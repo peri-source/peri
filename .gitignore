@@ -1,0 +1,8 @@
+build
+dist
+*.o
+*.pyc
+*~
+*.aux
+*.log
+*.pdf

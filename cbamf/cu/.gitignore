@@ -1,0 +1,4 @@
+*.so
+*.py
+*.pyc
+!__init__.py
