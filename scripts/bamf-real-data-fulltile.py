@@ -13,7 +13,7 @@ import pickle
 GN = 64
 GS = 0.05
 PHI = 0.47
-RADIUS = 8.0
+RADIUS = 12.0
 PSF = (0.6, 2)
 ORDER = (3,3,2)
 
@@ -30,10 +30,10 @@ def renorm(tstate, doprint=1):
     nbl.naive_renormalize_radii(p, r, 1)
     tstate.state[tstate.b_pos], tstate.state[tstate.b_rad] = p, r
 
-#itrue = initialize.normalize(initialize.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)[12:,:256,:256], True)
-itrue = initialize.normalize(initialize.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)[12:,:128,:128], False)
+itrue = initialize.normalize(initialize.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)[12:,:128,:128], True)
+#itrue = initialize.normalize(initialize.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)[12:,:128,:128], False)
 xstart, proc = initialize.local_max_featuring(itrue, 10)
-rstart = 4*np.ones(xstart.shape[0])
+rstart = 10*np.ones(xstart.shape[0])
 pstart = np.array(PSF)
 bstart = np.zeros(np.prod(ORDER))
 astart = np.zeros(1)
