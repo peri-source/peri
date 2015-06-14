@@ -1,7 +1,7 @@
 import itertools
 import numpy as np
 from copy import deepcopy
-from .cu import fields
+from cbamf.cu import fields
 
 psf_nparams = {
     fields.PSF_NONE: 0,
@@ -286,7 +286,7 @@ class StateXRPBA(State):
 
 def loadtest():
     import pickle
-    itrue, xstart, rstart, pstart, ipure = pickle.load(open("/media/scratch/bamf_ic_16.pkl", 'r'))
+    itrue, xstart, rstart, pstart, ipure = pickle.load(open("/media/scratch/bamf/bamf_ic_16.pkl", 'r'))
     bkg = np.zeros((3,3,3))
     bkg[0,0,0] = 1
     state = np.hstack([xstart.flatten(), rstart, pstart, bkg.ravel(), np.ones(1.0)])
@@ -335,13 +335,11 @@ class ConfocalImagePython(State):
         kx = 2*np.pi*np.fft.fftfreq(self._shape_fft[2])[None,None,:]
         ky = 2*np.pi*np.fft.fftfreq(self._shape_fft[1])[None,:,None]
         kz = 2*np.pi*np.fft.fftfreq(self._shape_fft[0])[:,None,None]
-        kv = np.array(np.broadcast_arrays(kx,ky,kz)).T
-        k = np.sqrt(kx**2 + ky**2 + kz**2)
-        self._kvecs = kv#[kx, ky, kz]
-        self._klen = k
+        self._kvecs = np.array(np.broadcast_arrays(kz,ky,kx)).T
+        self._klen = np.sqrt(kx**2 + ky**2 + kz**2)
 
     def _kparticle(self, pos, rad):
-        kdotx = (pos[::-1] * self._kvecs).sum(axis=-1)#pos[0]*self._kvecs[0]
+        kdotx = (pos * self._kvecs).sum(axis=-1)
         return self._disc3(self._klen*rad+1e-8, rad)*np.exp(-1.j*kdotx)
 
     def update_kspace_spheres(self, pos0, rad0, pos1, rad1):
@@ -352,16 +350,11 @@ class ConfocalImagePython(State):
         if self.index is None:
             raise AttributeError("Particle index has not been selected, call set_current_particle")
 
-        #kx,ky,kz = self._kvecs
         self.field_particles = np.zeros(self._shape_fft, dtype='complex')
 
         for p0, r0 in zip(self._pos.reshape(-1,3), self._rad):
             pos = p0 - self._bounds[0]
-            #kdotx = pos[0]*kx + pos[1]*ky + pos[2]*kz
             self.field_particles += self._kparticle(pos, r0)
-            #(
-            #    self._disc3(self._klen*r0+1e-8, r0)*np.exp(-1.j*kdotx)
-            #)
 
     def create_bkg_field(self):
         self.field_bkg = self.poly.evaluate(self.state[self.b_bkg], self._slice)
