@@ -186,6 +186,4 @@ def local_max_featuring(im, size=10):
 
     label = nd.label(equal)[0]
     pos = np.array(nd.measurements.center_of_mass(equal, labels=label, index=np.unique(label)))
-    x,y,z = pos.T
-    pos = np.vstack([z,y,x]).T
     return pos[1:], tim

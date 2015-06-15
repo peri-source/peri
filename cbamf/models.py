@@ -121,24 +121,10 @@ class NaiveColloids(Model):
         return pre*grad
 
 class PositionsRadiiPSF(Model):
-    def __init__(self, imtrue, imsig=0.1, LZ=32, *args, **kwargs):
+    def __init__(self, imsig=0.1, LZ=32, *args, **kwargs):
         super(PositionsRadiiPSF, self).__init__(*args, **kwargs)
         self.Lz = LZ
-        self.imtrue = imtrue
-        self.immask = imtrue > -1
         self.imsig = imsig
-
-        self.shape = self.imtrue.shape
-        if len(self.shape) == 2:
-            self.cut = self.Lz/2
-            self.oslice = np.s_[self.cut,:,:]
-            self.shape = self.shape + (self.Lz,)
-        else:
-            self.shape = self.shape[::-1]
-            self.oslice = np.s_[:,:,:]
-
-        self.lastimage = 0*self.imtrue
-        self.impack = None
 
     def has_negrad(self, state):
         rad = state.state[state.b_rad]
@@ -147,7 +133,6 @@ class PositionsRadiiPSF(Model):
     def has_overlaps(self, state):
         pos = state.state[state.b_pos]
         rad = state.state[state.b_rad]
-        #typ = (1+0*state.state[state.b_rad]).astype('int32')
         return nbl.naive_overlap(pos, rad, 0)
 
     def docalculate(self, state, docheck=True):
@@ -159,8 +144,6 @@ class PositionsRadiiPSF(Model):
             if self.has_negrad(state):
                 return -1e101
 
-        #output = state.create_final_image()[self.oslice]
-        #self.lastimage = output.copy()
         state.create_final_image()
         return state.create_differences()
 
@@ -168,7 +151,6 @@ class PositionsRadiiPSF(Model):
         logl = self.calculate(state)
         if isinstance(logl, float):
             return logl
-        #return -((logl[state.sub_im_compare] - self.imtrue[state.sub_slice][state.sub_im_compare])**2).sum() / self.imsig**2
         return -(logl**2).sum() / self.imsig**2
 
     def dogradloglikelihood(self, state):
@@ -177,8 +159,3 @@ class PositionsRadiiPSF(Model):
         grad[self.b_pos] = 0
         grad[self.b_rad] = 0
         return pre*grad
-
-    def free(self):
-        if self.impack is not None:
-            fields.free_image_package(self.impack)
-

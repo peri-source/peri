@@ -360,15 +360,15 @@ class ConfocalImagePython(State):
                 planner_effort=self.fftw_planning_level, threads=self.threads)
 
     def _setup_kvecs(self):
-        kx = 2*np.pi*np.fft.fftfreq(self._shape_fft[2])[None,None,:]
-        ky = 2*np.pi*np.fft.fftfreq(self._shape_fft[1])[None,:,None]
         kz = 2*np.pi*np.fft.fftfreq(self._shape_fft[0])[:,None,None]
-        self._kvecs = np.array(np.broadcast_arrays(kz,ky,kx)).T
+        ky = 2*np.pi*np.fft.fftfreq(self._shape_fft[1])[None,:,None]
+        kx = 2*np.pi*np.fft.fftfreq(self._shape_fft[2])[None,None,:]
+        self._kvecs = np.rollaxis(np.array(np.broadcast_arrays(kz,ky,kx)), 0, 4)
         self._klen = np.sqrt(kx**2 + ky**2 + kz**2)
 
     def _setup_rvecs(self):
         z,y,x = np.meshgrid(*(xrange(i) for i in self._shape_fft), indexing='ij')
-        self._rvecs = np.array(np.broadcast_arrays(z,y,x)).T
+        self._rvecs = np.rollaxis(np.array(np.broadcast_arrays(z,y,x)), 0, 4)
 
     def _kparticle(self, pos, rad):
         kdotx = (pos * self._kvecs).sum(axis=-1)
@@ -377,7 +377,8 @@ class ConfocalImagePython(State):
     def _rparticle(self, pos, rad, field, sign=1):
         p = np.round(pos)
         r = np.ceil(rad)+1
-        sl = np.s_[p[2]-r:p[2]+r, p[1]-r:p[1]+r, p[0]-r:p[0]+r]
+
+        sl = np.s_[p[0]-r:p[0]+r, p[1]-r:p[1]+r, p[2]-r:p[2]+r]
 
         subr = self._rvecs[sl + (np.s_[:],)]
         rdist = np.sqrt(((subr - pos)**2).sum(axis=-1))
@@ -414,6 +415,9 @@ class ConfocalImagePython(State):
 
     def create_bkg_field(self):
         self.field_bkg = self.poly.evaluate(self.state[self.b_bkg], self._slice)
+
+    def create_kpsf(self):
+        self._kpsf = self._psf_disc(self._klen, self.state[self.b_psf])
 
     def create_final_image(self):
         if (not pyfftw.is_n_byte_aligned(self._fftn_data, 16) or
@@ -470,10 +474,10 @@ class ConfocalImagePython(State):
             self.index = -1
 
             pl = np.array([0,0,0])
-            pr = np.array(self.image.shape[::-1])
+            pr = np.array(self.image.shape)
             center = (pr - pl)/2
 
-        if (pl < 0).any() or (pr[::-1] > self.image.shape).any():
+        if (pl < 0).any() or (pr > self.image.shape).any():
             return False
 
         # these variables map the buffer region back
@@ -481,9 +485,9 @@ class ConfocalImagePython(State):
         self._mask = ((pos > pl+rad[:,None]) & (pos < pr-rad[:,None])).all(axis=-1)
         self._center = center
         self._bounds = (pl, pr)
-        self._slice = np.s_[pl[2]:pr[2], pl[1]:pr[1], pl[0]:pr[0]]
-        self._shape = np.abs(pr - pl)[::-1]
-        self._shape_fft = self._shape#self._shape + self.pad
+        self._slice = np.s_[pl[0]:pr[0], pl[1]:pr[1], pl[2]:pr[2]]
+        self._shape = np.abs(pr - pl)
+        self._shape_fft = self._shape
 
         self._pos = pos[self._mask].flatten()
         self._rad = rad[self._mask]
@@ -494,15 +498,15 @@ class ConfocalImagePython(State):
         inr = pr - self.pad/2
         self._cmp_bounds = (inl, inr)
         self._cmp2buffer = (np.s_[self.pad/2:-self.pad/2],)*3
-        self._cmp_slice = np.s_[inl[2]:inr[2], inl[1]:inr[1], inl[0]:inr[0]]
-        self._cmp_shape = np.abs(inr - inl)[::-1]
+        self._cmp_slice = np.s_[inl[0]:inr[0], inl[1]:inr[1], inl[2]:inr[2]]
+        self._cmp_shape = np.abs(inr - inl)
         self._cmp_mask = self.image[self._cmp_slice] > -10
 
         self._setup_kvecs()
         self._setup_ffts()
         self.create_base_platonic_image()
         self.create_bkg_field()
-        self._kpsf = self._psf_disc(self._klen, self.state[self.b_psf])
+        self.create_kpsf()
         return True
 
     def update(self, block, data):
@@ -526,8 +530,13 @@ class ConfocalImagePython(State):
             cpos1 = (pos1.reshape(-1,3) - self._bounds[0]).flatten()
             self.update_rspace_spheres(cpos0, rad0, cpos1, rad1)
 
-        if bmask.any():
+        # update the background if it has been changed
+        if block[self.b_bkg].any():
             self.create_bkg_field()
+
+        # if the psf was changed, update
+        if block[self.b_psf].any():
+            self.create_kpsf()
 
     def create_clips(self, ccd_size):
         clip_pos = np.array([
