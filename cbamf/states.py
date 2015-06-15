@@ -1,3 +1,5 @@
+import os
+import pickle
 import itertools
 import numpy as np
 from copy import deepcopy
@@ -7,6 +9,9 @@ from pyfftw.builders import fftn, ifftn
 from multiprocessing import cpu_count
 
 from cbamf.cu import fields
+
+WISDOM_FILE = os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl")
+pyfftw.import_wisdom(pickle.load(open(WISDOM_FILE)))
 
 psf_nparams = {
     fields.PSF_NONE: 0,
@@ -126,7 +131,7 @@ class FlourescentParticlesWithBkgCUDA(State):
         self.param_lengths = [3*self.N, self.N, 0, self.psfn, np.prod(self.order), 1]
 
         total_params = sum(self.param_lengths)
-        super(StateXRPBA, self).__init__(nparams=total_params, *args, **kwargs)
+        super(FlourescentParticlesWithBkgCUDA, self).__init__(nparams=total_params, *args, **kwargs)
 
         self.b_pos = self.create_block('pos')
         self.b_rad = self.create_block('rad')
@@ -166,6 +171,9 @@ class FlourescentParticlesWithBkgCUDA(State):
 
         self.model_image = self.state[self.b_amp]+t.reshape(self.sub_shape)
         return self.model_image
+
+    def create_differences(self):
+        return self.model_image[self.sub_im_compare] - self.image[self.sub_slice][self.sub_im_compare]
 
     def set_current_particle(self, index=None, max_size=10):
         pos = self.state[self.b_pos].reshape(-1,3)
@@ -344,8 +352,8 @@ class ConfocalImagePython(State):
         return (1.0 + np.exp(-params[1]*params[0])) / (1.0 + np.exp(params[1]*(k - params[0])))
 
     def _setup_ffts(self):
-        self._fftn_data = pyfftw.n_byte_align(np.zeros(self._shape_fft, dtype='complex'), 16)
-        self._ifftn_data = pyfftw.n_byte_align(np.zeros(self._shape_fft, dtype='complex'), 16)
+        self._fftn_data = pyfftw.n_byte_align_empty(self._shape_fft, 16, dtype='complex')
+        self._ifftn_data = pyfftw.n_byte_align_empty(self._shape_fft, 16, dtype='complex')
         self._fftn = fftn(self._fftn_data, overwrite_input=True,
                 planner_effort=self.fftw_planning_level, threads=self.threads)
         self._ifftn = ifftn(self._ifftn_data, overwrite_input=True,
@@ -408,16 +416,23 @@ class ConfocalImagePython(State):
         self.field_bkg = self.poly.evaluate(self.state[self.b_bkg], self._slice)
 
     def create_final_image(self):
+        if (not pyfftw.is_n_byte_aligned(self._fftn_data, 16) or
+            not pyfftw.is_n_byte_aligned(self._ifftn_data, 16)):
+            raise AttributeError("FFT arrays became misaligned")
+
         self._fftn_data[:] = self.field_bkg * (1 - self.field_particles)
         self._fftn.execute()
-        self._ifftn_data[:] = self._fftn.get_output_array() * self._kpsf
+        self._ifftn_data[:] = self._fftn.get_output_array() * self._kpsf / self._fftn_data.size
         self._ifftn.execute()
 
         self.model_image = np.real(self._ifftn.get_output_array())
         return self.model_image
 
     def create_differences(self):
-        return self.model_image[self._cmp2buffer] - self.image[self._cmp_slice]
+        return (
+            self.model_image[self._cmp2buffer][self._cmp_mask]-
+            self.image[self._cmp_slice][self._cmp_mask]
+        )
 
     def set_current_particle(self, index=None, sub_image_size=None):
         """
@@ -566,3 +581,5 @@ class ConfocalImagePython(State):
         end = off + self.param_lengths[index]
         return off, end
 
+    def __del__(self):
+        pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'))
