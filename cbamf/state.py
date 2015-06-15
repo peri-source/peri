@@ -91,7 +91,7 @@ class PolyField3D(object):
         sl = sl + (np.s_[:],)
         return (self.poly[sl] * coeffs).sum(axis=-1)
 
-class StateXRPBA(State):
+class FlourescentParticlesWithBkgCUDA(State):
     """
     This class assumes that the positions and true image are indeed
     padded just as the fake image should be
@@ -329,7 +329,7 @@ class ConfocalImagePython(State):
         return 4*np.pi*R**3 * (np.sin(k)/k - np.cos(k))/k**2
 
     def _psf_disc(self, k, params):
-        return (1.0 + np.exp(-params[0]*params[1])) / (1.0 + np.exp(params[0]*(k - params[1])))
+        return (1.0 + np.exp(-params[1]*params[0])) / (1.0 + np.exp(params[1]*(k - params[0])))
 
     def _setup_kvecs(self):
         kx = 2*np.pi*np.fft.fftfreq(self._shape_fft[2])[None,None,:]
@@ -338,15 +338,32 @@ class ConfocalImagePython(State):
         self._kvecs = np.array(np.broadcast_arrays(kz,ky,kx)).T
         self._klen = np.sqrt(kx**2 + ky**2 + kz**2)
 
+    def _setup_rvecs(self):
+        z,y,x = np.meshgrid(*(xrange(i) for i in self._shape_fft), indexing='ij')
+        self._rvecs = np.array(np.broadcast_arrays(z,y,x)).T
+
     def _kparticle(self, pos, rad):
         kdotx = (pos * self._kvecs).sum(axis=-1)
         return self._disc3(self._klen*rad+1e-8, rad)*np.exp(-1.j*kdotx)
+
+    def _rparticle(self, pos, rad, field, sign=1):
+        p = np.round(pos)
+        r = np.ceil(rad)+1
+        sl = np.s_[p[2]-r:p[2]+r, p[1]-r:p[1]+r, p[0]-r:p[0]+r]
+
+        subr = self._rvecs[sl + (np.s_[:],)]
+        rdist = np.sqrt(((subr - pos)**2).sum(axis=-1))
+        field[sl] += sign/(1.0 + np.exp(5*(rdist - rad)))
 
     def update_kspace_spheres(self, pos0, rad0, pos1, rad1):
         self.field_particles -= self._kparticle(pos0, rad0)
         self.field_particles += self._kparticle(pos1, rad1)
 
-    def create_base_platonic_image(self):
+    def update_rspace_spheres(self, pos0, rad0, pos1, rad1):
+        self._rparticle(pos0, rad0, self.field_particles, -1)
+        self._rparticle(pos1, rad1, self.field_particles, +1)
+
+    def create_base_platonic_image_kspace(self):
         if self.index is None:
             raise AttributeError("Particle index has not been selected, call set_current_particle")
 
@@ -356,16 +373,30 @@ class ConfocalImagePython(State):
             pos = p0 - self._bounds[0]
             self.field_particles += self._kparticle(pos, r0)
 
+    def create_base_platonic_image(self):
+        if self.index is None:
+            raise AttributeError("Particle index has not been selected, call set_current_particle")
+
+        self._setup_rvecs()
+        self.field_particles = np.zeros(self._shape_fft)
+
+        for p0, r0 in zip(self._pos.reshape(-1,3), self._rad):
+            pos = p0 - self._bounds[0]
+            self._rparticle(pos, r0, self.field_particles)
+
     def create_bkg_field(self):
         self.field_bkg = self.poly.evaluate(self.state[self.b_bkg], self._slice)
 
     def create_final_image(self):
-        particles = np.fft.ifftn(self.field_particles)
-        kplatonic = np.fft.fftn(self.field_bkg * (1 - particles))
+        #particles = np.fft.ifftn(self.field_particles)
+        kplatonic = np.fft.fftn(self.field_bkg * (1 - self.field_particles))
         kpsf = self._psf_disc(self._klen, self.state[self.b_psf])
 
         self.model_image = np.real(np.fft.ifftn(kplatonic * kpsf))
         return self.model_image
+
+    def create_differences(self):
+        return self.model_image[self._cmp2buffer] - self.image[self._cmp_slice]
 
     def set_current_particle(self, index=None, sub_image_size=None):
         """
@@ -455,7 +486,7 @@ class ConfocalImagePython(State):
         if len(pos1) > 0 and len(rad1) > 0:
             cpos0 = (pos0.reshape(-1,3) - self._bounds[0]).flatten()
             cpos1 = (pos1.reshape(-1,3) - self._bounds[0]).flatten()
-            self.update_kspace_spheres(cpos0, rad0, cpos1, rad1)
+            self.update_rspace_spheres(cpos0, rad0, cpos1, rad1)
 
         if bmask.any():
             self.create_bkg_field()

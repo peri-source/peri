@@ -159,15 +159,17 @@ class PositionsRadiiPSF(Model):
             if self.has_negrad(state):
                 return -1e101
 
-        output = state.create_final_image()[self.oslice]
-        self.lastimage = output.copy()
-        return output * state.field_bkg
+        #output = state.create_final_image()[self.oslice]
+        #self.lastimage = output.copy()
+        state.create_final_image()
+        return state.create_differences()
 
     def dologlikelihood(self, state):
         logl = self.calculate(state)
         if isinstance(logl, float):
             return logl
-        return -((logl[state.sub_im_compare] - self.imtrue[state.sub_slice][state.sub_im_compare])**2).sum() / self.imsig**2
+        #return -((logl[state.sub_im_compare] - self.imtrue[state.sub_slice][state.sub_im_compare])**2).sum() / self.imsig**2
+        return -(logl**2).sum() / self.imsig**2
 
     def dogradloglikelihood(self, state):
         grad = 0.0*state
