@@ -11,7 +11,7 @@ import sys
 import pickle
 
 GN = 64
-GS = 0.01
+GS = 0.05
 PHI = 0.47
 RADIUS = 12.0
 PSF = (0.6, 2)
@@ -31,10 +31,17 @@ def renorm(s, doprint=1):
     s.state[s.b_pos], s.state[s.b_rad] = p, r
 
 import pickle
-itrue, xstart, rstart, pstart, ipure = pickle.load(open("/media/scratch/bamf/bamf_ic_16.pkl", 'r'))
-bkg = np.zeros((3,3,3))
-bkg[0,0,0] = 1
-strue = np.hstack([xstart.flatten(), rstart, pstart, bkg.ravel(), np.ones(1.0)])
+xstart, rstart = pickle.load(open("/media/scratch/bamf/bamf_ic_16_xr.pkl", 'r'))
+pstart = np.array(PSF)
+bstart = np.zeros((3,3,3)); bstart[0,0,0] = 1
+strue = np.hstack([xstart.flatten(), rstart, pstart, bstart.ravel(), np.ones(1.0)])
+s0 = state.ConfocalImagePython(len(rstart), np.zeros((128,128,128)), pad=24, order=(3,3,3), state=strue)
+s0.set_current_particle()
+ipure = s0.create_final_image()
+itrue = ipure + np.random.normal(0.0, GS, size=ipure.shape)
+
+#itrue = np.pad(itrue, 16, mode='constant', constant_values=0)
+#xstart += 16
 s = state.ConfocalImagePython(len(rstart), itrue, pad=32, order=(3,3,3), state=strue)
 
 #itrue = initialize.normalize(initialize.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)[12:,:128,:128], True)
@@ -104,7 +111,7 @@ if True:
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        for particle in xrange(s.N/8):
+        for particle in xrange(s.N/4):
             print particle
             sys.stdout.flush()
 

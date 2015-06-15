@@ -1,6 +1,11 @@
 import itertools
 import numpy as np
 from copy import deepcopy
+
+import pyfftw
+from pyfftw.builders import fftn, ifftn
+from multiprocessing import cpu_count
+
 from cbamf.cu import fields
 
 psf_nparams = {
@@ -9,6 +14,10 @@ psf_nparams = {
     fields.PSF_ISOTROPIC_GAUSSIAN: 2,
     fields.PSF_ISOTROPIC_PADE_3_7: 12
 }
+
+FFTW_PLAN_FAST = 'FFTW_ESTIMATE'
+FFTW_PLAN_NORMAL = 'FFTW_MEASURE'
+FFTW_PLAN_SLOW = 'FFTW_PATIENT'
 
 class State(object):
     def __init__(self, nparams, state=None):
@@ -290,10 +299,11 @@ def loadtest():
     bkg = np.zeros((3,3,3))
     bkg[0,0,0] = 1
     state = np.hstack([xstart.flatten(), rstart, pstart, bkg.ravel(), np.ones(1.0)])
-    return ConfocalImagePython(len(rstart), itrue, pad=32, order=(3,3,3), state=state)
+    return ConfocalImagePython(len(rstart), itrue, pad=32, order=(3,3,3), state=state, fftw_planning_level=FFTW_PLAN_SLOW)
 
 class ConfocalImagePython(State):
-    def __init__(self, N, image, psftype=fields.PSF_ISOTROPIC_DISC, pad=16, order=1, *args, **kwargs):
+    def __init__(self, N, image, psftype=fields.PSF_ISOTROPIC_DISC, pad=16, order=1,
+            fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1, *args, **kwargs):
         self.N = N
         self.image = image
         self.image_mask = self.image > -10
@@ -304,6 +314,8 @@ class ConfocalImagePython(State):
         self.field_bkg = None
         self.index = None
 
+        self.threads = threads if threads > 0 else cpu_count()
+        self.fftw_planning_level = fftw_planning_level
         self.order = order if hasattr(order, "__iter__") else (order,)*3
         self.poly = PolyField3D(shape=self.image.shape, order=self.order)
 
@@ -330,6 +342,14 @@ class ConfocalImagePython(State):
 
     def _psf_disc(self, k, params):
         return (1.0 + np.exp(-params[1]*params[0])) / (1.0 + np.exp(params[1]*(k - params[0])))
+
+    def _setup_ffts(self):
+        self._fftn_data = pyfftw.n_byte_align(np.zeros(self._shape_fft, dtype='complex'), 16)
+        self._ifftn_data = pyfftw.n_byte_align(np.zeros(self._shape_fft, dtype='complex'), 16)
+        self._fftn = fftn(self._fftn_data, overwrite_input=True,
+                planner_effort=self.fftw_planning_level, threads=self.threads)
+        self._ifftn = ifftn(self._ifftn_data, overwrite_input=True,
+                planner_effort=self.fftw_planning_level, threads=self.threads)
 
     def _setup_kvecs(self):
         kx = 2*np.pi*np.fft.fftfreq(self._shape_fft[2])[None,None,:]
@@ -388,11 +408,12 @@ class ConfocalImagePython(State):
         self.field_bkg = self.poly.evaluate(self.state[self.b_bkg], self._slice)
 
     def create_final_image(self):
-        #particles = np.fft.ifftn(self.field_particles)
-        kplatonic = np.fft.fftn(self.field_bkg * (1 - self.field_particles))
-        kpsf = self._psf_disc(self._klen, self.state[self.b_psf])
+        self._fftn_data[:] = self.field_bkg * (1 - self.field_particles)
+        self._fftn.execute()
+        self._ifftn_data[:] = self._fftn.get_output_array() * self._kpsf
+        self._ifftn.execute()
 
-        self.model_image = np.real(np.fft.ifftn(kplatonic * kpsf))
+        self.model_image = np.real(self._ifftn.get_output_array())
         return self.model_image
 
     def create_differences(self):
@@ -463,8 +484,10 @@ class ConfocalImagePython(State):
         self._cmp_mask = self.image[self._cmp_slice] > -10
 
         self._setup_kvecs()
+        self._setup_ffts()
         self.create_base_platonic_image()
         self.create_bkg_field()
+        self._kpsf = self._psf_disc(self._klen, self.state[self.b_psf])
         return True
 
     def update(self, block, data):
