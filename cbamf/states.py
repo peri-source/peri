@@ -120,7 +120,7 @@ class PolyField3D(object):
         return (self.poly[sl] * coeffs).sum(axis=-1)
 
 class ConfocalImagePython(State):
-    def __init__(self, N, image, psftype=PSF_ANISOTROPIC_GAUSSIAN, pad=16, order=1,
+    def __init__(self, N, image, psftype=PSF_ANISOTROPIC_GAUSSIAN, pad=16, order=1, sigma=0.1,
             fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1, *args, **kwargs):
         self.N = N
         self.image = image
@@ -131,6 +131,7 @@ class ConfocalImagePython(State):
         self.field_platonic = None
         self.field_bkg = None
         self.index = None
+        self.sigma = sigma
 
         self.threads = threads if threads > 0 else cpu_count()
         self.fftw_planning_level = fftw_planning_level
@@ -186,8 +187,8 @@ class ConfocalImagePython(State):
                 planner_effort=self.fftw_planning_level, threads=self.threads)
 
     def _setup_kvecs(self):
-        zscale = self.state[self.b_zscale]
-        kz = 2*np.pi*np.fft.fftfreq(self._shape_fft[0])[:,None,None]/zscale
+        #zscale = self.state[self.b_zscale]
+        kz = 2*np.pi*np.fft.fftfreq(self._shape_fft[0])[:,None,None]#/zscale
         ky = 2*np.pi*np.fft.fftfreq(self._shape_fft[1])[None,:,None]
         kx = 2*np.pi*np.fft.fftfreq(self._shape_fft[2])[None,None,:]
         self._kx, self._ky, self._kz = kx, ky, kz

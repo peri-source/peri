@@ -4,7 +4,7 @@ import numpy as np
 import acor
 import pylab as pl
 from cbamf.cu import nbl, fields
-from cbamf import observers, samplers, models, engines, initializers, states
+from cbamf import observers, samplers, models, engines, initializers, states, run
 from time import sleep
 import itertools
 import sys
@@ -20,11 +20,6 @@ PAD = 22
 sweeps = 20
 samples = 10
 burn = sweeps - samples
-
-def renorm(s, doprint=1):
-    p, r, z = s.state[s.b_pos], s.state[s.b_rad], s.state[s.b_zscale]
-    nbl.naive_renormalize_radii(p, r, z[0], 1)
-    s.state[s.b_pos], s.state[s.b_rad] = p, r
 
 #itrue = initializers.normalize(initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)[12:,:256,:256], True)
 itrue = initializers.normalize(initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)[12:,:128,:128], False)
@@ -44,114 +39,23 @@ xstart += PAD+2
 
 strue = np.hstack([xstart.flatten(), rstart, pstart, bstart, astart, zstart])
 s = states.ConfocalImagePython(GN, itrue, pad=PAD, order=ORDER, state=strue,
-        psftype=states.PSF_ISOTROPIC_GAUSSIAN, threads=4)
+        sigma=GS, psftype=states.PSF_ANISOTROPIC_GAUSSIAN, threads=4)
 
-renorm(s)
+run.renorm(s)
 
-def sample_state(st, blocks, slicing=True, N=1, doprint=False):
-    m = models.PositionsRadiiPSF(imsig=GS)
-
-    eng = engines.SequentialBlockEngine(m, st)
-    opsay = observers.Printer()
-    ohist = observers.HistogramObserver(block=blocks[0])
-    eng.add_samplers([samplers.SliceSampler(RADIUS/1e1, block=b) for b in blocks])
-
-    eng.add_likelihood_observers(opsay) if doprint else None
-    eng.add_state_observers(ohist)
-
-    eng.dosteps(N)
-    return ohist
-
-def sample_ll(st, element, size=0.1, N=1000):
-    m = models.PositionsRadiiPSF(imsig=GS)
-    start = st.state[element]
-
-    ll = []
-    vals = np.linspace(start-size, start+size, N)
-    for val in vals:
-        st.update(element, val)
-        l = m.loglikelihood(st)
-        ll.append(l)
-    return vals, np.array(ll)
-
-def scan_noise(image, st, element, size=0.01, N=1000):
-    start = st.state[element]
-
-    xs, ys = [], []
-    for i in xrange(N):
-        print i
-        test = image + np.random.normal(0, GS, image.shape)
-        x,y = sample_ll(test, st, element, size=size, N=300)
-        st.update(element, start)
-        xs.append(x)
-        ys.append(y)
-
-    return xs, ys
-
-def sample_particles(state):
-    for particle in xrange(s.N):
-        print particle
-        sys.stdout.flush()
-
-        renorm(state)
-
-        if s.set_current_particle(particle):
-            blocks = s.blocks_particle()
-            sample_state(s, blocks)
-
-#"""
 #raise IOError
 if True:
     h = []
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        print '{:-^39}'.format(' POS / RAD ')
-        for particle in xrange(s.N):
-            print particle
-            sys.stdout.flush()
-
-            renorm(s)
-
-            if s.set_current_particle(particle):
-                blocks = s.blocks_particle()
-                sample_state(s, blocks)
-
-        print '{:-^39}'.format(' PSF ')
-        s.set_current_particle()
-        blocks = (s.create_block('psf'),)
-        sample_state(s, blocks)
-
-        print '{:-^39}'.format(' BKG ')
-        s.set_current_particle()
-        blocks = (s.create_block('bkg'),)
-        sample_state(s, blocks)
-
-        print '{:-^39}'.format(' AMP ')
-        s.set_current_particle()
-        blocks = s.explode(s.create_block('amp'))
-        sample_state(s, blocks)
-
-        #print '{:-^39}'.format(' ZSCALE ')
-        #s.set_current_particle()
-        #blocks = s.explode(s.create_block('zscale'))
-        #sample_state(s, blocks)
+        run.sample_particles(s)
+        run.sample_block(s, 'psf', explode=False)
+        run.sample_block(s, 'bkg', explode=False)
+        run.sample_block(s, 'amp', explode=True)
+        #run.sample_block(s, 'zscale', explode=True)
 
         if i > burn:
             h.append(s.state.copy())
 
     h = np.array(h)
-    #return h
-
-#h = cycle(itrue, xstart, rstart, pstart, sweeps, sweeps-samples, size=SIZE)
-mu = h.mean(axis=0)
-std = h.std(axis=0)
-pl.figure(figsize=(20,4))
-pl.errorbar(xrange(len(mu)), (mu-strue), yerr=5*std/np.sqrt(samples),
-        fmt='.', lw=0.15, alpha=0.5)
-pl.vlines([0,3*GN-0.5, 4*GN-0.5], -1, 1, linestyle='dashed', lw=4, alpha=0.5)
-pl.hlines(0, 0, len(mu), linestyle='dashed', lw=5, alpha=0.5)
-pl.xlim(0, len(mu))
-pl.ylim(-0.02, 0.02)
-pl.show()
-#"""
