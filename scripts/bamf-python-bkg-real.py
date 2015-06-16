@@ -11,13 +11,13 @@ import sys
 import pickle
 import time
 
-GS = 0.05
+GS = 0.02
 RADIUS = 12.0
-PSF = (0.5, 5.8)
+PSF = (1, 2)
 ORDER = (3,3,2)
-PAD = 20
+PAD = 22
 
-sweeps = 10
+sweeps = 20
 samples = 10
 burn = sweeps - samples
 
@@ -35,7 +35,7 @@ rstart = 7*np.ones(xstart.shape[0])
 pstart = np.array(PSF)
 bstart = np.zeros(np.prod(ORDER))
 astart = np.zeros(1)
-zstart = np.ones(1)
+zstart = np.ones(1)#*1.41
 GN = rstart.shape[0]
 bstart[0] = 1
 
@@ -43,7 +43,8 @@ itrue = np.pad(itrue, PAD+2, mode='constant', constant_values=-10)
 xstart += PAD+2
 
 strue = np.hstack([xstart.flatten(), rstart, pstart, bstart, astart, zstart])
-s = states.ConfocalImagePython(GN, itrue, pad=PAD, order=ORDER, state=strue, threads=4)
+s = states.ConfocalImagePython(GN, itrue, pad=PAD, order=ORDER, state=strue,
+        psftype=states.PSF_ISOTROPIC_GAUSSIAN, threads=4)
 
 renorm(s)
 
@@ -105,6 +106,7 @@ if True:
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
+        print '{:-^39}'.format(' POS / RAD ')
         for particle in xrange(s.N):
             print particle
             sys.stdout.flush()
@@ -114,6 +116,11 @@ if True:
             if s.set_current_particle(particle):
                 blocks = s.blocks_particle()
                 sample_state(s, blocks)
+
+        print '{:-^39}'.format(' PSF ')
+        s.set_current_particle()
+        blocks = (s.create_block('psf'),)
+        sample_state(s, blocks)
 
         print '{:-^39}'.format(' BKG ')
         s.set_current_particle()
@@ -125,15 +132,10 @@ if True:
         blocks = s.explode(s.create_block('amp'))
         sample_state(s, blocks)
 
-        print '{:-^39}'.format(' PSF ')
-        s.set_current_particle()
-        blocks = (s.create_block('psf'),)
-        sample_state(s, blocks)
-
-        print '{:-^39}'.format(' ZSCALE ')
-        s.set_current_particle()
-        blocks = s.explode(s.create_block('zscale'))
-        sample_state(s, blocks)
+        #print '{:-^39}'.format(' ZSCALE ')
+        #s.set_current_particle()
+        #blocks = s.explode(s.create_block('zscale'))
+        #sample_state(s, blocks)
 
         if i > burn:
             h.append(s.state.copy())

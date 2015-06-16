@@ -15,7 +15,7 @@ pyfftw.import_wisdom(pickle.load(open(WISDOM_FILE)))
 (
     PSF_NONE,
     PSF_ISOTROPIC_DISC,
-    PSF_ISOTROPIC_GAUSSIAN,
+    PSF_ANISOTROPIC_GAUSSIAN,
     PSF_ISOTROPIC_PADE_3_7
 ) = xrange(4)
 
@@ -26,7 +26,7 @@ FFTW_PLAN_SLOW = 'FFTW_PATIENT'
 psf_nparams = {
     PSF_NONE: 0,
     PSF_ISOTROPIC_DISC: 2,
-    PSF_ISOTROPIC_GAUSSIAN: 2,
+    PSF_ANISOTROPIC_GAUSSIAN: 2,
     PSF_ISOTROPIC_PADE_3_7: 12
 }
 
@@ -120,7 +120,7 @@ class PolyField3D(object):
         return (self.poly[sl] * coeffs).sum(axis=-1)
 
 class ConfocalImagePython(State):
-    def __init__(self, N, image, psftype=PSF_ISOTROPIC_DISC, pad=16, order=1,
+    def __init__(self, N, image, psftype=PSF_ANISOTROPIC_GAUSSIAN, pad=16, order=1,
             fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1, *args, **kwargs):
         self.N = N
         self.image = image
@@ -175,7 +175,7 @@ class ConfocalImagePython(State):
 
     def _psf_gaussian_rz(self):
         params = self.state[self.b_psf]
-        return np.exp(-(self._kx**2 + self._ky**2)*params[0]**2/2 - self._kz**2*params[1]**2/2)
+        return np.exp(-(self._kx*params[0])**2 - (self._ky*params[0])**2 - (self._kz*params[1])**2)
 
     def _setup_ffts(self):
         self._fftn_data = pyfftw.n_byte_align_empty(self._shape_fft, 16, dtype='complex')
@@ -187,7 +187,7 @@ class ConfocalImagePython(State):
 
     def _setup_kvecs(self):
         zscale = self.state[self.b_zscale]
-        kz = 2*np.pi*np.fft.fftfreq(self._shape_fft[0])[:,None,None]*zscale
+        kz = 2*np.pi*np.fft.fftfreq(self._shape_fft[0])[:,None,None]/zscale
         ky = 2*np.pi*np.fft.fftfreq(self._shape_fft[1])[None,:,None]
         kx = 2*np.pi*np.fft.fftfreq(self._shape_fft[2])[None,None,:]
         self._kx, self._ky, self._kz = kx, ky, kz
@@ -212,7 +212,7 @@ class ConfocalImagePython(State):
 
         # apply the z-scaling of pixels
         zscale = self.state[self.b_zscale]
-        rvec[...,0] /= zscale
+        rvec[...,0] *= zscale
 
         rdist = np.sqrt((rvec**2).sum(axis=-1))
         field[sl] += sign/(1.0 + np.exp(5*(rdist - rad)))
@@ -252,7 +252,7 @@ class ConfocalImagePython(State):
     def create_kpsf(self):
         if self.psftype == PSF_ISOTROPIC_DISC:
             self._kpsf = self._psf_disc()
-        if self.psftype == PSF_ISOTROPIC_GAUSSIAN:
+        if self.psftype == PSF_ANISOTROPIC_GAUSSIAN:
             self._kpsf = self._psf_gaussian_rz()
 
     def create_final_image(self):

@@ -25,7 +25,7 @@ double naive_overlap(int NX, double *x, int NR, double *r,
             double *x0 = &x[3*i];
             double *x1 = &x[3*j];
             double dr[3] = {0,0,0};
-            dr[0] = (x1[0] - x0[0])/zscale;
+            dr[0] = (x1[0] - x0[0])*zscale;
             dr[1] = x1[1] - x0[1];
             dr[2] = x1[2] - x0[2];
 
@@ -53,7 +53,7 @@ void naive_renormalize_radii(int NX, double *x, int NR, double *r,
             double *x0 = &x[3*i];
             double *x1 = &x[3*j];
             double dr[3] = {0,0,0};
-            dr[0] = (x1[0] - x0[0])/zscale;
+            dr[0] = (x1[0] - x0[0])*zscale;
             dr[1] = x1[1] - x0[1];
             dr[2] = x1[2] - x0[2];
 
