@@ -1,28 +1,42 @@
 import os
 import pickle
-import itertools
 import numpy as np
+from itertools import product
+from collections import OrderedDict
 from copy import deepcopy
 
 import pyfftw
 from pyfftw.builders import fftn, ifftn
 from multiprocessing import cpu_count
 
-from cbamf.cu import fields
-
 WISDOM_FILE = os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl")
 pyfftw.import_wisdom(pickle.load(open(WISDOM_FILE)))
 
-psf_nparams = {
-    fields.PSF_NONE: 0,
-    fields.PSF_ISOTROPIC_DISC: 2,
-    fields.PSF_ISOTROPIC_GAUSSIAN: 2,
-    fields.PSF_ISOTROPIC_PADE_3_7: 12
-}
+(
+    PSF_NONE,
+    PSF_ISOTROPIC_DISC,
+    PSF_ISOTROPIC_GAUSSIAN,
+    PSF_ISOTROPIC_PADE_3_7
+) = xrange(4)
 
 FFTW_PLAN_FAST = 'FFTW_ESTIMATE'
 FFTW_PLAN_NORMAL = 'FFTW_MEASURE'
 FFTW_PLAN_SLOW = 'FFTW_PATIENT'
+
+psf_nparams = {
+    PSF_NONE: 0,
+    PSF_ISOTROPIC_DISC: 2,
+    PSF_ISOTROPIC_GAUSSIAN: 2,
+    PSF_ISOTROPIC_PADE_3_7: 12
+}
+
+def loadtest():
+    import pickle
+    itrue, xstart, rstart, pstart, ipure = pickle.load(open("/media/scratch/bamf/bamf_ic_16.pkl", 'r'))
+    bkg = np.zeros((3,3,3))
+    bkg[0,0,0] = 1
+    state = np.hstack([xstart.flatten(), rstart, pstart, bkg.ravel(), np.ones(1.0)])
+    return ConfocalImagePython(len(rstart), itrue, pad=32, order=(3,3,3), state=state, fftw_planning_level=FFTW_PLAN_SLOW)
 
 class State(object):
     def __init__(self, nparams, state=None):
@@ -87,7 +101,7 @@ class PolyField3D(object):
         self.setup_rvecs()
 
     def poly_orders(self):
-        return itertools.product(*(xrange(o) for o in self.order))
+        return product(*(xrange(o) for o in self.order))
 
     def setup_rvecs(self):
         o = self.shape
@@ -105,212 +119,8 @@ class PolyField3D(object):
         sl = sl + (np.s_[:],)
         return (self.poly[sl] * coeffs).sum(axis=-1)
 
-class FlourescentParticlesWithBkgCUDA(State):
-    """
-    This class assumes that the positions and true image are indeed
-    padded just as the fake image should be
-    """
-
-    def __init__(self, N, image, psftype=fields.PSF_ISOTROPIC_DISC, pad=16, order=1, *args, **kwargs):
-        self.N = N
-        self.image = image
-        self.image_mask = self.image > -10
-        self.psftype = psftype
-        self.psfn = psf_nparams[self.psftype]
-        self.pad = pad
-        self.kccd = None
-        self.field_kspace_platonic = None
-        self.field_bkg = None
-        self.index = None
-        self.impack = None
-
-        self.order = order if hasattr(order, "__iter__") else (order,)*3
-        self.poly = PolyField3D(shape=self.image.shape, order=self.order)
-
-        self.param_order = ['pos', 'rad', 'typ', 'psf', 'bkg', 'amp']
-        self.param_lengths = [3*self.N, self.N, 0, self.psfn, np.prod(self.order), 1]
-
-        total_params = sum(self.param_lengths)
-        super(FlourescentParticlesWithBkgCUDA, self).__init__(nparams=total_params, *args, **kwargs)
-
-        self.b_pos = self.create_block('pos')
-        self.b_rad = self.create_block('rad')
-        self.b_psf = self.create_block('psf')
-        self.b_bkg = self.create_block('bkg')
-        self.b_amp = self.create_block('amp')
-
-    def create_kspace_platonic_image(self):
-        if self.index is None:
-            raise AttributeError("Particle index has not been selected, call set_current_particle")
-
-        if self.field_kspace_platonic:
-            fields.freeCFieldGPU(self.field_kspace_platonic)
-
-        self.sub_size = np.array([i+self.pad for i in self.sub_shape[::-1]], dtype='int32')
-        self.kccd = np.zeros(self.sub_size, dtype='complex64').flatten()
-
-        self.field_kspace_platonic = fields.py_cfloat2cfield(self.kccd, self.sub_size)
-
-        centered_pos = (self.sub_pos.reshape(-1,3) - self.bounds[0]).flatten()
-        fields.create_kspace_spheres(self.field_kspace_platonic, centered_pos, self.sub_rad)
-
-    def create_bkg_field(self):
-        self.field_bkg = self.poly.evaluate(self.state[self.b_bkg], self.sub_slice)
-
-    def create_final_image(self):
-        t = np.zeros(self.sub_shape[::-1], dtype='float32').flatten()
-        field = fields.createField(np.array(self.sub_shape[::-1], dtype='int32'))
-        fields.fieldSet(field, t)
-
-        psf = self.state[self.b_psf]
-        self.impack = self.impack or fields.create_image_package(field, self.pad)
-
-        fields.update_image(self.field_kspace_platonic, field, self.impack, psf.astype('float32'), self.psftype, self.pad)
-        fields.fieldGet(field, t)
-        fields.freeField(field)
-
-        self.model_image = self.state[self.b_amp]+t.reshape(self.sub_shape)
-        return self.model_image
-
-    def create_differences(self):
-        return self.model_image[self.sub_im_compare] - self.image[self.sub_slice][self.sub_im_compare]
-
-    def set_current_particle(self, index=None, max_size=10):
-        pos = self.state[self.b_pos].reshape(-1,3)
-        rad = self.state[self.b_rad]
-        x,y,z = pos.T
-
-        if index is not None:
-            self.index = index
-
-            size = max_size
-            center = np.round(pos[index]).astype('int32')
-            pl = (center - size/2).astype('int')
-            pr = (center + size/2).astype('int')
-        else:
-            self.index = -1
-
-            pl = np.array([0,0,0])
-            pr = np.array(self.image.shape[::-1])
-            center = (pr - pl)/2
-
-        if (pl < 0).any() or (pr[::-1] > self.image.shape).any():
-            print pl
-            print pr
-            print self.image.shape
-            return False
-
-        mask =  (x > pl[0]-self.pad/2) & (x < pr[0]+self.pad/2)
-        mask &= (y > pl[1]-self.pad/2) & (y < pr[1]+self.pad/2)
-        mask &= (z > pl[2]-self.pad/2) & (z < pr[2]+self.pad/2)
-
-        self.mask = mask
-        self.center = center
-        self.bounds = (pl, pr)
-
-        self.sub_pos = pos[mask].flatten()
-        self.sub_rad = rad[mask]
-
-        self.sub_slice = np.s_[pl[2]:pr[2], pl[1]:pr[1], pl[0]:pr[0]]
-        self.sub_shape = np.abs(pr - pl)[::-1]
-
-        self.sub_im_compare = self.image[self.sub_slice] > -10
-
-        if self.impack is not None:
-            fields.free_image_package(self.impack)
-            self.impack = None
-
-        self.create_kspace_platonic_image()
-        self.create_bkg_field()
-        return True
-
-    def update(self, block, data):
-        pmask = block[self.b_pos]
-        rmask = block[self.b_rad]
-        bmask = block[self.b_bkg]
-
-        pmask = pmask.reshape(-1,3)
-        particles = pmask.any(axis=-1) | rmask
-
-        pos0 = self.state[self.b_pos].copy().reshape(-1,3)[particles].flatten()
-        rad0 = self.state[self.b_rad].copy()[particles]
-
-        self._update_state(block, data)
-
-        pos1 = self.state[self.b_pos].copy().reshape(-1,3)[particles].flatten()
-        rad1 = self.state[self.b_rad].copy()[particles]
-
-        if len(pos1) > 0 and len(rad1) > 0:
-            cpos0 = (pos0.reshape(-1,3) - self.bounds[0]).flatten()
-            cpos1 = (pos1.reshape(-1,3) - self.bounds[0]).flatten()
-            fields.update_kspace_spheres(self.field_kspace_platonic, cpos0, rad0, cpos1, rad1)
-
-        if bmask.any():
-            self.create_bkg_field()
-
-    def create_clips(self, ccd_size):
-        clip_pos = np.array([
-            [0, ccd_size[0]],
-            [0, ccd_size[1]],
-            [0, ccd_size[2]]
-        ])
-        clip_rad = np.array([1,50])
-        clip_psf = np.array([0, 100])
-        clips = np.vstack([clip_pos]*self.N + [clip_rad]*self.N + [clip_psf]*self.psfn)
-        return clips
-
-    def blocks_particles(self):
-        masks = []
-        for i in xrange(self.N):
-            mask = self.block_none()
-            mask[i*3:(i+1)*3] = True
-            mask[3*self.N+i] = True
-            masks.append(mask)
-        return masks
-
-    def blocks_particle(self):
-        if self.index is None:
-            raise AttributeError("No particle selected, run set_current_particle")
-
-        p_ind, r_ind = 3*self.index, 3*self.N + self.index
-
-        blocks = []
-        for t in xrange(p_ind, p_ind+3):
-            blocks.append(self.block_range(t, t+1))
-        blocks.append(self.block_range(r_ind, r_ind+1))
-        return blocks
-
-    def create_block(self, typ='all'):
-        return self.block_range(*self._block_offset_end(typ))
-
-    def explode(self, block):
-        inds = np.arange(block.shape[0])
-        inds = inds[block]
-
-        blocks = []
-        for i in inds:
-            tblock = self.block_none()
-            tblock[i] = True
-            blocks.append(tblock)
-        return blocks
-
-    def _block_offset_end(self, typ='pos'):
-        index = self.param_order.index(typ)
-        off = sum(self.param_lengths[:index])
-        end = off + self.param_lengths[index]
-        return off, end
-
-
-def loadtest():
-    import pickle
-    itrue, xstart, rstart, pstart, ipure = pickle.load(open("/media/scratch/bamf/bamf_ic_16.pkl", 'r'))
-    bkg = np.zeros((3,3,3))
-    bkg[0,0,0] = 1
-    state = np.hstack([xstart.flatten(), rstart, pstart, bkg.ravel(), np.ones(1.0)])
-    return ConfocalImagePython(len(rstart), itrue, pad=32, order=(3,3,3), state=state, fftw_planning_level=FFTW_PLAN_SLOW)
-
 class ConfocalImagePython(State):
-    def __init__(self, N, image, psftype=fields.PSF_ISOTROPIC_DISC, pad=16, order=1,
+    def __init__(self, N, image, psftype=PSF_ISOTROPIC_DISC, pad=16, order=1,
             fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1, *args, **kwargs):
         self.N = N
         self.image = image
@@ -327,8 +137,18 @@ class ConfocalImagePython(State):
         self.order = order if hasattr(order, "__iter__") else (order,)*3
         self.poly = PolyField3D(shape=self.image.shape, order=self.order)
 
-        self.param_order = ['pos', 'rad', 'typ', 'psf', 'bkg', 'amp']
-        self.param_lengths = [3*self.N, self.N, 0, self.psfn, np.prod(self.order), 1]
+        self.param_dict = OrderedDict({
+            'pos': 3*self.N,
+            'rad': self.N,
+            'typ': 0,
+            'psf': self.psfn,
+            'bkg': np.prod(self.order),
+            'amp': 1,
+            'zscale': 1
+        })
+
+        self.param_order = ['pos', 'rad', 'typ', 'psf', 'bkg', 'amp', 'zscale']
+        self.param_lengths = [self.param_dict[k] for k in self.param_order]
 
         total_params = sum(self.param_lengths)
         super(ConfocalImagePython, self).__init__(nparams=total_params, *args, **kwargs)
@@ -338,6 +158,7 @@ class ConfocalImagePython(State):
         self.b_psf = self.create_block('psf')
         self.b_bkg = self.create_block('bkg')
         self.b_amp = self.create_block('amp')
+        self.b_zscale = self.create_block('zscale')
 
     def _disc1(self, k, R):
         return 2*R*np.sin(k)/k
@@ -348,8 +169,13 @@ class ConfocalImagePython(State):
     def _disc3(self, k, R):
         return 4*np.pi*R**3 * (np.sin(k)/k - np.cos(k))/k**2
 
-    def _psf_disc(self, k, params):
-        return (1.0 + np.exp(-params[1]*params[0])) / (1.0 + np.exp(params[1]*(k - params[0])))
+    def _psf_disc(self):
+        params = self.state[self.b_psf]
+        return (1.0 + np.exp(-params[1]*params[0])) / (1.0 + np.exp(params[1]*(self._klen - params[0])))
+
+    def _psf_gaussian_rz(self):
+        params = self.state[self.b_psf]
+        return np.exp(-(self._kx**2 + self._ky**2)*params[0]**2/2 - self._kz**2*params[1]**2/2)
 
     def _setup_ffts(self):
         self._fftn_data = pyfftw.n_byte_align_empty(self._shape_fft, 16, dtype='complex')
@@ -360,9 +186,11 @@ class ConfocalImagePython(State):
                 planner_effort=self.fftw_planning_level, threads=self.threads)
 
     def _setup_kvecs(self):
-        kz = 2*np.pi*np.fft.fftfreq(self._shape_fft[0])[:,None,None]
+        zscale = self.state[self.b_zscale]
+        kz = 2*np.pi*np.fft.fftfreq(self._shape_fft[0])[:,None,None]*zscale
         ky = 2*np.pi*np.fft.fftfreq(self._shape_fft[1])[None,:,None]
         kx = 2*np.pi*np.fft.fftfreq(self._shape_fft[2])[None,None,:]
+        self._kx, self._ky, self._kz = kx, ky, kz
         self._kvecs = np.rollaxis(np.array(np.broadcast_arrays(kz,ky,kx)), 0, 4)
         self._klen = np.sqrt(kx**2 + ky**2 + kz**2)
 
@@ -379,9 +207,14 @@ class ConfocalImagePython(State):
         r = np.ceil(rad)+1
 
         sl = np.s_[p[0]-r:p[0]+r, p[1]-r:p[1]+r, p[2]-r:p[2]+r]
-
         subr = self._rvecs[sl + (np.s_[:],)]
-        rdist = np.sqrt(((subr - pos)**2).sum(axis=-1))
+        rvec = (subr - pos)
+
+        # apply the z-scaling of pixels
+        zscale = self.state[self.b_zscale]
+        rvec[...,0] /= zscale
+
+        rdist = np.sqrt((rvec**2).sum(axis=-1))
         field[sl] += sign/(1.0 + np.exp(5*(rdist - rad)))
 
     def update_kspace_spheres(self, pos0, rad0, pos1, rad1):
@@ -417,7 +250,10 @@ class ConfocalImagePython(State):
         self.field_bkg = self.poly.evaluate(self.state[self.b_bkg], self._slice)
 
     def create_kpsf(self):
-        self._kpsf = self._psf_disc(self._klen, self.state[self.b_psf])
+        if self.psftype == PSF_ISOTROPIC_DISC:
+            self._kpsf = self._psf_disc()
+        if self.psftype == PSF_ISOTROPIC_GAUSSIAN:
+            self._kpsf = self._psf_gaussian_rz()
 
     def create_final_image(self):
         if (not pyfftw.is_n_byte_aligned(self._fftn_data, 16) or
@@ -429,7 +265,7 @@ class ConfocalImagePython(State):
         self._ifftn_data[:] = self._fftn.get_output_array() * self._kpsf / self._fftn_data.size
         self._ifftn.execute()
 
-        self.model_image = np.real(self._ifftn.get_output_array())
+        self.model_image = np.real(self._ifftn.get_output_array()) + self.state[self.b_amp]
         return self.model_image
 
     def create_differences(self):
@@ -530,12 +366,23 @@ class ConfocalImagePython(State):
             cpos1 = (pos1.reshape(-1,3) - self._bounds[0]).flatten()
             self.update_rspace_spheres(cpos0, rad0, cpos1, rad1)
 
+        # if the psf was changed, update
+        if block[self.b_psf].any():
+            self.create_kpsf()
+
         # update the background if it has been changed
         if block[self.b_bkg].any():
             self.create_bkg_field()
 
-        # if the psf was changed, update
-        if block[self.b_psf].any():
+        # we actually don't have to do anything if the amplitude is changed
+        if block[self.b_amp].any():
+            pass
+
+        if block[self.b_zscale].any():
+            self._setup_kvecs()
+            self._setup_ffts()
+            self.create_base_platonic_image()
+            self.create_bkg_field()
             self.create_kpsf()
 
     def create_clips(self, ccd_size):
@@ -589,6 +436,23 @@ class ConfocalImagePython(State):
         off = sum(self.param_lengths[:index])
         end = off + self.param_lengths[index]
         return off, end
+
+    def grad(self, dl=1e-3):
+        blocks = self.explode(self.block_all())
+        grad = []
+        for block in blocks:
+            self.push_change(block, self.state[block]+dl)
+            self.create_final_image()
+            loglr = -(self.create_differences()**2).sum()
+            self.pop_change()
+
+            self.push_change(block, self.state[block]-dl)
+            self.create_final_image()
+            logll = -(self.create_differences()**2).sum()
+            self.pop_change()
+
+            grad.append((loglr - logll) / (2*dl))
+        return np.array(grad)
 
     def __del__(self):
         pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'))

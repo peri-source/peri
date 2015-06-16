@@ -13,36 +13,37 @@ import time
 
 GS = 0.05
 RADIUS = 12.0
-PSF = (0.6, 2)
+PSF = (0.5, 5.8)
 ORDER = (3,3,2)
-PAD = 18
+PAD = 20
 
-sweeps = 30
-samples = 20
+sweeps = 10
+samples = 10
 burn = sweeps - samples
 
 def renorm(s, doprint=1):
-    p, r = s.state[s.b_pos], s.state[s.b_rad]
-    nbl.naive_renormalize_radii(p, r, 1)
+    p, r, z = s.state[s.b_pos], s.state[s.b_rad], s.state[s.b_zscale]
+    nbl.naive_renormalize_radii(p, r, z[0], 1)
     s.state[s.b_pos], s.state[s.b_rad] = p, r
 
-#itrue = initializers.normalize(initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)[12:,:128,:128], False)
+#itrue = initializers.normalize(initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)[12:,:256,:256], True)
 itrue = initializers.normalize(initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)[12:,:128,:128], False)
-xstart, proc = initializers.local_max_featuring(itrue, 10)
+xstart, proc = initializers.local_max_featuring(itrue, 9)
 itrue = initializers.normalize(itrue, True)
 
-rstart = 6*np.ones(xstart.shape[0])
+rstart = 7*np.ones(xstart.shape[0])
 pstart = np.array(PSF)
 bstart = np.zeros(np.prod(ORDER))
 astart = np.zeros(1)
+zstart = np.ones(1)
 GN = rstart.shape[0]
 bstart[0] = 1
 
 itrue = np.pad(itrue, PAD+2, mode='constant', constant_values=-10)
 xstart += PAD+2
 
-strue = np.hstack([xstart.flatten(), rstart, pstart, bstart, astart])
-s = states.ConfocalImagePython(GN, itrue, pad=PAD, order=ORDER, state=strue, threads=1)
+strue = np.hstack([xstart.flatten(), rstart, pstart, bstart, astart, zstart])
+s = states.ConfocalImagePython(GN, itrue, pad=PAD, order=ORDER, state=strue, threads=4)
 
 renorm(s)
 
@@ -70,7 +71,6 @@ def sample_ll(st, element, size=0.1, N=1000):
         st.update(element, val)
         l = m.loglikelihood(st)
         ll.append(l)
-    m.free()
     return vals, np.array(ll)
 
 def scan_noise(image, st, element, size=0.01, N=1000):
@@ -86,6 +86,17 @@ def scan_noise(image, st, element, size=0.01, N=1000):
         ys.append(y)
 
     return xs, ys
+
+def sample_particles(state):
+    for particle in xrange(s.N):
+        print particle
+        sys.stdout.flush()
+
+        renorm(state)
+
+        if s.set_current_particle(particle):
+            blocks = s.blocks_particle()
+            sample_state(s, blocks)
 
 #"""
 #raise IOError
@@ -104,11 +115,6 @@ if True:
                 blocks = s.blocks_particle()
                 sample_state(s, blocks)
 
-        print '{:-^39}'.format(' PSF ')
-        s.set_current_particle()
-        blocks = s.explode(s.create_block('psf'))
-        sample_state(s, blocks)
-
         print '{:-^39}'.format(' BKG ')
         s.set_current_particle()
         blocks = (s.create_block('bkg'),)
@@ -117,6 +123,16 @@ if True:
         print '{:-^39}'.format(' AMP ')
         s.set_current_particle()
         blocks = s.explode(s.create_block('amp'))
+        sample_state(s, blocks)
+
+        print '{:-^39}'.format(' PSF ')
+        s.set_current_particle()
+        blocks = (s.create_block('psf'),)
+        sample_state(s, blocks)
+
+        print '{:-^39}'.format(' ZSCALE ')
+        s.set_current_particle()
+        blocks = s.explode(s.create_block('zscale'))
         sample_state(s, blocks)
 
         if i > burn:

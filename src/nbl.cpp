@@ -13,7 +13,8 @@ double dot(double *a, double *b){
     return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 }
 
-double naive_overlap(int NX, double *x, int NR, double *r, int doprint){
+double naive_overlap(int NX, double *x, int NR, double *r,
+        double zscale, int doprint){
     if (NX != 3*NR)
         log_err("Wrong number of parameters\n");
 
@@ -24,7 +25,7 @@ double naive_overlap(int NX, double *x, int NR, double *r, int doprint){
             double *x0 = &x[3*i];
             double *x1 = &x[3*j];
             double dr[3] = {0,0,0};
-            dr[0] = x1[0] - x0[0];
+            dr[0] = (x1[0] - x0[0])/zscale;
             dr[1] = x1[1] - x0[1];
             dr[2] = x1[2] - x0[2];
 
@@ -41,7 +42,8 @@ double naive_overlap(int NX, double *x, int NR, double *r, int doprint){
     return overlaps;
 }
 
-void naive_renormalize_radii(int NX, double *x, int NR, double *r, int doprint){
+void naive_renormalize_radii(int NX, double *x, int NR, double *r,
+        double zscale, int doprint){
     if (NX != 3*NR)
         log_err("Wrong number of parameters\n");
 
@@ -51,7 +53,7 @@ void naive_renormalize_radii(int NX, double *x, int NR, double *r, int doprint){
             double *x0 = &x[3*i];
             double *x1 = &x[3*j];
             double dr[3] = {0,0,0};
-            dr[0] = x1[0] - x0[0];
+            dr[0] = (x1[0] - x0[0])/zscale;
             dr[1] = x1[1] - x0[1];
             dr[2] = x1[2] - x0[2];
 

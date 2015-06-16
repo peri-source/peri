@@ -9,8 +9,8 @@
 #define MAX(x,y) ((x)>(y)?(x):(y))
 #define MIN(x,y) ((x)<(y)?(x):(y))
 
-void naive_renormalize_radii(int NX, double *x, int NR, double *r, int doprint);
-double naive_overlap(int NX, double *x, int NR, double *r, int doprint);
+void naive_renormalize_radii(int NX, double *x, int NR, double *r, double zscale, int doprint);
+double naive_overlap(int NX, double *x, int NR, double *r, double zscale, int doprint);
 
 class NBL {
 public:

@@ -133,7 +133,7 @@ class PositionsRadiiPSF(Model):
     def has_overlaps(self, state):
         pos = state.state[state.b_pos]
         rad = state.state[state.b_rad]
-        return nbl.naive_overlap(pos, rad, 0)
+        return nbl.naive_overlap(pos, rad, state.state[state.b_zscale][0], 0)
 
     def docalculate(self, state, docheck=True):
         # TODO - side-step the big calculation if it turns out that

@@ -34,16 +34,18 @@ def renorm(s, doprint=1):
 import pickle
 xstart, rstart = pickle.load(open("/media/scratch/bamf/bamf_ic_16_xr.pkl", 'r'))
 pstart = np.array(PSF)
-bstart = np.zeros((3,3,3)); bstart[0,0,0] = 1
+bstart = np.zeros(ORDER); bstart[0,0,0] = 1
 strue = np.hstack([xstart.flatten(), rstart, pstart, bstart.ravel(), np.ones(1.0)])
-s0 = states.ConfocalImagePython(len(rstart), np.zeros((128,128,128)), pad=32, order=(3,3,3), state=strue, threads=1)
+s0 = states.ConfocalImagePython(len(rstart), np.zeros((128,128,128)), pad=32,
+        order=ORDER, state=strue, threads=1)
 s0.set_current_particle()
 ipure = s0.create_final_image()
 itrue = ipure + np.random.normal(0.0, GS, size=ipure.shape)
 
 #itrue = np.pad(itrue, 8, mode='constant', constant_values=0)
 #xstart += 8
-s = states.ConfocalImagePython(len(rstart), itrue, pad=32, order=(3,3,3), state=strue, threads=1)
+s = states.ConfocalImagePython(len(rstart), itrue, pad=32, order=ORDER,
+        state=strue, threads=1)
 
 #itrue = initializers.normalize(initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)[12:,:128,:128], True)
 #itrue = initializers.normalize(initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)[12:,:128,:128], False)
@@ -64,7 +66,7 @@ s = states.ConfocalImagePython(len(rstart), itrue, pad=32, order=(3,3,3), state=
 np.random.seed(10)
 
 def sample_state(image, st, blocks, slicing=True, N=1, doprint=False):
-    m = models.PositionsRadiiPSF(image, imsig=GS)
+    m = models.PositionsRadiiPSF(imsig=GS)
 
     eng = engines.SequentialBlockEngine(m, st)
     opsay = observers.Printer()
@@ -75,11 +77,10 @@ def sample_state(image, st, blocks, slicing=True, N=1, doprint=False):
     eng.add_state_observers(ohist)
 
     eng.dosteps(N)
-    m.free()
     return ohist
 
 def sample_ll(image, st, element, size=0.1, N=1000):
-    m = models.PositionsRadiiPSF(image, imsig=GS)
+    m = models.PositionsRadiiPSF(imsig=GS)
     start = st.state[element]
 
     ll = []
@@ -88,7 +89,6 @@ def sample_ll(image, st, element, size=0.1, N=1000):
         st.update(element, val)
         l = m.loglikelihood(st)
         ll.append(l)
-    m.free()
     return vals, np.array(ll)
 
 def scan_noise(image, st, element, size=0.01, N=1000):
@@ -125,7 +125,6 @@ if True:
         b0 = time.time()
         print b0-a0
 
-        """
         print '{:-^39}'.format(' PSF ')
         s.set_current_particle()
         blocks = s.explode(s.create_block('psf'))
@@ -140,7 +139,6 @@ if True:
         s.set_current_particle()
         blocks = s.explode(s.create_block('amp'))
         sample_state(itrue, s, blocks)
-        """
 
         if i > burn:
             h.append(s.state.copy())
