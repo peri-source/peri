@@ -1,4 +1,6 @@
 import sys
+import numpy as np
+from scipy.optimize import minimize
 
 from . import models, samplers, engines, observers
 from .cu import nbl
@@ -69,3 +71,36 @@ def sample_block(state, blockname, explode=True):
         blocks = state.explode(blocks[0])
 
     sample_state(state, blocks)
+
+def build_bounds(state):
+    bounds = []
+
+    bound_dict = {
+        'pos': (1,512),
+        'rad': (0, 20),
+        'typ': (0,1),
+        'psf': (0, 10),
+        'bkg': (-100, 100),
+        'amp': (-3, 3),
+        'zscale': (0.5, 1.5)
+    }
+
+    for i,p in enumerate(state.param_order):
+        bounds.extend([bound_dict[p]]*state.param_lengths[i])
+    return np.array(bounds)
+
+def loglikelihood(vec, state):
+    state.set_state(vec)
+    state.set_current_particle()
+    state.create_final_image()
+    return -state.loglikelihood()
+
+def gradloglikelihood(vec, state):
+    state.set_state(vec)
+    state.set_current_particle()
+    return -state.gradloglikelihood()
+
+def gradient_descent(state, method='L-BFGS-B'):
+    bounds = build_bounds(state)
+    minimize(loglikelihood, state.state, args=(state,),
+            method=method, jac=gradloglikelihood, bounds=bounds)

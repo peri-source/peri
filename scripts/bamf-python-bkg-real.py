@@ -7,9 +7,9 @@ from cbamf import observers, samplers, models, engines, initializers, states, ru
 
 GS = 0.02
 RADIUS = 12.0
-PSF = (1.2/2, 4/2)
+PSF = (1.4, 2.3)
 ORDER = (3,3,2)
-PAD = 16
+PAD = 22
 
 sweeps = 20
 samples = 10
@@ -25,10 +25,10 @@ itrue = initializers.normalize(itrue, True)
 rstart = 7*np.ones(xstart.shape[0])
 pstart = np.array(PSF)
 bstart = np.zeros(np.prod(ORDER))
-astart = np.ones(1)*-0.2
-zstart = np.ones(1)*1.064
+astart = np.ones(1)#*-0.1
+zstart = np.ones(1)#*1.064
 GN = rstart.shape[0]
-bstart[0] = 1.2
+bstart[0] = 1.0
 
 itrue = np.pad(itrue, PAD+2, mode='constant', constant_values=-10)
 xstart += PAD+2
@@ -38,41 +38,6 @@ s = states.ConfocalImagePython(GN, itrue, pad=PAD, order=ORDER, state=strue,
         sigma=GS, psftype=states.PSF_ANISOTROPIC_GAUSSIAN, threads=4)
 
 run.renorm(s)
-
-from scipy.optimize import minimize
-
-def build_bounds(state):
-    bounds = []
-
-    bound_dict = {
-        'pos': (1,512),
-        'rad': (0, 20),
-        'typ': (0,1),
-        'psf': (0, 10),
-        'bkg': (-100, 100),
-        'amp': (-3, 3),
-        'zscale': (0.5, 1.5)
-    }
-
-    for i,p in enumerate(state.param_order):
-        bounds.extend([bound_dict[p]]*state.param_lengths[i])
-    return np.array(bounds)
-
-def loglikelihood(vec, state):
-    state.set_state(vec)
-    state.set_current_particle()
-    state.create_final_image()
-    return -state.loglikelihood()
-
-def gradloglikelihood(vec, state):
-    state.set_state(vec)
-    state.set_current_particle()
-    return -state.gradloglikelihood()
-
-def gradient_descent(state, method='L-BFGS-B'):
-    bounds = build_bounds(state)
-    minimize(loglikelihood, state.state, args=(state,),
-            method='CG', jac=gradloglikelihood, bounds=bounds)
 
 #raise IOError
 if True:

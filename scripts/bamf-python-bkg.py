@@ -35,6 +35,7 @@ s = states.ConfocalImagePython(len(rstart), itrue, pad=16, order=ORDER,
 
 run.renorm(s)
 
+#raise IOError
 if True:
     h = []
     for i in xrange(sweeps):
