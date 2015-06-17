@@ -77,7 +77,6 @@ class PositionsRadiiPSF(Model):
             if self.has_negrad(state):
                 return -np.inf
 
-        state.create_final_image()
         return state.loglikelihood()
 
     def dologlikelihood(self, state):

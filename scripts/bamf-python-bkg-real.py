@@ -7,9 +7,9 @@ from cbamf import observers, samplers, models, engines, initializers, states, ru
 
 GS = 0.02
 RADIUS = 12.0
-PSF = (1.2, 4)
+PSF = (1.2/2, 4/2)
 ORDER = (3,3,2)
-PAD = 22
+PAD = 16
 
 sweeps = 20
 samples = 10
@@ -62,19 +62,19 @@ def loglikelihood(vec, state):
     state.set_state(vec)
     state.set_current_particle()
     state.create_final_image()
-    return state.loglikelihood()
+    return -state.loglikelihood()
 
 def gradloglikelihood(vec, state):
     state.set_state(vec)
     state.set_current_particle()
-    return state.gradloglikelihood()
+    return -state.gradloglikelihood()
 
 def gradient_descent(state, method='L-BFGS-B'):
     bounds = build_bounds(state)
     minimize(loglikelihood, state.state, args=(state,),
             method='CG', jac=gradloglikelihood, bounds=bounds)
 
-raise IOError
+#raise IOError
 if True:
     h = []
     for i in xrange(sweeps):

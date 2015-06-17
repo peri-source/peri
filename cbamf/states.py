@@ -10,7 +10,15 @@ from pyfftw.builders import fftn, ifftn
 from multiprocessing import cpu_count
 
 WISDOM_FILE = os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl")
-pyfftw.import_wisdom(pickle.load(open(WISDOM_FILE)))
+
+def save_wisdom():
+    pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'))
+
+try:
+    with open(WISDOM_FILE) as wisdom:
+        pyfftw.import_wisdom(pickle.load(open(WISDOM_FILE)))
+except IOError as e:
+    save_wisdom()
 
 (
     PSF_NONE,
@@ -35,7 +43,7 @@ def loadtest():
     itrue, xstart, rstart, pstart, ipure = pickle.load(open("/media/scratch/bamf/bamf_ic_16.pkl", 'r'))
     bkg = np.zeros((3,3,3))
     bkg[0,0,0] = 1
-    state = np.hstack([xstart.flatten(), rstart, pstart, bkg.ravel(), np.ones(1.0)])
+    state = np.hstack([xstart.flatten(), rstart, pstart, bkg.ravel(), np.ones(1), np.zeros(1)])
     return ConfocalImagePython(len(rstart), itrue, pad=32, order=(3,3,3), state=state, fftw_planning_level=FFTW_PLAN_SLOW)
 
 class State(object):
@@ -108,12 +116,9 @@ class ConfocalImagePython(State):
             fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1, *args, **kwargs):
         self.N = N
         self.image = image
-        self.image_mask = self.image > -10
         self.psftype = psftype
         self.psfn = psf_nparams[self.psftype]
         self.pad = pad
-        self.field_platonic = None
-        self.field_bkg = None
         self.index = None
         self.sigma = sigma
 
@@ -145,14 +150,7 @@ class ConfocalImagePython(State):
         self.b_amp = self.create_block('amp')
         self.b_zscale = self.create_block('zscale')
 
-    def _disc1(self, k, R):
-        return 2*R*np.sin(k)/k
-
-    def _disc2(self, k, R):
-        return 2*np.pi*R**2 * j1(k) / k
-
-    def _disc3(self, k, R):
-        return 4*np.pi*R**3 * (np.sin(k)/k - np.cos(k))/k**2
+        self.initialize()
 
     def _psf_disc(self):
         params = self.state[self.b_psf]
@@ -179,12 +177,8 @@ class ConfocalImagePython(State):
         self._klen = np.sqrt(kx**2 + ky**2 + kz**2)
 
     def _setup_rvecs(self):
-        z,y,x = np.meshgrid(*(xrange(i) for i in self._shape_fft), indexing='ij')
+        z,y,x = np.meshgrid(*(xrange(i) for i in self.image.shape), indexing='ij')
         self._rvecs = np.rollaxis(np.array(np.broadcast_arrays(z,y,x)), 0, 4)
-
-    def _kparticle(self, pos, rad):
-        kdotx = (pos * self._kvecs).sum(axis=-1)
-        return self._disc3(self._klen*rad+1e-8, rad)*np.exp(-1.j*kdotx)
 
     def _rparticle(self, pos, rad, field, sign=1):
         p = np.round(pos)
@@ -201,40 +195,23 @@ class ConfocalImagePython(State):
         rdist = np.sqrt((rvec**2).sum(axis=-1))
         field[sl] += sign/(1.0 + np.exp(5*(rdist - rad)))
 
-    def update_kspace_spheres(self, pos0, rad0, pos1, rad1):
-        self.field_particles -= self._kparticle(pos0, rad0)
-        self.field_particles += self._kparticle(pos1, rad1)
+    def initialize(self):
+        self.create_base_platonic_image()
+        self.create_bkg_field()
 
     def update_rspace_spheres(self, pos0, rad0, pos1, rad1):
         self._rparticle(pos0, rad0, self.field_particles, -1)
         self._rparticle(pos1, rad1, self.field_particles, +1)
 
-    def create_base_platonic_image_kspace(self):
-        # TODO - change this so that there is one global platonic image
-        # which gets modified i.e. this function is not necessary.
-        # Take slices of the big image to create the sub comparison regions
-        if self.index is None:
-            raise AttributeError("Particle index has not been selected, call set_current_particle")
-
-        self.field_particles = np.zeros(self._shape_fft, dtype='complex')
-
-        for p0, r0 in zip(self._pos.reshape(-1,3), self._rad):
-            pos = p0 - self._bounds[0]
-            self.field_particles += self._kparticle(pos, r0)
-
     def create_base_platonic_image(self):
-        if self.index is None:
-            raise AttributeError("Particle index has not been selected, call set_current_particle")
-
         self._setup_rvecs()
-        self.field_particles = np.zeros(self._shape_fft)
+        self.field_particles = np.zeros(self.image.shape)
 
-        for p0, r0 in zip(self._pos.reshape(-1,3), self._rad):
-            pos = p0 - self._bounds[0]
-            self._rparticle(pos, r0, self.field_particles)
+        for p0, r0 in zip(self.state[self.b_pos].reshape(-1,3), self.state[self.b_rad]):
+            self._rparticle(p0, r0, self.field_particles)
 
     def create_bkg_field(self):
-        self.field_bkg = self.poly.evaluate(self.state[self.b_bkg], self._slice)
+        self.field_bkg = self.poly.evaluate(self.state[self.b_bkg])
 
     def create_kpsf(self):
         if self.psftype == PSF_ISOTROPIC_DISC:
@@ -247,7 +224,7 @@ class ConfocalImagePython(State):
             not pyfftw.is_n_byte_aligned(self._ifftn_data, 16)):
             raise AttributeError("FFT arrays became misaligned")
 
-        self._fftn_data[:] = self.field_bkg * (1 - self.field_particles)
+        self._fftn_data[:] = self.field_bkg[self._slice] * (1 - self.field_particles[self._slice])
         self._fftn.execute()
         self._ifftn_data[:] = self._fftn.get_output_array() * self._kpsf / self._fftn_data.size
         self._ifftn.execute()
@@ -257,31 +234,28 @@ class ConfocalImagePython(State):
 
     def create_differences(self):
         return (
-            self.model_image[self._cmp2buffer][self._cmp_mask]-
+            self.model_image[self._cmp_region][self._cmp_mask]-
             self.image[self._cmp_slice][self._cmp_mask]
         )
 
     def set_current_particle(self, index=None, sub_image_size=None):
         """
         We must set up the following structure:
-        +-----------------------------+-----+
-        |        Buffer Region        |     |
-        |(bkg field + other particles)|     |
-        |                             |     |
-        |    +-------------------+    |     |
-        |    |                   |    |     |
-        |    |    Comparison     |    |     |
-        |    |      Region       |    |     |
-        |    |                   |    |     |
-        |    |                   |    |     |
-        |    |      (size)       |    |     |
-        |    +-------------------+    |     |
-        |                             |     |
-        |           (pad)             |     |
-        +-----------------------------+     |
-        |                                   |
-        |       FFT padding region          |
-        +-----------------------------------+
+        +-----------------------------+
+        |        Buffer Region        |
+        |(bkg field + other particles)|
+        |                             |
+        |    +-------------------+    |
+        |    |                   |    |
+        |    |    Comparison     |    |
+        |    |      Region       |    |
+        |    |                   |    |
+        |    |                   |    |
+        |    |      (size)       |    |
+        |    +-------------------+    |
+        |                             |
+        |           (pad)             |
+        +-----------------------------+
         """
         pos = self.state[self.b_pos].reshape(-1,3)
         rad = self.state[self.b_rad]
@@ -289,46 +263,40 @@ class ConfocalImagePython(State):
         if index is not None:
             self.index = index
 
-            size = sub_image_size or self.pad
+            size = sub_image_size or int(3*rad[index])
             center = np.round(pos[index]).astype('int32')
             pl = (center - size/2 - self.pad/2).astype('int')
             pr = (center + size/2 + self.pad/2).astype('int')
         else:
             self.index = -1
 
-            pl = np.array([0,0,0])
-            pr = np.array(self.image.shape)
+            pl, pr = np.array([0,0,0]), np.array(self.image.shape)
             center = (pr - pl)/2
 
         if (pl < 0).any() or (pr > self.image.shape).any():
             return False
 
+        lcmp = np.vstack([pl, np.zeros(pl.shape)])
+        rcmp = np.vstack([pr, self.image.shape])
+        pl = np.max(lcmp, axis=0).astype('int')
+        pr = np.min(rcmp, axis=0).astype('int')
+
         # these variables map the buffer region back
         # into the large image in real space
-        self._mask = ((pos > pl+rad[:,None]) & (pos < pr-rad[:,None])).all(axis=-1)
         self._center = center
         self._bounds = (pl, pr)
         self._slice = np.s_[pl[0]:pr[0], pl[1]:pr[1], pl[2]:pr[2]]
-        self._shape = np.abs(pr - pl)
-        self._shape_fft = self._shape
-
-        self._pos = pos[self._mask].flatten()
-        self._rad = rad[self._mask]
+        self._shape_fft = np.abs(pr - pl)
 
         # these variables have to do with the comparison region
         # that is inside the buffer region
-        inl = pl + self.pad/2
-        inr = pr - self.pad/2
-        self._cmp_bounds = (inl, inr)
-        self._cmp2buffer = (np.s_[self.pad/2:-self.pad/2],)*3
+        inl, inr = pl + self.pad/2, pr - self.pad/2
+        self._cmp_region = (np.s_[self.pad/2:-self.pad/2],)*3
         self._cmp_slice = np.s_[inl[0]:inr[0], inl[1]:inr[1], inl[2]:inr[2]]
-        self._cmp_shape = np.abs(inr - inl)
         self._cmp_mask = self.image[self._cmp_slice] > -10
 
         self._setup_kvecs()
         self._setup_ffts()
-        self.create_base_platonic_image()
-        self.create_bkg_field()
         self.create_kpsf()
         return True
 
@@ -349,9 +317,7 @@ class ConfocalImagePython(State):
         rad1 = self.state[self.b_rad].copy()[particles]
 
         if len(pos1) > 0 and len(rad1) > 0:
-            cpos0 = (pos0.reshape(-1,3) - self._bounds[0]).flatten()
-            cpos1 = (pos1.reshape(-1,3) - self._bounds[0]).flatten()
-            self.update_rspace_spheres(cpos0, rad0, cpos1, rad1)
+            self.update_rspace_spheres(pos0, rad0, pos1, rad1)
 
         # if the psf was changed, update
         if block[self.b_psf].any():
@@ -445,7 +411,8 @@ class ConfocalImagePython(State):
         return np.array(grad)
 
     def loglikelihood(self):
+        self.create_final_image()
         return -(self.create_differences()**2).sum() / self.sigma**2
 
     def __del__(self):
-        pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'))
+        save_wisdom()
