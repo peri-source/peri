@@ -42,8 +42,6 @@ class State(object):
     def __init__(self, nparams, state=None):
         self.nparams = nparams
         self.state = state if state is not None else np.zeros(self.nparams, dtype='float32')
-        self.loglikelihood = None
-        self.gradloglikelihood = None
         self.stack = []
 
     def push_change(self, block, data):
@@ -73,20 +71,6 @@ class State(object):
         bmax = min(bmax, self.nparams)
         block[bmin:bmax] = True
         return block
-
-    def blocks_const_size(self, size):
-        blocks = []
-        end = self.nparams/size if (self.nparams % size == 0) else self.nparams / size + 1
-        for i in xrange(end):
-            ma = self.block_none()
-
-            if (i+1)*size > self.nparams:
-                ma[i*size:] = True
-            else:
-                ma[i*size:(i+1)*size] = True
-
-            blocks.append(ma)
-        return blocks
 
     def set_state(self, state):
         self.state = state.astype(self.state.dtype)
@@ -187,8 +171,7 @@ class ConfocalImagePython(State):
                 planner_effort=self.fftw_planning_level, threads=self.threads)
 
     def _setup_kvecs(self):
-        #zscale = self.state[self.b_zscale]
-        kz = 2*np.pi*np.fft.fftfreq(self._shape_fft[0])[:,None,None]#/zscale
+        kz = 2*np.pi*np.fft.fftfreq(self._shape_fft[0])[:,None,None]
         ky = 2*np.pi*np.fft.fftfreq(self._shape_fft[1])[None,:,None]
         kx = 2*np.pi*np.fft.fftfreq(self._shape_fft[2])[None,None,:]
         self._kx, self._ky, self._kz = kx, ky, kz
@@ -227,6 +210,9 @@ class ConfocalImagePython(State):
         self._rparticle(pos1, rad1, self.field_particles, +1)
 
     def create_base_platonic_image_kspace(self):
+        # TODO - change this so that there is one global platonic image
+        # which gets modified i.e. this function is not necessary.
+        # Take slices of the big image to create the sub comparison regions
         if self.index is None:
             raise AttributeError("Particle index has not been selected, call set_current_particle")
 
@@ -386,26 +372,6 @@ class ConfocalImagePython(State):
             self.create_bkg_field()
             self.create_kpsf()
 
-    def create_clips(self, ccd_size):
-        clip_pos = np.array([
-            [0, ccd_size[0]],
-            [0, ccd_size[1]],
-            [0, ccd_size[2]]
-        ])
-        clip_rad = np.array([1,50])
-        clip_psf = np.array([0, 100])
-        clips = np.vstack([clip_pos]*self.N + [clip_rad]*self.N + [clip_psf]*self.psfn)
-        return clips
-
-    def blocks_particles(self):
-        masks = []
-        for i in xrange(self.N):
-            mask = self.block_none()
-            mask[i*3:(i+1)*3] = True
-            mask[3*self.N+i] = True
-            masks.append(mask)
-        return masks
-
     def blocks_particle(self):
         if self.index is None:
             raise AttributeError("No particle selected, run set_current_particle")
@@ -438,22 +404,48 @@ class ConfocalImagePython(State):
         end = off + self.param_lengths[index]
         return off, end
 
-    def grad(self, dl=1e-3):
-        blocks = self.explode(self.block_all())
+    def _grad_single_param(self, block, dl):
+        self.push_change(block, self.state[block]+dl)
+        self.create_final_image()
+        loglr = self.loglikelihood()
+        self.pop_change()
+
+        self.push_change(block, self.state[block]-dl)
+        self.create_final_image()
+        logll = self.loglikelihood()
+        self.pop_change()
+
+        return (loglr - logll) / (2*dl)
+
+    def gradloglikelihood(self, dl=1e-3):
         grad = []
-        for block in blocks:
-            self.push_change(block, self.state[block]+dl)
-            self.create_final_image()
-            loglr = -(self.create_differences()**2).sum()
-            self.pop_change()
+        for pg in self.param_order:
+            print '{:-^39}'.format(' '+pg.upper()+' ')
+            if pg == 'pos':
+                for i in xrange(self.N):
+                    self.set_current_particle(i)
+                    blocks = self.blocks_particle()[:-1]
 
-            self.push_change(block, self.state[block]-dl)
-            self.create_final_image()
-            logll = -(self.create_differences()**2).sum()
-            self.pop_change()
+                    for block in blocks:
+                        grad.append(self._grad_single_param(block, dl))
 
-            grad.append((loglr - logll) / (2*dl))
+            if pg == 'rad':
+                for i in xrange(self.N):
+                    self.set_current_particle(i)
+                    block = self.blocks_particle()[-1]
+                    grad.append(self._grad_single_param(block, dl))
+
+            if pg == 'psf' or pg == 'bkg' or pg == 'amp' or pg == 'zscale':
+                self.set_current_particle()
+                blocks = self.explode(self.create_block(pg))
+
+                for block in blocks:
+                    grad.append(self._grad_single_param(block, dl))
+
         return np.array(grad)
+
+    def loglikelihood(self):
+        return -(self.create_differences()**2).sum() / self.sigma**2
 
     def __del__(self):
         pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'))

@@ -187,3 +187,10 @@ def local_max_featuring(im, size=10):
     label = nd.label(equal)[0]
     pos = np.array(nd.measurements.center_of_mass(equal, labels=label, index=np.unique(label)))
     return pos[1:], tim
+
+def trackpy_featuring(im, size=10):
+    from trackpy.feature import locate
+    size = size + size % 2
+    a = locate(im, size, invert=True)
+    pos = np.vstack([a.z, a.y, a.x]).T
+    return pos

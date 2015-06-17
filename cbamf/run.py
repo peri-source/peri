@@ -9,7 +9,7 @@ def renorm(s, doprint=1):
     s.state[s.b_pos], s.state[s.b_rad] = p, r
 
 def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
-    m = models.PositionsRadiiPSF(imsig=state.sigma)
+    m = models.PositionsRadiiPSF()
 
     eng = engines.SequentialBlockEngine(m, state)
     opsay = observers.Printer()
@@ -23,7 +23,7 @@ def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
     return ohist
 
 def sample_ll(state, element, size=0.1, N=1000):
-    m = models.PositionsRadiiPSF(imsig=state.sigma)
+    m = models.PositionsRadiiPSF()
     start = state.state[element]
 
     ll = []
