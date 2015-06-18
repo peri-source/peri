@@ -53,9 +53,10 @@ class MHSampler(Sampler):
         return px, self.getstate(state, x)
 
 class SliceSampler(Sampler):
-    def __init__(self, var=None, width=None, *args, **kwargs):
+    def __init__(self, var=None, width=None, maxsteps=50, *args, **kwargs):
         super(SliceSampler, self).__init__(*args, **kwargs)
         self.width = width or 1
+        self.maxsteps = maxsteps
 
     def sample(self, model, state, curloglike=None):
         size = state.state[self.block].shape
@@ -78,22 +79,17 @@ class SliceSampler(Sampler):
             print "Starting with bad state"
             raise IOError
 
-        steps = 0
-        while (up < pl):
+        stepl = np.floor(self.maxsteps * np.random.rand())
+        stepr = self.maxsteps - 1 - stepl
+        while stepl > 0 and up < pl:
             xl = xl - self.width
             pl = self.loglikelihood(model, state, xl)
-            steps += 1
-            if steps > 100:
-                print up, pl, self.width
-                raise IOError
-        steps = 0
-        while (up < pr):
+            stepl -= 1
+
+        while stepr > 0 and up < pr:
             xr = xr + self.width
             pr = self.loglikelihood(model, state, xr)
-            steps += 1
-            if steps > 100:
-                print up, pl, self.width
-                raise IOError
+            stepr -= 1
 
         steps = 0
         xr0 = xr
@@ -109,9 +105,128 @@ class SliceSampler(Sampler):
             xl[xp < x] = xp[xp < x]
             steps += 1
 
-            if steps > 100:
-                print xl0, xr0, xl, xr, xp, pp, self.width
-                raise IOError #return px, self.getstate(state, x)
+            if steps > self.maxsteps:
+                return up, self.getstate(state, x)
+
+class SliceSampler1D(Sampler):
+    def __init__(self, var=None, width=None, maxsteps=10, procedure='uniform', *args, **kwargs):
+        super(SliceSampler, self).__init__(*args, **kwargs)
+        self.width = width or 1
+        self.maxsteps = maxsteps
+        self.procedure = procedure
+
+        self._procedure = ['uniform', 'doubling']
+        if self.procedure not in self._procedure:
+            raise AttributeError("Stepout procedure '%s' not recognized, must be one of %r" % (self.procedure, self._procedure))
+
+    def stepout_uniform(self, model, state, x0, p0):
+        u = np.random.rand()
+        xl = x0 - self.width*u
+        xr = x0 + self.width*(1-u)
+
+        v = np.random.rand()
+        ml = np.floor(self.maxsteps * v)
+        mr = (self.maxsteps - 1) - ml
+
+        pl = self.loglikelihood(model, state, xl)
+        pr = self.loglikelihood(model, state, xr)
+
+        while ml > 0 and p0 < pl:
+            xl = xl - self.width
+            ml = ml - 1
+            pl = self.loglikelihood(model, state, xl)
+
+        while mr > 0 and p0 < pr:
+            xr = xr + self.width
+            mr = mr - 1
+            pr = self.loglikelihood(model, state, xr)
+
+        return xl, xr
+
+    def stepout_doubling(self, model, state, x0, p0):
+        u = np.random.rand()
+        xl = x0 - self.width*u
+        xr = x0 + self.width*(1-u)
+
+        k = self.maxsteps
+
+        pl = self.loglikelihood(model, state, xl)
+        pr = self.loglikelihood(model, state, xr)
+
+        while k > 0 and (p0 < pl and p0 < pr):
+            v = np.random.rand()
+            if v < 0.5:
+                xl = xl - (xr - xl)
+            else:
+                xr = xr + (xr - xl)
+            k = k - 1
+
+        return xl, xr
+
+    def sampling_uniform(self, model, state, xl, xr, x0, p0):
+        while True:
+            u = np.random.rand()
+            x1 = xl + u*(xr - xl)
+
+            p1 = self.loglikelihood(model, state, x1)
+            if p0 < p1:
+                return p0, x1
+
+            xr[x1 > x0] = x1
+            xl[x1 < x0] = x1
+
+    def sampling_doubling(self, model, state, xl, xr, x0, p0):
+        size = x0.shape
+        if size[0] > 1:
+            raise AttributeError("Shrink sampling cannot have multidimensional blocks")
+
+        d = False
+
+        v = np.random.rand()
+        x1 = xl + (xr - xl)*v
+        p1 = self.loglikelihood(model, state, m)
+
+        while xr - xl > 1.1*self.width:
+            m = (xl + xr)/2
+
+            if ((x0 < m and x1 > m) or (x0 >= m and x1 < m)):
+                d = True
+
+            if x1 < m:
+                r = m
+            else:
+                l = m
+
+            pl = self.loglikelihood(model, state, xl)
+            pr = self.loglikelihood(model, state, xr)
+
+            if d and p0 > pl and p0 > pr:
+                return up, x0
+
+        return p1, x1
+
+    def sample(self, model, state, curloglike=None):
+        size = state.state[self.block].shape
+        x = state.state[self.block]
+
+        if not isinstance(x, np.ndarray):
+            x = np.array([x])
+
+        px = curloglike or self.loglikelihood(model, state, x)
+        up = np.log(np.random.rand()) + px
+
+        if self.procedure == 'uniform':
+            xl, xr = self.stepout_uniform(model, state, x, up)
+        if self.procedure == 'doubling':
+            xl, xr = self.stepout_doubling(model, state, x, up)
+
+
+        if self.procedure == 'uniform':
+            ll, xn = self.sampling_uniform(model, state, xl, xr, x, up)
+        if self.procedure == 'doubling':
+            ll, xn = self.sampling_doubling(model, state, xl, xr, x, up)
+
+        return ll, self.getstate(state, xn)
 
 class HamiltonianMCSampler(Sampler):
     def __init__(self, var=None, steps=1, tau=5, eps=1e-2, *args, **kwargs):

@@ -50,7 +50,7 @@ def scan_noise(image, state, element, size=0.01, N=1000):
 
     return xs, ys
 
-def sample_particles(state):
+def sample_particles(state, stepout=1):
     print '{:-^39}'.format(' POS / RAD ')
     for particle in xrange(state.N):
         print particle
@@ -60,9 +60,9 @@ def sample_particles(state):
 
         if state.set_current_particle(particle):
             blocks = state.blocks_particle()
-            sample_state(state, blocks)
+            sample_state(state, blocks, stepout=stepout)
 
-def sample_block(state, blockname, explode=True):
+def sample_block(state, blockname, explode=True, stepout=1):
     print '{:-^39}'.format(' '+blockname.upper()+' ')
     state.set_current_particle()
     blocks = [state.create_block(blockname)]
@@ -70,7 +70,7 @@ def sample_block(state, blockname, explode=True):
     if explode:
         blocks = state.explode(blocks[0])
 
-    sample_state(state, blocks)
+    sample_state(state, blocks, stepout)
 
 def build_bounds(state):
     bounds = []

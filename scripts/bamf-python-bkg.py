@@ -12,12 +12,12 @@ import pickle
 import time
 
 GN = 64
-GS = 0.05
+GS = 0.01
 PSF = (0.6, 2)
 ORDER = (3,3,2)
 
-sweeps = 10
-samples = 10
+sweeps = 5
+samples = 2
 burn = sweeps - samples
 
 import pickle
@@ -31,7 +31,7 @@ ipure = s0.create_final_image()
 itrue = ipure + np.random.normal(0.0, GS, size=ipure.shape)
 
 s = states.ConfocalImagePython(len(rstart), itrue, pad=16, order=ORDER,
-        state=strue, threads=1)
+        state=strue.copy(), threads=4)
 
 run.renorm(s)
 
@@ -47,7 +47,7 @@ if True:
         run.sample_block(s, 'amp', explode=True)
         #run.sample_block(s, 'zscale', explode=True)
 
-        if i > burn:
+        if i >= burn:
             h.append(s.state.copy())
 
     h = np.array(h)
