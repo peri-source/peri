@@ -172,15 +172,18 @@ def log_featuring(im, size_range=[0,20]):
 
     return p, q, s
 
-def local_max_featuring(im, size=10):
-    x,y,z = np.mgrid[0:2*size,0:2*size,0:2*size]
-    r = np.sqrt((x-size-0.5)**2 + (y-size-0.5)**2 + (z-size-0.5)**2)
-    footprint = r < size - 1
+def generate_sphere(radius):
+    x,y,z = np.mgrid[0:2*radius,0:2*radius,0:2*radius]
+    r = np.sqrt((x-radius-0.5)**2 + (y-radius-0.5)**2 + (z-radius-0.5)**2)
+    sphere = r < radius - 1
+    return sphere
+
+def local_max_featuring(im, radius=10):
+    footprint = generate_sphere(radius)
 
     tim = im.copy()
     tim = remove_z_mean(tim)
     tim = smooth(tim, 2)
-    tim = highpass(tim, size/2.0/im.shape[0])
     maxes = nd.maximum_filter(tim, footprint=footprint)
     equal = maxes == tim
 
@@ -190,7 +193,7 @@ def local_max_featuring(im, size=10):
 
 def trackpy_featuring(im, size=10):
     from trackpy.feature import locate
-    size = size + size % 2
+    size = size + (size+1) % 2
     a = locate(im, size, invert=True)
     pos = np.vstack([a.z, a.y, a.x]).T
     return pos

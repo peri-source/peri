@@ -5,24 +5,27 @@ import pylab as pl
 from cbamf.cu import nbl, fields
 from cbamf import observers, samplers, models, engines, initializers, states, run
 
-GS = 0.02
-RADIUS = 12.0
-PSF = (1.4, 3.0)
 ORDER = (1,1,1)
-PAD = 20
-
 sweeps = 20
 samples = 10
 burn = sweeps - samples
 
-#itrue = initializers.normalize(initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)[12:,:128,:128], True)
-#itrue = initializers.normalize(initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)[12:,:128,:128], False)
-raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)
-itrue = initializers.normalize(raw[12:,:128,:128], False)
-xstart, proc = initializers.local_max_featuring(itrue, 9)
+if False:
+    GS = 0.02
+    PSF = (1.4, 3.0)
+    PAD, FSIZE, RAD, INVERT, IMSIZE = 34, 13, 13, True, 256
+    raw = initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)
+else:
+    GS = 0.02
+    PSF = (1.4, 3.0)
+    PAD, FSIZE, RAD, INVERT, IMSIZE = 22, 9, 7.3, False, 128
+    raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)
+
+itrue = initializers.normalize(raw[12:,:IMSIZE,:IMSIZE], INVERT)
+xstart, proc = initializers.local_max_featuring(itrue, FSIZE)
 itrue = initializers.normalize(itrue, True)
 
-rstart = 7.3*np.ones(xstart.shape[0])
+rstart = RAD*np.ones(xstart.shape[0])
 pstart = np.array(PSF)
 bstart = np.zeros(np.prod(ORDER))
 astart = np.ones(1)*0
@@ -30,8 +33,8 @@ zstart = np.ones(1)#*1.064
 GN = rstart.shape[0]
 bstart[0] = 1.0
 
-itrue = np.pad(itrue, PAD+2, mode='constant', constant_values=-10)
-xstart += PAD+2
+itrue = np.pad(itrue, PAD, mode='constant', constant_values=-10)
+xstart += PAD
 
 strue = np.hstack([xstart.flatten(), rstart, pstart, bstart, astart, zstart])
 s = states.ConfocalImagePython(GN, itrue, pad=PAD, order=ORDER, state=strue.copy(),
