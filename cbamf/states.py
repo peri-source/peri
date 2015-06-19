@@ -218,7 +218,7 @@ class ConfocalImagePython(State):
             self.offset = self.state[self.b_off]
 
         if block[self.b_zscale].any():
-            self.zscale = s.state[self.b_zscale]
+            self.zscale = self.state[self.b_zscale]
             self.initialize()
 
     def blocks_particle(self):

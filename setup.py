@@ -15,7 +15,8 @@ import shutil
 # https://github.com/rmcgibbo/npcuda-example
 #==============================================================
 # Obtain the numpy include directory.  This logic works across numpy versions.
-DOPLOT = True
+DOPLOT = False
+DOCUDA = False
 
 try:
     numpy_include = numpy.get_include()
@@ -32,6 +33,7 @@ def customize_compiler_for_nvcc(self):
             self.set_executable('compiler_so', 'nvcc')
             postargs = extra_postargs['nvcc']
         else:
+            pass
             postargs = extra_postargs['gcc']
 
         default_compile(obj, src, ext, cc_args, postargs, pp_opts)
@@ -77,37 +79,39 @@ def locate_cuda():
             raise EnvironmentError('The CUDA %s path could not be located in %s' % (k, v))
 
     return cudaconfig
-CUDA = locate_cuda()
 
 GLLIB = ['GL', 'GLU', 'glut'] if DOPLOT else []
-CUARGS = {
-    'swig_opts': ['-c++'],
-    'library_dirs': [CUDA['lib64']],
-    'runtime_library_dirs': [CUDA['lib64']],
-    'include_dirs': [numpy_include, CUDA['include'], 'src'],
-    'libraries': ['cudart', 'curand', 'cufft', 'cublas', 'm', 'rt'] + GLLIB,
-    'extra_compile_args': {
-        'gcc': ['-std=c99', '-O2', "-fPIC", "-DCUDA", "-march=native", '-pipe', '-Wall'],
-        'nvcc': ['-DCUDA', '-O2', '-use_fast_math', '-arch=sm_20', '-c', '--compiler-options', "'-fPIC'"]#, '--compiler-options', "'-Wall'"]
-    },
-}
 
-CARGS = {
-    'include_dirs': [numpy_include, 'src'],
-    'libraries': ['m', 'rt'] + GLLIB,
-    'extra_compile_args': {
-        'gcc': ['-std=c99', "-fPIC"],
-    },
-}
+if DOCUDA:
+    CUDA = locate_cuda()
+    CUARGS = {
+        'swig_opts': ['-c++'],
+        'library_dirs': [CUDA['lib64']],
+        'runtime_library_dirs': [CUDA['lib64']],
+        'include_dirs': [numpy_include, CUDA['include'], 'src'],
+        'libraries': ['cudart', 'curand', 'cufft', 'cublas', 'm', 'rt'] + GLLIB,
+        'extra_compile_args': {
+            'gcc': ['-std=c99', '-O2', "-fPIC", "-DCUDA", "-march=native", '-pipe', '-Wall'],
+            'nvcc': ['-DCUDA', '-O2', '-use_fast_math', '-arch=sm_20', '-c', '--compiler-options', "'-fPIC'"]#, '--compiler-options', "'-Wall'"]
+        },
+    }
+
+    ext2 = Extension('cbamf.cu._fields',
+            sources=['src/fields.i', 'src/fields.cu', 'src/util.cu'], **CUARGS)
+else:
+    CUARGS = {
+        'swig_opts': ['-c++'],
+        'include_dirs': [numpy_include, 'src'],
+        'libraries': ['m', 'rt'] + GLLIB,
+        'extra_compile_args': {
+            'gcc': ['-std=c99', "-fPIC"],
+        },
+    }
 
 ext = Extension('cbamf.cu._nbl',
         sources=['src/nbl.i', 'src/nbl.cpp'], **CUARGS)
 
-ext2 = Extension('cbamf.cu._fields',
-        sources=['src/fields.i', 'src/fields.cu', 'src/util.cu'], **CUARGS)
-
-extensions = [ext, ext2]
-extensions = extensions if DOPLOT else extensions[:-1]
+extensions = [ext] + [] if not DOCUDA else [ext2]
 
 for f in glob.glob("src/*.py"):
     ff = os.path.basename(f)
