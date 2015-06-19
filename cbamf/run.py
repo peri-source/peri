@@ -52,7 +52,7 @@ def scan_noise(image, state, element, size=0.01, N=1000):
 
 def sample_particles(state, stepout=1):
     print '{:-^39}'.format(' POS / RAD ')
-    for particle in xrange(state.N):
+    for particle in xrange(state.obj.N):
         print particle
         sys.stdout.flush()
 

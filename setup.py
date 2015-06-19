@@ -121,7 +121,7 @@ setup(name='cbamf',
       author='Matt Bierbaum',
       version='0.1',
 
-      packages=['cbamf', 'cbamf.cu'],
+      packages=['cbamf', 'cbamf.cu', 'cbamf.comp', 'cbamf.psf'],
       cmdclass={'build_ext': CustomBuildExt},
       ext_modules=extensions,
       zip_safe=False

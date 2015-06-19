@@ -61,7 +61,7 @@ def sample(s):
         run.sample_block(s, 'psf', stepout=0.1, explode=False)
         run.sample_block(s, 'bkg', stepout=0.1, explode=False)
         run.sample_block(s, 'amp', stepout=0.1, explode=True)
-        #run.sample_block(s, 'zscale', explode=True)
+        run.sample_block(s, 'zscale', explode=True)
 
         if i > burn:
             h.append(s.state.copy())
