@@ -52,10 +52,11 @@ class PSF(object):
         self._klen = np.sqrt(kx**2 + ky**2 + kz**2)
 
     def set_tile(self, tile):
-        self.tile = tile
-        self._setup_kvecs()
-        self._setup_ffts()
-        self.update(self.params)
+        if any(self.tile.shape != tile.shape):
+            self.tile = tile
+            self._setup_kvecs()
+            self._setup_ffts()
+            self.update(self.params)
 
     def update(self, params):
         self.params = params

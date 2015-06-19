@@ -37,10 +37,7 @@ if True:
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        a = time.time()
         run.sample_particles(s)
-        b = time.time()
-        print b-a
         run.sample_block(s, 'psf', explode=False)
         run.sample_block(s, 'ilm', explode=False)
         run.sample_block(s, 'off', explode=True)

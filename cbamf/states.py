@@ -90,7 +90,6 @@ class ConfocalImagePython(State):
         self.b_zscale = self.create_block('zscale')
 
         self.build_state()
-        self.initialize()
 
     def build_state(self):
         out = []
@@ -110,6 +109,9 @@ class ConfocalImagePython(State):
 
         self.state = np.hstack(out)
 
+        self.initialize()
+        self.update_psf()
+
     def initialize(self):
         self.obj.initialize(self.zscale)
         self.ilm.initialize()
@@ -119,9 +121,6 @@ class ConfocalImagePython(State):
     
     def update_psf(self):
         self.psf.update(self.state[self.b_psf])
-
-    def update_sphere(self, pos0, rad0, pos1, rad1):
-        self.obj.update(pos0, rad0, pos1, rad1, self.state[self.b_zscale])
 
     def create_final_image(self):
         illumination = self.ilm.get_field() * (1 - self.obj.get_field())
@@ -204,7 +203,7 @@ class ConfocalImagePython(State):
         rad = self.state[self.b_rad].copy()[particles]
 
         if len(pos) > 0 and len(rad) > 0:
-            self.obj.update(particles, pos, rad, self.zscale)#update_rspace_spheres(particles, pos, rad, self.zscale)
+            self.obj.update(particles, pos, rad, self.zscale)
 
         # if the psf was changed, update
         if block[self.b_psf].any():
