@@ -128,5 +128,3 @@ class GaussianPolynomialPCA(PSF):
     def evaluate_fourier_space(self):
         pass
 
-    def nparams(self):
-        return 2 + self.comp

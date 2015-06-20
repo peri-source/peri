@@ -5,20 +5,20 @@ import pylab as pl
 from cbamf import states, run, initializers
 from cbamf.comp import objs, psfs, ilms
 
-ORDER = (1,1,1)
+ORDER = (3,3,2)
 sweeps = 20
 samples = 10
 burn = sweeps - samples
 
 if False:
-    sigma = 0.02
-    PSF = (1.4, 3.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE = 34, 13, 13, True, 256
+    sigma = 0.05
+    PSF = (0.9, 2.0)
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 34, 16, 17, True, 256, 1.34
     raw = initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)
 else:
     sigma = 0.02
     PSF = (1.4, 3.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE = 22, 9, 7.3, False, 128
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 22, 9, 7.3, False, 512, 1.06
     raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)
 
 itrue = initializers.normalize(raw[12:,:IMSIZE,:IMSIZE], INVERT)
@@ -33,7 +33,7 @@ obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
 psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
 ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
 s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
-        zscale=1, offset=0, pad=16, sigma=sigma)
+        zscale=zscale, offset=0, pad=16, sigma=sigma)
 
 run.renorm(s)
 
