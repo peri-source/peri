@@ -18,8 +18,11 @@ if False:
 else:
     sigma = 0.02
     PSF = (1.4, 3.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 22, 9, 7.3, False, 512, 1.06
-    raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)
+    #PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 22, 9, 7.3, False, 128, 1.06
+    #raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)
+
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 16, 5, 5.3, False, 128, 1.06
+    raw = initializers.load_tiff("/media/scratch/bamf/neil-large.tif", do3d=True)
 
 itrue = initializers.normalize(raw[12:,:IMSIZE,:IMSIZE], INVERT)
 xstart, proc = initializers.local_max_featuring(itrue, FSIZE)
