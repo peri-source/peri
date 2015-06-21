@@ -6,7 +6,7 @@ import pyfftw
 from pyfftw.builders import fftn, ifftn
 from multiprocessing import cpu_count
 
-from ..util import Tile
+from cbamf.util import Tile
 
 WISDOM_FILE = os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl")
 
@@ -31,9 +31,8 @@ class PSF(object):
         self.threads = threads if threads > 0 else cpu_count()
         self.fftw_planning_level = fftw_planning_level
 
-        self.tile = Tile(self.shape)
-        self._setup_kvecs()
-        self._setup_ffts()
+        self.tile = Tile((0,0,0))
+        self.set_tile(Tile(self.shape))
 
     def _setup_ffts(self):
         self._fftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
@@ -44,12 +43,23 @@ class PSF(object):
                 planner_effort=self.fftw_planning_level, threads=self.threads)
 
     def _setup_kvecs(self):
-        kz = 2*np.pi*np.fft.fftfreq(self.tile.shape[0])[:,None,None]
-        ky = 2*np.pi*np.fft.fftfreq(self.tile.shape[1])[None,:,None]
-        kx = 2*np.pi*np.fft.fftfreq(self.tile.shape[2])[None,None,:]
+        sp = self.tile.shape
+        kz = 2*np.pi*np.fft.fftfreq(sp[0])[:,None,None]
+        ky = 2*np.pi*np.fft.fftfreq(sp[1])[None,:,None]
+        kx = 2*np.pi*np.fft.fftfreq(sp[2])[None,None,:]
         self._kx, self._ky, self._kz = kx, ky, kz
         self._kvecs = np.rollaxis(np.array(np.broadcast_arrays(kz,ky,kx)), 0, 4)
         self._klen = np.sqrt(kx**2 + ky**2 + kz**2)
+
+    def _setup_rvecs(self):
+        sp = self.tile.shape
+        mx = np.max(sp)
+        rz = 2*sp[0]*np.fft.fftfreq(sp[0])[:,None,None] / mx
+        ry = 2*sp[1]*np.fft.fftfreq(sp[1])[None,:,None] / mx
+        rx = 2*sp[2]*np.fft.fftfreq(sp[2])[None,None,:] / mx
+        self._rx, self._ry, self._rz = rx, ry, rz
+        self._rvecs = np.rollaxis(np.array(np.broadcast_arrays(rz,ry,rx)), 0, 4)
+        self._rlen = np.sqrt(rx**2 + ry**2 + rz**2)
 
     def set_tile(self, tile):
         if any(self.tile.shape != tile.shape):
@@ -103,28 +113,50 @@ class IsotropicDisc(PSF):
         return (1.0 + np.exp(-params[1]*params[0])) / (1.0 + np.exp(params[1]*(self._klen - params[0])))
 
 class GaussianPolynomialPCA(PSF):
-    def __init__(self, cov_mat_file, mean_mat_file, components=5):
+    def __init__(self, cov_mat_file, mean_mat_file, shape, gaussian=(1,1), components=5, *args, **kwargs):
         self.cov_mat_file = cov_mat_file
         self.mean_mat_file = mean_mat_file
         self.comp = components
 
-        self.setup_from_files()
+        self._setup_from_files()
+        params0 = np.hstack([gaussian, self._psf_vecs.T.dot(self._psf_mean)])
 
-    def setup_from_files(self):
-        covm = np.load(self.psf_data_files[0])
-        mean = np.load(self.psf_data_files[1])
+        super(GaussianPolynomialPCA, self).__init__(*args, params=params0, shape=shape, **kwargs)
+
+    def _setup_from_files(self):
+        covm = np.load(self.cov_mat_file)
+        mean = np.load(self.mean_mat_file)
 
         vals, vecs = np.linalg.eig(covm)
-        self.psf_vecs = vecs[:,:self.comp+1]
+        self._psf_vecs = np.real(vecs[:,:self.comp+1])
+        self._psf_mean = np.real(mean)
 
-    def evaluate_real_space(self, rvec, coeff):
-        rho = np.sqrt(rvec[1]**2 + rvec[2]**2) / coeff[0]
-        z = rvec[0] / coeff[1]
+    def _evaluate_real_space(self):
+        coeff = self.params
+        rvec = self._rvecs
 
-        polycoeffs = self.psf_vecs.dot(coeff[2:])
+        rho = np.sqrt(rvec[...,1]**2 + rvec[...,2]**2) / coeff[0]
+        z = rvec[...,0] / coeff[1]
+
+        polycoeffs = self._psf_vecs.dot(coeff[2:])
         poly = np.polynomial.polynomial.polyval2d(rho, z, polycoeffs)
         return poly * np.exp(-rho**2) * np.exp(-z**2)
 
-    def evaluate_fourier_space(self):
-        pass
+    def _evaluate_fourier_space(self, arr):
+        self._fftn_data[:] = arr
+        self._fftn.execute()
+        return self._fftn.get_output_array()
+
+    def set_tile(self, tile):
+        if any(self.tile.shape != tile.shape):
+            self.tile = tile
+            self._setup_rvecs()
+            self._setup_kvecs()
+            self._setup_ffts()
+            self.update(self.params)
+
+    def update(self, params):
+        self.params = params
+        self.rpsf = self._evaluate_real_space()
+        self.kpsf = self._evaluate_fourier_space(self.rpsf)
 
