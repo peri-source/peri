@@ -5,9 +5,9 @@ import pylab as pl
 from cbamf import states, run, initializers
 from cbamf.comp import objs, psfs, ilms
 
-ORDER = (3,3,2)
-sweeps = 20
-samples = 10
+ORDER = (1,1,1)
+sweeps = 30
+samples = 20
 burn = sweeps - samples
 
 if False:

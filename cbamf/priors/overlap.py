@@ -1,8 +1,7 @@
 import itertools
 import numpy as np
 import scipy as sp
-from priors import ZEROLOGPRIOR
-from cbamf.util import Tile
+from .priors import ZEROLOGPRIOR
 
 class HardSphereOverlapNaive(object):
     def __init__(self, pos, rad, zscale=1, prior_type='absolute'):
@@ -168,6 +167,7 @@ class HardSphereOverlapCellBased(object):
 
         for n in self._neighbors(index):
             self._calculate_prior(n)
+        self._calculate_prior(index)
 
     def logprior(self):
         return self.logpriors.sum()
