@@ -52,7 +52,7 @@ def scan_noise(image, state, element, size=0.01, N=1000):
 
 def sample_particles(state, stepout=1):
     print '{:-^39}'.format(' POS / RAD ')
-    for particle in xrange(state.N):
+    for particle in xrange(state.obj.N):
         print particle
         sys.stdout.flush()
 
@@ -71,6 +71,55 @@ def sample_block(state, blockname, explode=True, stepout=1):
         blocks = state.explode(blocks[0])
 
     sample_state(state, blocks, stepout)
+
+def feature(filename, sweeps=20, samples=10, prad=7.3, psize=9,
+        pad=22, imsize=-1, zscale=1.06, sigma=0.02, invert=False):
+    from cbamf import states, run, initializers
+    from cbamf.comp import objs, psfs, ilms
+
+    ORDER = (1,1,1)
+    burn = sweeps - samples
+
+    PSF = (1.4, 3.0)
+    raw = initializers.load_tiff(filename, do3d=True)
+
+    print "Initial featuring"
+    itrue = initializers.normalize(raw[12:,:imsize,:imsize], invert)
+    xstart, proc = initializers.local_max_featuring(itrue, psize)
+    itrue = initializers.normalize(itrue, True)
+    itrue = np.pad(itrue, pad, mode='constant', constant_values=-10)
+    xstart += pad
+    rstart = prad*np.ones(xstart.shape[0])
+
+    print "Making state"
+    imsize = itrue.shape
+    obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
+    psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
+    ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
+    s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
+            zscale=zscale, offset=0, pad=16, sigma=sigma)
+
+    run.renorm(s)
+
+    h = []
+    ll = []
+    run.renorm(s)
+    for i in xrange(sweeps):
+        print '{:=^79}'.format(' Sweep '+str(i)+' ')
+
+        run.sample_particles(s, stepout=0.1)
+        run.sample_block(s, 'psf', stepout=0.1, explode=False)
+        run.sample_block(s, 'ilm', stepout=0.1, explode=False)
+        run.sample_block(s, 'off', stepout=0.1, explode=True)
+        run.sample_block(s, 'zscale', explode=True)
+
+        if i > burn:
+            h.append(s.state.copy())
+            ll.append(s.loglikelihood())
+
+    h = np.array(h)
+    ll = np.array(ll)
+    return h, ll
 
 def build_bounds(state):
     bounds = []

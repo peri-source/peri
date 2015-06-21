@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.special import j1
-from .cu import fields, nbl
+from .cu import nbl
 
 class Model(object):
     def __init__(self, logpriors=None, gradlogpriors=None):

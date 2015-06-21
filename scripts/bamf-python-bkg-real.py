@@ -2,43 +2,41 @@ import matplotlib as mpl
 mpl.use('Agg')
 import numpy as np
 import pylab as pl
-from cbamf.cu import nbl, fields
-from cbamf import observers, samplers, models, engines, initializers, states, run
+from cbamf import states, run, initializers
+from cbamf.comp import objs, psfs, ilms
 
 ORDER = (1,1,1)
-sweeps = 20
-samples = 10
+sweeps = 30
+samples = 20
 burn = sweeps - samples
 
 if False:
-    GS = 0.02
-    PSF = (1.4, 3.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE = 34, 13, 13, True, 256
+    sigma = 0.05
+    PSF = (0.9, 2.0)
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 34, 16, 17, True, 256, 1.34
     raw = initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)
 else:
-    GS = 0.02
+    sigma = 0.02
     PSF = (1.4, 3.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE = 22, 9, 7.3, False, 128
-    raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)
+    #PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 22, 9, 7.3, False, 128, 1.06
+    #raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)
+
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 16, 5, 5.3, False, 128, 1.06
+    raw = initializers.load_tiff("/media/scratch/bamf/neil-large.tif", do3d=True)
 
 itrue = initializers.normalize(raw[12:,:IMSIZE,:IMSIZE], INVERT)
 xstart, proc = initializers.local_max_featuring(itrue, FSIZE)
 itrue = initializers.normalize(itrue, True)
-
-rstart = RAD*np.ones(xstart.shape[0])
-pstart = np.array(PSF)
-bstart = np.zeros(np.prod(ORDER))
-astart = np.ones(1)*0
-zstart = np.ones(1)#*1.064
-GN = rstart.shape[0]
-bstart[0] = 1.0
-
 itrue = np.pad(itrue, PAD, mode='constant', constant_values=-10)
 xstart += PAD
+rstart = RAD*np.ones(xstart.shape[0])
 
-strue = np.hstack([xstart.flatten(), rstart, pstart, bstart, astart, zstart])
-s = states.ConfocalImagePython(GN, itrue, pad=PAD, order=ORDER, state=strue.copy(),
-        sigma=GS, psftype=states.PSF_ANISOTROPIC_GAUSSIAN, threads=4)
+imsize = itrue.shape
+obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
+psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
+ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
+s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
+        zscale=zscale, offset=0, pad=16, sigma=sigma)
 
 run.renorm(s)
 
@@ -59,9 +57,9 @@ def sample(s):
 
         run.sample_particles(s, stepout=0.1)
         run.sample_block(s, 'psf', stepout=0.1, explode=False)
-        run.sample_block(s, 'bkg', stepout=0.1, explode=False)
-        run.sample_block(s, 'amp', stepout=0.1, explode=True)
-        #run.sample_block(s, 'zscale', explode=True)
+        run.sample_block(s, 'ilm', stepout=0.1, explode=False)
+        run.sample_block(s, 'off', stepout=0.1, explode=True)
+        run.sample_block(s, 'zscale', explode=True)
 
         if i > burn:
             h.append(s.state.copy())

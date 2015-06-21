@@ -7,8 +7,6 @@ from scipy import signal
 import matplotlib as mpl
 import time
 
-from .cu import nbl
-
 def load_stack(filename, do3d=False):
     if do3d:
         z = load_tiff(filename, do3d=True)
@@ -46,63 +44,6 @@ def normalize(im, invert=False):
     if invert:
         out = 1 - out
     return out
-
-def fake_image_2d(N=32, radius=5, phi=0.53, noise=0.05, seed=10, psf=(0.5,5)):
-    from colloids.sim import Sim
-    from colloids.cu import fields
-    s = Sim(N, radius=radius, seed=seed)
-    s.init_random_2d(phi=phi)
-    s.do_relaxation(4000)
-    s.set_param_hs()
-    s.do_steps(100)
-
-    L = s.L.astype('int32')+1
-    x = s.get_pos().flatten()
-    r = s.get_rad().flatten()
-    p = np.array(psf, dtype='float32')
-
-    im = np.zeros(L, dtype='float32').flatten()
-    field = fields.createField(L)
-    fields.fieldSet(field, im)
-    fields.process_image(field, x, r, p, fields.PSF_ISOTROPIC_DISC, 16)
-    fields.fieldGet(field, im)
-    fields.freeField(field)
-
-    im = im.reshape(L[::-1])
-    imnoise = np.random.normal(0, noise, L[::-1])
-    im += imnoise
-    print 'Noise disturbance added:', (imnoise**2).sum()/noise**2
-    return im[:], x.reshape(-1,3), r, p
-
-def fake_image_3d(N=32, radius=5, phi=0.53, noise=0.05, seed=10, psf=(0.5,5)):
-    from colloids.sim import Sim
-    from colloids.cu import fields
-    s = Sim(N, radius=radius, seed=seed)
-    s.init_random_3d(phi=phi)
-    s.do_relaxation(4000)
-    s.set_param_hs()
-    s.do_steps(100)
-
-    L = s.L.astype('int32')+1
-    x = s.get_pos().flatten().astype('float64')
-    r = s.get_rad().flatten().astype('float64')
-    p = np.array(psf, dtype='float32')
-
-    nbl.naive_renormalize_radii(x, r, 1)
-
-    im = np.zeros(L, dtype='float32').flatten()
-    field = fields.createField(L)
-    fields.fieldSet(field, im)
-    fields.process_image(field, x, r, p, fields.PSF_ISOTROPIC_DISC, int(radius*3))
-    fields.fieldGet(field, im)
-    fields.freeField(field)
-
-    im = im.reshape(L[::-1])
-    nonoise = im.copy()
-    imnoise = np.random.normal(0, noise, L[::-1])
-    im += imnoise
-    print 'Noise disturbance added:', (imnoise**2).sum()/noise**2
-    return nonoise, im[:], x.reshape(-1,3), r, p
 
 def scan(im, cycles=1):
     pl.figure(1)
