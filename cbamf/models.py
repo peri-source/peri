@@ -1,6 +1,4 @@
 import numpy as np
-from scipy.special import j1
-from .cu import nbl
 
 class Model(object):
     def __init__(self, logpriors=None, gradlogpriors=None):
@@ -71,7 +69,7 @@ class PositionsRadiiPSF(Model):
         return nbl.naive_overlap(pos, rad, state.state[state.b_zscale][0], 0)
 
     def docalculate(self, state, docheck=True):
-        if docheck:
+        if False:
             if self.has_overlaps(state):
                 return -np.inf
             if self.has_negrad(state):
