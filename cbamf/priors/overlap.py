@@ -77,6 +77,7 @@ class HardSphereOverlapCell(object):
         self.zscale = np.array([zscale, 1, 1])
         self.logpriors = np.zeros_like(rad)
         self.inds = [[]]*self.N
+        self.neighs = []*self.N
 
         if prior_type == 'absolute':
             self.prior_func = lambda x: (x < 0)*ZEROLOGPRIOR
@@ -102,9 +103,11 @@ class HardSphereOverlapCell(object):
         inds = self.inds[index]
 
         for ind,_ in inds:
-            p = np.where(self.cells[ind] == index)[0]
-            self.cells[p] = self.cells[self.counts[ind]-1]
-            self.cells[self.counts[ind]-1] = -1
+            cell = self.cells[ind]
+            p = np.where(cell == index)[0]
+            cell[p] = cell[self.counts[ind]-1]
+            cell[self.counts[ind]-1] = -1
+            self.cells[ind] = cell
             self.counts[ind] -= 1
 
         self.inds[index] = []
@@ -126,6 +129,7 @@ class HardSphereOverlapCell(object):
             )
 
     def _neighbors(self, i):
+        # TODO cache this, and only recalculate the necessary bits
         locs = self.inds[i]
 
         neighs = []
@@ -138,7 +142,7 @@ class HardSphereOverlapCell(object):
                 neighs.extend(cell[:count])
 
         neighs = np.unique(np.array(neighs))
-        neighs = np.delete(neighs, np.where(neighs == i))
+        neighs = np.delete(neighs, np.where((neighs == i) | (neighs == -1)))
         return neighs
 
     def _calculate_prior(self, i):
@@ -157,14 +161,16 @@ class HardSphereOverlapCell(object):
     def update(self, index, pos, rad):
         for i,p,r in zip(index, pos, rad):
 
+            n0 = self._neighbors(i)
             self._unbin_particle(i)
 
             self.pos[i] = p
             self.rad[i] = r
 
             self._bin_particle(i)
+            n1 = self._neighbors(i)
 
-            for n in self._neighbors(i):
+            for n in itertools.chain(n0, n1):
                 self._calculate_prior(n)
             self._calculate_prior(i)
 
@@ -174,6 +180,7 @@ class HardSphereOverlapCell(object):
 def test():
     N = 128
     for i in xrange(50):
+        print i
         x = np.random.rand(N, 3)
         r = 0.05*np.random.rand(N)
 
@@ -181,3 +188,15 @@ def test():
         b = HardSphereOverlapCell(x, r)
 
         assert((a.logpriors == b.logpriors).all())
+
+        for j in xrange(100):
+            l = np.random.randint(N, size=1)
+            pp = x[l]#np.random.rand(3)
+            rp = 0.05*np.random.rand(1)
+            a.update(l, pp, rp)
+            b.update(l, pp, rp)
+
+            if not (a.logpriors == b.logpriors).all():
+                print l, pp, rp
+                print (a.logpriors - b.logpriors).sum()
+                raise IOError

@@ -119,7 +119,7 @@ class ConfocalImagePython(State):
 
         bounds = (np.array([0,0,0]), np.array(self.image.shape))
         self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad,
-                       bounds=bounds, cutoff=3*self.obj.rad.max(), zscale=self.zscale)
+                zscale=self.zscale, bounds=bounds, cutoff=3*self.obj.rad.max())
 
     def update_ilm(self):
         self.ilm.update(self.state[self.b_ilm])
@@ -299,6 +299,13 @@ class ConfocalImagePython(State):
 
         return np.array(grad)
 
+    def logpriors(self):
+        return self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
+
     def loglikelihood(self):
+        logpriors = self.logpriors()
+        if logpriors < -1e90:
+            return logpriors
+
         self.create_final_image()
         return -(self.create_differences()**2).sum() / self.sigma**2

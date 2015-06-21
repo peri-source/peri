@@ -69,12 +69,6 @@ class PositionsRadiiPSF(Model):
         return nbl.naive_overlap(pos, rad, state.state[state.b_zscale][0], 0)
 
     def docalculate(self, state, docheck=True):
-        if False:
-            if self.has_overlaps(state):
-                return -np.inf
-            if self.has_negrad(state):
-                return -np.inf
-
         return state.loglikelihood()
 
     def dologlikelihood(self, state):
