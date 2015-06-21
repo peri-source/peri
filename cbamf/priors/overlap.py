@@ -39,9 +39,6 @@ class HardSphereOverlapNaive(object):
                 cost = self.prior_func(d - r)
                 self.logpriors[i] += cost
                 self.logpriors[j] += cost
-
-                if cost < -1 and (i == 61 or j == 61):
-                    print i,j
         """
 
     def update(self, pos, rad, index):
@@ -131,7 +128,8 @@ class HardSphereOverlapCellBased(object):
     def _neighbors(self, i):
         locs = self.inds[i]
 
-        neighs = []
+        neighs = np.zeros(self.maxn, dtype='int')
+        curr = 0
 
         for _,loc in locs:
             tiles = self._gentiles(loc)
@@ -139,9 +137,11 @@ class HardSphereOverlapCellBased(object):
             for tile in tiles:
                 cell = self.cells[tile]
                 count = self.counts[tile]
-                neighs.extend(cell[:count])
 
-        neighs = np.unique(np.array(neighs))
+                neighs[curr:curr+count] = cell[:count]
+                curr += count
+
+        neighs = np.unique(neighs[:curr])
         neighs = np.delete(neighs, np.where(neighs == i))
         return neighs
 
@@ -171,3 +171,14 @@ class HardSphereOverlapCellBased(object):
 
     def logprior(self):
         return self.logpriors.sum()
+
+def test():
+    N = 128
+    for i in xrange(50):
+        x = np.random.rand(N, 3)
+        r = 0.05*np.random.rand(N)
+
+        a = HardSphereOverlapNaive(x, r)
+        b = HardSphereOverlapCellBased(x, r)
+
+        assert((a.logpriors == b.logpriors).all())
