@@ -3,12 +3,6 @@ import numpy as np
 from scipy.optimize import minimize
 
 from . import models, samplers, engines, observers
-from .cu import nbl
-
-def renorm(s, doprint=1):
-    p, r, z = s.state[s.b_pos], s.state[s.b_rad], s.state[s.b_zscale]
-    nbl.naive_renormalize_radii(p, r, z[0], 1)
-    s.state[s.b_pos], s.state[s.b_rad] = p, r
 
 def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
     m = models.PositionsRadiiPSF()
@@ -56,8 +50,6 @@ def sample_particles(state, stepout=1):
         print particle
         sys.stdout.flush()
 
-        renorm(state)
-
         if state.set_current_particle(particle):
             blocks = state.blocks_particle()
             sample_state(state, blocks, stepout=stepout)
@@ -99,11 +91,8 @@ def feature(filename, sweeps=20, samples=10, prad=7.3, psize=9,
     s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
             zscale=zscale, offset=0, pad=16, sigma=sigma)
 
-    run.renorm(s)
-
     h = []
     ll = []
-    run.renorm(s)
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 

@@ -2,6 +2,7 @@ import os
 import numpy as np
 from collections import OrderedDict
 from .util import Tile
+from .priors import overlap
 
 def loadtest():
     import pickle
@@ -116,6 +117,10 @@ class ConfocalImagePython(State):
         self.obj.initialize(self.zscale)
         self.ilm.initialize()
 
+        bounds = (np.array([0,0,0]), np.array(self.image.shape))
+        self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad,
+                zscale=self.zscale, bounds=bounds, cutoff=3*self.obj.rad.max())
+
     def update_ilm(self):
         self.ilm.update(self.state[self.b_ilm])
     
@@ -204,6 +209,7 @@ class ConfocalImagePython(State):
 
         if len(pos) > 0 and len(rad) > 0:
             self.obj.update(particles, pos, rad, self.zscale)
+            self.nbl.update(particles, pos, rad)
 
         # if the psf was changed, update
         if block[self.b_psf].any():
@@ -293,6 +299,13 @@ class ConfocalImagePython(State):
 
         return np.array(grad)
 
+    def logpriors(self):
+        return self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
+
     def loglikelihood(self):
+        logpriors = self.logpriors()
+        if logpriors < -1e90:
+            return logpriors
+
         self.create_final_image()
         return -(self.create_differences()**2).sum() / self.sigma**2

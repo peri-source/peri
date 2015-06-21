@@ -7,6 +7,19 @@ from scipy import signal
 import matplotlib as mpl
 import time
 
+def remove_overlaps(pos, rad):
+    N = rad.shape[0]
+    for i in xrange(N):
+        for j in xrange(N):
+            if i == j:
+                continue;
+            d = np.sqrt(((pos[i] - pos[j])**2).sum())
+            r = rad[i] + rad[j]
+            diff = d - r
+            if diff < 0:
+                rad[i] -= np.abs(diff)/2 + 1e-10
+                rad[j] -= np.abs(diff)/2 + 1e-10
+
 def load_stack(filename, do3d=False):
     if do3d:
         z = load_tiff(filename, do3d=True)

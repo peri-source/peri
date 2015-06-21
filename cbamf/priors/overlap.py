@@ -1,7 +1,7 @@
 import itertools
 import numpy as np
 import scipy as sp
-from .priors import ZEROLOGPRIOR
+from priors import ZEROLOGPRIOR
 
 class HardSphereOverlapNaive(object):
     def __init__(self, pos, rad, zscale=1, prior_type='absolute'):
@@ -40,9 +40,9 @@ class HardSphereOverlapNaive(object):
                 self.logpriors[j] += cost
         """
 
-    def update(self, pos, rad, index):
-        self.pos[index] = pos
-        self.rad[index] = rad
+    def update(self, particles, pos, rad):
+        self.pos[particles] = pos
+        self.rad[particles] = rad
 
         self._calculate()
 
@@ -50,7 +50,7 @@ class HardSphereOverlapNaive(object):
         return self.logpriors.sum()
 
 
-class HardSphereOverlapCellBased(object):
+class HardSphereOverlapCell(object):
     def __init__(self, pos, rad, bounds=None, cutoff=None, zscale=1, maxn=30,
             prior_type='absolute'):
 
@@ -76,7 +76,8 @@ class HardSphereOverlapCellBased(object):
         self.maxn = maxn
         self.zscale = np.array([zscale, 1, 1])
         self.logpriors = np.zeros_like(rad)
-        self.inds = [[]]*self.N
+        self.inds = [[] for i in xrange(self.N)]
+        self.neighs = [{} for i in xrange(self.N)]
 
         if prior_type == 'absolute':
             self.prior_func = lambda x: (x < 0)*ZEROLOGPRIOR
@@ -86,27 +87,33 @@ class HardSphereOverlapCellBased(object):
         self.size = (self.bdiff / self.cutoff).astype('int')
         self.size += 1
 
-        self.cells = np.zeros(tuple(self.size) + (self.maxn,), dtype='int')
+        self.cells = np.zeros(tuple(self.size) + (self.maxn,), dtype='int') - 1
         self.counts = np.zeros(self.size, dtype='int')
 
         for i in xrange(self.N):
             self._bin_particle(i)
-        self._calculate_all_priors()
 
     def _pos_to_inds(self, pos):
-        # TODO - add to multiple bins if bigger than cutoff
         ind = (self.size * (pos - self.bl) / self.bdiff).astype('int')
         return [[np.s_[ind[0], ind[1], ind[2]], ind]]
 
     def _unbin_particle(self, index):
         inds = self.inds[index]
 
+        for n,_ in self.neighs[index].iteritems():
+            dlogprior = self.neighs[n].pop(index)
+            self.logpriors[n] -= dlogprior
+
         for ind,_ in inds:
-            p = np.where(self.cells[ind] == index)[0]
-            self.cells[p] = self.cells[self.counts[ind]-1]
+            cell = self.cells[ind]
+            p = np.where(cell == index)[0]
+            cell[p] = cell[self.counts[ind]-1]
+            cell[self.counts[ind]-1] = -1
+            self.cells[ind] = cell
             self.counts[ind] -= 1
 
         self.inds[index] = []
+        self.neighs[index] = {}
 
     def _bin_particle(self, index):
         inds = self._pos_to_inds(self.pos[index])
@@ -116,6 +123,21 @@ class HardSphereOverlapCellBased(object):
             self.counts[ind] += 1
 
         self.inds[index] = inds
+
+        neighs = self._neighbors(index).astype('int')
+        for n in neighs:
+            co = self._logprior(index, n)
+            self.neighs[index][n] = co
+            self.neighs[n][index] = co
+
+            self.logpriors[n] += co
+
+        self.logpriors[index] = np.sum(self.neighs[index].values())
+
+    def _logprior(self, i, j):
+        dist = ((self.zscale*(self.pos[i] - self.pos[j]))**2).sum(axis=-1)
+        dist0 = (self.rad[i] + self.rad[j])**2
+        return self.prior_func(dist - dist0)
 
     def _gentiles(self, loc):
         return itertools.product(
@@ -127,47 +149,27 @@ class HardSphereOverlapCellBased(object):
     def _neighbors(self, i):
         locs = self.inds[i]
 
-        neighs = np.zeros(self.maxn, dtype='int')
-        curr = 0
-
+        neighs = []
         for _,loc in locs:
             tiles = self._gentiles(loc)
 
             for tile in tiles:
                 cell = self.cells[tile]
                 count = self.counts[tile]
+                neighs.extend(cell[:count])
 
-                neighs[curr:curr+count] = cell[:count]
-                curr += count
-
-        neighs = np.unique(neighs[:curr])
-        neighs = np.delete(neighs, np.where(neighs == i))
+        neighs = np.unique(np.array(neighs))
+        neighs = np.delete(neighs, np.where((neighs == i) | (neighs == -1)))
         return neighs
 
-    def _calculate_prior(self, i):
-        self.logpriors[i] = 0
+    def update(self, index, pos, rad):
+        for i,p,r in zip(index, pos, rad):
+            self._unbin_particle(i)
 
-        n = self._neighbors(i).astype('int')
-        dist = ((self.zscale*(self.pos[i] - self.pos[n]))**2).sum(axis=-1)
-        dist0 = (self.rad[i] + self.rad[n])**2
+            self.pos[i] = p
+            self.rad[i] = r
 
-        self.logpriors[i] = np.sum(self.prior_func(dist - dist0))
-
-    def _calculate_all_priors(self):
-        for i in xrange(self.rad.shape[0]):
-            self._calculate_prior(i)
-
-    def update(self, pos, rad, index):
-        self._unbin_particle(index)
-
-        self.pos[index] = pos
-        self.rad[index] = rad
-
-        self._bin_particle(index)
-
-        for n in self._neighbors(index):
-            self._calculate_prior(n)
-        self._calculate_prior(index)
+            self._bin_particle(i)
 
     def logprior(self):
         return self.logpriors.sum()
@@ -175,10 +177,23 @@ class HardSphereOverlapCellBased(object):
 def test():
     N = 128
     for i in xrange(50):
+        print i
         x = np.random.rand(N, 3)
         r = 0.05*np.random.rand(N)
 
         a = HardSphereOverlapNaive(x, r)
-        b = HardSphereOverlapCellBased(x, r)
+        b = HardSphereOverlapCell(x, r)
 
         assert((a.logpriors == b.logpriors).all())
+
+        for j in xrange(100):
+            l = np.random.randint(N, size=1)
+            pp = x[l]#np.random.rand(3)
+            rp = 0.05*np.random.rand(1)
+            a.update(l, pp, rp)
+            b.update(l, pp, rp)
+
+            if not (a.logpriors == b.logpriors).all():
+                print l, pp, rp
+                print (a.logpriors - b.logpriors).sum()
+                raise IOError

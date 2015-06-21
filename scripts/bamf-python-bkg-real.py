@@ -30,6 +30,7 @@ itrue = initializers.normalize(itrue, True)
 itrue = np.pad(itrue, PAD, mode='constant', constant_values=-10)
 xstart += PAD
 rstart = RAD*np.ones(xstart.shape[0])
+initializers.remove_overlaps(xstart, rstart)
 
 imsize = itrue.shape
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
@@ -37,8 +38,6 @@ psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
 ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
 s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
         zscale=zscale, offset=0, pad=16, sigma=sigma)
-
-run.renorm(s)
 
 def gd(state, N=1, ratio=1e-1):
     state.set_current_particle()
@@ -51,7 +50,6 @@ def gd(state, N=1, ratio=1e-1):
 
 def sample(s):
     h = []
-    run.renorm(s)
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
