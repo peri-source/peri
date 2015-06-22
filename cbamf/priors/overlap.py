@@ -135,9 +135,29 @@ class HardSphereOverlapCell(object):
         self.logpriors[index] = np.sum(self.neighs[index].values())
 
     def _logprior(self, i, j):
-        dist = ((self.zscale*(self.pos[i] - self.pos[j]))**2).sum(axis=-1)
-        dist0 = (self.rad[i] + self.rad[j])**2
-        return self.prior_func(dist - dist0)
+        dd = self._dist_diff(self.pos[i], self.pos[j],
+                np.array(self.rad[i]+self.rad[j]), self.zscale)
+        return self.prior_func(dd)
+
+    def _dist_diff(self, p0, p1, r1r2, zs):
+        a = zs*(p0-p1)
+        dist = np.dot(a, a)
+        dist0 = r1r2*r1r2
+        return dist - dist0
+
+    def _dist_diff2(self, p0, p1, r1r2, zs):
+        from scipy import weave
+        code = """
+            double dist = 0.0;
+            for (int i=0; i<3; i++){
+                double d = zs[i]*(p0[i] - p1[i]);
+                dist += d*d;
+            }
+            o[0] = dist - r1r2[0]*r1r2[0];
+        """
+        o = np.zeros(1)
+        weave.inline(code, ["p0", "p1", "r1r2", "zs", "o"])
+        return o[0]
 
     def _gentiles(self, loc):
         return itertools.product(

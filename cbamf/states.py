@@ -119,7 +119,7 @@ class ConfocalImagePython(State):
 
         bounds = (np.array([0,0,0]), np.array(self.image.shape))
         self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad,
-                zscale=self.zscale, bounds=bounds, cutoff=3*self.obj.rad.max())
+                zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
 
     def update_ilm(self):
         self.ilm.update(self.state[self.b_ilm])
