@@ -51,12 +51,19 @@ class PSF(object):
         self._kvecs = np.rollaxis(np.array(np.broadcast_arrays(kz,ky,kx)), 0, 4)
         self._klen = np.sqrt(kx**2 + ky**2 + kz**2)
 
-    def _setup_rvecs(self):
+    def _setup_rvecs(self, centered=False):
         sp = self.tile.shape
         mx = np.max(sp)
-        rz = 2*sp[0]*np.fft.fftfreq(sp[0])[:,None,None] / mx
-        ry = 2*sp[1]*np.fft.fftfreq(sp[1])[None,:,None] / mx
-        rx = 2*sp[2]*np.fft.fftfreq(sp[2])[None,None,:] / mx
+
+        if not centered:
+            rz = 2*sp[0]*np.fft.fftfreq(sp[0])[:,None,None] / mx
+            ry = 2*sp[1]*np.fft.fftfreq(sp[1])[None,:,None] / mx
+            rx = 2*sp[2]*np.fft.fftfreq(sp[2])[None,None,:] / mx
+        else:
+            rz = (np.arange(sp[0], dtype='float')[:,None,None] - sp[0]/2)/mx
+            ry = (np.arange(sp[1], dtype='float')[None,:,None] - sp[1]/2)/mx
+            rx = (np.arange(sp[2], dtype='float')[None,None,:] - sp[2]/2)/mx
+
         self._rx, self._ry, self._rz = rx, ry, rz
         self._rvecs = np.rollaxis(np.array(np.broadcast_arrays(rz,ry,rx)), 0, 4)
         self._rlen = np.sqrt(rx**2 + ry**2 + rz**2)
@@ -150,7 +157,7 @@ class GaussianPolynomialPCA(PSF):
     def set_tile(self, tile):
         if any(self.tile.shape != tile.shape):
             self.tile = tile
-            self._setup_rvecs()
+            self._setup_rvecs(centered=True)
             self._setup_kvecs()
             self._setup_ffts()
             self.update(self.params)
