@@ -6,6 +6,7 @@ from scipy.misc import imread
 from scipy import signal
 import matplotlib as mpl
 import time
+import itertools
 
 def remove_overlaps(pos, rad):
     N = rad.shape[0]
@@ -20,30 +21,24 @@ def remove_overlaps(pos, rad):
                 rad[i] -= np.abs(diff)/2 + 1e-10
                 rad[j] -= np.abs(diff)/2 + 1e-10
 
-def load_stack(filename, do3d=False):
-    if do3d:
-        z = load_tiff(filename, do3d=True)
-    else:
-        try:
-            z = imread(filename)
-        except Exception as e:
-            z = load_tiff(filename, do3d)
-    return z
+def load_tiff_iter(filename, iter_slice_size):
+    import libtiff
+    tifs = libtiff.TIFF.open(filename).iter_images()
 
-def load_tiff(filename, do3d=False):
-    if do3d:
-        import libtiff
-        tif = libtiff.TIFF.open(filename)
-        z = np.array([a for a in tif.iter_images()])
-    else:
-        import libtiff
-        tif = libtiff.TIFF.open(filename)
-        it = tif.iter_images()
-        for i in xrange(4):
-            it.next()
-        z = it.next()
-        #z = imread("./colloids.tif")
-    return z
+    while True:
+        ims = [a for a in itertools.islice(tifs, iter_slice_size)]
+        if len(ims) > 0:
+            yield np.array(ims)
+        else:
+            break
+
+def load_tiff(filename, single_layer=None):
+    import libtiff
+    tifs = libtiff.TIFF.open(filename).iter_images()
+
+    if single_layer:
+        return np.array([a for a in itertools.islice(tifs, single_layer, single_layer+1)])
+    return np.array([a for a in tifs])
 
 def remove_z_mean(im):
     for i in xrange(im.shape[0]):

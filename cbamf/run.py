@@ -64,8 +64,8 @@ def sample_block(state, blockname, explode=True, stepout=1):
 
     sample_state(state, blocks, stepout)
 
-def feature(filename, sweeps=20, samples=10, prad=7.3, psize=9,
-        pad=22, imsize=-1, zscale=1.06, sigma=0.02, invert=False):
+def feature(rawimage, sweeps=20, samples=10, prad=7.3, psize=9,
+        pad=22, imsize=-1, imzstart=0, zscale=1.06, sigma=0.02, invert=False):
     from cbamf import states, run, initializers
     from cbamf.comp import objs, psfs, ilms
 
@@ -73,15 +73,15 @@ def feature(filename, sweeps=20, samples=10, prad=7.3, psize=9,
     burn = sweeps - samples
 
     PSF = (1.4, 3.0)
-    raw = initializers.load_tiff(filename, do3d=True)
 
     print "Initial featuring"
-    itrue = initializers.normalize(raw[12:,:imsize,:imsize], invert)
+    itrue = initializers.normalize(rawimage[imzstart:,:imsize,:imsize], invert)
     xstart, proc = initializers.local_max_featuring(itrue, psize)
     itrue = initializers.normalize(itrue, True)
     itrue = np.pad(itrue, pad, mode='constant', constant_values=-10)
     xstart += pad
     rstart = prad*np.ones(xstart.shape[0])
+    initializers.remove_overlaps(xstart, rstart)
 
     print "Making state"
     imsize = itrue.shape

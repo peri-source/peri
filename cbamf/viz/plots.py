@@ -13,7 +13,7 @@ def summary_plot(state, samples):
     mu = samples.mean(axis=0)
     std = samples.std(axis=0)
 
-    fig, axs = pl.subplots(2,3, figsize=(30,12))
+    fig, axs = pl.subplots(2,3, figsize=(20,12))
     axs[0][0].imshow((s.image[s._cmp_region]*s._cmp_mask)[43], vmin=0, vmax=1)
     axs[0][1].imshow((t[s._cmp_region]*s._cmp_mask)[43], vmin=0, vmax=1)
     axs[0][2].imshow(((s.image-t)[s._cmp_region]*s._cmp_mask)[43], vmin=-1, vmax=1)

@@ -4,25 +4,35 @@ import numpy as np
 import pylab as pl
 from cbamf import states, run, initializers
 from cbamf.comp import objs, psfs, ilms
+from cbamf.viz import plots
 
 ORDER = (1,1,1)
 sweeps = 30
 samples = 20
 burn = sweeps - samples
 
-if False:
+FILE = 4
+
+if FILE == 1:
     sigma = 0.05
     PSF = (0.9, 2.0)
     PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 34, 16, 17, True, 256, 1.34
-    raw = initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif", do3d=True)
-else:
+    raw = initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif")
+if FILE == 2:
     sigma = 0.02
     PSF = (1.4, 3.0)
-    #PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 22, 9, 7.3, False, 128, 1.06
-    #raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif", do3d=True)
-
     PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 16, 5, 5.3, False, 128, 1.06
-    raw = initializers.load_tiff("/media/scratch/bamf/neil-large.tif", do3d=True)
+    raw = initializers.load_tiff("/media/scratch/bamf/neil-large.tif")
+if FILE == 3:
+    sigma = 0.02
+    PSF = (1.4, 3.0)
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 22, 9, 7.3, False, 128, 1.06
+    raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif")
+if FILE == 4:
+    sigma = 0.05
+    PSF = (1.4, 3.0)
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 16, 9, 7.3, True, 128, 1.0
+    raw = next(initializers.load_tiff_iter("/media/scratch/bamf/averaged_dz015_N200_1.tif", 70))
 
 itrue = initializers.normalize(raw[12:,:IMSIZE,:IMSIZE], INVERT)
 xstart, proc = initializers.local_max_featuring(itrue, FSIZE)

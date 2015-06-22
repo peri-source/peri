@@ -126,16 +126,17 @@ class GaussianPolynomialPCA(PSF):
         self.comp = components
 
         self._setup_from_files()
-        params0 = np.hstack([gaussian, self._psf_vecs.T.dot(self._psf_mean)])
+        params0 = np.hstack([gaussian, np.zeros(self.comp)])
 
         super(GaussianPolynomialPCA, self).__init__(*args, params=params0, shape=shape, **kwargs)
 
     def _setup_from_files(self):
         covm = np.load(self.cov_mat_file)
         mean = np.load(self.mean_mat_file)
+        self.poly_shape = (np.round(np.sqrt(mean.shape[0])),)*2
 
         vals, vecs = np.linalg.eig(covm)
-        self._psf_vecs = np.real(vecs[:,:self.comp+1])
+        self._psf_vecs = np.real(vecs[:,:self.comp])
         self._psf_mean = np.real(mean)
 
     def _evaluate_real_space(self):
@@ -145,8 +146,8 @@ class GaussianPolynomialPCA(PSF):
         rho = np.sqrt(rvec[...,1]**2 + rvec[...,2]**2) / coeff[0]
         z = rvec[...,0] / coeff[1]
 
-        polycoeffs = self._psf_vecs.dot(coeff[2:])
-        poly = np.polynomial.polynomial.polyval2d(rho, z, polycoeffs)
+        polycoeffs = self._psf_vecs.dot(coeff[2:]) + self._psf_mean
+        poly = np.polynomial.polynomial.polyval2d(rho, z, polycoeffs.reshape(*self.poly_shape))
         return poly * np.exp(-rho**2) * np.exp(-z**2)
 
     def _evaluate_fourier_space(self, arr):
@@ -157,7 +158,7 @@ class GaussianPolynomialPCA(PSF):
     def set_tile(self, tile):
         if any(self.tile.shape != tile.shape):
             self.tile = tile
-            self._setup_rvecs(centered=True)
+            self._setup_rvecs(centered=False)
             self._setup_kvecs()
             self._setup_ffts()
             self.update(self.params)
