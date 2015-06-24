@@ -50,13 +50,11 @@ def sample_particles(state, stepout=1):
         print particle
         sys.stdout.flush()
 
-        if state.set_current_particle(particle):
-            blocks = state.blocks_particle()
-            sample_state(state, blocks, stepout=stepout)
+        blocks = state.blocks_particle(particle)
+        sample_state(state, blocks, stepout=stepout)
 
 def sample_block(state, blockname, explode=True, stepout=1):
     print '{:-^39}'.format(' '+blockname.upper()+' ')
-    state.set_current_particle()
     blocks = [state.create_block(blockname)]
 
     if explode:
@@ -66,7 +64,7 @@ def sample_block(state, blockname, explode=True, stepout=1):
 
 def feature(rawimage, sweeps=20, samples=10, prad=7.3, psize=9,
         pad=22, imsize=-1, imzstart=0, zscale=1.06, sigma=0.02, invert=False):
-    from cbamf import states, run, initializers
+    from cbamf import states, initializers
     from cbamf.comp import objs, psfs, ilms
 
     ORDER = (1,1,1)
@@ -99,11 +97,11 @@ def do_samples(s, sweeps, burn):
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        run.sample_particles(s, stepout=0.1)
-        run.sample_block(s, 'psf', stepout=0.1, explode=False)
-        run.sample_block(s, 'ilm', stepout=0.1, explode=False)
-        run.sample_block(s, 'off', stepout=0.1, explode=True)
-        run.sample_block(s, 'zscale', explode=True)
+        sample_particles(s, stepout=0.1)
+        sample_block(s, 'psf', stepout=0.1, explode=False)
+        sample_block(s, 'ilm', stepout=0.1, explode=False)
+        sample_block(s, 'off', stepout=0.1, explode=True)
+        sample_block(s, 'zscale', explode=True)
 
         if i > burn:
             h.append(s.state.copy())
@@ -132,13 +130,11 @@ def build_bounds(state):
 
 def loglikelihood(vec, state):
     state.set_state(vec)
-    state.set_current_particle()
     state.create_final_image()
     return -state.loglikelihood()
 
 def gradloglikelihood(vec, state):
     state.set_state(vec)
-    state.set_current_particle()
     return -state.gradloglikelihood()
 
 def gradient_descent(state, method='L-BFGS-B'):

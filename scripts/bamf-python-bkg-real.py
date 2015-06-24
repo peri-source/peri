@@ -2,7 +2,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 import numpy as np
 import pylab as pl
-from cbamf import states, run, initializers
+from cbamf import states, runner, initializers
 from cbamf.comp import objs, psfs, ilms
 from cbamf.viz import plots
 
@@ -11,19 +11,19 @@ sweeps = 10
 samples = 5
 burn = sweeps - samples
 
-FILE = 3
+FILE = 2
 
 if FILE == 1:
     sigma = 0.06
     PSF = np.array([1.8, 3.5])
     OFF = 0.2
     BKG = 0.6
-    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 8, 14, True, 256, 17, 1.34
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 8, 14, True, 256, 17, 1.34
     raw = initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif")
 if FILE == 2:
     sigma = 0.02
-    PSF = (1.4, 3.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 5, 5.3, False, 128, 12, 1.06
+    PSF = (0.9, 2.0)
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 5, 5.3, False, 128, 12, 1.06
     raw = initializers.load_tiff("/media/scratch/bamf/neil-large.tif")
 if FILE == 3:
     sigma = 0.01
@@ -36,9 +36,9 @@ if FILE == 4:
     PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 9, 7.3, True, 128, 2, 1.056
     raw = next(initializers.load_tiff_iter("/media/scratch/bamf/p1_N150_1.tif", 70))
 
-itrue = initializers.normalize(raw[zstart:,:IMSIZE,:IMSIZE], INVERT)
-xstart, proc = initializers.local_max_featuring(itrue, FSIZE, 4)
-itrue = initializers.normalize(itrue, True)
+feat = initializers.normalize(raw[zstart:,:IMSIZE,:IMSIZE], INVERT)
+xstart, proc = initializers.local_max_featuring(feat, FSIZE, FSIZE/3.)
+itrue = initializers.normalize(feat, True)
 itrue = np.pad(itrue, PAD, mode='constant', constant_values=-10)
 xstart += PAD
 rstart = RAD*np.ones(xstart.shape[0])
@@ -53,7 +53,7 @@ ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
 #    -0.01790116, -0.34568229, -0.09325139,  0.38523795,  0.21644174,
 #    -0.24665272,  0.02717521,  0.61476543])
 s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
-        zscale=zscale, offset=1, pad=16, sigma=sigma)
+        zscale=zscale, offset=0, pad=16, sigma=sigma)
 
 
 
@@ -71,11 +71,11 @@ def sample(s):
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        run.sample_particles(s, stepout=0.1)
-        run.sample_block(s, 'ilm', stepout=0.1, explode=False)
-        run.sample_block(s, 'off', stepout=0.1, explode=True)
-        run.sample_block(s, 'psf', stepout=0.1, explode=False)
-        #run.sample_block(s, 'zscale', explode=True)
+        runner.sample_particles(s, stepout=0.1)
+        runner.sample_block(s, 'ilm', stepout=0.1, explode=False)
+        runner.sample_block(s, 'off', stepout=0.1, explode=True)
+        runner.sample_block(s, 'psf', stepout=0.1, explode=False)
+        #runner.sample_block(s, 'zscale', explode=True)
 
         if i > burn:
             h.append(s.state.copy())

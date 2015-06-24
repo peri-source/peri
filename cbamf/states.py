@@ -4,14 +4,6 @@ from collections import OrderedDict
 from .util import Tile
 from .priors import overlap
 
-def loadtest():
-    import pickle
-    itrue, xstart, rstart, pstart, ipure = pickle.load(open("/media/scratch/bamf/bamf_ic_16.pkl", 'r'))
-    ilm = np.zeros((3,3,3))
-    ilm[0,0,0] = 1
-    state = np.hstack([xstart.flatten(), rstart, pstart, ilm.ravel(), np.ones(1), np.zeros(1)])
-    return ConfocalImagePython(len(rstart), itrue, pad=32, order=(3,3,3), state=state, fftw_planning_level=FFTW_PLAN_SLOW)
-
 class State(object):
     def __init__(self, nparams, state=None):
         self.nparams = nparams
@@ -56,6 +48,9 @@ class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=0,
             pad=16, sigma=0.1, *args, **kwargs):
         self.image = image
+        self.image_mask = (image > -10).astype('float')
+        self.image *= self.image_mask
+
         self.pad = pad
         self.index = None
         self.sigma = sigma
@@ -91,6 +86,7 @@ class ConfocalImagePython(State):
         self.b_zscale = self.create_block('zscale')
 
         self.build_state()
+        self.initialize()
 
     def build_state(self):
         out = []
@@ -109,11 +105,12 @@ class ConfocalImagePython(State):
                 out.append(self.zscale)
 
         self.state = np.hstack(out).astype('float')
-
-        self.initialize()
-        self.update_psf()
+        self.model_image = np.zeros_like(self.image)
+        self._loglikelihood_field = -self.image_mask*self.image**2 / self.sigma**2
+        self._loglikelihood = self._loglikelihood_field.sum()
 
     def initialize(self):
+        self.psf.update(self.state[self.b_psf])
         self.obj.initialize(self.zscale)
         self.ilm.initialize()
 
@@ -121,109 +118,95 @@ class ConfocalImagePython(State):
         self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad,
                 zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
 
-    def update_ilm(self):
-        self.ilm.update(self.state[self.b_ilm])
+        self._update_tile(*self._tile_global())
 
-    def update_psf(self):
-        self.psf.update(self.state[self.b_psf])
+    def _tile_from_particle_change(self, p0, r0, p1, r1):
+        zsc = np.array([1.0/self.zscale, 1, 1])
+        r0, r1 = zsc*r0, zsc*r1
+        pl = np.round(np.vstack([p0-1.5*r0-self.pad/2, p1-1.5*r1-self.pad/2]).min(axis=0)).astype('int')
+        pr = np.round(np.vstack([p0+1.5*r0+self.pad/2, p1+1.5*r1+self.pad/2]).max(axis=0)).astype('int')
 
-    def create_final_image(self):
-        illumination = self.ilm.get_field() * (1 - self.obj.get_field())
-        self.model_image = self.psf.execute(illumination) + self.offset
-        return self.model_image
+        outer = Tile(pl, pr, 0, self.image.shape)
+        inner = Tile(pl+self.pad/2, pr-self.pad/2, self.pad/2, np.array(self.image.shape)-self.pad/2)
+        ioslice = (np.s_[self.pad/2:-self.pad/2],)*3
+        return outer, inner, ioslice
 
-    def create_differences(self):
-        sl = self.tile_cmp.slicer
-        return (
-            self.model_image[self._cmp_region][self._cmp_mask]-
-            self.image[sl][self._cmp_mask]
-        )
+    def _tile_global(self):
+        outer = Tile(0, self.image.shape)
+        inner = Tile(self.pad/2, np.array(self.image.shape)-self.pad/2)
+        ioslice = (np.s_[self.pad/2:-self.pad/2],)*3
+        return outer, inner, ioslice
 
-    def set_current_particle(self, index=None, sub_image_size=None):
-        """
-        We must set up the following structure:
-        +-----------------------------+
-        |        Buffer Region        |
-        |(ilm field + other particles)|
-        |                             |
-        |    +-------------------+    |
-        |    |                   |    |
-        |    |    Comparison     |    |
-        |    |      Region       |    |
-        |    |                   |    |
-        |    |                   |    |
-        |    |      (size)       |    |
-        |    +-------------------+    |
-        |                             |
-        |           (pad)             |
-        +-----------------------------+
-        """
-        pos = self.state[self.b_pos].reshape(-1,3)
-        rad = self.state[self.b_rad]
+    def _update_tile(self, otile, itile, ioslice):
+        self._last_slices = (otile, itile, ioslice)
 
-        if index is not None:
-            self.index = index
+        self.obj.set_tile(otile)
+        self.ilm.set_tile(otile)
+        self.psf.set_tile(otile)
 
-            size = sub_image_size or int(3*rad[index])
-            center = np.round(pos[index]).astype('int32')
-            pl = (center - size/2 - self.pad/2).astype('int')
-            pr = (center + size/2 + self.pad/2).astype('int')
-        else:
-            self.index = -1
+        islice = itile.slicer
+        oldll = self._loglikelihood_field[islice].sum()
 
-            pl, pr = np.array([0,0,0]), np.array(self.image.shape)
-            center = (pr - pl)/2
+        replacement = self.ilm.get_field() * (1 - self.obj.get_field())
+        replacement = self.psf.execute(replacement) + self.offset
 
-        # these variables map the buffer region back
-        # into the large image in real space
-        self.tile = Tile(pl, pr, 0, self.image.shape)
+        self.model_image[islice] = replacement[ioslice]
+        self._loglikelihood_field[islice] = -self.image_mask[islice]*(replacement[ioslice] - self.image[islice])**2 / self.sigma**2
 
-        # these variables have to do with the comparison region
-        # that is inside the buffer region
-        self.tile_cmp = Tile(pl + self.pad/2, pr - self.pad/2)
-        self._cmp_region = (np.s_[self.pad/2:-self.pad/2],)*3
-        self._cmp_mask = self.image[self.tile_cmp.slicer] > -10
-
-        self.obj.set_tile(self.tile)
-        self.ilm.set_tile(self.tile)
-        self.psf.set_tile(self.tile)
-        return True
+        newll = self._loglikelihood_field[islice].sum()
+        self._loglikelihood += newll - oldll
 
     def update(self, block, data):
+        prev = self.state.copy()
+
         self._update_state(block, data)
 
         pmask = block[self.b_pos].reshape(-1, 3)
         rmask = block[self.b_rad]
         particles = np.arange(self.obj.N)[pmask.any(axis=-1) | rmask]
 
-        pos = self.state[self.b_pos].copy().reshape(-1,3)[particles]
-        rad = self.state[self.b_rad].copy()[particles]
+        # TODO check all the priors before actually going for an update
+        # if it is too small, don't both and return False
 
-        if len(pos) > 0 and len(rad) > 0:
+        # if the particle was changed, update locally
+        if len(particles) > 0:
+            pos0 = prev[self.b_pos].copy().reshape(-1,3)[particles]
+            rad0 = prev[self.b_rad].copy()[particles]
+
+            pos = self.state[self.b_pos].copy().reshape(-1,3)[particles]
+            rad = self.state[self.b_rad].copy()[particles]
+
             self.obj.update(particles, pos, rad, self.zscale)
             self.nbl.update(particles, pos, rad)
+            
+            self._update_tile(*self._tile_from_particle_change(pos0, rad0, pos, rad))
+        else:
+            docalc = False
 
-        # if the psf was changed, update
-        if block[self.b_psf].any():
-            self.update_psf()
+            # if the psf was changed, update globally
+            if block[self.b_psf].any():
+                self.psf.update(self.state[self.b_psf])
+                docalc = True
 
-        # update the background if it has been changed
-        if block[self.b_ilm].any():
-            self.update_ilm()
+            # update the background if it has been changed
+            if block[self.b_ilm].any():
+                self.ilm.update(self.state[self.b_ilm])
+                docalc = True
 
-        # we actually don't have to do anything if the offset is changed
-        if block[self.b_off].any():
-            self.offset = self.state[self.b_off]
+            # we actually don't have to do anything if the offset is changed
+            if block[self.b_off].any():
+                self.offset = self.state[self.b_off]
+                docalc = True
 
-        if block[self.b_zscale].any():
-            self.zscale = self.state[self.b_zscale]
-            self.initialize()
+            if block[self.b_zscale].any():
+                self.zscale = self.state[self.b_zscale]
+                self.initialize()
 
-    def blocks_particle(self):
-        if self.index is None:
-            raise AttributeError("No particle selected, run set_current_particle")
+            if docalc:
+                self._update_tile(*self._tile_global())
 
-        p_ind, r_ind = 3*self.index, 3*self.obj.N + self.index
+    def blocks_particle(self, index):
+        p_ind, r_ind = 3*index, 3*self.obj.N + index
 
         blocks = []
         for t in xrange(p_ind, p_ind+3):
@@ -253,12 +236,10 @@ class ConfocalImagePython(State):
 
     def _grad_single_param(self, block, dl):
         self.push_change(block, self.state[block]+dl)
-        self.create_final_image()
         loglr = self.loglikelihood()
         self.pop_change()
 
         self.push_change(block, self.state[block]-dl)
-        self.create_final_image()
         logll = self.loglikelihood()
         self.pop_change()
 
@@ -270,22 +251,17 @@ class ConfocalImagePython(State):
             print '{:-^39}'.format(' '+pg.upper()+' ')
             if pg == 'pos':
                 for i in xrange(self.obj.N):
-                    self.set_current_particle(i)
                     blocks = self.blocks_particle()[:-1]
-
                     for block in blocks:
                         grad.append(self._grad_single_param(block, dl))
 
             if pg == 'rad':
                 for i in xrange(self.obj.N):
-                    self.set_current_particle(i)
                     block = self.blocks_particle()[-1]
                     grad.append(self._grad_single_param(block, dl))
 
             if pg == 'psf' or pg == 'ilm' or pg == 'off' or pg == 'zscale':
-                self.set_current_particle()
                 blocks = self.explode(self.create_block(pg))
-
                 for block in blocks:
                     grad.append(self._grad_single_param(block, dl))
 
@@ -299,5 +275,4 @@ class ConfocalImagePython(State):
         if logpriors < -1e90:
             return logpriors
 
-        self.create_final_image()
-        return -(self.create_differences()**2).sum() / self.sigma**2
+        return self._loglikelihood
