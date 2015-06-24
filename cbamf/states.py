@@ -108,6 +108,7 @@ class ConfocalImagePython(State):
         self.model_image = np.zeros_like(self.image)
         self._loglikelihood_field = -self.image_mask*self.image**2 / self.sigma**2
         self._loglikelihood = self._loglikelihood_field.sum()
+        self._logprior = 0
 
     def initialize(self):
         self.psf.update(self.state[self.b_psf])
@@ -159,6 +160,7 @@ class ConfocalImagePython(State):
     def update(self, block, data):
         prev = self.state.copy()
 
+        # TODO, instead, push the change in case we need to pop it
         self._update_state(block, data)
 
         pmask = block[self.b_pos].reshape(-1, 3)
@@ -167,6 +169,14 @@ class ConfocalImagePython(State):
 
         # TODO check all the priors before actually going for an update
         # if it is too small, don't both and return False
+        """
+        if len(particles) > 0:
+            self.nbl.update(particles, pos, rad)
+            self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
+            if self._logprior < -1e90:
+                # TODO, instead pop the change off and return nothing
+                pass
+        """
 
         # if the particle was changed, update locally
         if len(particles) > 0:
@@ -178,7 +188,7 @@ class ConfocalImagePython(State):
 
             self.obj.update(particles, pos, rad, self.zscale)
             self.nbl.update(particles, pos, rad)
-            
+            self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
             self._update_tile(*self._tile_from_particle_change(pos0, rad0, pos, rad))
         else:
             docalc = False
@@ -267,12 +277,5 @@ class ConfocalImagePython(State):
 
         return np.array(grad)
 
-    def logpriors(self):
-        return self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
-
     def loglikelihood(self):
-        logpriors = self.logpriors()
-        if logpriors < -1e90:
-            return logpriors
-
-        return self._loglikelihood
+        return self._logprior + self._loglikelihood
