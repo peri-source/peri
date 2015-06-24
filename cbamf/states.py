@@ -61,8 +61,8 @@ class ConfocalImagePython(State):
         self.sigma = sigma
 
         self.psf = psf
-        self.ilm = ilm  
-        self.obj = obj 
+        self.ilm = ilm
+        self.obj = obj
         self.zscale = zscale
         self.offset = offset
         self.N = self.obj.N
@@ -108,7 +108,7 @@ class ConfocalImagePython(State):
             if param == 'zscale':
                 out.append(self.zscale)
 
-        self.state = np.hstack(out)
+        self.state = np.hstack(out).astype('float')
 
         self.initialize()
         self.update_psf()
@@ -123,7 +123,7 @@ class ConfocalImagePython(State):
 
     def update_ilm(self):
         self.ilm.update(self.state[self.b_ilm])
-    
+
     def update_psf(self):
         self.psf.update(self.state[self.b_psf])
 
@@ -174,17 +174,9 @@ class ConfocalImagePython(State):
             pl, pr = np.array([0,0,0]), np.array(self.image.shape)
             center = (pr - pl)/2
 
-        if (pl < 0).any() or (pr > self.image.shape).any():
-            return False
-
-        lcmp = np.vstack([pl, np.zeros(pl.shape)])
-        rcmp = np.vstack([pr, self.image.shape])
-        pl = np.max(lcmp, axis=0).astype('int')
-        pr = np.min(rcmp, axis=0).astype('int')
-
         # these variables map the buffer region back
         # into the large image in real space
-        self.tile = Tile(pl, pr)
+        self.tile = Tile(pl, pr, 0, self.image.shape)
 
         # these variables have to do with the comparison region
         # that is inside the buffer region

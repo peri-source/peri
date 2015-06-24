@@ -26,7 +26,7 @@ FFTW_PLAN_SLOW = 'FFTW_PATIENT'
 class PSF(object):
     def __init__(self, params, shape, fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1):
         self.shape = shape
-        self.params = params
+        self.params = np.array(params).astype('float')
 
         self.threads = threads if threads > 0 else cpu_count()
         self.fftw_planning_level = fftw_planning_level

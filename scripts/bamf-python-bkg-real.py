@@ -11,7 +11,7 @@ sweeps = 10
 samples = 5
 burn = sweeps - samples
 
-FILE = 1
+FILE = 3
 
 if FILE == 1:
     sigma = 0.06
@@ -26,9 +26,9 @@ if FILE == 2:
     PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 5, 5.3, False, 128, 12, 1.06
     raw = initializers.load_tiff("/media/scratch/bamf/neil-large.tif")
 if FILE == 3:
-    sigma = 0.02
-    PSF = (1.4, 3.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 22, 9, 7.3, False, 128, 12, 1.06
+    sigma = 0.01
+    PSF = (1.0, 2.0)
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 22, 6, 7.3, False, 128, 12, 1.06
     raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif")
 if FILE == 4:
     sigma = 0.05
@@ -48,10 +48,10 @@ imsize = itrue.shape
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
 psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
 ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
-ilm.params = np.array([ 0.85957264,  0.05256052, -0.12153001, -0.49850949, -0.11503405,
-     0.01370529,  0.08920759, -0.40520612,  0.38749629, -0.13532091,
-    -0.01790116, -0.34568229, -0.09325139,  0.38523795,  0.21644174,
-    -0.24665272,  0.02717521,  0.61476543])
+#ilm.params = np.array([ 0.85957264,  0.05256052, -0.12153001, -0.49850949, -0.11503405,
+#     0.01370529,  0.08920759, -0.40520612,  0.38749629, -0.13532091,
+#    -0.01790116, -0.34568229, -0.09325139,  0.38523795,  0.21644174,
+#    -0.24665272,  0.02717521,  0.61476543])
 s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
         zscale=zscale, offset=1, pad=16, sigma=sigma)
 

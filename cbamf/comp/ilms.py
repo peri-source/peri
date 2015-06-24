@@ -7,10 +7,10 @@ class Polynomial3D(object):
         self.order = order
 
         if coeffs is None:
-            self.params = np.zeros(np.prod(order))
+            self.params = np.zeros(np.prod(order), dtype='float')
             self.params[0] = 1
         else:
-            self.params = coeffs
+            self.params = coeffs.astype('float')
 
         self._setup_rvecs()
 
