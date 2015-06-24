@@ -72,7 +72,7 @@ def feature(rawimage, sweeps=20, samples=10, prad=7.3, psize=9,
     ORDER = (1,1,1)
     burn = sweeps - samples
 
-    PSF = (1.4, 3.0)
+    PSF = (0.8, 1.5)
 
     print "Initial featuring"
     itrue = initializers.normalize(rawimage[imzstart:,:imsize,:imsize], invert)
@@ -91,6 +91,9 @@ def feature(rawimage, sweeps=20, samples=10, prad=7.3, psize=9,
     s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
             zscale=zscale, offset=0, pad=16, sigma=sigma)
 
+    return do_samples(s, sweeps, burn)
+
+def do_samples(s, sweeps, burn):
     h = []
     ll = []
     for i in xrange(sweeps):

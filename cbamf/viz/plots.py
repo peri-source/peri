@@ -2,7 +2,7 @@ import matplotlib as mpl
 import matplotlib.pylab as pl
 import numpy as np
 
-def summary_plot(state, samples):
+def summary_plot(state, samples, layer=None):
     def MAD(d):
         return np.median(np.abs(d - np.median(d)))
 
@@ -10,13 +10,16 @@ def summary_plot(state, samples):
     s.set_current_particle()
     t = s.create_final_image()
 
+    if layer is None:
+        layer = t.shape[0]/2
+
     mu = samples.mean(axis=0)
     std = samples.std(axis=0)
 
     fig, axs = pl.subplots(2,3, figsize=(20,12))
-    axs[0][0].imshow((s.image[s._cmp_region]*s._cmp_mask)[43], vmin=0, vmax=1)
-    axs[0][1].imshow((t[s._cmp_region]*s._cmp_mask)[43], vmin=0, vmax=1)
-    axs[0][2].imshow(((s.image-t)[s._cmp_region]*s._cmp_mask)[43], vmin=-1, vmax=1)
+    axs[0][0].imshow((s.image[s._cmp_region]*s._cmp_mask)[layer], vmin=0, vmax=1)
+    axs[0][1].imshow((t[s._cmp_region]*s._cmp_mask)[layer], vmin=0, vmax=1)
+    axs[0][2].imshow(((s.image-t)[s._cmp_region]*s._cmp_mask)[layer], vmin=-1, vmax=1)
     axs[0][0].set_xticks([])
     axs[0][0].set_yticks([])
     axs[0][1].set_xticks([])
@@ -48,4 +51,3 @@ def summary_plot(state, samples):
     axs[1][2].set_xlabel("Pixel value differences")
 
     pl.tight_layout()
-

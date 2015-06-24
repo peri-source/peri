@@ -6,36 +6,38 @@ from cbamf import states, run, initializers
 from cbamf.comp import objs, psfs, ilms
 from cbamf.viz import plots
 
-ORDER = (1,1,1)
-sweeps = 30
-samples = 20
+ORDER = (3,3,2)
+sweeps = 10
+samples = 5
 burn = sweeps - samples
 
-FILE = 4
+FILE = 1
 
 if FILE == 1:
-    sigma = 0.05
-    PSF = (0.9, 2.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 34, 16, 17, True, 256, 1.34
+    sigma = 0.06
+    PSF = np.array([1.8, 3.5])
+    OFF = 0.2
+    BKG = 0.6
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 8, 14, True, 256, 17, 1.34
     raw = initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif")
 if FILE == 2:
     sigma = 0.02
     PSF = (1.4, 3.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 16, 5, 5.3, False, 128, 1.06
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 5, 5.3, False, 128, 12, 1.06
     raw = initializers.load_tiff("/media/scratch/bamf/neil-large.tif")
 if FILE == 3:
     sigma = 0.02
     PSF = (1.4, 3.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 22, 9, 7.3, False, 128, 1.06
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 22, 9, 7.3, False, 128, 12, 1.06
     raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif")
 if FILE == 4:
     sigma = 0.05
-    PSF = (1.4, 3.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE, zscale = 16, 9, 7.3, True, 128, 1.0
-    raw = next(initializers.load_tiff_iter("/media/scratch/bamf/averaged_dz015_N200_1.tif", 70))
+    PSF = (0.8, 1.5)
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 9, 7.3, True, 128, 2, 1.056
+    raw = next(initializers.load_tiff_iter("/media/scratch/bamf/p1_N150_1.tif", 70))
 
-itrue = initializers.normalize(raw[12:,:IMSIZE,:IMSIZE], INVERT)
-xstart, proc = initializers.local_max_featuring(itrue, FSIZE)
+itrue = initializers.normalize(raw[zstart:,:IMSIZE,:IMSIZE], INVERT)
+xstart, proc = initializers.local_max_featuring(itrue, FSIZE, 4)
 itrue = initializers.normalize(itrue, True)
 itrue = np.pad(itrue, PAD, mode='constant', constant_values=-10)
 xstart += PAD
@@ -46,8 +48,14 @@ imsize = itrue.shape
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
 psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
 ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
+ilm.params = np.array([ 0.85957264,  0.05256052, -0.12153001, -0.49850949, -0.11503405,
+     0.01370529,  0.08920759, -0.40520612,  0.38749629, -0.13532091,
+    -0.01790116, -0.34568229, -0.09325139,  0.38523795,  0.21644174,
+    -0.24665272,  0.02717521,  0.61476543])
 s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
-        zscale=zscale, offset=0, pad=16, sigma=sigma)
+        zscale=zscale, offset=1, pad=16, sigma=sigma)
+
+
 
 def gd(state, N=1, ratio=1e-1):
     state.set_current_particle()
@@ -64,10 +72,10 @@ def sample(s):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
         run.sample_particles(s, stepout=0.1)
-        run.sample_block(s, 'psf', stepout=0.1, explode=False)
         run.sample_block(s, 'ilm', stepout=0.1, explode=False)
         run.sample_block(s, 'off', stepout=0.1, explode=True)
-        run.sample_block(s, 'zscale', explode=True)
+        run.sample_block(s, 'psf', stepout=0.1, explode=False)
+        #run.sample_block(s, 'zscale', explode=True)
 
         if i > burn:
             h.append(s.state.copy())

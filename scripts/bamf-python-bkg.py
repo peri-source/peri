@@ -17,6 +17,7 @@ burn = sweeps - samples
 imsize = (128,128,128)
 blank = np.zeros(imsize, dtype='float')
 xstart, rstart = pickle.load(open("/media/scratch/bamf/bamf_ic_16_xr.pkl", 'r'))
+initializers.remove_overlaps(xstart, rstart)
 
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
 psf = psfs.AnisotropicGaussian((0.6, 2), shape=imsize)
@@ -28,8 +29,6 @@ itrue = s.create_final_image()
 itrue += np.random.normal(0.0, sigma, size=itrue.shape)
 strue = s.state.copy()
 s.image = itrue
-
-run.renorm(s)
 
 #raise IOError
 if True:
