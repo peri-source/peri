@@ -119,7 +119,14 @@ class HardSphereOverlapCell(object):
         inds = self._pos_to_inds(self.pos[index])
 
         for ind,q in inds:
-            self.cells[ind][self.counts[ind]] = index
+            try:
+                self.cells[ind][self.counts[ind]] = index
+            except IndexError as e:
+                self.inds[index] = []
+                self.neighs[index] = {}
+                self.logpriors[index] = ZEROLOGPRIOR
+                return
+
             self.counts[ind] += 1
 
         self.inds[index] = inds
