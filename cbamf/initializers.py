@@ -74,37 +74,6 @@ def normalize(im, invert=False):
         out = 1 - out
     return out
 
-def scan(im, cycles=1):
-    pl.figure(1)
-    pl.show()
-    time.sleep(3)
-    for c in xrange(cycles):
-        for i, sl in enumerate(im):
-            print i
-            pl.clf()
-            pl.imshow(sl, cmap=pl.cm.bone, interpolation='nearest',
-                    origin='lower', vmin=0, vmax=1)
-            pl.draw()
-            time.sleep(0.3)
-
-def scan_together(im, p, delay=2):
-    pl.figure(1)
-    pl.show()
-    time.sleep(3)
-    z,y,x = p.T
-    for i in xrange(len(im)):
-        print i
-        sl = im[i]
-        pl.clf()
-        pl.imshow(sl, cmap=pl.cm.bone, interpolation='nearest', origin='lower')
-        m = z.astype('int') == i
-        #pl.plot(y[m], x[m], 'o')
-        pl.plot(x[m], y[m], 'o')
-        pl.xlim(0, sl.shape[0])
-        pl.ylim(0, sl.shape[1])
-        pl.draw()
-        time.sleep(delay)
-
 def highpass(im, frac):
     fx = np.fft.fftfreq(im.shape[2])[None,None,:]
     fy = np.fft.fftfreq(im.shape[1])[None,:,None]

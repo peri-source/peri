@@ -1,6 +1,7 @@
 import matplotlib as mpl
 import matplotlib.pylab as pl
 import numpy as np
+import time
 
 def summary_plot(state, samples, layer=None):
     def MAD(d):
@@ -51,3 +52,35 @@ def summary_plot(state, samples, layer=None):
     axs[1][2].set_xlabel("Pixel value differences")
 
     pl.tight_layout()
+
+def scan(im, cycles=1, sleep=0.3):
+    pl.figure(1)
+    pl.show()
+    time.sleep(3)
+    for c in xrange(cycles):
+        for i, sl in enumerate(im):
+            print i
+            pl.clf()
+            pl.imshow(sl, cmap=pl.cm.bone, interpolation='nearest',
+                    origin='lower', vmin=0, vmax=1)
+            pl.draw()
+            time.sleep(sleep)
+
+def scan_together(im, p, delay=2):
+    pl.figure(1)
+    pl.show()
+    time.sleep(3)
+    z,y,x = p.T
+    for i in xrange(len(im)):
+        print i
+        sl = im[i]
+        pl.clf()
+        pl.imshow(sl, cmap=pl.cm.bone, interpolation='nearest', origin='lower',
+                vmin=0, vmax=1)
+        m = z.astype('int') == i
+        pl.plot(x[m], y[m], 'o')
+        pl.xlim(0, sl.shape[0])
+        pl.ylim(0, sl.shape[1])
+        pl.draw()
+        time.sleep(delay)
+
