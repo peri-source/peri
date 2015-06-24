@@ -12,6 +12,12 @@ class Tile(object):
             right = left
             left = np.zeros(len(left), dtype='int')
 
+        if not hasattr(left, '__iter__'):
+            left = np.array([left]*3, dtype='int')
+
+        if not hasattr(right, '__iter__'):
+            right = np.array([right]*3, dtype='int')
+
         if mins is not None:
             if not hasattr(mins, '__iter__'):
                 mins = np.array([mins]*3)
