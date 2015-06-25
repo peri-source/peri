@@ -9,19 +9,9 @@ import time
 import itertools
 from PIL import Image
 
-def remove_overlaps(pos, rad):
-    N = rad.shape[0]
-    for i in xrange(N):
-        for j in xrange(N):
-            if i == j:
-                continue;
-            d = np.sqrt(((pos[i] - pos[j])**2).sum())
-            r = rad[i] + rad[j]
-            diff = d - r
-            if diff < 0:
-                rad[i] -= np.abs(diff)/2 + 1e-10
-                rad[j] -= np.abs(diff)/2 + 1e-10
-
+#=======================================================================
+# Image loading functions
+#=======================================================================
 def _sliceiter(img):
     i = 0
     while True:
@@ -61,11 +51,9 @@ def load_tiff_iter_libtiff(filename, iter_slice_size):
         else:
             break
 
-def remove_z_mean(im):
-    for i in xrange(im.shape[0]):
-        im[i] -= im[i].mean()
-    return im
-
+#=======================================================================
+# Featuring functions
+#=======================================================================
 def normalize(im, invert=False):
     out = im.astype('float').copy()
     out -= 1.0*out.min()
@@ -73,43 +61,6 @@ def normalize(im, invert=False):
     if invert:
         out = 1 - out
     return out
-
-def highpass(im, frac):
-    fx = np.fft.fftfreq(im.shape[2])[None,None,:]
-    fy = np.fft.fftfreq(im.shape[1])[None,:,None]
-    fz = np.fft.fftfreq(im.shape[0])[:,None,None]
-    fr = np.sqrt(fx**2 + fy**2 + fz**2)
-    ff = np.fft.fftn(im)
-    return np.real( np.fft.ifftn( ff * (fr > frac / np.sqrt(2))))
-
-def smooth(im, sigma):
-    return nd.gaussian_filter(im, sigma)
-
-def log_featuring(im, size_range=[0,20]):
-    from skimage.feature import blob_log
-
-    potpos = []
-    potim = []
-    for layer in im:
-        ll = smooth(highpass(layer, 5./512), 1)
-
-        bl = blob_log(ll, min_sigma=5, max_sigma=20, threshold=0.09, overlap=0.2)
-
-        ll *= 0
-        if len(bl) > 0:
-            x = np.clip(bl[:,1], 0, ll.shape[1])
-            y = np.clip(bl[:,0], 0, ll.shape[0])
-            ll[x, y] = 1
-
-    a = potpos
-    b = np.array(potim)
-
-    q = nd.gaussian_filter(np.array(potim), 2)
-    s = q*(q > 0.02)
-    r = nd.label(s)[0]
-    p = np.array(nd.measurements.center_of_mass(q, labels=r, index=np.unique(r)))
-
-    return p, q, s
 
 def generate_sphere(radius):
     x,y,z = np.mgrid[0:2*radius,0:2*radius,0:2*radius]
@@ -131,4 +82,21 @@ def trackpy_featuring(im, size=10):
     pos = np.vstack([a.z, a.y, a.x]).T
     return pos
 
+def remove_overlaps(pos, rad):
+    N = rad.shape[0]
+    for i in xrange(N):
+        for j in xrange(N):
+            if i == j:
+                continue;
+            d = np.sqrt(((pos[i] - pos[j])**2).sum())
+            r = rad[i] + rad[j]
+            diff = d - r
+            if diff < 0:
+                rad[i] -= np.abs(diff)/2 + 1e-10
+                rad[j] -= np.abs(diff)/2 + 1e-10
 
+#=======================================================================
+# Generating fake data
+#=======================================================================
+def fake_image(pos, rad, psf=(1, 2), shape=(128,128,128)):
+    pass
