@@ -53,6 +53,8 @@ def sample_particles(state, stepout=1):
         blocks = state.blocks_particle(particle)
         sample_state(state, blocks, stepout=stepout)
 
+    return state.state.copy()
+
 def sample_block(state, blockname, explode=True, stepout=1):
     print '{:-^39}'.format(' '+blockname.upper()+' ')
     blocks = [state.create_block(blockname)]
@@ -60,7 +62,7 @@ def sample_block(state, blockname, explode=True, stepout=1):
     if explode:
         blocks = state.explode(blocks[0])
 
-    sample_state(state, blocks, stepout)
+    return sample_state(state, blocks, stepout)
 
 def feature(rawimage, sweeps=20, samples=10, prad=7.3, psize=9,
         pad=22, imsize=-1, imzstart=0, zscale=1.06, sigma=0.02, invert=False):
@@ -103,7 +105,7 @@ def do_samples(s, sweeps, burn):
         sample_block(s, 'off', stepout=0.1, explode=True)
         sample_block(s, 'zscale', explode=True)
 
-        if i > burn:
+        if i >= burn:
             h.append(s.state.copy())
             ll.append(s.loglikelihood())
 
