@@ -3,15 +3,15 @@ mpl.use('Agg')
 import numpy as np
 import pylab as pl
 
-from cbamf import states, run
+from cbamf import states, runner, initializers
 from cbamf.comp import psfs, ilms, objs
 import pickle
 import time
 
 sigma = 0.05
 
-sweeps = 10
-samples = 7
+sweeps = 3
+samples = 3
 burn = sweeps - samples
 
 imsize = (128,128,128)
@@ -20,15 +20,14 @@ xstart, rstart = pickle.load(open("/media/scratch/bamf/bamf_ic_16_xr.pkl", 'r'))
 initializers.remove_overlaps(xstart, rstart)
 
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
-psf = psfs.AnisotropicGaussian((0.6, 2), shape=imsize)
+psf = psfs.AnisotropicGaussian((0.6, 2), shape=imsize, fftw_planning_level=psfs.FFTW_PLAN_FAST)
 ilm = ilms.Polynomial3D(order=(3,3,2), shape=imsize)
 s = states.ConfocalImagePython(blank, obj=obj, psf=psf, ilm=ilm, pad=16, sigma=sigma)
 
-s.set_current_particle()
-itrue = s.create_final_image()
+itrue = s.get_model_image()
 itrue += np.random.normal(0.0, sigma, size=itrue.shape)
 strue = s.state.copy()
-s.image = itrue
+s.set_image(itrue)
 
 #raise IOError
 if True:
@@ -36,10 +35,10 @@ if True:
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        run.sample_particles(s)
-        run.sample_block(s, 'psf', explode=False)
-        run.sample_block(s, 'ilm', explode=False)
-        run.sample_block(s, 'off', explode=True)
+        runner.sample_particles(s)
+        runner.sample_block(s, 'psf', explode=False)
+        runner.sample_block(s, 'ilm', explode=False)
+        runner.sample_block(s, 'off', explode=True)
         #run.sample_block(s, 'zscale', explode=True)
 
         if i >= burn:

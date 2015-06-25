@@ -14,8 +14,8 @@ burn = sweeps - samples
 FILE = 2
 
 if FILE == 1:
-    sigma = 0.06
-    PSF = np.array([1.8, 3.5])
+    sigma = 0.04
+    PSF = np.array([0.9, 1.9])
     OFF = 0.2
     BKG = 0.6
     PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 8, 14, True, 256, 17, 1.34

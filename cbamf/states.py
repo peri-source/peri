@@ -10,20 +10,20 @@ class State(object):
         self.state = state if state is not None else np.zeros(self.nparams, dtype='double')
         self.stack = []
 
-    def push_change(self, block, data):
-        curr = self.state[block].copy()
-        self.stack.append((block, curr))
-        self.update(block, data)
-
-    def pop_change(self):
-        block, data = self.stack.pop()
-        self.update(block, data)
-
     def update(self, block, data):
         return self._update_state(block, data)
 
     def _update_state(self, block, data):
         self.state[block] = data.astype(self.state.dtype)
+
+    def _push_update(self, block, data):
+        curr = self.state[block].copy()
+        self.stack.append((block, curr))
+        self.update(block, data)
+
+    def _pop_update(self):
+        block, data = self.stack.pop()
+        self.update(block, data)
 
     def block_all(self):
         return np.ones(self.nparams, dtype='bool')
@@ -38,19 +38,9 @@ class State(object):
         block[bmin:bmax] = True
         return block
 
-    def set_state(self, state):
-        self.state = state.astype(self.state.dtype)
-
-    def reset(self):
-        self.state *= 0
-
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=0,
             pad=16, sigma=0.1, *args, **kwargs):
-        self.image = image
-        self.image_mask = (image > -10).astype('float')
-        self.image *= self.image_mask
-
         self.pad = pad
         self.index = None
         self.sigma = sigma
@@ -85,10 +75,21 @@ class ConfocalImagePython(State):
         self.b_off = self.create_block('off')
         self.b_zscale = self.create_block('zscale')
 
-        self.build_state()
-        self.initialize()
+        self._build_state()
+        self.set_image(image)
 
-    def build_state(self):
+    def set_image(self, image):
+        self.image = image
+        self.image_mask = (image > -10).astype('float')
+        self.image *= self.image_mask
+
+        self._build_internal_variables()
+        self._initialize()
+
+    def get_model_image(self):
+        return self.model_image * self.image_mask
+
+    def _build_state(self):
         out = []
         for param in self.param_order:
             if param == 'pos':
@@ -105,12 +106,14 @@ class ConfocalImagePython(State):
                 out.append(self.zscale)
 
         self.state = np.hstack(out).astype('float')
+
+    def _build_internal_variables(self):
         self.model_image = np.zeros_like(self.image)
         self._loglikelihood_field = -self.image_mask*self.image**2 / self.sigma**2
         self._loglikelihood = self._loglikelihood_field.sum()
         self._logprior = 0
 
-    def initialize(self):
+    def _initialize(self):
         self.psf.update(self.state[self.b_psf])
         self.obj.initialize(self.zscale)
         self.ilm.initialize()
@@ -124,8 +127,12 @@ class ConfocalImagePython(State):
     def _tile_from_particle_change(self, p0, r0, p1, r1):
         zsc = np.array([1.0/self.zscale, 1, 1])
         r0, r1 = zsc*r0, zsc*r1
-        pl = np.round(np.vstack([p0-1.5*r0-self.pad/2, p1-1.5*r1-self.pad/2]).min(axis=0)).astype('int')
-        pr = np.round(np.vstack([p0+1.5*r0+self.pad/2, p1+1.5*r1+self.pad/2]).max(axis=0)).astype('int')
+        pl = np.round(np.vstack(
+                [p0-1.5*r0-self.pad/2, p1-1.5*r1-self.pad/2]
+            ).min(axis=0)).astype('int')
+        pr = np.round(np.vstack(
+                [p0+1.5*r0+self.pad/2, p1+1.5*r1+self.pad/2]
+            ).max(axis=0)).astype('int')
 
         outer = Tile(pl, pr, 0, self.image.shape)
         inner = Tile(pl+self.pad/2, pr-self.pad/2, self.pad/2, np.array(self.image.shape)-self.pad/2)
@@ -189,6 +196,10 @@ class ConfocalImagePython(State):
             self.obj.update(particles, pos, rad, self.zscale)
             self.nbl.update(particles, pos, rad)
             self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
+
+            #if self._logprior < -1e90:
+            #    self._pop_update()
+
             self._update_tile(*self._tile_from_particle_change(pos0, rad0, pos, rad))
         else:
             docalc = False
@@ -210,7 +221,7 @@ class ConfocalImagePython(State):
 
             if block[self.b_zscale].any():
                 self.zscale = self.state[self.b_zscale]
-                self.initialize()
+                self._initialize()
 
             if docalc:
                 self._update_tile(*self._tile_global())

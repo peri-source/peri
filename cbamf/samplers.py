@@ -17,15 +17,13 @@ class Sampler(object):
         return state
 
     def loglikelihood(self, model, state, substate):
-        state.push_change(self.block, substate)
+        state.update(self.block, substate)
         lg = model.loglikelihood(state)
-        state.pop_change()
         return lg
 
     def gradloglikelihood(self, model, state, substate):
-        state.push_change(self.block, substate)
+        state.update(self.block, substate)
         lg = model.gradloglikelihood(state)
-        state.pop_change()
         return lg
 
     def sample(self, model, state):

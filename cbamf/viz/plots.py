@@ -8,8 +8,7 @@ def summary_plot(state, samples, layer=None):
         return np.median(np.abs(d - np.median(d)))
 
     s = state
-    s.set_current_particle()
-    t = s.create_final_image()
+    t = s.get_model_image()
 
     if layer is None:
         layer = t.shape[0]/2
@@ -18,9 +17,9 @@ def summary_plot(state, samples, layer=None):
     std = samples.std(axis=0)
 
     fig, axs = pl.subplots(2,3, figsize=(20,12))
-    axs[0][0].imshow((s.image[s._cmp_region]*s._cmp_mask)[layer], vmin=0, vmax=1)
-    axs[0][1].imshow((t[s._cmp_region]*s._cmp_mask)[layer], vmin=0, vmax=1)
-    axs[0][2].imshow(((s.image-t)[s._cmp_region]*s._cmp_mask)[layer], vmin=-1, vmax=1)
+    axs[0][0].imshow(s.image[layer], vmin=0, vmax=1)
+    axs[0][1].imshow(t[layer], vmin=0, vmax=1)
+    axs[0][2].imshow((s.image-t)[layer], vmin=-1, vmax=1)
     axs[0][0].set_xticks([])
     axs[0][0].set_yticks([])
     axs[0][1].set_xticks([])
@@ -45,7 +44,7 @@ def summary_plot(state, samples, layer=None):
     axs[1][1].hist(d, bins=50, histtype='stepfilled', alpha=0.8)
     axs[1][1].set_xlabel("Radii")
 
-    axs[1][2].hist(((s.image-t)[s._cmp_region]*s._cmp_mask).ravel(), bins=150,
+    axs[1][2].hist((s.image-t).ravel(), bins=150,
             histtype='stepfilled', alpha=0.8)
     axs[1][2].set_xlim(-0.35, 0.35)
     axs[1][2].semilogy()
