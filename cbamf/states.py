@@ -174,17 +174,6 @@ class ConfocalImagePython(State):
         rmask = block[self.b_rad]
         particles = np.arange(self.obj.N)[pmask.any(axis=-1) | rmask]
 
-        # TODO check all the priors before actually going for an update
-        # if it is too small, don't both and return False
-        """
-        if len(particles) > 0:
-            self.nbl.update(particles, pos, rad)
-            self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
-            if self._logprior < -1e90:
-                # TODO, instead pop the change off and return nothing
-                pass
-        """
-
         # if the particle was changed, update locally
         if len(particles) > 0:
             pos0 = prev[self.b_pos].copy().reshape(-1,3)[particles]
@@ -197,8 +186,13 @@ class ConfocalImagePython(State):
             self.nbl.update(particles, pos, rad)
             self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
 
-            #if self._logprior < -1e90:
-            #    self._pop_update()
+            # TODO check all the priors before actually going for an update
+            # if it is too small, don't both and return False
+            # This needs to be more general with pop and push
+            if self._logprior < -1e90:
+                self.obj.update(particles, pos0, rad0, self.zscale)
+                self.nbl.update(particles, pos0, rad0)
+                return False
 
             self._update_tile(*self._tile_from_particle_change(pos0, rad0, pos, rad))
         else:

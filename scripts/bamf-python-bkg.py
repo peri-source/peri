@@ -5,13 +5,14 @@ import pylab as pl
 
 from cbamf import states, runner, initializers
 from cbamf.comp import psfs, ilms, objs
+from cbamf.viz import plots
 import pickle
 import time
 
 sigma = 0.05
 
-sweeps = 3
-samples = 3
+sweeps = 30
+samples = 20
 burn = sweeps - samples
 
 imsize = (128,128,128)
