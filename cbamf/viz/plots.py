@@ -3,23 +3,26 @@ import matplotlib.pylab as pl
 import numpy as np
 import time
 
-def summary_plot(state, samples, layer=None):
+def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     def MAD(d):
         return np.median(np.abs(d - np.median(d)))
 
     s = state
     t = s.get_model_image()
 
-    if layer is None:
-        layer = t.shape[0]/2
+    if zlayer is None:
+        zlayer = t.shape[0]/2
+
+    if xlayer is None:
+        xlayer = t.shape[2]/2
 
     mu = samples.mean(axis=0)
     std = samples.std(axis=0)
 
-    fig, axs = pl.subplots(2,3, figsize=(20,12))
-    axs[0][0].imshow(s.image[layer], vmin=0, vmax=1)
-    axs[0][1].imshow(t[layer], vmin=0, vmax=1)
-    axs[0][2].imshow((s.image-t)[layer], vmin=-1, vmax=1)
+    fig, axs = pl.subplots(3,3, figsize=(20,12))
+    axs[0][0].imshow(s.image[zlayer], vmin=0, vmax=1)
+    axs[0][1].imshow(t[zlayer], vmin=0, vmax=1)
+    axs[0][2].imshow((s.image-t)[zlayer], vmin=-1, vmax=1)
     axs[0][0].set_xticks([])
     axs[0][0].set_yticks([])
     axs[0][1].set_xticks([])
@@ -27,13 +30,31 @@ def summary_plot(state, samples, layer=None):
     axs[0][2].set_xticks([])
     axs[0][2].set_yticks([])
 
-    axs[1][0].hist(std[s.b_pos], bins=np.logspace(-3,0,50), label='Positions',
+    axs[1][0].imshow(s.image[:,:,xlayer], vmin=0, vmax=1)
+    axs[1][1].imshow(t[:,:,xlayer], vmin=0, vmax=1)
+    axs[1][2].imshow((s.image-t)[:,:,xlayer], vmin=-1, vmax=1)
+    axs[1][0].set_xticks([])
+    axs[1][0].set_yticks([])
+    axs[1][1].set_xticks([])
+    axs[1][1].set_yticks([])
+    axs[1][2].set_xticks([])
+    axs[1][2].set_yticks([])
+
+    axs[2][0].hist(std[s.b_pos], bins=np.logspace(-3,0,50), label='Positions',
             histtype='stepfilled', alpha=0.8)
-    axs[1][0].hist(std[s.b_rad], bins=np.logspace(-3,0,50), label='Radii',
+    axs[2][0].hist(std[s.b_rad], bins=np.logspace(-3,0,50), label='Radii',
             histtype='stepfilled', alpha=0.8)
-    axs[1][0].semilogx()
-    axs[1][0].legend(loc='upper right')
-    axs[1][0].set_xlabel("Estimated standard deviation")
+
+    if truestate is not None:
+        d = np.abs(mu - truestate)
+        axs[2][0].hist(d[s.b_pos], bins=np.logspace(-3,0,50), label='Position errors',
+                histtype='step', alpha=0.8)
+        axs[2][0].hist(d[s.b_rad], bins=np.logspace(-3,0,50), label='Radius errors',
+                histtype='step', alpha=0.8)
+
+    axs[2][0].semilogx()
+    axs[2][0].legend(loc='upper right')
+    axs[2][0].set_xlabel("Estimated standard deviation")
 
     d = s.state[s.b_rad]
     m = 2*1.4826 * MAD(d)
@@ -41,14 +62,17 @@ def summary_plot(state, samples, layer=None):
 
     d = d[(d > mb - m) & (d < mb +m)]
     d = s.state[s.b_rad]
-    axs[1][1].hist(d, bins=50, histtype='stepfilled', alpha=0.8)
-    axs[1][1].set_xlabel("Radii")
+    axs[2][1].hist(d, bins=50, histtype='stepfilled', alpha=0.8)
+    axs[2][1].set_xlabel("Radii")
 
-    axs[1][2].hist((s.image-t).ravel(), bins=150,
+    if truestate is not None:
+        axs[2][1].hist(truestate[s.b_rad], bins=50, histtype='step', alpha=0.8)
+
+    axs[2][2].hist((s.image-t)[s.image_mask].ravel(), bins=150,
             histtype='stepfilled', alpha=0.8)
-    axs[1][2].set_xlim(-0.35, 0.35)
-    axs[1][2].semilogy()
-    axs[1][2].set_xlabel("Pixel value differences")
+    axs[2][2].set_xlim(-0.35, 0.35)
+    axs[2][2].semilogy()
+    axs[2][2].set_xlabel("Pixel value differences")
 
     pl.tight_layout()
 

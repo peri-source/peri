@@ -23,7 +23,7 @@ if FILE == 1:
 if FILE == 2:
     sigma = 0.02
     PSF = (0.9, 2.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 5, 5.3, False, 128, 12, 1.06
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 5, 5.3, False, 128, 5, 1.06
     raw = initializers.load_tiff("/media/scratch/bamf/neil-large.tif")
 if FILE == 3:
     sigma = 0.01
@@ -75,7 +75,7 @@ def sample(s):
         runner.sample_block(s, 'ilm', stepout=0.1, explode=False)
         runner.sample_block(s, 'off', stepout=0.1, explode=True)
         runner.sample_block(s, 'psf', stepout=0.1, explode=False)
-        #runner.sample_block(s, 'zscale', explode=True)
+        runner.sample_block(s, 'zscale', explode=True)
 
         if i > burn:
             h.append(s.state.copy())

@@ -182,11 +182,13 @@ class ConfocalImagePython(State):
             pos = self.state[self.b_pos].copy().reshape(-1,3)[particles]
             rad = self.state[self.b_rad].copy()[particles]
 
+            # TODO - check why we need to have obj.update here?? should
+            # only be necessary before _update_tile
             self.obj.update(particles, pos, rad, self.zscale)
             self.nbl.update(particles, pos, rad)
             self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
 
-            # TODO check all the priors before actually going for an update
+            # check all the priors before actually going for an update
             # if it is too small, don't both and return False
             # This needs to be more general with pop and push
             if self._logprior < -1e90:
