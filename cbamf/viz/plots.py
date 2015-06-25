@@ -40,17 +40,20 @@ def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     axs[1][2].set_xticks([])
     axs[1][2].set_yticks([])
 
+    alpha = 0.5 if truestate is not None else 0.8
     axs[2][0].hist(std[s.b_pos], bins=np.logspace(-3,0,50), label='Positions',
-            histtype='stepfilled', alpha=0.8)
-    axs[2][0].hist(std[s.b_rad], bins=np.logspace(-3,0,50), label='Radii',
-            histtype='stepfilled', alpha=0.8)
-
+            histtype='stepfilled', alpha=alpha)
     if truestate is not None:
         d = np.abs(mu - truestate)
-        axs[2][0].hist(d[s.b_pos], bins=np.logspace(-3,0,50), label='Position errors',
-                histtype='step', alpha=0.8)
-        axs[2][0].hist(d[s.b_rad], bins=np.logspace(-3,0,50), label='Radius errors',
-                histtype='step', alpha=0.8)
+        axs[2][0].hist(d[s.b_pos], bins=np.logspace(-3,0,50), color='red',
+                histtype='step', alpha=1)
+
+    axs[2][0].hist(std[s.b_rad], bins=np.logspace(-3,0,50), label='Radii',
+            histtype='stepfilled', alpha=alpha)
+    if truestate is not None:
+        d = np.abs(mu - truestate)
+        axs[2][0].hist(d[s.b_rad], bins=np.logspace(-3,0,50), color='blue',
+                histtype='step', alpha=1)
 
     axs[2][0].semilogx()
     axs[2][0].legend(loc='upper right')
@@ -68,12 +71,13 @@ def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     if truestate is not None:
         axs[2][1].hist(truestate[s.b_rad], bins=50, histtype='step', alpha=0.8)
 
-    axs[2][2].hist((s.image-t)[s.image_mask].ravel(), bins=150,
+    axs[2][2].hist((s.image-t)[s.image_mask==1].ravel(), bins=150,
             histtype='stepfilled', alpha=0.8)
     axs[2][2].set_xlim(-0.35, 0.35)
     axs[2][2].semilogy()
     axs[2][2].set_xlabel("Pixel value differences")
 
+    pl.subplots_adjust(left=0, right=1, bottom=0, top=1, wspace=0.05, hspace=0.05)
     pl.tight_layout()
 
 def scan(im, cycles=1, sleep=0.3):
