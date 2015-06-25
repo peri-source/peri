@@ -40,10 +40,11 @@ class State(object):
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=0,
-            pad=16, sigma=0.1, *args, **kwargs):
+            pad=16, sigma=0.1, doprior=True, *args, **kwargs):
         self.pad = pad
         self.index = None
         self.sigma = sigma
+        self.doprior = doprior
 
         self.psf = psf
         self.ilm = ilm
@@ -185,8 +186,9 @@ class ConfocalImagePython(State):
             # TODO - check why we need to have obj.update here?? should
             # only be necessary before _update_tile
             self.obj.update(particles, pos, rad, self.zscale)
-            self.nbl.update(particles, pos, rad)
-            self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
+            if self.doprior:
+                self.nbl.update(particles, pos, rad)
+            self._logprior = self.doprior*(self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any())
 
             # check all the priors before actually going for an update
             # if it is too small, don't both and return False
@@ -216,7 +218,7 @@ class ConfocalImagePython(State):
                 docalc = True
 
             if block[self.b_zscale].any():
-                self.zscale = self.state[self.b_zscale]
+                self.zscale = self.state[self.b_zscale][0]
                 self._initialize()
 
             if docalc:
@@ -252,37 +254,55 @@ class ConfocalImagePython(State):
         return off, end
 
     def _grad_single_param(self, block, dl):
-        self.push_change(block, self.state[block]+dl)
+        self._push_update(block, self.state[block]+dl)
         loglr = self.loglikelihood()
-        self.pop_change()
+        self._pop_update()
 
-        self.push_change(block, self.state[block]-dl)
+        self._push_update(block, self.state[block]-dl)
         logll = self.loglikelihood()
-        self.pop_change()
+        self._pop_update()
 
         return (loglr - logll) / (2*dl)
 
+    def _hess_two_param(self, b0, b1, dl):
+        self._push_update(b0, self.state[b0]+dl)
+        self._push_update(b1, self.state[b1]+dl)
+        logl_01 = self.loglikelihood()
+        self._pop_update()
+        self._pop_update()
+
+        self._push_update(b0, self.state[b0]+dl)
+        logl_0 = self.loglikelihood()
+        self._pop_update()
+
+        self._push_update(b1, self.state[b1]+dl)
+        logl_1 = self.loglikelihood()
+        self._pop_update()
+
+        logl = self.loglikelihood()
+
+        return (logl_01 - logl_0 - logl_1 + logl) / (dl**2)
+
     def gradloglikelihood(self, dl=1e-3):
-        grad = []
-        for pg in self.param_order:
-            print '{:-^39}'.format(' '+pg.upper()+' ')
-            if pg == 'pos':
-                for i in xrange(self.obj.N):
-                    blocks = self.blocks_particle()[:-1]
-                    for block in blocks:
-                        grad.append(self._grad_single_param(block, dl))
+        blocks = self.explode(self.block_all())
+        grad = np.zeros(self.nparams)
 
-            if pg == 'rad':
-                for i in xrange(self.obj.N):
-                    block = self.blocks_particle()[-1]
-                    grad.append(self._grad_single_param(block, dl))
+        for i in xrange(self.nparams):
+            grad[i] = self._grad_single_param(blocks[i], dl)
 
-            if pg == 'psf' or pg == 'ilm' or pg == 'off' or pg == 'zscale':
-                blocks = self.explode(self.create_block(pg))
-                for block in blocks:
-                    grad.append(self._grad_single_param(block, dl))
+        return grad
 
-        return np.array(grad)
+    def hessloglikelihood(self, dl=1e-3):
+        blocks = self.explode(self.block_all())
+        hess = np.zeros((self.nparams, self.nparams))
+
+        for i in xrange(self.nparams):
+            for j in xrange(i, self.nparams):
+                thess = self._hess_two_param(blocks[i], blocks[j], dl)
+                hess[i,j] = thess
+                hess[j,i] = thess
+
+        return hess
 
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
