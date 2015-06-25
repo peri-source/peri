@@ -2,22 +2,28 @@ import os
 import pickle
 import numpy as np
 
-import pyfftw
-from pyfftw.builders import fftn, ifftn
+try:
+    import pyfftw
+    from pyfftw.builders import fftn, ifftn
+    hasfftw = True
+except ImportError as e:
+    hasfftw = False
+
 from multiprocessing import cpu_count
 
 from cbamf.util import Tile
 
-WISDOM_FILE = os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl")
+if hasfftw:
+    WISDOM_FILE = os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl")
 
-def save_wisdom():
-    pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'))
+    def save_wisdom():
+        pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'))
 
-try:
-    with open(WISDOM_FILE) as wisdom:
-        pyfftw.import_wisdom(pickle.load(open(WISDOM_FILE)))
-except IOError as e:
-    save_wisdom()
+    try:
+        with open(WISDOM_FILE) as wisdom:
+            pyfftw.import_wisdom(pickle.load(open(WISDOM_FILE)))
+    except IOError as e:
+        save_wisdom()
 
 FFTW_PLAN_FAST = 'FFTW_ESTIMATE'
 FFTW_PLAN_NORMAL = 'FFTW_MEASURE'
@@ -35,12 +41,13 @@ class PSF(object):
         self.set_tile(Tile(self.shape))
 
     def _setup_ffts(self):
-        self._fftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
-        self._ifftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
-        self._fftn = fftn(self._fftn_data, overwrite_input=True,
-                planner_effort=self.fftw_planning_level, threads=self.threads)
-        self._ifftn = ifftn(self._ifftn_data, overwrite_input=True,
-                planner_effort=self.fftw_planning_level, threads=self.threads)
+        if hasfftw:
+            self._fftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
+            self._ifftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
+            self._fftn = fftn(self._fftn_data, overwrite_input=False,
+                    planner_effort=self.fftw_planning_level, threads=self.threads)
+            self._ifftn = ifftn(self._ifftn_data, overwrite_input=False,
+                    planner_effort=self.fftw_planning_level, threads=self.threads)
 
     def _setup_kvecs(self):
         sp = self.tile.shape
@@ -83,21 +90,26 @@ class PSF(object):
         if any(field.shape != self.tile.shape):
             raise AttributeError("Field passed to PSF incorrect shape")
 
-        if (not pyfftw.is_n_byte_aligned(self._fftn_data, 16) or
-            not pyfftw.is_n_byte_aligned(self._ifftn_data, 16)):
-            raise AttributeError("FFT arrays became misaligned")
+        #if (not pyfftw.is_n_byte_aligned(self._fftn_data, 16) or
+        #    not pyfftw.is_n_byte_aligned(self._ifftn_data, 16)):
+        #    raise AttributeError("FFT arrays became misaligned")
 
         if not np.iscomplex(field.ravel()[0]):
-            self._fftn_data[:] = field
-            self._fftn.execute()
-            infield = self._fftn.get_output_array()
+            if hasfftw:
+                self._fftn_data[:] = field
+                self._fftn.execute()
+                infield = self._fftn.get_output_array()
+            else:
+                infield = np.fft.fftn(field)
         else:
             infield = field
 
-        self._ifftn_data[:] = infield * self.kpsf / self._fftn_data.size
-        self._ifftn.execute()
-
-        return np.real(self._ifftn.get_output_array())
+        if hasfftw:
+            self._ifftn_data[:] = infield * self.kpsf / self._fftn_data.size
+            self._ifftn.execute()
+            return np.real(self._ifftn.get_output_array())
+        else:
+            return np.real(np.fft.ifftn(infield * self.kpsf))
 
     def get_params(self):
         return self.params
