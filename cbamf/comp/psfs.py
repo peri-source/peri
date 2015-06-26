@@ -30,7 +30,7 @@ FFTW_PLAN_NORMAL = 'FFTW_MEASURE'
 FFTW_PLAN_SLOW = 'FFTW_PATIENT'
 
 class PSF(object):
-    def __init__(self, params, shape, fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1):
+    def __init__(self, params, shape, fftw_planning_level=FFTW_PLAN_NORMAL, threads=1):
         self.shape = shape
         self.params = np.array(params).astype('float')
 
@@ -114,15 +114,26 @@ class PSF(object):
     def get_params(self):
         return self.params
 
+    def get_support_size(self):
+        return np.zeros(3)
+
     def __del__(self):
         save_wisdom()
 
 class AnisotropicGaussian(PSF):
-    def __init__(self, params, shape, *args, **kwargs):
+    def __init__(self, params, shape, support_factor=1.4, *args, **kwargs):
+        """
+        Do not set support_factor to an integral value (don't know why, but this is causes kinks
+        in the loglikelihood function)
+        """
+        self.support_factor = support_factor
         super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
 
     def psf_func(self, params):
         return np.exp(-(self._kx*params[0])**2 - (self._ky*params[0])**2 - (self._kz*params[1])**2)
+
+    def get_support_size(self):
+        return self.support_factor*np.array([self.params[1], self.params[0], self.params[0]])
 
 class IsotropicDisc(PSF):
     def __init__(self, params, shape, *args, **kwargs):
@@ -130,6 +141,9 @@ class IsotropicDisc(PSF):
 
     def psf_func(self, params):
         return (1.0 + np.exp(-params[1]*params[0])) / (1.0 + np.exp(params[1]*(self._klen - params[0])))
+
+    def get_support_size(self):
+        return 3.5*np.array([self.params[0]]*3)
 
 class GaussianPolynomialPCA(PSF):
     def __init__(self, cov_mat_file, mean_mat_file, shape, gaussian=(1,1), components=5, *args, **kwargs):
