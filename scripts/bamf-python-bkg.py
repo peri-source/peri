@@ -40,7 +40,7 @@ if True:
         runner.sample_block(s, 'psf', explode=False)
         runner.sample_block(s, 'ilm', explode=False)
         runner.sample_block(s, 'off', explode=True)
-        #run.sample_block(s, 'zscale', explode=True)
+        runner.sample_block(s, 'zscale', explode=True)
 
         if i >= burn:
             h.append(s.state.copy())

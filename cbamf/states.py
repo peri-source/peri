@@ -123,6 +123,7 @@ class ConfocalImagePython(State):
         self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad,
                 zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
 
+        self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
         self._update_tile(*self._tile_global())
 
     def _tile_from_particle_change(self, p0, r0, p1, r1):
@@ -187,9 +188,8 @@ class ConfocalImagePython(State):
             # TODO - check why we need to have obj.update here?? should
             # only be necessary before _update_tile
             self.obj.update(particles, pos, rad, self.zscale)
-            if self.doprior:
-                self.nbl.update(particles, pos, rad)
-            self._logprior = self.doprior*(self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any())
+            self.nbl.update(particles, pos, rad)
+            self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
 
             # check all the priors before actually going for an update
             # if it is too small, don't both and return False
@@ -197,6 +197,7 @@ class ConfocalImagePython(State):
             if self._logprior < -1e90:
                 self.obj.update(particles, pos0, rad0, self.zscale)
                 self.nbl.update(particles, pos0, rad0)
+                self.state[block] = prev[block]
                 return False
 
             self._update_tile(*self._tile_from_particle_change(pos0, rad0, pos, rad))
