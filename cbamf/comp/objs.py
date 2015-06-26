@@ -2,8 +2,8 @@ import numpy as np
 from ..util import Tile
 
 class SphereCollectionRealSpace(object):
-    def __init__(self, pos, rad, shape, boundary_size=3):
-        self.boundary_size = boundary_size
+    def __init__(self, pos, rad, shape, support_size=3):
+        self.support_size = support_size
         self.pos = pos.astype('float')
         self.rad = rad.astype('float')
         self.N = rad.shape[0]
@@ -18,7 +18,7 @@ class SphereCollectionRealSpace(object):
 
     def _particle(self, pos, rad, zscale, sign=1):
         p = np.round(pos)
-        r = np.round(np.array([1.0/zscale,1,1])*np.ceil(rad)+self.boundary_size)
+        r = np.round(np.array([1.0/zscale,1,1])*np.ceil(rad)+self.support_size)
 
         tile = Tile(p-r, p+r, 0, self.shape)
         subr = self.rvecs[tile.slicer + (np.s_[:],)]
@@ -66,3 +66,6 @@ class SphereCollectionRealSpace(object):
 
     def get_params_rad(self):
         return self.rad
+
+    def get_support_size(self):
+        return self.support_size

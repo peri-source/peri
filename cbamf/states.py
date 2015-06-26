@@ -128,16 +128,16 @@ class ConfocalImagePython(State):
         self._update_tile(*self._tile_global())
 
     def _tile_from_particle_change(self, p0, r0, p1, r1):
-        psc = self.psf.get_support_size()/2
+        psc = self.psf.get_support_size()/2.0
+        rsc = self.obj.get_support_size()/2.0
 
         zsc = np.array([1.0/self.zscale, 1, 1])
         r0, r1 = zsc*r0, zsc*r1
-        pl = np.round(np.vstack(
-                [p0-r0-3-self.pad/2-psc, p1-r1-3-self.pad/2-psc]
-            ).min(axis=0)).astype('int')
-        pr = np.round(np.vstack(
-                [p0+r0+3+self.pad/2+psc+1, p1+r1+3+self.pad/2+psc+1]
-            ).max(axis=0)).astype('int')
+
+        off0 = r0 + self.pad/2 + psc + rsc
+        off1 = r1 + self.pad/2 + psc + rsc
+        pl = np.round(np.vstack([p0-off0, p1-off1]).min(axis=0)).astype('int')
+        pr = np.round(np.vstack([p0+off0, p1+off1]).max(axis=0)).astype('int')
 
         outer = Tile(pl, pr, 0, self.image.shape)
         inner = Tile(pl+self.pad/2, pr-self.pad/2, self.pad/2, np.array(self.image.shape)-self.pad/2)
