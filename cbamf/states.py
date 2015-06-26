@@ -110,7 +110,7 @@ class ConfocalImagePython(State):
 
     def _build_internal_variables(self):
         self.model_image = np.zeros_like(self.image)
-        self._loglikelihood_field = -self.image_mask*self.image**2 / self.sigma**2
+        self._loglikelihood_field = -self.image_mask*self.image**2 / (2*self.sigma**2)
         self._loglikelihood = self._loglikelihood_field.sum()
         self._logprior = 0
 
@@ -126,6 +126,7 @@ class ConfocalImagePython(State):
         self._update_tile(*self._tile_global())
 
     def _tile_from_particle_change(self, p0, r0, p1, r1):
+        # TODO - add the psf into the calculation of the tile size
         zsc = np.array([1.0/self.zscale, 1, 1])
         r0, r1 = zsc*r0, zsc*r1
         pl = np.round(np.vstack(
@@ -160,7 +161,7 @@ class ConfocalImagePython(State):
         replacement = self.psf.execute(replacement) + self.offset
 
         self.model_image[islice] = replacement[ioslice]
-        self._loglikelihood_field[islice] = -self.image_mask[islice]*(replacement[ioslice] - self.image[islice])**2 / self.sigma**2
+        self._loglikelihood_field[islice] = -self.image_mask[islice]*(replacement[ioslice] - self.image[islice])**2 / (2*self.sigma**2)
 
         newll = self._loglikelihood_field[islice].sum()
         self._loglikelihood += newll - oldll

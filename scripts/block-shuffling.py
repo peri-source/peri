@@ -30,30 +30,16 @@ itrue += np.random.normal(0.0, sigma, size=itrue.shape)
 strue = s.state.copy()
 s.set_image(itrue)
 
-#raise IOError
-if True:
-    h = []
-    for i in xrange(sweeps):
-        print '{:=^79}'.format(' Sweep '+str(i)+' ')
+blocks = s.explode(s.block_all())
+h = []
+for i in xrange(sweeps):
+    print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        runner.sample_particles(s)
-        runner.sample_block(s, 'psf', explode=False)
-        runner.sample_block(s, 'ilm', explode=False)
-        runner.sample_block(s, 'off', explode=True)
-        #run.sample_block(s, 'zscale', explode=True)
+    np.random.shuffle(blocks)
+    for block in blocks:
+        runner.sample_state(s, [block], stepout=0.1)
 
-        if i >= burn:
-            h.append(s.state.copy())
+    if i >= burn:
+        h.append(s.state.copy())
 
-    h = np.array(h)
-
-mu = h.mean(axis=0)
-std = h.std(axis=0)
-pl.figure(figsize=(20,4))
-pl.errorbar(xrange(len(mu)), (mu-strue), yerr=5*std/np.sqrt(samples),
-        fmt='.', lw=0.15, alpha=0.5)
-pl.vlines([0,3*s.N-0.5, 4*s.N-0.5], -1, 1, linestyle='dashed', lw=4, alpha=0.5)
-pl.hlines(0, 0, len(mu), linestyle='dashed', lw=5, alpha=0.5)
-pl.xlim(0, len(mu))
-pl.ylim(-0.02, 0.02)
-pl.show()
+h = np.array(h)

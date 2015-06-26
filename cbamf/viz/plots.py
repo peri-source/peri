@@ -58,6 +58,7 @@ def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     axs[2][0].semilogx()
     axs[2][0].legend(loc='upper right')
     axs[2][0].set_xlabel("Estimated standard deviation")
+    axs[2][0].set_ylim(bottom=0)
 
     d = s.state[s.b_rad]
     m = 2*1.4826 * MAD(d)
@@ -67,6 +68,7 @@ def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     d = s.state[s.b_rad]
     axs[2][1].hist(d, bins=50, histtype='stepfilled', alpha=0.8)
     axs[2][1].set_xlabel("Radii")
+    axs[2][1].set_ylim(bottom=0)
 
     if truestate is not None:
         axs[2][1].hist(truestate[s.b_rad], bins=50, histtype='step', alpha=0.8)
@@ -75,6 +77,7 @@ def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
             histtype='stepfilled', alpha=0.8)
     axs[2][2].set_xlim(-0.35, 0.35)
     axs[2][2].semilogy()
+    axs[2][2].set_ylim(bottom=0)
     axs[2][2].set_xlabel("Pixel value differences")
 
     pl.subplots_adjust(left=0, right=1, bottom=0, top=1, wspace=0.05, hspace=0.05)

@@ -10,7 +10,7 @@ from cbamf.viz import plots
 PAD = 16
 sigma = 0.05
 
-imsize = (64,64,64)
+imsize = (64,)*3
 blank = np.zeros(imsize, dtype='float')
 xstart, rstart = np.array(imsize).reshape(-1,3)/2.0, np.array([5.0])
 
@@ -24,5 +24,8 @@ itrue += np.random.normal(0.0, sigma, size=itrue.shape)
 strue = s.state.copy()
 s.set_image(itrue)
 
-hess = -s.hessloglikelihood()
-fischer = np.linalg.inv(hess)
+hess = s.hessloglikelihood()
+print "Hessian:", np.diag(hess)
+
+#h, ll = runner.do_samples(s, 30, 5)
+#plots.summary_plot(s, h, truestate=strue)

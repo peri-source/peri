@@ -28,6 +28,8 @@ def sample_ll(state, element, size=0.1, N=1000):
         state.update(element, val)
         l = m.loglikelihood(state)
         ll.append(l)
+
+    state.update(element, start)
     return vals, np.array(ll)
 
 def scan_noise(image, state, element, size=0.01, N=1000):

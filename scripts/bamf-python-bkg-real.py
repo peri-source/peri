@@ -7,8 +7,8 @@ from cbamf.comp import objs, psfs, ilms
 from cbamf.viz import plots
 
 ORDER = (3,3,2)
-sweeps = 10
-samples = 5
+sweeps = 30
+samples = 20
 burn = sweeps - samples
 
 FILE = 2
@@ -21,7 +21,7 @@ if FILE == 1:
     PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 8, 14, True, 256, 17, 1.34
     raw = initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif")
 if FILE == 2:
-    sigma = 0.02
+    sigma = 0.0141
     PSF = (0.9, 2.0)
     PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 5, 5.3, False, 128, 5, 1.06
     raw = initializers.load_tiff("/media/scratch/bamf/neil-large.tif")
