@@ -179,6 +179,18 @@ class AnisotropicGaussian(PSF):
         self._set_tile_precalc()
         return np.array([self.pz, self.pr, self.pr])
 
+class AnisotropicGaussianKSpace(PSF):
+    def __init__(self, params, shape, support_factor=1.4, *args, **kwargs):
+        """ Do not set support_factor to an integral value """
+        self.support_factor = support_factor
+        super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
+
+    def kpsf_func(self, params):
+        return np.exp(-(self._kx*params[0])**2 - (self._ky*params[0])**2 - (self._kz*params[1])**2)
+
+    def get_support_size(self):
+        return self.support_factor*np.array([self.params[1], self.params[0], self.params[0]])
+
 class GaussianPolynomialPCA(PSF):
     _fourier_space = False
 
