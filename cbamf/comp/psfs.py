@@ -31,6 +31,7 @@ FFTW_PLAN_SLOW = 'FFTW_PATIENT'
 
 class PSF(object):
     def __init__(self, params, shape, fftw_planning_level=FFTW_PLAN_NORMAL, threads=1):
+        self._cache = {}
         self.shape = shape
         self.params = np.array(params).astype('float')
 
@@ -78,13 +79,21 @@ class PSF(object):
     def set_tile(self, tile):
         if any(self.tile.shape != tile.shape):
             self.tile = tile
-            self._setup_kvecs()
-            self._setup_ffts()
-            self.update(self.params)
+
+            key = tuple(self.tile.shape)
+            if key in self._cache:
+                self.kpsf = self._cache[key]
+                self._setup_ffts()
+            else:
+                self._setup_kvecs()
+                self._setup_ffts()
+                self.kpsf = self.psf_func(self.params)
+                self._cache[key] = self.kpsf.copy()
 
     def update(self, params):
         self.params = params
         self.kpsf = self.psf_func(self.params)
+        self._cache = {}
 
     def execute(self, field):
         if any(field.shape != self.tile.shape):
