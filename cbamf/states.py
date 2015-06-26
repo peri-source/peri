@@ -39,7 +39,7 @@ class State(object):
         return block
 
 class ConfocalImagePython(State):
-    def __init__(self, image, obj, psf, ilm, zscale=1, offset=0,
+    def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
             pad=16, sigma=0.1, doprior=True, *args, **kwargs):
         self.pad = pad
         self.index = None
@@ -128,13 +128,15 @@ class ConfocalImagePython(State):
 
     def _tile_from_particle_change(self, p0, r0, p1, r1):
         # TODO - add the psf into the calculation of the tile size
+        psc = self.psf.get_support_size()/2
+
         zsc = np.array([1.0/self.zscale, 1, 1])
         r0, r1 = zsc*r0, zsc*r1
         pl = np.round(np.vstack(
-                [p0-1.5*r0-self.pad/2, p1-1.5*r1-self.pad/2]
+                [p0-1.5*r0-self.pad/2-psc, p1-1.5*r1-self.pad/2-psc]
             ).min(axis=0)).astype('int')
         pr = np.round(np.vstack(
-                [p0+1.5*r0+self.pad/2, p1+1.5*r1+self.pad/2]
+                [p0+1.5*r0+self.pad/2+psc, p1+1.5*r1+self.pad/2+psc]
             ).max(axis=0)).astype('int')
 
         outer = Tile(pl, pr, 0, self.image.shape)
@@ -158,8 +160,8 @@ class ConfocalImagePython(State):
         islice = itile.slicer
         oldll = self._loglikelihood_field[islice].sum()
 
-        replacement = self.ilm.get_field() * (1 - self.obj.get_field())
-        replacement = self.psf.execute(replacement) + self.offset
+        replacement = self.ilm.get_field() * (1 - self.offset*self.obj.get_field())
+        replacement = self.psf.execute(replacement)
 
         self.model_image[islice] = replacement[ioslice]
         self._loglikelihood_field[islice] = -self.image_mask[islice]*(replacement[ioslice] - self.image[islice])**2 / (2*self.sigma**2)
