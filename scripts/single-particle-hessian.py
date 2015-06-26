@@ -15,7 +15,7 @@ blank = np.zeros(imsize, dtype='float')
 xstart, rstart = np.array(imsize).reshape(-1,3)/2.0, np.array([5.0])
 
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
-psf = psfs.AnisotropicGaussian((1, 2), shape=imsize)
+psf = psfs.AnisotropicGaussian((2, 4), shape=imsize, error=3e-3)
 ilm = ilms.Polynomial3D(order=(1,1,1), shape=imsize)
 s = states.ConfocalImagePython(blank, obj=obj, psf=psf, ilm=ilm, pad=PAD, sigma=sigma)
 
@@ -26,7 +26,12 @@ strue = s.state.copy()
 s.set_image(itrue)
 
 hess = s.hessloglikelihood()
-print "Hessian:", np.diag(hess)
+
+pl.figure()
+pl.imshow(np.log10(np.abs(hess)))
+pl.title("Log Hessian matrix")
+pl.colorbar()
+pl.show()
 
 #h, ll = runner.do_samples(s, 30, 5)
 #plots.summary_plot(s, h, truestate=strue)

@@ -30,7 +30,9 @@ FFTW_PLAN_NORMAL = 'FFTW_MEASURE'
 FFTW_PLAN_SLOW = 'FFTW_PATIENT'
 
 class PSF(object):
-    def __init__(self, params, shape, fftw_planning_level=FFTW_PLAN_NORMAL, threads=1):
+    _fourier_space = True
+
+    def __init__(self, params, shape, fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1):
         self._cache = {}
         self.shape = shape
         self.params = np.array(params).astype('float')
@@ -64,61 +66,84 @@ class PSF(object):
         mx = np.max(sp)
 
         if not centered:
-            rz = 2*sp[0]*np.fft.fftfreq(sp[0])[:,None,None] / mx
-            ry = 2*sp[1]*np.fft.fftfreq(sp[1])[None,:,None] / mx
-            rx = 2*sp[2]*np.fft.fftfreq(sp[2])[None,None,:] / mx
+            rz = 2*sp[0]*np.fft.fftfreq(sp[0])[:,None,None]
+            ry = 2*sp[1]*np.fft.fftfreq(sp[1])[None,:,None]
+            rx = 2*sp[2]*np.fft.fftfreq(sp[2])[None,None,:]
         else:
-            rz = (np.arange(sp[0], dtype='float')[:,None,None] - sp[0]/2)/mx
-            ry = (np.arange(sp[1], dtype='float')[None,:,None] - sp[1]/2)/mx
-            rx = (np.arange(sp[2], dtype='float')[None,None,:] - sp[2]/2)/mx
+            rz = (np.arange(sp[0], dtype='float')[:,None,None] - sp[0]/2)
+            ry = (np.arange(sp[1], dtype='float')[None,:,None] - sp[1]/2)
+            rx = (np.arange(sp[2], dtype='float')[None,None,:] - sp[2]/2)
 
         self._rx, self._ry, self._rz = rx, ry, rz
         self._rvecs = np.rollaxis(np.array(np.broadcast_arrays(rz,ry,rx)), 0, 4)
         self._rlen = np.sqrt(rx**2 + ry**2 + rz**2)
 
+    def _set_tile_precalc(self):
+        pass
+
+    def fftn(self, arr):
+        if hasfftw:
+            self._fftn_data[:] = arr
+            self._fftn.execute()
+            return self._fftn.get_output_array().copy()
+        else:
+            return np.fft.fftn(arr)
+
+    def ifftn(self, arr):
+        if hasfftw:
+            self._ifftn_data[:] = arr
+            self._ifftn.execute()
+            return (self._ifftn.get_output_array() / self._fftn_data.size).copy()
+        else:
+            return np.fft.ifftn(arr)
+
+    def normalize_kpsf(self):
+        self.kpsf /= np.real(self.kpsf[0,0,0])
+        pass
+
     def set_tile(self, tile):
         if any(self.tile.shape != tile.shape):
             self.tile = tile
+            self._setup_ffts()
 
             key = tuple(self.tile.shape)
             if key in self._cache:
                 self.kpsf = self._cache[key]
-                self._setup_ffts()
             else:
-                self._setup_kvecs()
-                self._setup_ffts()
-                self.kpsf = self.psf_func(self.params)
-                self._cache[key] = self.kpsf.copy()
+                if self._fourier_space:
+                    self._setup_kvecs()
+                else:
+                    self._setup_rvecs()
 
-    def update(self, params):
+                self._set_tile_precalc()
+                self.update(self.params, clearcache=False)
+                # TODO - caching not working, figure it out
+                #self._cache[key] = self.kpsf.copy()
+
+    def update(self, params, clearcache=True):
         self.params = params
-        self.kpsf = self.psf_func(self.params)
-        self._cache = {}
+
+        if self._fourier_space:
+            self.kpsf = self.kpsf_func(self.params)
+        else:
+            self.rpsf = self.rpsf_func(self.params)
+            self.kpsf = self.fftn(self.rpsf)
+
+        self.normalize_kpsf()
+
+        if clearcache:
+            self._cache = {}
 
     def execute(self, field):
         if any(field.shape != self.tile.shape):
             raise AttributeError("Field passed to PSF incorrect shape")
 
-        #if (not pyfftw.is_n_byte_aligned(self._fftn_data, 16) or
-        #    not pyfftw.is_n_byte_aligned(self._ifftn_data, 16)):
-        #    raise AttributeError("FFT arrays became misaligned")
-
         if not np.iscomplex(field.ravel()[0]):
-            if hasfftw:
-                self._fftn_data[:] = field
-                self._fftn.execute()
-                infield = self._fftn.get_output_array()
-            else:
-                infield = np.fft.fftn(field)
+            infield = self.fftn(field)
         else:
             infield = field
 
-        if hasfftw:
-            self._ifftn_data[:] = infield * self.kpsf / self._fftn_data.size
-            self._ifftn.execute()
-            return np.real(self._ifftn.get_output_array())
-        else:
-            return np.real(np.fft.ifftn(infield * self.kpsf))
+        return np.real(self.ifftn(infield * self.kpsf))
 
     def get_params(self):
         return self.params
@@ -130,31 +155,33 @@ class PSF(object):
         save_wisdom()
 
 class AnisotropicGaussian(PSF):
-    def __init__(self, params, shape, support_factor=1.4, *args, **kwargs):
+    _fourier_space = False
+
+    def __init__(self, params, shape, error=1e-3, *args, **kwargs):
         """
         Do not set support_factor to an integral value (don't know why, but this is causes kinks
         in the loglikelihood function)
         """
-        self.support_factor = support_factor
+        self.error = error
         super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
 
-    def psf_func(self, params):
-        return np.exp(-(self._kx*params[0])**2 - (self._ky*params[0])**2 - (self._kz*params[1])**2)
+    def _set_tile_precalc(self):
+        self.pr = self.params[0]*np.sqrt(-2*np.log(self.error))
+        self.pz = self.params[1]*np.sqrt(-2*np.log(self.error))
+
+    def rpsf_func(self, params):
+        rt2 = np.sqrt(2)
+        rhosq = self._rx**2 + self._ry**2
+        arg = np.exp(-(rhosq)/(rt2*params[0])**2 - (self._rz/(rt2*params[1]))**2)
+        return arg * (rhosq <= self.pr**2) * (np.abs(self._rz) <= self.pz)
 
     def get_support_size(self):
-        return self.support_factor*np.array([self.params[1], self.params[0], self.params[0]])
-
-class IsotropicDisc(PSF):
-    def __init__(self, params, shape, *args, **kwargs):
-        super(IsotropicDisc, self).__init__(*args, **kwargs)
-
-    def psf_func(self, params):
-        return (1.0 + np.exp(-params[1]*params[0])) / (1.0 + np.exp(params[1]*(self._klen - params[0])))
-
-    def get_support_size(self):
-        return 3.5*np.array([self.params[0]]*3)
+        self._set_tile_precalc()
+        return np.array([self.pz, self.pr, self.pr])
 
 class GaussianPolynomialPCA(PSF):
+    _fourier_space = False
+
     def __init__(self, cov_mat_file, mean_mat_file, shape, gaussian=(1,1), components=5, *args, **kwargs):
         self.cov_mat_file = cov_mat_file
         self.mean_mat_file = mean_mat_file
@@ -165,6 +192,13 @@ class GaussianPolynomialPCA(PSF):
 
         super(GaussianPolynomialPCA, self).__init__(*args, params=params0, shape=shape, **kwargs)
 
+    def _set_tile_precalc(self):
+        # normalize the vectors to be small and managable
+        mx = np.max(self.tile.shape)
+        self._rx = self._rx / mx
+        self._ry = self._ry / mx
+        self._rz = self._rz / mx
+
     def _setup_from_files(self):
         covm = np.load(self.cov_mat_file)
         mean = np.load(self.mean_mat_file)
@@ -174,7 +208,7 @@ class GaussianPolynomialPCA(PSF):
         self._psf_vecs = np.real(vecs[:,:self.comp])
         self._psf_mean = np.real(mean)
 
-    def _evaluate_real_space(self):
+    def rpsf_func(self):
         coeff = self.params
         rvec = self._rvecs
 
@@ -185,21 +219,4 @@ class GaussianPolynomialPCA(PSF):
         poly = np.polynomial.polynomial.polyval2d(rho, z, polycoeffs.reshape(*self.poly_shape))
         return poly * np.exp(-rho**2) * np.exp(-z**2)
 
-    def _evaluate_fourier_space(self, arr):
-        self._fftn_data[:] = arr
-        self._fftn.execute()
-        return self._fftn.get_output_array()
-
-    def set_tile(self, tile):
-        if any(self.tile.shape != tile.shape):
-            self.tile = tile
-            self._setup_rvecs(centered=False)
-            self._setup_kvecs()
-            self._setup_ffts()
-            self.update(self.params)
-
-    def update(self, params):
-        self.params = params
-        self.rpsf = self._evaluate_real_space()
-        self.kpsf = self._evaluate_fourier_space(self.rpsf)
 

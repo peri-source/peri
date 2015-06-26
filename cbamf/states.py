@@ -123,20 +123,20 @@ class ConfocalImagePython(State):
         self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad,
                 zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
 
-        self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
+        if self.doprior:
+            self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
         self._update_tile(*self._tile_global())
 
     def _tile_from_particle_change(self, p0, r0, p1, r1):
-        # TODO - add the psf into the calculation of the tile size
         psc = self.psf.get_support_size()/2
 
         zsc = np.array([1.0/self.zscale, 1, 1])
         r0, r1 = zsc*r0, zsc*r1
         pl = np.round(np.vstack(
-                [p0-1.5*r0-self.pad/2-psc, p1-1.5*r1-self.pad/2-psc]
+                [p0-r0-3-self.pad/2-psc, p1-r1-3-self.pad/2-psc]
             ).min(axis=0)).astype('int')
         pr = np.round(np.vstack(
-                [p0+1.5*r0+self.pad/2+psc, p1+1.5*r1+self.pad/2+psc]
+                [p0+r0+3+self.pad/2+psc+1, p1+r1+3+self.pad/2+psc+1]
             ).max(axis=0)).astype('int')
 
         outer = Tile(pl, pr, 0, self.image.shape)
@@ -191,7 +191,9 @@ class ConfocalImagePython(State):
             # only be necessary before _update_tile
             self.obj.update(particles, pos, rad, self.zscale)
             self.nbl.update(particles, pos, rad)
-            self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
+
+            if self.doprior:
+                self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
 
             # check all the priors before actually going for an update
             # if it is too small, don't both and return False
@@ -296,17 +298,21 @@ class ConfocalImagePython(State):
 
         return grad
 
-    def hessloglikelihood(self, dl=1e-3):
-        blocks = self.explode(self.block_all())
-        hess = np.zeros((self.nparams, self.nparams))
+    def hessloglikelihood(self, dl=1e-3, jtj=False):
+        if jtj:
+            grad = self.gradloglikelihood(dl=dl)
+            return grad.T[None,:] * grad[:,None]
+        else:
+            blocks = self.explode(self.block_all())
+            hess = np.zeros((self.nparams, self.nparams))
 
-        for i in xrange(self.nparams):
-            for j in xrange(i, self.nparams):
-                thess = self._hess_two_param(blocks[i], blocks[j], dl)
-                hess[i,j] = thess
-                hess[j,i] = thess
+            for i in xrange(self.nparams):
+                for j in xrange(i, self.nparams):
+                    thess = self._hess_two_param(blocks[i], blocks[j], dl)
+                    hess[i,j] = thess
+                    hess[j,i] = thess
 
-        return hess
+            return hess
 
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
