@@ -19,6 +19,7 @@ psf = psfs.AnisotropicGaussian((1, 2), shape=imsize)
 ilm = ilms.Polynomial3D(order=(1,1,1), shape=imsize)
 s = states.ConfocalImagePython(blank, obj=obj, psf=psf, ilm=ilm, pad=PAD, sigma=sigma)
 
+np.random.seed(10)
 itrue = s.get_model_image()
 itrue += np.random.normal(0.0, sigma, size=itrue.shape)
 strue = s.state.copy()

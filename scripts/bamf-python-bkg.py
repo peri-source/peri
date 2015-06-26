@@ -21,7 +21,7 @@ xstart, rstart = pickle.load(open("/media/scratch/bamf/bamf_ic_16_xr.pkl", 'r'))
 initializers.remove_overlaps(xstart, rstart)
 
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
-psf = psfs.AnisotropicGaussian((0.6, 2), shape=imsize, fftw_planning_level=psfs.FFTW_PLAN_FAST)
+psf = psfs.AnisotropicGaussian((0.6, 2), shape=imsize)
 ilm = ilms.Polynomial3D(order=(3,3,2), shape=imsize)
 s = states.ConfocalImagePython(blank, obj=obj, psf=psf, ilm=ilm, pad=16, sigma=sigma)
 

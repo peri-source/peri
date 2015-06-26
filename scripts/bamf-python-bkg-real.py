@@ -53,9 +53,7 @@ ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
 #    -0.01790116, -0.34568229, -0.09325139,  0.38523795,  0.21644174,
 #    -0.24665272,  0.02717521,  0.61476543])
 s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
-        zscale=zscale, offset=0, pad=16, sigma=sigma)
-
-
+        zscale=zscale, pad=16, sigma=sigma)
 
 def gd(state, N=1, ratio=1e-1):
     state.set_current_particle()
