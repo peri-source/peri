@@ -35,8 +35,6 @@ class Polynomial3D(object):
 
     def update(self, params):
         self.params = params
-        #self.bkg = np.polynomial.polynomial.polyval3d(self.rz, self.ry, self.rx, self.params[::-1])
-        #sl = sl + (np.s_[:],)
         self.bkg = (self._poly * self.params).sum(axis=-1)
 
     def get_field(self):

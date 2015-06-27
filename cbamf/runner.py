@@ -1,6 +1,5 @@
 import sys
 import numpy as np
-from scipy.optimize import minimize
 
 from . import models, samplers, engines, observers
 
@@ -142,6 +141,8 @@ def gradloglikelihood(vec, state):
     return -state.gradloglikelihood()
 
 def gradient_descent(state, method='L-BFGS-B'):
+    from scipy.optimize import minimize
+
     bounds = build_bounds(state)
     minimize(loglikelihood, state.state, args=(state,),
             method=method, jac=gradloglikelihood, bounds=bounds)

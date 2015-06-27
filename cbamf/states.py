@@ -38,6 +38,76 @@ class State(object):
         block[bmin:bmax] = True
         return block
 
+    def explode(self, block):
+        inds = np.arange(block.shape[0])
+        inds = inds[block]
+
+        blocks = []
+        for i in inds:
+            tblock = self.block_none()
+            tblock[i] = True
+            blocks.append(tblock)
+        return blocks
+
+    def _grad_single_param(self, block, dl):
+        self._push_update(block, self.state[block]+dl)
+        loglr = self.loglikelihood()
+        self._pop_update()
+
+        self._push_update(block, self.state[block]-dl)
+        logll = self.loglikelihood()
+        self._pop_update()
+
+        return (loglr - logll) / (2*dl)
+
+    def _hess_two_param(self, b0, b1, dl):
+        self._push_update(b0, self.state[b0]+dl)
+        self._push_update(b1, self.state[b1]+dl)
+        logl_01 = self.loglikelihood()
+        self._pop_update()
+        self._pop_update()
+
+        self._push_update(b0, self.state[b0]+dl)
+        logl_0 = self.loglikelihood()
+        self._pop_update()
+
+        self._push_update(b1, self.state[b1]+dl)
+        logl_1 = self.loglikelihood()
+        self._pop_update()
+
+        logl = self.loglikelihood()
+
+        return (logl_01 - logl_0 - logl_1 + logl) / (dl**2)
+
+    def gradloglikelihood(self, dl=1e-3, blocks=None):
+        if blocks is None:
+            blocks = self.explode(self.block_all())
+        grad = np.zeros(len(blocks))
+
+        for i, b in enumerate(blocks):
+            grad[i] = self._grad_single_param(b, dl)
+
+        return grad
+
+    def hessloglikelihood(self, dl=1e-3, jtj=False, blocks=None):
+        if jtj:
+            grad = self.gradloglikelihood(dl=dl, blocks=blocks)
+            return grad.T[None,:] * grad[:,None]
+        else:
+            if blocks is None:
+                blocks = self.explode(self.block_all())
+            hess = np.zeros((len(blocks), len(blocks)))
+
+            for i, bi in enumerate(blocks):
+                for j, bj in enumerate(blocks[i+1:]):
+                    J = j + i+1
+                    thess = self._hess_two_param(bi, bj, dl)
+                    hess[i,J] = thess
+                    hess[J,i] = thess
+
+            return hess
+
+
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
             pad=16, sigma=0.1, doprior=True, *args, **kwargs):
@@ -242,77 +312,40 @@ class ConfocalImagePython(State):
     def create_block(self, typ='all'):
         return self.block_range(*self._block_offset_end(typ))
 
-    def explode(self, block):
-        inds = np.arange(block.shape[0])
-        inds = inds[block]
-
-        blocks = []
-        for i in inds:
-            tblock = self.block_none()
-            tblock[i] = True
-            blocks.append(tblock)
-        return blocks
-
     def _block_offset_end(self, typ='pos'):
         index = self.param_order.index(typ)
         off = sum(self.param_lengths[:index])
         end = off + self.param_lengths[index]
         return off, end
 
-    def _grad_single_param(self, block, dl):
-        self._push_update(block, self.state[block]+dl)
-        loglr = self.loglikelihood()
-        self._pop_update()
-
-        self._push_update(block, self.state[block]-dl)
-        logll = self.loglikelihood()
-        self._pop_update()
-
-        return (loglr - logll) / (2*dl)
-
-    def _hess_two_param(self, b0, b1, dl):
-        self._push_update(b0, self.state[b0]+dl)
-        self._push_update(b1, self.state[b1]+dl)
-        logl_01 = self.loglikelihood()
-        self._pop_update()
-        self._pop_update()
-
-        self._push_update(b0, self.state[b0]+dl)
-        logl_0 = self.loglikelihood()
-        self._pop_update()
-
-        self._push_update(b1, self.state[b1]+dl)
-        logl_1 = self.loglikelihood()
-        self._pop_update()
-
-        logl = self.loglikelihood()
-
-        return (logl_01 - logl_0 - logl_1 + logl) / (dl**2)
-
-    def gradloglikelihood(self, dl=1e-3):
-        blocks = self.explode(self.block_all())
-        grad = np.zeros(self.nparams)
-
-        for i in xrange(self.nparams):
-            grad[i] = self._grad_single_param(blocks[i], dl)
-
-        return grad
-
-    def hessloglikelihood(self, dl=1e-3, jtj=False):
-        if jtj:
-            grad = self.gradloglikelihood(dl=dl)
-            return grad.T[None,:] * grad[:,None]
-        else:
-            blocks = self.explode(self.block_all())
-            hess = np.zeros((self.nparams, self.nparams))
-
-            for i in xrange(self.nparams):
-                for j in xrange(i, self.nparams):
-                    thess = self._hess_two_param(blocks[i], blocks[j], dl)
-                    hess[i,j] = thess
-                    hess[j,i] = thess
-
-            return hess
-
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
+
+
+class IlluminationField(State):
+    def __init__(self, image, ilm, sigma=0.1, *args, **kwargs):
+        self.image = image
+        self.sigma = sigma
+        self.ilm = ilm
+        self.nparams = ilm.get_params().shape[0]
+
+        super(IlluminationField, self).__init__(nparams=self.nparams,
+                state=self.ilm.get_params(), *args, **kwargs)
+
+        self.ilm.set_tile(Tile(self.image.shape))
+        self.ilm.update(self.ilm.get_params())
+        self.model_image = self.ilm.get_field()
+        self._update_ll()
+
+    def _update_ll(self):
+        self._loglikelihood = -((self.model_image - self.image)**2).sum() / (2*self.sigma**2)
+
+    def update(self, block, data):
+        self._update_state(block, data)
+
+        self.ilm.update(self.state)
+        self.model_image = self.ilm.get_field()
+        self._update_ll()
+
+    def loglikelihood(self):
+        return self._loglikelihood
