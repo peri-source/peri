@@ -15,24 +15,28 @@ FILE = 2
 
 if FILE == 1:
     sigma = 0.04
-    PSF = np.array([0.9, 1.9])
+    PSF = (2.5, 5.0)
     OFF = 0.2
     BKG = 0.6
     PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 8, 14, True, 256, 17, 1.34
     raw = initializers.load_tiff("/media/scratch/bamf/brian-frozen.tif")
 if FILE == 2:
     sigma = 0.0141
-    PSF = (0.9, 2.0)
-    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 5, 5.3, False, 128, 5, 1.06
+    PSF = (2.402, 5.151)
+    ILM = [ 0.94367202, -0.03018738,  0.02714354, -0.14109688,  0.09263272,
+            0.02980459, -0.07640744, -0.07616682, -0.31820937,  0.13269572,
+            0.1601496 ,  0.07075362,  0.16516718,  0.02004564, -0.00973342,
+            -0.11106133,  0.00270983, -0.27165701]
+    PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 5, 5.04, False, 128, 5, 1.0717
     raw = initializers.load_tiff("/media/scratch/bamf/neil-large.tif")
 if FILE == 3:
     sigma = 0.01
-    PSF = (1.0, 2.0)
+    PSF = (2.5, 5.0)
     PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 22, 6, 7.3, False, 128, 12, 1.06
     raw = initializers.load_tiff("/media/scratch/bamf/neil-large-clean.tif")
 if FILE == 4:
     sigma = 0.05
-    PSF = (0.8, 1.5)
+    PSF = (2.2, 4.6)
     PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 9, 7.3, True, 128, 2, 1.056
     raw = next(initializers.load_tiff_iter("/media/scratch/bamf/p1_N150_1.tif", 70))
 
@@ -48,10 +52,6 @@ imsize = itrue.shape
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
 psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
 ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
-#ilm.params = np.array([ 0.85957264,  0.05256052, -0.12153001, -0.49850949, -0.11503405,
-#     0.01370529,  0.08920759, -0.40520612,  0.38749629, -0.13532091,
-#    -0.01790116, -0.34568229, -0.09325139,  0.38523795,  0.21644174,
-#    -0.24665272,  0.02717521,  0.61476543])
 s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
         zscale=zscale, pad=16, sigma=sigma)
 

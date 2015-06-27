@@ -136,8 +136,8 @@ class ConfocalImagePython(State):
 
         off0 = r0 + self.pad/2 + psc + rsc
         off1 = r1 + self.pad/2 + psc + rsc
-        pl = np.round(np.vstack([p0-off0, p1-off1]).min(axis=0)).astype('int')
-        pr = np.round(np.vstack([p0+off0, p1+off1]).max(axis=0)).astype('int')
+        pl = np.round(np.vstack([p0-off0+0, p1-off1+0]).min(axis=0)).astype('int')
+        pr = np.round(np.vstack([p0+off0+1, p1+off1+1]).max(axis=0)).astype('int')
 
         outer = Tile(pl, pr, 0, self.image.shape)
         inner = Tile(pl+self.pad/2, pr-self.pad/2, self.pad/2, np.array(self.image.shape)-self.pad/2)

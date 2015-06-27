@@ -158,10 +158,6 @@ class AnisotropicGaussian(PSF):
     _fourier_space = False
 
     def __init__(self, params, shape, error=1e-3, *args, **kwargs):
-        """
-        Do not set support_factor to an integral value (don't know why, but this is causes kinks
-        in the loglikelihood function)
-        """
         self.error = error
         super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
 
@@ -183,7 +179,7 @@ class AnisotropicGaussianKSpace(PSF):
     def __init__(self, params, shape, support_factor=1.4, *args, **kwargs):
         """ Do not set support_factor to an integral value """
         self.support_factor = support_factor
-        super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
+        super(AnisotropicGaussianKSpace, self).__init__(*args, params=params, shape=shape, **kwargs)
 
     def kpsf_func(self, params):
         return np.exp(-(self._kx*params[0])**2 - (self._ky*params[0])**2 - (self._kz*params[1])**2)
