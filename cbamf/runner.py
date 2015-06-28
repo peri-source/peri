@@ -56,7 +56,7 @@ def sample_particles(state, stepout=1):
 
     return state.state.copy()
 
-def sample_block(state, blockname, explode=True, stepout=1):
+def sample_block(state, blockname, explode=True, stepout=0.1):
     print '{:-^39}'.format(' '+blockname.upper()+' ')
     blocks = [state.create_block(blockname)]
 
@@ -101,10 +101,10 @@ def do_samples(s, sweeps, burn):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
         sample_particles(s, stepout=0.1)
-        sample_block(s, 'psf', stepout=0.1, explode=False)
-        sample_block(s, 'ilm', stepout=0.1, explode=False)
-        sample_block(s, 'off', stepout=0.1, explode=True)
-        sample_block(s, 'zscale', explode=True)
+        sample_block(s, 'psf', stepout=0.1)
+        sample_block(s, 'ilm', stepout=0.1)
+        sample_block(s, 'off', stepout=0.1)
+        sample_block(s, 'zscale', stepout=0.1)
 
         if i >= burn:
             h.append(s.state.copy())

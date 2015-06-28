@@ -51,7 +51,7 @@ class MHSampler(Sampler):
         return px, self.getstate(state, x)
 
 class SliceSampler(Sampler):
-    def __init__(self, var=None, width=None, maxsteps=50, *args, **kwargs):
+    def __init__(self, width=None, maxsteps=50, *args, **kwargs):
         super(SliceSampler, self).__init__(*args, **kwargs)
         self.width = width or 1
         self.maxsteps = maxsteps
@@ -107,15 +107,19 @@ class SliceSampler(Sampler):
                 return up, self.getstate(state, x)
 
 class SliceSampler1D(Sampler):
-    def __init__(self, var=None, width=None, maxsteps=10, procedure='uniform', *args, **kwargs):
-        super(SliceSampler, self).__init__(*args, **kwargs)
+    def __init__(self, width=None, maxsteps=10, procedure='uniform', aparam=6, *args, **kwargs):
+        super(SliceSampler1D, self).__init__(*args, **kwargs)
         self.width = width or 1
         self.maxsteps = maxsteps
+        self.aparam = aparam
         self.procedure = procedure
 
-        self._procedure = ['uniform', 'doubling']
+        self._procedure = ['uniform', 'doubling', 'overrelaxed']
         if self.procedure not in self._procedure:
             raise AttributeError("Stepout procedure '%s' not recognized, must be one of %r" % (self.procedure, self._procedure))
+
+        if self.procedure == 'doubling':
+            raise AttributeError("Doubling not currently supported")
 
     def stepout_uniform(self, model, state, x0, p0):
         u = np.random.rand()
@@ -151,12 +155,14 @@ class SliceSampler1D(Sampler):
         pl = self.loglikelihood(model, state, xl)
         pr = self.loglikelihood(model, state, xr)
 
-        while k > 0 and (p0 < pl and p0 < pr):
+        while k > 0 and (p0 < pl or p0 < pr):
             v = np.random.rand()
             if v < 0.5:
                 xl = xl - (xr - xl)
+                pl = self.loglikelihood(model, state, xl)
             else:
                 xr = xr + (xr - xl)
+                pr = self.loglikelihood(model, state, xr)
             k = k - 1
 
         return xl, xr
@@ -167,25 +173,26 @@ class SliceSampler1D(Sampler):
             x1 = xl + u*(xr - xl)
 
             p1 = self.loglikelihood(model, state, x1)
-            if p0 < p1:
-                return p0, x1
 
-            xr[x1 > x0] = x1
-            xl[x1 < x0] = x1
+            if p0 < p1:
+                return p1, x1
+
+            if x1 < x0:
+                xl = x1
+            else:
+                xr = x1
 
     def sampling_doubling(self, model, state, xl, xr, x0, p0):
         size = x0.shape
-        if size[0] > 1:
-            raise AttributeError("Shrink sampling cannot have multidimensional blocks")
+
+        x1 = xl + (xr - xl)*np.random.rand()
+        p1 = self.loglikelihood(model, state, x1)
 
         d = False
-
-        v = np.random.rand()
-        x1 = xl + (xr - xl)*v
-        p1 = self.loglikelihood(model, state, m)
-
         while xr - xl > 1.1*self.width:
             m = (xl + xr)/2
+            x1 = xl + (xr - xl)*np.random.rand()
+            p1 = self.loglikelihood(model, state, x1)
 
             if ((x0 < m and x1 > m) or (x0 >= m and x1 < m)):
                 d = True
@@ -199,7 +206,51 @@ class SliceSampler1D(Sampler):
             pr = self.loglikelihood(model, state, xr)
 
             if d and p0 > pl and p0 > pr:
-                return up, x0
+                return p0, x0
+
+        return p1, x1
+
+    def sampling_overrelaxed(self, model, state, xl, xr, x0, p0):
+        a = self.aparam
+        w = self.width
+
+        if xr - xl < 1.1*w:
+            while True:
+                xm = (xl + xr)/2
+                pm = self.loglikelihood(model, state, xm)
+
+                if a == 0 or p0 < pm:
+                    break
+
+                if x0 > xm:
+                    xl = xm
+                else:
+                    xr = xm
+
+                a = a - 1
+                w = w/2
+
+        while a > 0:
+            a = a - 1
+            w = w/2
+
+            xls = xl + w
+            xrs = xr - w
+
+            pls = self.loglikelihood(model, state, xls)
+            prs = self.loglikelihood(model, state, xrs)
+
+            if p0 >= pls:
+                xl = xls
+            if p0 >= prs:
+                xr = xrs
+
+        x1 = xl + xr - x0
+        p1 = self.loglikelihood(model, state, x1)
+
+        if x1 < xl or x1 > xr or p0 > p1:
+            x1 = x0
+            p1 = p0
 
         return p1, x1
 
@@ -207,27 +258,31 @@ class SliceSampler1D(Sampler):
         size = state.state[self.block].shape
         x = state.state[self.block]
 
+        if size[0] > 1:
+            raise AttributeError("SliceSampler1D cannot have multidimensional blocks")
+
         if not isinstance(x, np.ndarray):
             x = np.array([x])
 
         px = curloglike or self.loglikelihood(model, state, x)
         up = np.log(np.random.rand()) + px
 
-        if self.procedure == 'uniform':
+        if self.procedure == 'uniform' or self.procedure == 'overrelaxed':
             xl, xr = self.stepout_uniform(model, state, x, up)
         if self.procedure == 'doubling':
             xl, xr = self.stepout_doubling(model, state, x, up)
-
 
         if self.procedure == 'uniform':
             ll, xn = self.sampling_uniform(model, state, xl, xr, x, up)
         if self.procedure == 'doubling':
             ll, xn = self.sampling_doubling(model, state, xl, xr, x, up)
+        if self.procedure == 'overrelaxed':
+            ll, xn = self.sampling_overrelaxed(model, state, xl, xr, x, up)
 
         return ll, self.getstate(state, xn)
 
 class HamiltonianMCSampler(Sampler):
-    def __init__(self, var=None, steps=1, tau=5, eps=1e-2, *args, **kwargs):
+    def __init__(self, steps=1, tau=5, eps=1e-2, *args, **kwargs):
         super(HamiltonianMCSampler, self).__init__(*args, **kwargs)
         self.steps = steps
         self.tau = tau
