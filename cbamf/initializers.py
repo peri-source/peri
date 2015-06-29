@@ -62,6 +62,13 @@ def normalize(im, invert=False):
         out = 1 - out
     return out
 
+def fsmooth(im, sigma):
+    kz, ky, kx = np.meshgrid(*[np.fft.fftfreq(i) for i in feat.shape], indexing='ij')
+    ksq = kx**2 + ky**2 + kz**2
+    kim = np.fft.fftn(im)
+    kim *= np.exp(-ksq * sigma**2)
+    return np.real(np.fft.ifftn(kim))
+
 def generate_sphere(radius):
     x,y,z = np.mgrid[0:2*radius,0:2*radius,0:2*radius]
     r = np.sqrt((x-radius-0.5)**2 + (y-radius-0.5)**2 + (z-radius-0.5)**2)

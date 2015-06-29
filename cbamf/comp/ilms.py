@@ -1,6 +1,8 @@
 import numpy as np
 from itertools import product
 
+from ..util import Tile
+
 class Polynomial3D(object):
     def __init__(self, shape, coeffs=None, order=(1,1,1)):
         self.shape = shape
@@ -13,6 +15,7 @@ class Polynomial3D(object):
             self.params = coeffs.astype('float')
 
         self._setup_rvecs()
+        self.tile = Tile(self.shape)
 
     def _poly_orders(self):
         return product(*(xrange(o) for o in self.order))
@@ -26,6 +29,10 @@ class Polynomial3D(object):
             self._poly.append( self.rx**i * self.ry**j * self.rz**k )
 
         self._poly = np.rollaxis( np.array(self._poly), 0, len(self.shape)+1 )
+
+    def fit_to_data(self, f):
+        fit, _, _, _ = np.linalg.lstsq(self._poly.reshape(-1, self.params.shape[0]), f.ravel())
+        return fit
 
     def initialize(self):
         self.update(self.params)
