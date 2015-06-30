@@ -83,7 +83,7 @@ def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     pl.subplots_adjust(left=0, right=1, bottom=0, top=1, wspace=0.05, hspace=0.05)
     pl.tight_layout()
 
-def scan(im, cycles=1, sleep=0.3):
+def scan(im, cycles=1, sleep=0.3, vmin=0, vmax=1):
     pl.figure(1)
     pl.show()
     time.sleep(3)
@@ -92,11 +92,11 @@ def scan(im, cycles=1, sleep=0.3):
             print i
             pl.clf()
             pl.imshow(sl, cmap=pl.cm.bone, interpolation='nearest',
-                    origin='lower', vmin=0, vmax=1)
+                    origin='lower', vmin=vmin, vmax=vmax)
             pl.draw()
             time.sleep(sleep)
 
-def scan_together(im, p, delay=2):
+def scan_together(im, p, delay=2, vmin=0, vmax=1):
     pl.figure(1)
     pl.show()
     time.sleep(3)
@@ -106,7 +106,7 @@ def scan_together(im, p, delay=2):
         sl = im[i]
         pl.clf()
         pl.imshow(sl, cmap=pl.cm.bone, interpolation='nearest', origin='lower',
-                vmin=0, vmax=1)
+                vmin=vmin, vmax=vmax)
         m = z.astype('int') == i
         pl.plot(x[m], y[m], 'o')
         pl.xlim(0, sl.shape[0])

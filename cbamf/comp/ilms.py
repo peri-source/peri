@@ -16,6 +16,8 @@ class Polynomial3D(object):
 
         self._setup_rvecs()
         self.tile = Tile(self.shape)
+        self.set_tile(Tile(self.shape))
+        self.update()
 
     def _poly_orders(self):
         return product(*(xrange(o) for o in self.order))
@@ -30,9 +32,11 @@ class Polynomial3D(object):
 
         self._poly = np.rollaxis( np.array(self._poly), 0, len(self.shape)+1 )
 
-    def fit_to_data(self, f):
-        fit, _, _, _ = np.linalg.lstsq(self._poly.reshape(-1, self.params.shape[0]), f.ravel())
-        return fit
+    def from_data(self, f, mask=None):
+        if mask is None:
+            mask = np.s_[:]
+        fit, _, _, _ = np.linalg.lstsq(self._poly[mask].reshape(-1, self.params.shape[0]), f[mask].ravel())
+        self.update(fit)
 
     def initialize(self):
         self.update(self.params)
@@ -40,8 +44,9 @@ class Polynomial3D(object):
     def set_tile(self, tile):
         self.tile = tile
 
-    def update(self, params):
-        self.params = params
+    def update(self, params=None):
+        if params is not None:
+            self.params = params
         self.bkg = (self._poly * self.params).sum(axis=-1)
 
     def get_field(self):

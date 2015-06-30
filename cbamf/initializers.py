@@ -89,18 +89,26 @@ def trackpy_featuring(im, size=10):
     pos = np.vstack([a.z, a.y, a.x]).T
     return pos
 
-def remove_overlaps(pos, rad):
+def remove_overlaps(pos, rad, zscale=1):
     N = rad.shape[0]
+    z = np.array([zscale, 1, 1])
     for i in xrange(N):
         for j in xrange(N):
             if i == j:
                 continue;
-            d = np.sqrt(((pos[i] - pos[j])**2).sum())
+            d = np.sqrt(( (z*(pos[i] - pos[j]))**2 ).sum())
             r = rad[i] + rad[j]
             diff = d - r
             if diff < 0:
                 rad[i] -= np.abs(diff)/2 + 1e-10
                 rad[j] -= np.abs(diff)/2 + 1e-10
+
+def remove_background(im, order=(5,5,4), mask=None):
+    from cbamf.comp import ilms
+    ilm = ilms.Polynomial3D(order=order, shape=im.shape) 
+    ilm.from_data(im, mask=mask)
+
+    return im - ilm.get_field()
 
 #=======================================================================
 # Generating fake data

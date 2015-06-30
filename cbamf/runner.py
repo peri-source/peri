@@ -146,3 +146,12 @@ def gradient_descent(state, method='L-BFGS-B'):
     bounds = build_bounds(state)
     minimize(loglikelihood, state.state, args=(state,),
             method=method, jac=gradloglikelihood, bounds=bounds)
+
+def gd(state, N=1, ratio=1e-1):
+    state.set_current_particle()
+    for i in xrange(N):
+        print state.loglikelihood()
+        grad = state.gradloglikelihood()
+        n = state.state + 1.0/np.abs(grad).max() * ratio * grad
+        state.set_state(n)
+        print state.loglikelihood()
