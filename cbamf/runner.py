@@ -1,12 +1,10 @@
 import sys
 import numpy as np
 
-from . import models, samplers, engines, observers
+from .mc import samplers, engines, observers
 
 def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
-    m = models.PositionsRadiiPSF()
-
-    eng = engines.SequentialBlockEngine(m, state)
+    eng = engines.SequentialBlockEngine(state)
     opsay = observers.Printer()
     ohist = observers.HistogramObserver(block=blocks[0])
     eng.add_samplers([samplers.SliceSampler(stepout, block=b) for b in blocks])
@@ -18,14 +16,13 @@ def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
     return ohist
 
 def sample_ll(state, element, size=0.1, N=1000):
-    m = models.PositionsRadiiPSF()
     start = state.state[element]
 
     ll = []
     vals = np.linspace(start-size, start+size, N)
     for val in vals:
         state.update(element, val)
-        l = m.loglikelihood(state)
+        l = state.loglikelihood()
         ll.append(l)
 
     state.update(element, start)

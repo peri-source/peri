@@ -5,13 +5,11 @@ from .util import Tile
 from .priors import overlap
 
 class State(object):
-    def __init__(self, nparams, state=None):
+    def __init__(self, nparams, state=None, logpriors=None):
         self.nparams = nparams
         self.state = state if state is not None else np.zeros(self.nparams, dtype='double')
         self.stack = []
-
-    def update(self, block, data):
-        return self._update_state(block, data)
+        self.logpriors = logpriors
 
     def _update_state(self, block, data):
         self.state[block] = data.astype(self.state.dtype)
@@ -24,6 +22,9 @@ class State(object):
     def _pop_update(self):
         block, data = self.stack.pop()
         self.update(block, data)
+
+    def update(self, block, data):
+        return self._update_state(block, data)
 
     def block_all(self):
         return np.ones(self.nparams, dtype='bool')
@@ -79,6 +80,12 @@ class State(object):
 
         return (logl_01 - logl_0 - logl_1 + logl) / (dl**2)
 
+    def loglikelihood(self, state):
+        loglike = self.dologlikelihood(state)
+        if self.logpriors is not None:
+            loglike += self.logpriors(state)
+        return loglike
+
     def gradloglikelihood(self, dl=1e-3, blocks=None):
         if blocks is None:
             blocks = self.explode(self.block_all())
@@ -106,6 +113,31 @@ class State(object):
                     hess[J,i] = thess
 
             return hess
+
+    def negloglikelihood(self, state):
+        return -self.loglikelihood(state)
+
+    def neggradloglikelihood(self, state):
+        return -self.gradloglikelihood(state)
+
+
+class LinearFit(State):
+    def __init__(self, x, y, *args, **kwargs):
+        super(LinearFit, self).__init__(*args, **kwargs)
+        self.dx, self.dy = (np.array(i) for i in zip(*sorted(zip(x, y))))
+
+    def plot(self, state):
+        import pylab as pl
+        pl.figure()
+        pl.plot(self.dx, self.dy, 'o')
+        pl.plot(self.dx, self.docalculate(state), '-')
+        pl.show()
+
+    def _calculate(self, state):
+        return state.state[0]*self.dx + state.state[1]
+
+    def dologlikelihood(self, state):
+        return -((self._calculate(state) - self.dy)**2).sum()
 
 
 class ConfocalImagePython(State):
@@ -260,6 +292,10 @@ class ConfocalImagePython(State):
 
             pos = self.state[self.b_pos].copy().reshape(-1,3)[particles]
             rad = self.state[self.b_rad].copy()[particles]
+
+            if (pos < 0).any() or (pos > np.array(self.image.shape)).any():
+                self.state[block] = prev[block]
+                return False
 
             # TODO - check why we need to have obj.update here?? should
             # only be necessary before _update_tile

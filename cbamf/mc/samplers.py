@@ -16,17 +16,17 @@ class Sampler(object):
         state.update(self.block, substate)
         return state
 
-    def loglikelihood(self, model, state, substate):
+    def loglikelihood(self, state, substate):
         state.update(self.block, substate)
-        lg = model.loglikelihood(state)
+        lg = state.loglikelihood()
         return lg
 
-    def gradloglikelihood(self, model, state, substate):
+    def gradloglikelihood(self, state, substate):
         state.update(self.block, substate)
-        lg = model.gradloglikelihood(state)
+        lg = state.gradloglikelihood()
         return lg
 
-    def sample(self, model, state):
+    def sample(self, state):
         pass
 
 class MHSampler(Sampler):
@@ -36,15 +36,15 @@ class MHSampler(Sampler):
         self.loglike = None
         self.varsteps = varsteps
 
-    def sample(self, model, state, curloglike=None):
+    def sample(self, state, curloglike=None):
         size = state.state[self.block].shape
         x = state.state[self.block]
 
         tvar = self.var*np.random.rand() if self.varsteps else self.var
 
-        px = curloglike or self.loglikelihood(model, state, x)
+        px = curloglike or self.loglikelihood(state, x)
         xp = x + tvar*(2*np.random.rand(*size)-1)
-        pp = self.loglikelihood(model, state, xp)
+        pp = self.loglikelihood(state, xp)
 
         if np.log(np.random.rand()) < (pp - px):
             return pp, self.getstate(state, xp)
@@ -56,22 +56,22 @@ class SliceSampler(Sampler):
         self.width = width or 1
         self.maxsteps = maxsteps
 
-    def sample(self, model, state, curloglike=None):
+    def sample(self, state, curloglike=None):
         size = state.state[self.block].shape
         x = state.state[self.block]
 
         if not isinstance(x, np.ndarray):
             x = np.array([x])
 
-        px = curloglike or self.loglikelihood(model, state, x)
+        px = curloglike or self.loglikelihood(state, x)
         up = np.log(np.random.rand()) + px
 
         r = np.random.rand(*size)
         xl = x - r*self.width
         xr = x + (1-r)*self.width
 
-        pl = self.loglikelihood(model, state, xl)
-        pr = self.loglikelihood(model, state, xr)
+        pl = self.loglikelihood(state, xl)
+        pr = self.loglikelihood(state, xr)
 
         if px < -1e90:
             print "Starting with bad state"
@@ -81,12 +81,12 @@ class SliceSampler(Sampler):
         stepr = self.maxsteps - 1 - stepl
         while stepl > 0 and up < pl:
             xl = xl - self.width
-            pl = self.loglikelihood(model, state, xl)
+            pl = self.loglikelihood(state, xl)
             stepl -= 1
 
         while stepr > 0 and up < pr:
             xr = xr + self.width
-            pr = self.loglikelihood(model, state, xr)
+            pr = self.loglikelihood(state, xr)
             stepr -= 1
 
         steps = 0
@@ -94,7 +94,7 @@ class SliceSampler(Sampler):
         xl0 = xl
         while True:
             xp = (xr-xl)*np.random.rand(*size) + xl
-            pp = self.loglikelihood(model, state, xp)
+            pp = self.loglikelihood(state, xp)
 
             if up < pp:
                 return pp, self.getstate(state, xp)
@@ -121,7 +121,7 @@ class SliceSampler1D(Sampler):
         if self.procedure == 'doubling':
             raise AttributeError("Doubling not currently supported")
 
-    def stepout_uniform(self, model, state, x0, p0):
+    def stepout_uniform(self, state, x0, p0):
         u = np.random.rand()
         xl = x0 - self.width*u
         xr = x0 + self.width*(1-u)
@@ -130,49 +130,49 @@ class SliceSampler1D(Sampler):
         ml = np.floor(self.maxsteps * v)
         mr = (self.maxsteps - 1) - ml
 
-        pl = self.loglikelihood(model, state, xl)
-        pr = self.loglikelihood(model, state, xr)
+        pl = self.loglikelihood(state, xl)
+        pr = self.loglikelihood(state, xr)
 
         while ml > 0 and p0 < pl:
             xl = xl - self.width
             ml = ml - 1
-            pl = self.loglikelihood(model, state, xl)
+            pl = self.loglikelihood(state, xl)
 
         while mr > 0 and p0 < pr:
             xr = xr + self.width
             mr = mr - 1
-            pr = self.loglikelihood(model, state, xr)
+            pr = self.loglikelihood(state, xr)
 
         return xl, xr
 
-    def stepout_doubling(self, model, state, x0, p0):
+    def stepout_doubling(self, state, x0, p0):
         u = np.random.rand()
         xl = x0 - self.width*u
         xr = x0 + self.width*(1-u)
 
         k = self.maxsteps
 
-        pl = self.loglikelihood(model, state, xl)
-        pr = self.loglikelihood(model, state, xr)
+        pl = self.loglikelihood(state, xl)
+        pr = self.loglikelihood(state, xr)
 
         while k > 0 and (p0 < pl or p0 < pr):
             v = np.random.rand()
             if v < 0.5:
                 xl = xl - (xr - xl)
-                pl = self.loglikelihood(model, state, xl)
+                pl = self.loglikelihood(state, xl)
             else:
                 xr = xr + (xr - xl)
-                pr = self.loglikelihood(model, state, xr)
+                pr = self.loglikelihood(state, xr)
             k = k - 1
 
         return xl, xr
 
-    def sampling_uniform(self, model, state, xl, xr, x0, p0):
+    def sampling_uniform(self, state, xl, xr, x0, p0):
         while True:
             u = np.random.rand()
             x1 = xl + u*(xr - xl)
 
-            p1 = self.loglikelihood(model, state, x1)
+            p1 = self.loglikelihood(state, x1)
 
             if p0 < p1:
                 return p1, x1
@@ -182,17 +182,17 @@ class SliceSampler1D(Sampler):
             else:
                 xr = x1
 
-    def sampling_doubling(self, model, state, xl, xr, x0, p0):
+    def sampling_doubling(self, state, xl, xr, x0, p0):
         size = x0.shape
 
         x1 = xl + (xr - xl)*np.random.rand()
-        p1 = self.loglikelihood(model, state, x1)
+        p1 = self.loglikelihood(state, x1)
 
         d = False
         while xr - xl > 1.1*self.width:
             m = (xl + xr)/2
             x1 = xl + (xr - xl)*np.random.rand()
-            p1 = self.loglikelihood(model, state, x1)
+            p1 = self.loglikelihood(state, x1)
 
             if ((x0 < m and x1 > m) or (x0 >= m and x1 < m)):
                 d = True
@@ -202,22 +202,22 @@ class SliceSampler1D(Sampler):
             else:
                 l = m
 
-            pl = self.loglikelihood(model, state, xl)
-            pr = self.loglikelihood(model, state, xr)
+            pl = self.loglikelihood(state, xl)
+            pr = self.loglikelihood(state, xr)
 
             if d and p0 > pl and p0 > pr:
                 return p0, x0
 
         return p1, x1
 
-    def sampling_overrelaxed(self, model, state, xl, xr, x0, p0):
+    def sampling_overrelaxed(self, state, xl, xr, x0, p0):
         a = self.aparam
         w = self.width
 
         if xr - xl < 1.1*w:
             while True:
                 xm = (xl + xr)/2
-                pm = self.loglikelihood(model, state, xm)
+                pm = self.loglikelihood(state, xm)
 
                 if a == 0 or p0 < pm:
                     break
@@ -237,8 +237,8 @@ class SliceSampler1D(Sampler):
             xls = xl + w
             xrs = xr - w
 
-            pls = self.loglikelihood(model, state, xls)
-            prs = self.loglikelihood(model, state, xrs)
+            pls = self.loglikelihood(state, xls)
+            prs = self.loglikelihood(state, xrs)
 
             if p0 >= pls:
                 xl = xls
@@ -246,7 +246,7 @@ class SliceSampler1D(Sampler):
                 xr = xrs
 
         x1 = xl + xr - x0
-        p1 = self.loglikelihood(model, state, x1)
+        p1 = self.loglikelihood(state, x1)
 
         if x1 < xl or x1 > xr or p0 > p1:
             x1 = x0
@@ -254,7 +254,7 @@ class SliceSampler1D(Sampler):
 
         return p1, x1
 
-    def sample(self, model, state, curloglike=None):
+    def sample(self, state, curloglike=None):
         size = state.state[self.block].shape
         x = state.state[self.block]
 
@@ -264,20 +264,20 @@ class SliceSampler1D(Sampler):
         if not isinstance(x, np.ndarray):
             x = np.array([x])
 
-        px = curloglike or self.loglikelihood(model, state, x)
+        px = curloglike or self.loglikelihood(state, x)
         up = np.log(np.random.rand()) + px
 
         if self.procedure == 'uniform' or self.procedure == 'overrelaxed':
-            xl, xr = self.stepout_uniform(model, state, x, up)
+            xl, xr = self.stepout_uniform(state, x, up)
         if self.procedure == 'doubling':
-            xl, xr = self.stepout_doubling(model, state, x, up)
+            xl, xr = self.stepout_doubling(state, x, up)
 
         if self.procedure == 'uniform':
-            ll, xn = self.sampling_uniform(model, state, xl, xr, x, up)
+            ll, xn = self.sampling_uniform(state, xl, xr, x, up)
         if self.procedure == 'doubling':
-            ll, xn = self.sampling_doubling(model, state, xl, xr, x, up)
+            ll, xn = self.sampling_doubling(state, xl, xr, x, up)
         if self.procedure == 'overrelaxed':
-            ll, xn = self.sampling_overrelaxed(model, state, xl, xr, x, up)
+            ll, xn = self.sampling_overrelaxed(state, xl, xr, x, up)
 
         return ll, self.getstate(state, xn)
 
@@ -288,15 +288,15 @@ class HamiltonianMCSampler(Sampler):
         self.tau = tau
         self.eps = eps
 
-    def sample(self, model, state, curloglike=None):
+    def sample(self, state, curloglike=None):
         size = state.state[self.block].shape
         x = state.state[self.block]
 
         if not isinstance(x, np.ndarray):
             x = np.array([x])
 
-        g = -self.gradloglikelihood(model, state, x)
-        E = -self.loglikelihood(model, state, x)
+        g = -self.gradloglikelihood(state, x)
+        E = -self.loglikelihood(state, x)
 
         for l in xrange(0, self.steps):
             p = np.random.normal(0, 1, size)
@@ -306,10 +306,10 @@ class HamiltonianMCSampler(Sampler):
             for i in xrange(0, self.tau):
                 p = p - self.eps*gnew/2
                 xnew = xnew + self.eps*p
-                gnew = -self.gradloglikelihood(model, state, xnew)
+                gnew = -self.gradloglikelihood(state, xnew)
                 p = p - self.eps*gnew/2
 
-            Enew = -self.loglikelihood(model, state, xnew)
+            Enew = -self.loglikelihood(state, xnew)
             Hnew = p.dot(p)/2 + Enew
             dH = Hnew - H
 

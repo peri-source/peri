@@ -7,6 +7,7 @@ try:
     from pyfftw.builders import fftn, ifftn
     hasfftw = True
 except ImportError as e:
+    print "*WARNING* pyfftw not found, switching to numpy.fft (20x slower)"
     hasfftw = False
 
 from multiprocessing import cpu_count
