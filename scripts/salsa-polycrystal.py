@@ -25,6 +25,12 @@ def sample(s, sweeps, burn):
     h = np.array(h)
     return h
 
+def wrap_feature(filename):
+    try:
+        feature_snap(filename)
+    except Exception as e:
+        return
+
 def feature_snap(filename):
     ORDER = (1,1,1)
     sweeps = 10
@@ -46,7 +52,7 @@ def feature_snap(filename):
 
     imsize = itrue.shape
     obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
-    psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
+    psf = psfs.AnisotropicGaussian(PSF, shape=imsize, threads=1)
     ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
     s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
             zscale=zscale, pad=16, sigma=sigma)
@@ -64,4 +70,4 @@ if __name__ == '__main__':
     files = glob.glob(fldr+'*.tif')
 
     pool = Pool(12)
-    pool.map(feature_snap, files)
+    pool.map(wrap_feature, files)
