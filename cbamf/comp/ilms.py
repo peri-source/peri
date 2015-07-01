@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.polynomial.legendre import legval
 from itertools import product
 
 from ..util import Tile
@@ -32,7 +33,8 @@ class Polynomial3D(object):
 
         self._poly = np.rollaxis( np.array(self._poly), 0, len(self.shape)+1 )
 
-    def from_data(self, f, mask=None):
+    def from_data(self, f, mask=None, dopriors=False, multiplier=1):
+        # TODO -- add priors to the fit
         if mask is None:
             mask = np.s_[:]
         fit, _, _, _ = np.linalg.lstsq(self._poly[mask].reshape(-1, self.params.shape[0]), f[mask].ravel())
@@ -54,3 +56,27 @@ class Polynomial3D(object):
 
     def get_params(self):
         return self.params
+
+
+class LegendrePoly3D(Polynomial3D):
+    def __init__(self, shape, coeffs=None, order=(1,1,1)):
+        super(LegendrePoly3D, self).__init__(shape=shape, coeffs=coeffs, order=order)
+
+    def _poly_orders(self):
+        return product(*(xrange(o) for o in self.order))
+
+    def _setup_rvecs(self):
+        o = self.shape
+        self.rz, self.ry, self.rx = np.meshgrid(*[np.linspace(-1, 1, i) for i in o], indexing='ij')
+        self._poly = []
+
+        for i,j,k in self._poly_orders():
+            ci = np.zeros(i+1)
+            cj = np.zeros(j+1)
+            ck = np.zeros(k+1)
+            ci[-1] = 1
+            cj[-1] = 1
+            ck[-1] = 1
+            self._poly.append( legval(self.rx, ci) * legval(self.ry, cj) * legval(self.rz, ck) )
+
+        self._poly = np.rollaxis( np.array(self._poly), 0, len(self.shape)+1 )
