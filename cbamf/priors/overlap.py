@@ -51,7 +51,7 @@ class HardSphereOverlapNaive(object):
 
 
 class HardSphereOverlapCell(object):
-    def __init__(self, pos, rad, bounds=None, cutoff=None, zscale=1, maxn=30,
+    def __init__(self, pos, rad, typ, bounds=None, cutoff=None, zscale=1, maxn=30,
             prior_type='absolute'):
 
         # the mild inflation is to deal with numerical issues
@@ -71,8 +71,9 @@ class HardSphereOverlapCell(object):
 
         self.N = rad.shape[0]
         self.cutoff = cutoff
-        self.pos = pos
-        self.rad = rad
+        self.pos = pos.copy()
+        self.rad = rad.copy()
+        self.typ = typ.copy()
         self.maxn = maxn
         self.zscale = np.array([zscale, 1, 1])
         self.logpriors = np.zeros_like(rad)
@@ -91,7 +92,8 @@ class HardSphereOverlapCell(object):
         self.counts = np.zeros(self.size, dtype='int')
 
         for i in xrange(self.N):
-            self._bin_particle(i)
+            if self.typ[i] == 1:
+                self._bin_particle(i)
 
     def _pos_to_inds(self, pos):
         ind = (self.size * (pos - self.bl) / self.bdiff).astype('int')
@@ -189,14 +191,17 @@ class HardSphereOverlapCell(object):
         neighs = np.delete(neighs, np.where((neighs == i) | (neighs == -1)))
         return neighs
 
-    def update(self, index, pos, rad):
-        for i,p,r in zip(index, pos, rad):
-            self._unbin_particle(i)
+    def update(self, index, pos, rad, typ):
+        for i,p,r,t in zip(index, pos, rad, typ):
+            if self.typ[i] == 1:
+                self._unbin_particle(i)
 
             self.pos[i] = p
             self.rad[i] = r
+            self.typ[i] = t
 
-            self._bin_particle(i)
+            if self.typ[i] == 1:
+                self._bin_particle(i)
 
     def logprior(self):
         return self.logpriors.sum()

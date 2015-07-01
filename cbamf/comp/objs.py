@@ -2,11 +2,18 @@ import numpy as np
 from ..util import Tile
 
 class SphereCollectionRealSpace(object):
-    def __init__(self, pos, rad, shape, support_size=3):
+    def __init__(self, pos, rad, shape, support_size=3, typ=None, pad=None):
         self.support_size = support_size
         self.pos = pos.astype('float')
         self.rad = rad.astype('float')
         self.N = rad.shape[0]
+
+        if typ is None:
+            self.typ = np.ones(self.N)
+            if pad is not None and pad <= self.N:
+                self.typ[-pad:] = 0
+        else:
+            self.typ = typ.astype('float')
 
         self.shape = shape
         self._setup()
@@ -32,28 +39,32 @@ class SphereCollectionRealSpace(object):
         rdist = np.sqrt((rvec**2).sum(axis=-1))
         self.particles[tile.slicer] += sign/(1.0 + np.exp(np.pi*(rdist - rad)))
 
-    def _update_particle(self, n, p, r, zscale):
-        self._particle(self.pos[n], self.rad[n], zscale, -1)
+    def _update_particle(self, n, p, r, t, zscale):
+        if self.typ[n] == 1:
+            self._particle(self.pos[n], self.rad[n], zscale, -1)
 
         self.pos[n] = p
         self.rad[n] = r
+        self.typ[n] = t
 
-        self._particle(self.pos[n], self.rad[n], zscale, +1)
+        if self.typ[n] == 1:
+            self._particle(self.pos[n], self.rad[n], zscale, +1)
 
     def initialize(self, zscale):
         if len(self.pos.shape) != 2:
             raise AttributeError("Position array needs to be (-1,3) shaped, (z,y,x) order")
 
         self.particles = np.zeros(self.shape)
-        for p0, r0 in zip(self.pos, self.rad):
-            self._particle(p0, r0, zscale)
+        for p0, r0, t0 in zip(self.pos, self.rad, self.typ):
+            if t0 == 1:
+                self._particle(p0, r0, zscale)
 
     def set_tile(self, tile):
         self.tile = tile
 
-    def update(self, ns, pos, rad, zscale):
-        for n, p, r in zip(ns, pos, rad):
-            self._update_particle(n, p, r, zscale)
+    def update(self, ns, pos, rad, typ, zscale):
+        for n, p, r, t in zip(ns, pos, rad, typ):
+            self._update_particle(n, p, r, t, zscale)
 
     def get_field(self):
         return self.particles[self.tile.slicer]
@@ -66,6 +77,9 @@ class SphereCollectionRealSpace(object):
 
     def get_params_rad(self):
         return self.rad
+
+    def get_params_typ(self):
+        return self.typ
 
     def get_support_size(self):
         return self.support_size

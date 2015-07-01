@@ -159,7 +159,7 @@ class ConfocalImagePython(State):
         self.param_dict = OrderedDict({
             'pos': 3*self.obj.N,
             'rad': self.obj.N,
-            'typ': 0,
+            'typ': self.obj.N,
             'psf': len(self.psf.get_params()),
             'ilm': len(self.ilm.get_params()),
             'off': 1,
@@ -174,6 +174,7 @@ class ConfocalImagePython(State):
 
         self.b_pos = self.create_block('pos')
         self.b_rad = self.create_block('rad')
+        self.b_typ = self.create_block('typ')
         self.b_psf = self.create_block('psf')
         self.b_ilm = self.create_block('ilm')
         self.b_off = self.create_block('off')
@@ -200,6 +201,8 @@ class ConfocalImagePython(State):
                 out.append(self.obj.get_params_pos())
             if param == 'rad':
                 out.append(self.obj.get_params_rad())
+            if param == 'typ':
+                out.append(self.obj.get_params_typ())
             if param == 'psf':
                 out.append(self.psf.get_params())
             if param == 'ilm':
@@ -223,7 +226,7 @@ class ConfocalImagePython(State):
         self.ilm.initialize()
 
         bounds = (np.array([0,0,0]), np.array(self.image.shape))
-        self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad,
+        self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad, self.obj.typ,
                 zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
 
         if self.doprior:
@@ -283,24 +286,34 @@ class ConfocalImagePython(State):
 
         pmask = block[self.b_pos].reshape(-1, 3)
         rmask = block[self.b_rad]
-        particles = np.arange(self.obj.N)[pmask.any(axis=-1) | rmask]
+        tmask = block[self.b_typ]
+        particles = np.arange(self.obj.N)[pmask.any(axis=-1) | rmask | tmask]
 
+        self._logprior = 0
         # if the particle was changed, update locally
         if len(particles) > 0:
             pos0 = prev[self.b_pos].copy().reshape(-1,3)[particles]
             rad0 = prev[self.b_rad].copy()[particles]
+            typ0 = prev[self.b_typ].copy()[particles]
 
             pos = self.state[self.b_pos].copy().reshape(-1,3)[particles]
             rad = self.state[self.b_rad].copy()[particles]
+            typ = self.state[self.b_typ].copy()[particles]
+
+            if (typ0 == 0).all() and (typ == 0).all():
+                self.state[block] = prev[block]
+                self._logprior = -1e100
+                return False
 
             if (pos < 0).any() or (pos > np.array(self.image.shape)).any():
                 self.state[block] = prev[block]
+                self._logprior = -1e100
                 return False
 
             # TODO - check why we need to have obj.update here?? should
             # only be necessary before _update_tile
-            self.obj.update(particles, pos, rad, self.zscale)
-            self.nbl.update(particles, pos, rad)
+            self.obj.update(particles, pos, rad, typ, self.zscale)
+            self.nbl.update(particles, pos, rad, typ)
 
             if self.doprior:
                 self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
@@ -309,8 +322,8 @@ class ConfocalImagePython(State):
             # if it is too small, don't both and return False
             # This needs to be more general with pop and push
             if self._logprior < -1e90:
-                self.obj.update(particles, pos0, rad0, self.zscale)
-                self.nbl.update(particles, pos0, rad0)
+                self.obj.update(particles, pos0, rad0, typ0, self.zscale)
+                self.nbl.update(particles, pos0, rad0, typ0)
                 self.state[block] = prev[block]
                 return False
 
@@ -348,6 +361,21 @@ class ConfocalImagePython(State):
             blocks.append(self.block_range(t, t+1))
         blocks.append(self.block_range(r_ind, r_ind+1))
         return blocks
+
+    def block_particle_pos(self, index):
+        a = self.block_none()
+        a[3*index:3*index+3] = True
+        return a
+
+    def block_particle_rad(self, index):
+        a = self.block_none()
+        a[3*self.obj.N + index] = True
+        return a
+
+    def block_particle_typ(self, index):
+        a = self.block_none()
+        a[4*self.obj.N + index] = True
+        return a
 
     def create_block(self, typ='all'):
         return self.block_range(*self._block_offset_end(typ))

@@ -100,8 +100,8 @@ def remove_overlaps(pos, rad, zscale=1):
             r = rad[i] + rad[j]
             diff = d - r
             if diff < 0:
-                rad[i] -= np.abs(diff)/2 + 1e-10
-                rad[j] -= np.abs(diff)/2 + 1e-10
+                rad[i] -= np.abs(diff)*rad[i]/(rad[i]+rad[j]) + 1e-10
+                rad[j] -= np.abs(diff)*rad[j]/(rad[i]+rad[j]) + 1e-10
 
 def remove_background(im, order=(5,5,4), mask=None):
     from cbamf.comp import ilms
