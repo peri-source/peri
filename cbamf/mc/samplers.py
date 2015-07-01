@@ -5,7 +5,7 @@ to a model and its parameters
 from copy import deepcopy
 import numpy as np
 
-from ..const import PRIORCUT
+from ..const import PRIORCUT, ZEROLOGPRIOR
 
 def createBlock(imin, imax=None, skip=None):
     return np.s_[imin:imax:skip]
@@ -19,14 +19,14 @@ class Sampler(object):
         return state
 
     def loglikelihood(self, state, substate):
-        state.update(self.block, substate)
-        lg = state.loglikelihood()
-        return lg
+        if state.update(self.block, substate):
+            return state.loglikelihood()
+        return ZEROLOGPRIOR
 
     def gradloglikelihood(self, state, substate):
-        state.update(self.block, substate)
-        lg = state.gradloglikelihood()
-        return lg
+        if state.update(self.block, substate):
+            return state.gradloglikelihood()
+        return ZEROLOGPRIOR
 
     def sample(self, state):
         pass

@@ -2,7 +2,7 @@ import os
 import numpy as np
 from collections import OrderedDict
 from .const import ZEROLOGPRIOR, PRIORCUT
-from .util import Tile
+from .util import Tile, amin, amax
 from .priors import overlap
 
 class State(object):
@@ -14,6 +14,7 @@ class State(object):
 
     def _update_state(self, block, data):
         self.state[block] = data.astype(self.state.dtype)
+        return True
 
     def push_update(self, block, data):
         curr = self.state[block].copy()
@@ -234,7 +235,7 @@ class ConfocalImagePython(State):
 
         self._update_tile(*self._tile_global())
 
-    def _tile_from_particle_change(self, p0, r0, p1, r1):
+    def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
         psc = self.psf.get_support_size()/2.0
         rsc = self.obj.get_support_size()/2.0
 
@@ -243,8 +244,16 @@ class ConfocalImagePython(State):
 
         off0 = r0 + self.pad/2 + psc + rsc
         off1 = r1 + self.pad/2 + psc + rsc
-        pl = np.round(np.vstack([p0-off0+0, p1-off1+0]).min(axis=0)).astype('int')
-        pr = np.round(np.vstack([p0+off0+1, p1+off1+1]).max(axis=0)).astype('int')
+
+        if t0[0] == 1 and t1[0] == 1:
+            pl = np.round(amin(p0-off0+0, p1-off1+0)).astype('int')
+            pr = np.round(amax(p0+off0+1, p1+off1+1)).astype('int')
+        if t0[0] == 0 and t1[0] == 1:
+            pl = np.round(p1-off1+0).astype('int')
+            pr = np.round(p1+off1+1).astype('int')
+        if t0[0] == 1 and t1[0] == 0:
+            pl = np.round(p0-off0+0).astype('int')
+            pr = np.round(p0+off0+1).astype('int')
 
         outer = Tile(pl, pr, 0, self.image.shape)
         inner = Tile(pl+self.pad/2, pr-self.pad/2, self.pad/2, np.array(self.image.shape)-self.pad/2)
@@ -285,10 +294,10 @@ class ConfocalImagePython(State):
         # TODO, instead, push the change in case we need to pop it
         self._update_state(block, data)
 
-        pmask = block[self.b_pos].reshape(-1, 3)
+        pmask = block[self.b_pos].reshape(-1, 3).any(axis=-1)
         rmask = block[self.b_rad]
         tmask = block[self.b_typ]
-        particles = np.arange(self.obj.N)[pmask.any(axis=-1) | rmask | tmask]
+        particles = np.arange(self.obj.N)[pmask | rmask | tmask]
 
         self._logprior = 0
         # if the particle was changed, update locally
@@ -304,21 +313,14 @@ class ConfocalImagePython(State):
             # Do a bunch of checks to make sure that we can safetly modify
             # the image since that is costly and we would reject
             # this state eventually otherwise
-            if (typ0 == 0).all() and (typ == 0).all():
-                self.state[block] = prev[block]
-                self._logprior = ZEROLOGPRIOR
-                return False
-
             if (pos < 0).any() or (pos > np.array(self.image.shape)).any():
                 self.state[block] = prev[block]
-                self._logprior = ZEROLOGPRIOR
                 return False
 
-            tiles = self._tile_from_particle_change(pos0, rad0, pos, rad)
+            tiles = self._tile_from_particle_change(pos0, rad0, typ0, pos, rad, typ)
             for tile in tiles[:2]:
                 if (np.array(tile.shape) < 0).any():
                     self.state[block] = prev[block]
-                    self._logprior = ZEROLOGPRIOR
                     return False
 
             if self.doprior:
@@ -327,8 +329,13 @@ class ConfocalImagePython(State):
 
                 if self._logprior < PRIORCUT:
                     self.nbl.update(particles, pos0, rad0, typ0)
+                    self._logprior = self.nbl.logprior() + ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
+
                     self.state[block] = prev[block]
                     return False
+
+            if (typ0 == 0).all() and (typ == 0).all():
+                return False
 
             # Finally, modify the image
             self.obj.update(particles, pos, rad, typ, self.zscale)
@@ -361,7 +368,6 @@ class ConfocalImagePython(State):
 
                     if tnbl.logprior() < PRIORCUT:
                         self.state[block] = prev[block]
-                        self._logprior = ZEROLOGPRIOR
                         return False
 
                     self.nbl = tnbl
@@ -372,6 +378,11 @@ class ConfocalImagePython(State):
 
             if docalc:
                 self._update_tile(*self._tile_global())
+
+        return True
+
+    def isactive(self, particle):
+        return self.state[self.block_particle_typ(particle)] == 1
 
     def blocks_particle(self, index):
         p_ind, r_ind = 3*index, 3*self.obj.N + index
@@ -384,7 +395,7 @@ class ConfocalImagePython(State):
 
     def block_particle_pos(self, index):
         a = self.block_none()
-        a[3*index:3*index+4] = True
+        a[3*index:3*index+3] = True
         return a
 
     def block_particle_rad(self, index):
@@ -408,32 +419,3 @@ class ConfocalImagePython(State):
 
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
-
-
-class IlluminationField(State):
-    def __init__(self, image, ilm, sigma=0.1, *args, **kwargs):
-        self.image = image
-        self.sigma = sigma
-        self.ilm = ilm
-        self.nparams = ilm.get_params().shape[0]
-
-        super(IlluminationField, self).__init__(nparams=self.nparams,
-                state=self.ilm.get_params(), *args, **kwargs)
-
-        self.ilm.set_tile(Tile(self.image.shape))
-        self.ilm.update(self.ilm.get_params())
-        self.model_image = self.ilm.get_field()
-        self._update_ll()
-
-    def _update_ll(self):
-        self._loglikelihood = -((self.model_image - self.image)**2).sum() / (2*self.sigma**2)
-
-    def update(self, block, data):
-        self._update_state(block, data)
-
-        self.ilm.update(self.state)
-        self.model_image = self.ilm.get_field()
-        self._update_ll()
-
-    def loglikelihood(self):
-        return self._loglikelihood

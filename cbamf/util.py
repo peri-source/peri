@@ -1,9 +1,9 @@
 import numpy as np
 
-def _min(a, b):
+def amin(a, b):
     return np.vstack([a, b]).min(axis=0)
 
-def _max(a, b):
+def amax(a, b):
     return np.vstack([a, b]).max(axis=0)
 
 class Tile(object):
@@ -21,12 +21,12 @@ class Tile(object):
         if mins is not None:
             if not hasattr(mins, '__iter__'):
                 mins = np.array([mins]*3)
-            left = _max(left, mins)
+            left = amax(left, mins)
 
         if maxs is not None:
             if not hasattr(maxs, '__iter__'):
                 maxs = np.array([maxs]*3)
-            right = _min(right, maxs)
+            right = amin(right, maxs)
 
         l, r = left, right
         self.l = np.array(l)
