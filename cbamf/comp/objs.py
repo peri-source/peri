@@ -2,7 +2,7 @@ import numpy as np
 from ..util import Tile
 
 class SphereCollectionRealSpace(object):
-    def __init__(self, pos, rad, shape, support_size=3, typ=None, pad=None):
+    def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None):
         self.support_size = support_size
         self.pos = pos.astype('float')
         self.rad = rad.astype('float')

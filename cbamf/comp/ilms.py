@@ -62,9 +62,6 @@ class LegendrePoly3D(Polynomial3D):
     def __init__(self, shape, coeffs=None, order=(1,1,1)):
         super(LegendrePoly3D, self).__init__(shape=shape, coeffs=coeffs, order=order)
 
-    def _poly_orders(self):
-        return product(*(xrange(o) for o in self.order))
-
     def _setup_rvecs(self):
         o = self.shape
         self.rz, self.ry, self.rx = np.meshgrid(*[np.linspace(-1, 1, i) for i in o], indexing='ij')
