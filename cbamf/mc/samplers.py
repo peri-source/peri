@@ -5,6 +5,8 @@ to a model and its parameters
 from copy import deepcopy
 import numpy as np
 
+from ..const import PRIORCUT
+
 def createBlock(imin, imax=None, skip=None):
     return np.s_[imin:imax:skip]
 
@@ -73,7 +75,7 @@ class SliceSampler(Sampler):
         pl = self.loglikelihood(state, xl)
         pr = self.loglikelihood(state, xr)
 
-        if px < -1e90:
+        if px < PRIORCUT:
             print "Starting with bad state"
             raise IOError
 

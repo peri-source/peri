@@ -22,7 +22,7 @@ initializers.remove_overlaps(xstart, rstart)
 
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
 psf = psfs.AnisotropicGaussian((0.6, 2), shape=imsize)
-ilm = ilms.Polynomial3D(order=(3,3,2), shape=imsize)
+ilm = ilms.Polynomial3D(order=(1,1,1), shape=imsize)
 s = states.ConfocalImagePython(blank, obj=obj, psf=psf, ilm=ilm, pad=16, sigma=sigma)
 
 itrue = s.get_model_image()
@@ -36,11 +36,11 @@ if True:
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        runner.sample_particles(s)
-        runner.sample_block(s, 'psf', explode=False)
-        runner.sample_block(s, 'ilm', explode=False)
-        runner.sample_block(s, 'off', explode=True)
-        runner.sample_block(s, 'zscale', explode=True)
+        runner.sample_particles(s, stepout=0.05)
+        runner.sample_block(s, 'psf', stepout=0.1)
+        runner.sample_block(s, 'ilm', stepout=0.1)
+        runner.sample_block(s, 'off', stepout=0.1)
+        runner.sample_block(s, 'zscale', stepout=0.1)
 
         if i >= burn:
             h.append(s.state.copy())

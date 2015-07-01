@@ -21,21 +21,21 @@ burn = sweeps - samples
 
 sigma = 0.05
 PSF = (2.4, 4.6)
-PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 5, 5.0, True, 78, 14, 1.056
+PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 5, 5.0, True, 150, 14, 1.056
 raw = initializers.load_tiff("/media/scratch/bamf/frozen-particles/zstack_dx0/0.tif")
 
 feat = initializers.normalize(raw[zstart:,:IMSIZE,:IMSIZE], INVERT)
 feat = initializers.remove_background(feat, order=ORDER)
-#xstart, proc = initializers.local_max_featuring(feat, FSIZE, FSIZE/3.)
-xstart, rstart = pickle.load(open("/media/scratch/fff.pkl"))
+xstart, proc = initializers.local_max_featuring(feat, FSIZE, FSIZE/3.)
+#xstart, rstart = pickle.load(open("/media/scratch/fff.pkl"))
 
 itrue = initializers.normalize(raw[zstart:,:IMSIZE,:IMSIZE], not INVERT)
 itrue = np.pad(itrue, PAD, mode='constant', constant_values=-10)
-#xstart += PAD
-#rstart = RAD*np.ones(xstart.shape[0])
-#initializers.remove_overlaps(xstart, rstart, zscale=zscale)
+xstart += PAD
+rstart = RAD*np.ones(xstart.shape[0])
+initializers.remove_overlaps(xstart, rstart, zscale=zscale)
 nfake = 20
-#xstart, rstart = pad_fake_particles(xstart, rstart, nfake)
+xstart, rstart = pad_fake_particles(xstart, rstart, nfake)
 
 imsize = itrue.shape
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize, pad=nfake)
@@ -63,6 +63,7 @@ def sample_add(s, rad=5):
     lbl = nd.label(eq)[0]
     pos = np.array(nd.center_of_mass(eq, lbl, np.unique(lbl)))[1:]
 
+    #np.unravel_index
     n = s.obj.typ.argmin()
     bp = s.block_particle_pos(n)
     br = s.block_particle_rad(n)

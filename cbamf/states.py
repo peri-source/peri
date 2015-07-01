@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from collections import OrderedDict
+from .const import ZEROLOGPRIOR, PRIORCUT
 from .util import Tile
 from .priors import overlap
 
@@ -14,12 +15,12 @@ class State(object):
     def _update_state(self, block, data):
         self.state[block] = data.astype(self.state.dtype)
 
-    def _push_update(self, block, data):
+    def push_update(self, block, data):
         curr = self.state[block].copy()
         self.stack.append((block, curr))
         self.update(block, data)
 
-    def _pop_update(self):
+    def pop_update(self):
         block, data = self.stack.pop()
         self.update(block, data)
 
@@ -51,30 +52,30 @@ class State(object):
         return blocks
 
     def _grad_single_param(self, block, dl):
-        self._push_update(block, self.state[block]+dl)
+        self.push_update(block, self.state[block]+dl)
         loglr = self.loglikelihood()
-        self._pop_update()
+        self.pop_update()
 
-        self._push_update(block, self.state[block]-dl)
+        self.push_update(block, self.state[block]-dl)
         logll = self.loglikelihood()
-        self._pop_update()
+        self.pop_update()
 
         return (loglr - logll) / (2*dl)
 
     def _hess_two_param(self, b0, b1, dl):
-        self._push_update(b0, self.state[b0]+dl)
-        self._push_update(b1, self.state[b1]+dl)
+        self.push_update(b0, self.state[b0]+dl)
+        self.push_update(b1, self.state[b1]+dl)
         logl_01 = self.loglikelihood()
-        self._pop_update()
-        self._pop_update()
+        self.pop_update()
+        self.pop_update()
 
-        self._push_update(b0, self.state[b0]+dl)
+        self.push_update(b0, self.state[b0]+dl)
         logl_0 = self.loglikelihood()
-        self._pop_update()
+        self.pop_update()
 
-        self._push_update(b1, self.state[b1]+dl)
+        self.push_update(b1, self.state[b1]+dl)
         logl_1 = self.loglikelihood()
-        self._pop_update()
+        self.pop_update()
 
         logl = self.loglikelihood()
 
@@ -221,16 +222,16 @@ class ConfocalImagePython(State):
         self._logprior = 0
 
     def _initialize(self):
+        if self.doprior:
+            bounds = (np.array([0,0,0]), np.array(self.image.shape))
+            self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad, self.obj.typ,
+                    zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
+            self._logprior = self.nbl.logprior() + ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
+
         self.psf.update(self.state[self.b_psf])
         self.obj.initialize(self.zscale)
         self.ilm.initialize()
 
-        bounds = (np.array([0,0,0]), np.array(self.image.shape))
-        self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad, self.obj.typ,
-                zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
-
-        if self.doprior:
-            self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
         self._update_tile(*self._tile_global())
 
     def _tile_from_particle_change(self, p0, r0, p1, r1):
@@ -289,6 +290,7 @@ class ConfocalImagePython(State):
         tmask = block[self.b_typ]
         particles = np.arange(self.obj.N)[pmask.any(axis=-1) | rmask | tmask]
 
+        self._logprior = 0
         # if the particle was changed, update locally
         if len(particles) > 0:
             pos0 = prev[self.b_pos].copy().reshape(-1,3)[particles]
@@ -299,31 +301,38 @@ class ConfocalImagePython(State):
             rad = self.state[self.b_rad].copy()[particles]
             typ = self.state[self.b_typ].copy()[particles]
 
+            # Do a bunch of checks to make sure that we can safetly modify
+            # the image since that is costly and we would reject
+            # this state eventually otherwise
             if (typ0 == 0).all() and (typ == 0).all():
+                self.state[block] = prev[block]
+                self._logprior = ZEROLOGPRIOR
                 return False
 
             if (pos < 0).any() or (pos > np.array(self.image.shape)).any():
                 self.state[block] = prev[block]
+                self._logprior = ZEROLOGPRIOR
                 return False
 
-            # TODO - check why we need to have obj.update here?? should
-            # only be necessary before _update_tile
-            self.obj.update(particles, pos, rad, typ, self.zscale)
-            self.nbl.update(particles, pos, rad, typ)
+            tiles = self._tile_from_particle_change(pos0, rad0, pos, rad)
+            for tile in tiles[:2]:
+                if (np.array(tile.shape) < 0).any():
+                    self.state[block] = prev[block]
+                    self._logprior = ZEROLOGPRIOR
+                    return False
 
             if self.doprior:
-                self._logprior = self.nbl.logprior() + -1e100*(self.state[self.b_rad] < 0).any()
+                self.nbl.update(particles, pos, rad, typ)
+                self._logprior = self.nbl.logprior() + ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
 
-            # check all the priors before actually going for an update
-            # if it is too small, don't both and return False
-            # This needs to be more general with pop and push
-            if self._logprior < -1e90:
-                self.obj.update(particles, pos0, rad0, typ0, self.zscale)
-                self.nbl.update(particles, pos0, rad0, typ0)
-                self.state[block] = prev[block]
-                return False
+                if self._logprior < PRIORCUT:
+                    self.nbl.update(particles, pos0, rad0, typ0)
+                    self.state[block] = prev[block]
+                    return False
 
-            self._update_tile(*self._tile_from_particle_change(pos0, rad0, pos, rad))
+            # Finally, modify the image
+            self.obj.update(particles, pos, rad, typ, self.zscale)
+            self._update_tile(*tiles)
         else:
             docalc = False
 
@@ -344,7 +353,22 @@ class ConfocalImagePython(State):
 
             if block[self.b_zscale].any():
                 self.zscale = self.state[self.b_zscale][0]
-                self._initialize()
+
+                if self.doprior:
+                    bounds = (np.array([0,0,0]), np.array(self.image.shape))
+                    tnbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad, self.obj.typ,
+                            zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
+
+                    if tnbl.logprior() < PRIORCUT:
+                        self.state[block] = prev[block]
+                        self._logprior = ZEROLOGPRIOR
+                        return False
+
+                    self.nbl = tnbl
+                    self._logprior = self.nbl.logprior() + ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
+
+                self.obj.initialize(self.zscale)
+                self._update_tile(*self._tile_global())
 
             if docalc:
                 self._update_tile(*self._tile_global())
