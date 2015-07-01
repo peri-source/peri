@@ -289,7 +289,6 @@ class ConfocalImagePython(State):
         tmask = block[self.b_typ]
         particles = np.arange(self.obj.N)[pmask.any(axis=-1) | rmask | tmask]
 
-        self._logprior = 0
         # if the particle was changed, update locally
         if len(particles) > 0:
             pos0 = prev[self.b_pos].copy().reshape(-1,3)[particles]
@@ -301,13 +300,10 @@ class ConfocalImagePython(State):
             typ = self.state[self.b_typ].copy()[particles]
 
             if (typ0 == 0).all() and (typ == 0).all():
-                self.state[block] = prev[block]
-                self._logprior = -1e100
                 return False
 
             if (pos < 0).any() or (pos > np.array(self.image.shape)).any():
                 self.state[block] = prev[block]
-                self._logprior = -1e100
                 return False
 
             # TODO - check why we need to have obj.update here?? should
@@ -364,7 +360,7 @@ class ConfocalImagePython(State):
 
     def block_particle_pos(self, index):
         a = self.block_none()
-        a[3*index:3*index+3] = True
+        a[3*index:3*index+4] = True
         return a
 
     def block_particle_rad(self, index):
