@@ -59,7 +59,7 @@ s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
 
 import scipy.ndimage as nd
 
-def sample_add(s, rad=5, tries=5):
+def sample_particle_add(s, rad=5, tries=5):
     diff = (s.get_model_image() - s.image).copy()
 
     smoothdiff = nd.gaussian_filter(diff, rad/2.0)
@@ -86,51 +86,41 @@ def sample_add(s, rad=5, tries=5):
         s.update(br, np.array([rad]))
         s.update(bt, np.array([1]))
 
-        #return n, bp, br, bt
         bl = s.blocks_particle(n)[:-1]
         runner.sample_state(s, bl, stepout=1, N=1)
 
         diff2 = (s.get_model_image() - s.image)
 
         print p, (diff**2).sum(), (diff2**2).sum()
-        if np.log(np.random.rand()) > (diff2**2).sum() - (diff**2).sum():
-            #neighs = s.nbl.neighs[n].keys()
-            #print "Added, modifying neighbors"
-            #for neigh in neighs:
-            #    print neigh
-            #    bl = s.blocks_particle(neigh)
-            #    runner.sample_state(s, bl, stepout=0.3)
-            #return True
-            pass
-        else:
+        if not (np.log(np.random.rand()) > (diff2**2).sum() - (diff**2).sum()):
             s.update(bt, np.array([0]))
-    #return False
 
-def sample_remove(s, rad=5):
-    diff = s.get_model_image() - s.image
+def sample_particle_remove(s, rad=5, tries=5):
+    diff = (s.get_model_image() - s.image).copy()
 
-    smoothdiff = nd.gaussian_filter(diff, 1)
-    eq = smoothdiff == smoothdiff.min()
+    smoothdiff = nd.gaussian_filter(diff, rad/2.0)
+    maxfilter = nd.maximum_filter(smoothdiff, size=rad)
+    eq = smoothdiff == maxfilter
     lbl = nd.label(eq)[0]
-    pos = np.array(nd.center_of_mass(eq, lbl, np.unique(lbl)))[1:]
+    pos = np.array(nd.center_of_mass(eq, lbl, np.unique(lbl)))[1:].astype('int')
+    ind = np.arange(len(pos))
 
-    n = ((s.obj.pos - pos)**2).sum(axis=0).argmin()
-    bt = s.block_particle_typ(n)
-    s.update(bt, np.array([0]))
+    val = [maxfilter[tuple(pos[i])] for i in ind]
+    vals = sorted(zip(val, ind))
 
-    diff2 = s.get_model_image() - s.image
+    for _, i in vals[-tries:]:
+        diff = (s.get_model_image() - s.image)
 
-    if np.log(np.random.rand()) > (diff2**2).sum() - (diff**2).sum():
-        neighs = s.nbl.neighs[n].keys()
-        print "Removed, modifying neighbors"
-        for neigh in neighs:
-            print neigh
-            bl = s.blocks_particle(neigh)
-            runner.sample_state(s, bl, stepout=0.3)
-        return True
-    else:
-        s.update(bt, np.array([1]))
-    return False
+        n = ((s.obj.pos - pos[i])**2).sum(axis=0).argmin()
+
+        bt = s.block_particle_typ(n)
+        s.update(bt, np.array([0]))
+
+        diff2 = (s.get_model_image() - s.image)
+
+        print p, (diff**2).sum(), (diff2**2).sum()
+        if not (np.log(np.random.rand()) > (diff2**2).sum() - (diff**2).sum()):
+            s.update(bt, np.array([1]))
 
 def iterate(s, n=10):
     for i in xrange(n):

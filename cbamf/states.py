@@ -52,7 +52,8 @@ class State(object):
             blocks.append(tblock)
         return blocks
 
-    def _grad_single_param(self, block, dl):
+    def _grad_single_param(self, block, dl, action='ll'):
+        # TODO -- add option for model_data grad / hess
         self.push_update(block, self.state[block]+dl)
         loglr = self.loglikelihood()
         self.pop_update()
@@ -63,7 +64,7 @@ class State(object):
 
         return (loglr - logll) / (2*dl)
 
-    def _hess_two_param(self, b0, b1, dl):
+    def _hess_two_param(self, b0, b1, dl, action='ll'):
         self.push_update(b0, self.state[b0]+dl)
         self.push_update(b1, self.state[b1]+dl)
         logl_01 = self.loglikelihood()
@@ -81,6 +82,9 @@ class State(object):
         logl = self.loglikelihood()
 
         return (logl_01 - logl_0 - logl_1 + logl) / (dl**2)
+
+    def get_model_data(self):
+        pass
 
     def loglikelihood(self, state):
         loglike = self.dologlikelihood(state)
@@ -144,7 +148,7 @@ class LinearFit(State):
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
-            pad=16, sigma=0.1, doprior=True, constoff=False, *args, **kwargs):
+            pad=16, sigma=0.1, doprior=True, constoff=False, varyn=False, *args, **kwargs):
         self.pad = pad
         self.index = None
         self.sigma = sigma
@@ -248,10 +252,10 @@ class ConfocalImagePython(State):
         if t0[0] == 1 and t1[0] == 1:
             pl = np.round(amin(p0-off0+0, p1-off1+0)).astype('int')
             pr = np.round(amax(p0+off0+1, p1+off1+1)).astype('int')
-        if t0[0] == 0 and t1[0] == 1:
+        if t0[0] != 1 and t1[0] == 1:
             pl = np.round(p1-off1+0).astype('int')
             pr = np.round(p1+off1+1).astype('int')
-        if t0[0] == 1 and t1[0] == 0:
+        if t0[0] == 1 and t1[0] != 1:
             pl = np.round(p0-off0+0).astype('int')
             pr = np.round(p0+off0+1).astype('int')
 
