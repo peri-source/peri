@@ -292,7 +292,7 @@ class ConfocalImagePython(State):
         if self.constoff:
             replacement = self.ilm.get_field() - self.offset*platonic
         else:
-            replacement = self.ilm.get_field() * (1 - self.offset*platonic
+            replacement = self.ilm.get_field() * (1 - self.offset*platonic)
         replacement = self.psf.execute(replacement)
 
         self.model_image[islice] = replacement[ioslice]
