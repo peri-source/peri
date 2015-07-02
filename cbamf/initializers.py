@@ -6,6 +6,7 @@ from scipy.misc import imread
 from scipy import signal
 import matplotlib as mpl
 import time
+import glob
 import itertools
 from PIL import Image
 
@@ -25,6 +26,13 @@ def _sliceiter(img):
 def load_tiff(filename):
     img = Image.open(filename)
     return np.array(list(_sliceiter(img)))
+
+def load_tiffs(fileglob):
+    files = glob.glob(fileglob)
+    files.sort()
+
+    for f in files:
+        yield f, load_tiff(f)
 
 def load_tiff_layer(filename, layer):
     img = Image.open(filename)
