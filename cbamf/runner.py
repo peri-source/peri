@@ -94,18 +94,17 @@ def sample_block(state, blockname, explode=True, stepout=0.1):
     return sample_state(state, blocks, stepout)
 
 def feature(rawimage, sweeps=20, samples=10, prad=7.3, psize=9,
-        pad=22, imsize=-1, imzstart=0, zscale=1.06, sigma=0.02, invert=False):
+        pad=22, imsize=-1, imzstart=0, zscale=1.06, sigma=0.02, invert=False,
+        PSF=(2.0, 4.1), ORDER=(3,3,2), threads=-1):
+
     from cbamf import states, initializers
     from cbamf.comp import objs, psfs, ilms
 
-    ORDER = (1,1,1)
     burn = sweeps - samples
-
-    PSF = (0.8, 1.5)
 
     print "Initial featuring"
     itrue = initializers.normalize(rawimage[imzstart:,:imsize,:imsize], invert)
-    xstart, proc = initializers.local_max_featuring(itrue, psize)
+    xstart, proc = initializers.local_max_featuring(itrue, psize, psize/3.)
     itrue = initializers.normalize(itrue, True)
     itrue = np.pad(itrue, pad, mode='constant', constant_values=-10)
     xstart += pad
@@ -115,24 +114,25 @@ def feature(rawimage, sweeps=20, samples=10, prad=7.3, psize=9,
     print "Making state"
     imsize = itrue.shape
     obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
-    psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
-    ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
+    psf = psfs.AnisotropicGaussian(PSF, shape=imsize, threads=threads)
+    ilm = ilms.LegendrePoly3D(order=ORDER, shape=imsize)
     s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
-            zscale=zscale, offset=0, pad=16, sigma=sigma)
+            zscale=zscale, pad=pad, sigma=sigma)
 
-    return do_samples(s, sweeps, burn)
+    sample_particles(s, stepout=1)
+    return do_samples(s, sweeps, burn, stepout=0.05)
 
-def do_samples(s, sweeps, burn):
+def do_samples(s, sweeps, burn, stepout=0.1):
     h = []
     ll = []
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        sample_particles(s, stepout=0.1)
-        sample_block(s, 'psf', stepout=0.1)
-        sample_block(s, 'ilm', stepout=0.1)
-        sample_block(s, 'off', stepout=0.1)
-        sample_block(s, 'zscale', stepout=0.1)
+        sample_particles(s, stepout=stepout)
+        sample_block(s, 'psf', stepout=stepout)
+        sample_block(s, 'ilm', stepout=stepout)
+        sample_block(s, 'off', stepout=stepout)
+        sample_block(s, 'zscale', stepout=stepout)
 
         if i >= burn:
             h.append(s.state.copy())
