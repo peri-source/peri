@@ -45,10 +45,41 @@ def scan_noise(image, state, element, size=0.01, N=1000):
 def sample_particles(state, stepout=1):
     print '{:-^39}'.format(' POS / RAD ')
     for particle in xrange(state.obj.N):
+        if not state.isactive(particle):
+            continue
+
         print particle
         sys.stdout.flush()
 
         blocks = state.blocks_particle(particle)
+        sample_state(state, blocks, stepout=stepout)
+
+    return state.state.copy()
+
+def sample_particle_pos(state, stepout=1):
+    print '{:-^39}'.format(' POS ')
+    for particle in xrange(state.obj.N):
+        if not state.isactive(particle):
+            continue
+
+        print particle
+        sys.stdout.flush()
+
+        blocks = state.blocks_particle(particle)[:-1]
+        sample_state(state, blocks, stepout=stepout)
+
+    return state.state.copy()
+
+def sample_particle_rad(state, stepout=1):
+    print '{:-^39}'.format(' POS ')
+    for particle in xrange(state.obj.N):
+        if not state.isactive(particle):
+            continue
+
+        print particle
+        sys.stdout.flush()
+
+        blocks = [state.blocks_particle(particle)[-1]]
         sample_state(state, blocks, stepout=stepout)
 
     return state.state.copy()

@@ -55,25 +55,16 @@ ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
 s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
         zscale=zscale, pad=16, sigma=sigma)
 
-def gd(state, N=1, ratio=1e-1):
-    state.set_current_particle()
-    for i in xrange(N):
-        print state.loglikelihood()
-        grad = state.gradloglikelihood()
-        n = state.state + 1.0/np.abs(grad).max() * ratio * grad
-        state.set_state(n)
-        print state.loglikelihood()
-
 def sample(s):
     h = []
     for i in xrange(sweeps):
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        runner.sample_particles(s, stepout=0.1)
-        runner.sample_block(s, 'ilm', stepout=0.1, explode=False)
-        runner.sample_block(s, 'off', stepout=0.1, explode=True)
-        runner.sample_block(s, 'psf', stepout=0.1, explode=False)
-        runner.sample_block(s, 'zscale', explode=True)
+        runner.sample_particles(s, stepout=1.0)
+        runner.sample_block(s, 'ilm', stepout=0.1)
+        runner.sample_block(s, 'off', stepout=0.1)
+        runner.sample_block(s, 'psf', stepout=0.1)
+        runner.sample_block(s, 'zscale', stepout=0.1)
 
         if i > burn:
             h.append(s.state.copy())
