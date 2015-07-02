@@ -149,7 +149,7 @@ class LinearFit(State):
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
             pad=16, sigma=0.1, doprior=True, constoff=False,
-            varyn=False, allowdimers=True, *args, **kwargs):
+            varyn=False, allowdimers=False, *args, **kwargs):
         self.pad = pad
         self.index = None
         self.sigma = sigma

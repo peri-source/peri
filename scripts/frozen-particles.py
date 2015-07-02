@@ -59,7 +59,7 @@ s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
 
 import scipy.ndimage as nd
 
-def sample_particle_add(s, rad=5, tries=5):
+def sample_particle_add(s, rad, tries=5):
     diff = (s.get_model_image() - s.image).copy()
 
     smoothdiff = nd.gaussian_filter(diff, rad/2.0)
@@ -99,7 +99,7 @@ def sample_particle_add(s, rad=5, tries=5):
             accepts += 1
     return accepts
 
-def sample_particle_remove(s, rad=5, tries=5):
+def sample_particle_remove(s, rad, tries=5):
     diff = (s.get_model_image() - s.image).copy()
 
     smoothdiff = nd.gaussian_filter(diff, rad/2.0)
@@ -130,13 +130,13 @@ def sample_particle_remove(s, rad=5, tries=5):
             accepts += 1
     return accepts
 
-def full_feature(s, n=2):
-    for i in xrange(n):
+def full_feature(s, rad, globaloptimizes=2, add_remove_tries=20):
+    for i in xrange(globaloptimizes):
         accepts = 1
         while accepts > 0:
             accepts = 0
-            accepts += sample_particle_add(s, rad=7, tries=20)
-            accepts += sample_particle_remove(s, rad=7, tries=2)
+            accepts += sample_particle_add(s, rad=rad, tries=add_remove_tries)
+            accepts += sample_particle_remove(s, rad=rad, tries=add_remove_tries/5)
             runner.sample_particle_pos(s, stepout=1)
             runner.sample_block(s, 'ilm', stepout=0.1)
             runner.sample_block(s, 'off', stepout=0.1)
