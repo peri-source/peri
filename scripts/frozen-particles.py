@@ -24,7 +24,7 @@ burn = sweeps - samples
 
 sigma = 0.05
 PSF = (2.4, 4.6)
-PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 5, 5.0, True, 150, 14, 1.056
+PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 16, 5, 5.0, True, 72, 14, 1.056
 raw = initializers.load_tiff("/media/scratch/bamf/frozen-particles/zstack_dx0/0.tif")
 
 feat = initializers.normalize(raw[zstart:,:IMSIZE,:IMSIZE], INVERT)
@@ -74,7 +74,7 @@ def sample_particle_add(s, rad=5, tries=5):
 
     accepts = 0
     for _, i in vals[-tries:][::-1]:
-        diff = (s.get_model_image() - s.image)
+        diff = (s.get_model_image() - s.image)/(2*s.sigma**2)
 
         p = pos[i].reshape(-1,3)
         n = s.obj.typ.argmin()
@@ -90,7 +90,7 @@ def sample_particle_add(s, rad=5, tries=5):
         bl = s.blocks_particle(n)[:-1]
         runner.sample_state(s, bl, stepout=1, N=1)
 
-        diff2 = (s.get_model_image() - s.image)
+        diff2 = (s.get_model_image() - s.image)/(2*s.sigma**2)
 
         print p, (diff**2).sum(), (diff2**2).sum()
         if not (np.log(np.random.rand()) > (diff2**2).sum() - (diff**2).sum()):
@@ -114,14 +114,14 @@ def sample_particle_remove(s, rad=5, tries=5):
 
     accepts = 0
     for _, i in vals[-tries:]:
-        diff = (s.get_model_image() - s.image)
+        diff = (s.get_model_image() - s.image)/(2*s.sigma**2)
 
         n = ((s.obj.pos - pos[i])**2).sum(axis=0).argmin()
 
         bt = s.block_particle_typ(n)
         s.update(bt, np.array([0]))
 
-        diff2 = (s.get_model_image() - s.image)
+        diff2 = (s.get_model_image() - s.image)/(2*s.sigma**2)
 
         print s.obj.pos[n], (diff**2).sum(), (diff2**2).sum()
         if not (np.log(np.random.rand()) > (diff2**2).sum() - (diff**2).sum()):
@@ -130,30 +130,21 @@ def sample_particle_remove(s, rad=5, tries=5):
             accepts += 1
     return accepts
 
-def iterate(s, n=10):
+def full_feature(s, n=2):
     for i in xrange(n):
-        while sample_particle_add(s, rad=7, tries=10) > 0:
+        accepts = 1
+        while accepts > 0:
+            accepts = 0
+            accepts += sample_particle_add(s, rad=7, tries=20)
+            accepts += sample_particle_remove(s, rad=7, tries=2)
             runner.sample_particle_pos(s, stepout=1)
-            runner.sample_block(s, 'ilm', stepout=0.03)
-            runner.sample_block(s, 'off', stepout=0.03)
-
-        while sample_particle_remove(s, rad=7, tries=1) > 0:
-            runner.sample_particle_pos(s, stepout=1)
-            runner.sample_block(s, 'ilm', stepout=0.03)
-            runner.sample_block(s, 'off', stepout=0.03)
+            runner.sample_block(s, 'ilm', stepout=0.1)
+            runner.sample_block(s, 'off', stepout=0.1)
 
         for i in xrange(2):
             runner.sample_particle_pos(s, stepout=1)
             runner.sample_particle_rad(s, stepout=1)
 
-        runner.do_samples(s, 7, 3)
+        runner.do_samples(s, 5, 5)
 
-        while sample_particle_add(s, rad=7, tries=5) > 0:
-            runner.sample_particle_pos(s, stepout=1)
-            runner.sample_block(s, 'ilm', stepout=0.03)
-            runner.sample_block(s, 'off', stepout=0.03)
-
-        while sample_particle_remove(s, rad=7, tries=1) > 0:
-            runner.sample_particle_pos(s, stepout=1)
-            runner.sample_block(s, 'ilm', stepout=0.03)
-            runner.sample_block(s, 'off', stepout=0.03)
+    return runner.do_samples(s, 20, 10)
