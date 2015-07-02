@@ -148,12 +148,14 @@ class LinearFit(State):
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
-            pad=16, sigma=0.1, doprior=True, constoff=False, varyn=False, *args, **kwargs):
+            pad=16, sigma=0.1, doprior=True, constoff=False,
+            varyn=False, allowdimers=True, *args, **kwargs):
         self.pad = pad
         self.index = None
         self.sigma = sigma
         self.doprior = doprior
         self.constoff = constoff
+        self.allowdimers = allowdimers
 
         self.psf = psf
         self.ilm = ilm
@@ -283,10 +285,14 @@ class ConfocalImagePython(State):
         islice = itile.slicer
         oldll = self._loglikelihood_field[islice].sum()
 
+        platonic = self.obj.get_field()
+        if self.allowdimers:
+            platonic = np.clip(platonic, 0, 1)
+
         if self.constoff:
-            replacement = self.ilm.get_field() - self.offset*self.obj.get_field()
+            replacement = self.ilm.get_field() - self.offset*platonic
         else:
-            replacement = self.ilm.get_field() * (1 - self.offset*self.obj.get_field())
+            replacement = self.ilm.get_field() * (1 - self.offset*platonic
         replacement = self.psf.execute(replacement)
 
         self.model_image[islice] = replacement[ioslice]
