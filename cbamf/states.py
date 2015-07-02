@@ -258,6 +258,9 @@ class ConfocalImagePython(State):
         if t0[0] == 1 and t1[0] != 1:
             pl = np.round(p0-off0+0).astype('int')
             pr = np.round(p0+off0+1).astype('int')
+        if t0[0] != 1 and t1[0] != 1:
+            pl = np.zeros(3)
+            pr = np.array(self.image.shape)
 
         outer = Tile(pl, pr, 0, self.image.shape)
         inner = Tile(pl+self.pad/2, pr-self.pad/2, self.pad/2, np.array(self.image.shape)-self.pad/2)

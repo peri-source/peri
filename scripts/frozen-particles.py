@@ -37,14 +37,14 @@ itrue = np.pad(itrue, PAD, mode='constant', constant_values=-10)
 xstart += PAD
 rstart = RAD*np.ones(xstart.shape[0])
 initializers.remove_overlaps(xstart, rstart, zscale=zscale)
-nfake = 50
+nfake = 100
 #xstart, rstart, tstart = zero_particles(nfake)
 xstart, rstart = pad_fake_particles(xstart, rstart, nfake)
 
 imsize = itrue.shape
 obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize, pad=nfake)
 psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
-ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
+ilm = ilms.LegendrePoly3D(order=ORDER, shape=imsize)
 ilm.from_data(itrue, mask=itrue > -10)
 
 diff = (ilm.get_field() - itrue)
@@ -72,6 +72,7 @@ def sample_particle_add(s, rad=5, tries=5):
     val = [maxfilter[tuple(pos[i])] for i in ind]
     vals = sorted(zip(val, ind))
 
+    accepts = 0
     for _, i in vals[-tries:][::-1]:
         diff = (s.get_model_image() - s.image)
 
@@ -94,6 +95,9 @@ def sample_particle_add(s, rad=5, tries=5):
         print p, (diff**2).sum(), (diff2**2).sum()
         if not (np.log(np.random.rand()) > (diff2**2).sum() - (diff**2).sum()):
             s.update(bt, np.array([0]))
+        else:
+            accepts += 1
+    return accepts
 
 def sample_particle_remove(s, rad=5, tries=5):
     diff = (s.get_model_image() - s.image).copy()
@@ -108,6 +112,7 @@ def sample_particle_remove(s, rad=5, tries=5):
     val = [maxfilter[tuple(pos[i])] for i in ind]
     vals = sorted(zip(val, ind))
 
+    accepts = 0
     for _, i in vals[-tries:]:
         diff = (s.get_model_image() - s.image)
 
@@ -118,37 +123,37 @@ def sample_particle_remove(s, rad=5, tries=5):
 
         diff2 = (s.get_model_image() - s.image)
 
-        print p, (diff**2).sum(), (diff2**2).sum()
+        print s.obj.pos[n], (diff**2).sum(), (diff2**2).sum()
         if not (np.log(np.random.rand()) > (diff2**2).sum() - (diff**2).sum()):
             s.update(bt, np.array([1]))
+        else:
+            accepts += 1
+    return accepts
 
 def iterate(s, n=10):
     for i in xrange(n):
-        if sample_add(s):
-            #sample_good_particles(s)
+        while sample_particle_add(s, rad=7, tries=10) > 0:
+            runner.sample_particle_pos(s, stepout=1)
             runner.sample_block(s, 'ilm', stepout=0.03)
-            runner.sample_block(s, 'psf', stepout=0.03)
             runner.sample_block(s, 'off', stepout=0.03)
 
-        if sample_remove(s):
-            #sample_good_particles(s)
+        while sample_particle_remove(s, rad=7, tries=1) > 0:
+            runner.sample_particle_pos(s, stepout=1)
             runner.sample_block(s, 'ilm', stepout=0.03)
-            runner.sample_block(s, 'psf', stepout=0.03)
             runner.sample_block(s, 'off', stepout=0.03)
 
-def sample(s):
-    h = []
-    for i in xrange(sweeps):
-        print '{:=^79}'.format(' Sweep '+str(i)+' ')
+        for i in xrange(2):
+            runner.sample_particle_pos(s, stepout=1)
+            runner.sample_particle_rad(s, stepout=1)
 
-        runner.sample_particles(s, stepout=0.1)
-        #runner.sample_block(s, 'off', stepout=0.1)
-        runner.sample_block(s, 'psf', stepout=0.1)
-        #runner.sample_block(s, 'ilm', stepout=0.1)
-        runner.sample_block(s, 'zscale')
+        runner.do_samples(s, 7, 3)
 
-        if i > burn:
-            h.append(s.state.copy())
+        while sample_particle_add(s, rad=7, tries=5) > 0:
+            runner.sample_particle_pos(s, stepout=1)
+            runner.sample_block(s, 'ilm', stepout=0.03)
+            runner.sample_block(s, 'off', stepout=0.03)
 
-    h = np.array(h)
-    return h
+        while sample_particle_remove(s, rad=7, tries=1) > 0:
+            runner.sample_particle_pos(s, stepout=1)
+            runner.sample_block(s, 'ilm', stepout=0.03)
+            runner.sample_block(s, 'off', stepout=0.03)
