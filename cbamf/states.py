@@ -224,9 +224,10 @@ class ConfocalImagePython(State):
 
     def _build_internal_variables(self):
         self.model_image = np.zeros_like(self.image)
-        self._loglikelihood_field = -self.image_mask*self.image**2 / (2*self.sigma**2)
-        self._loglikelihood = self._loglikelihood_field.sum()
+
         self._logprior = 0
+        self._loglikelihood = 0
+        self._loglikelihood_field = np.zeros(self.image.shape)
 
     def _initialize(self):
         if self.doprior:
@@ -277,6 +278,20 @@ class ConfocalImagePython(State):
         ioslice = (np.s_[self.pad/2:-self.pad/2],)*3
         return outer, inner, ioslice
 
+    def _update_ll_field(self, data=None, slicer=np.s_[:]):
+        if data is None:
+            data = self.get_model_image()
+
+        oldll = self._loglikelihood_field[slicer].sum()
+
+        self._loglikelihood_field[slicer] = (
+                -self.image_mask[slicer] * (data - self.image[slicer])**2 / (2*self.sigma**2)
+                -np.log( np.sqrt(2*np.pi) * self.sigma )
+            )
+
+        newll = self._loglikelihood_field[slicer].sum()
+        self._loglikelihood += newll - oldll
+
     def _update_tile(self, otile, itile, ioslice):
         self._last_slices = (otile, itile, ioslice)
 
@@ -285,7 +300,6 @@ class ConfocalImagePython(State):
         self.psf.set_tile(otile)
 
         islice = itile.slicer
-        oldll = self._loglikelihood_field[islice].sum()
 
         platonic = self.obj.get_field()
         if self.allowdimers:
@@ -298,10 +312,7 @@ class ConfocalImagePython(State):
         replacement = self.psf.execute(replacement)
 
         self.model_image[islice] = replacement[ioslice]
-        self._loglikelihood_field[islice] = -self.image_mask[islice]*(replacement[ioslice] - self.image[islice])**2 / (2*self.sigma**2)
-
-        newll = self._loglikelihood_field[islice].sum()
-        self._loglikelihood += newll - oldll
+        self._update_ll_field(replacement[ioslice], islice)
 
     def update(self, block, data):
         prev = self.state.copy()
