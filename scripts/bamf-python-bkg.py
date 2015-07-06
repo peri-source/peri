@@ -9,7 +9,7 @@ from cbamf.viz import plots
 import pickle
 import time
 
-sigma = 0.05
+sigma = 0.050
 
 sweeps = 30
 samples = 20
@@ -30,7 +30,16 @@ itrue += np.random.normal(0.0, sigma, size=itrue.shape)
 strue = s.state.copy()
 s.set_image(itrue)
 
-#raise IOError
+def scan_sigma(s, n=200):
+    sigmas = np.linspace(np.max(0.01,s.sigma-0.1), sigma+0.1, n)
+    lls = []
+    for ss in sigmas:
+        s.sigma = ss
+        s._update_ll_field()
+        lls.append(s.loglikelihood())
+    return sigmas, np.array(lls)
+
+raise IOError
 if True:
     h = []
     for i in xrange(sweeps):

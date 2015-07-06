@@ -11,10 +11,10 @@ sweeps = 30
 samples = 20
 burn = sweeps - samples
 
-sigma = 0.0541
-PSF = (2.402, 5.151)
-PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 5, 5.04, True, 128, 5, 1.0717
-raw = initializers.load_tiff('/media/scratch/bamf/tmp/hyperfine_dz015_N50_3.tif_t002.tif')
+sigma = 0.03041
+PSF = (2.402, 4.151)
+PAD, FSIZE, RAD, INVERT, IMSIZE, zstart, zscale = 24, 5, 5.04, True, 76, 5, 1.0717
+raw = initializers.load_tiff('/media/scratch/bamf/tmp/hyperfine_dz015_N50_3.tif_t001.tif')
 
 feat = initializers.normalize(raw[zstart:,:IMSIZE,:IMSIZE], INVERT)
 xstart, proc = initializers.local_max_featuring(feat, FSIZE, FSIZE/3.)
@@ -29,7 +29,7 @@ obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
 psf = psfs.AnisotropicGaussian(PSF, shape=imsize, threads=1)
 ilm = ilms.LegendrePoly3D(order=ORDER, shape=imsize)
 s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
-        zscale=zscale, pad=16, sigma=sigma)
+        zscale=zscale, pad=16, sigma=sigma, constoff=True)
 
 def sample(s):
     h = []
