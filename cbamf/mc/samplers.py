@@ -5,7 +5,7 @@ to a model and its parameters
 from copy import deepcopy
 import numpy as np
 
-from ..const import PRIORCUT
+from cbamf.const import PRIORCUT
 
 def createBlock(imin, imax=None, skip=None):
     return np.s_[imin:imax:skip]

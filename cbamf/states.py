@@ -1,9 +1,9 @@
 import os
 import numpy as np
 from collections import OrderedDict
-from .const import ZEROLOGPRIOR, PRIORCUT
-from .util import Tile, amin, amax
-from .priors import overlap
+from cbamf.const import ZEROLOGPRIOR, PRIORCUT
+from cbamf.util import Tile, amin, amax
+from cbamf.priors import overlap
 
 class State(object):
     def __init__(self, nparams, state=None, logpriors=None):
@@ -157,6 +157,7 @@ class ConfocalImagePython(State):
         self.constoff = constoff
         self.allowdimers = allowdimers
         self.nlogs = nlogs
+        self.varyn = varyn
 
         self.psf = psf
         self.ilm = ilm
@@ -168,7 +169,7 @@ class ConfocalImagePython(State):
         self.param_dict = OrderedDict({
             'pos': 3*self.obj.N,
             'rad': self.obj.N,
-            'typ': self.obj.N,
+            'typ': self.obj.N*self.varyn,
             'psf': len(self.psf.get_params()),
             'ilm': len(self.ilm.get_params()),
             'off': 1,
@@ -213,7 +214,7 @@ class ConfocalImagePython(State):
                 out.append(self.obj.get_params_pos())
             if param == 'rad':
                 out.append(self.obj.get_params_rad())
-            if param == 'typ':
+            if param == 'typ' and self.varyn:
                 out.append(self.obj.get_params_typ())
             if param == 'psf':
                 out.append(self.psf.get_params())
@@ -328,7 +329,8 @@ class ConfocalImagePython(State):
 
         pmask = block[self.b_pos].reshape(-1, 3).any(axis=-1)
         rmask = block[self.b_rad]
-        tmask = block[self.b_typ]
+        tmask = block[self.b_typ] if self.varyn else (0*rmask).astype('bool')
+
         particles = np.arange(self.obj.N)[pmask | rmask | tmask]
 
         self._logprior = 0
@@ -336,11 +338,16 @@ class ConfocalImagePython(State):
         if len(particles) > 0:
             pos0 = prev[self.b_pos].copy().reshape(-1,3)[particles]
             rad0 = prev[self.b_rad].copy()[particles]
-            typ0 = prev[self.b_typ].copy()[particles]
 
             pos = self.state[self.b_pos].copy().reshape(-1,3)[particles]
             rad = self.state[self.b_rad].copy()[particles]
-            typ = self.state[self.b_typ].copy()[particles]
+
+            if self.varyn:
+                typ0 = prev[self.b_typ].copy()[particles]
+                typ = self.state[self.b_typ].copy()[particles]
+            else:
+                typ0 = np.ones(len(particles))
+                typ = np.ones(len(particles))
 
             # Do a bunch of checks to make sure that we can safetly modify
             # the image since that is costly and we would reject
@@ -414,7 +421,9 @@ class ConfocalImagePython(State):
         return True
 
     def isactive(self, particle):
-        return self.state[self.block_particle_typ(particle)] == 1
+        if self.varyn:
+            return self.state[self.block_particle_typ(particle)] == 1
+        return True
 
     def blocks_particle(self, index):
         p_ind, r_ind = 3*index, 3*self.obj.N + index

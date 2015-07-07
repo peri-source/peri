@@ -1,5 +1,5 @@
 import numpy as np
-from ..util import Tile
+from cbamf.util import Tile
 
 class SphereCollectionRealSpace(object):
     def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None):

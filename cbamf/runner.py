@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import scipy.ndimage as nd
 
-from .mc import samplers, engines, observers
+from cbamf.mc import samplers, engines, observers
 
 def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
     eng = engines.SequentialBlockEngine(state)
@@ -202,10 +202,10 @@ def feature(rawimage, sweeps=20, samples=15, prad=7.3, psize=9,
 
     s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
             zscale=zscale, pad=pad, sigma=sigma, offset=ptp, doprior=(not addsubtract),
-            nlogs=(not addsubtract))
+            nlogs=(not addsubtract), varyn=addsubtract)
 
     if addsubtract:
-        full_feature(s, rad=prad)
+        full_feature(s, rad=prad, sweeps=3, particle_group_size=nfake/3)
 
         initializers.remove_overlaps(obj.pos, obj.rad, zscale=s.zscale)
         s = states.ConfocalImagePython(itrue, obj=s.obj, psf=s.psf, ilm=s.ilm,
