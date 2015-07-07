@@ -40,7 +40,7 @@ class HardSphereOverlapNaive(object):
                 self.logpriors[j] += cost
         """
 
-    def update(self, particles, pos, rad):
+    def update(self, particles, pos, rad, typ):
         self.pos[particles] = pos
         self.rad[particles] = rad
 

@@ -242,31 +242,33 @@ class ConfocalImagePython(State):
         self._update_tile(*self._tile_global())
 
     def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
-        psc = self.psf.get_support_size()/2.0
+        psc = self.psf.get_support_size()
         rsc = self.obj.get_support_size()/2.0
 
         zsc = np.array([1.0/self.zscale, 1, 1])
         r0, r1 = zsc*r0, zsc*r1
 
-        off0 = r0 + self.pad/2 + psc + rsc
-        off1 = r1 + self.pad/2 + psc + rsc
+        off0 = r0 + 2*psc + rsc
+        off1 = r1 + 2*psc + rsc
 
         if t0[0] == 1 and t1[0] == 1:
-            pl = np.round(amin(p0-off0+0, p1-off1+0)).astype('int')
-            pr = np.round(amax(p0+off0+1, p1+off1+1)).astype('int')
+            pl = np.floor(amin(p0-off0-1, p1-off1-1)).astype('int')
+            pr = np.ceil (amax(p0+off0+1, p1+off1+1)).astype('int')
         if t0[0] != 1 and t1[0] == 1:
-            pl = np.round(p1-off1+0).astype('int')
-            pr = np.round(p1+off1+1).astype('int')
+            pl = np.floor(p1-off1-1).astype('int')
+            pr = np.ceil (p1+off1+1).astype('int')
         if t0[0] == 1 and t1[0] != 1:
-            pl = np.round(p0-off0+0).astype('int')
-            pr = np.round(p0+off0+1).astype('int')
+            pl = np.floor(p0-off0-1).astype('int')
+            pr = np.ceil (p0+off0+1).astype('int')
         if t0[0] != 1 and t1[0] != 1:
             pl = np.zeros(3)
             pr = np.array(self.image.shape)
 
+        ipsc = np.ceil(psc)
+
         outer = Tile(pl, pr, 0, self.image.shape)
-        inner = Tile(pl+self.pad/2, pr-self.pad/2, self.pad/2, np.array(self.image.shape)-self.pad/2)
-        ioslice = (np.s_[self.pad/2:-self.pad/2],)*3
+        inner = Tile(pl+ipsc, pr-ipsc, ipsc, np.array(self.image.shape)-ipsc)
+        ioslice = tuple([np.s_[ipsc[i]:-ipsc[i]] for i in xrange(3)])
         return outer, inner, ioslice
 
     def _tile_global(self):

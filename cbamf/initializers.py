@@ -97,7 +97,7 @@ def trackpy_featuring(im, size=10):
     pos = np.vstack([a.z, a.y, a.x]).T
     return pos
 
-def remove_overlaps(pos, rad, zscale=1):
+def remove_overlaps(pos, rad, zscale=1, doprint=False):
     N = rad.shape[0]
     z = np.array([zscale, 1, 1])
     for i in xrange(N):
@@ -110,6 +110,8 @@ def remove_overlaps(pos, rad, zscale=1):
             if diff < 0:
                 rad[i] -= np.abs(diff)*rad[i]/(rad[i]+rad[j]) + 1e-10
                 rad[j] -= np.abs(diff)*rad[j]/(rad[i]+rad[j]) + 1e-10
+                if doprint:
+                    print diff, rad[i], rad[j]
 
 def remove_background(im, order=(5,5,4), mask=None):
     from cbamf.comp import ilms
