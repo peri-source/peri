@@ -2,12 +2,12 @@ import numpy as np
 
 class DiskCollection:
     """
-    self.min_sep: The min separation between disks. 
+    self.min_sep: The min separation between disks.
     self.diskGrid: The grid of the disk positions; 0 if there is no disk at the
-        nearest pixel, 1 if it's at the nearest pixel. 
+        nearest pixel, 1 if it's at the nearest pixel.
     self.positions: N-element list, each element in the list is an array of the
-        corresponding disk's position. 
-    Right now only works for 2 and 3D arrays; could be generalized. 
+        corresponding disk's position.
+    Right now only works for 2 and 3D arrays; could be generalized.
     """
     def __init__(self, gridshape, min_sep, max_sep=None, k=30):
         """
@@ -21,7 +21,7 @@ class DiskCollection:
 
         min_sep : float
             minimum separation between objects
-        
+
         max_sep : float
             maximum separation between objects
 
@@ -30,7 +30,7 @@ class DiskCollection:
 
         Returns:
         --------
-        self : DiskCollection 
+        self : DiskCollection
         """
         if len(gridshape) > 3:
             raise AttributeError("Can only handle 2D / 3D grids")
@@ -38,7 +38,7 @@ class DiskCollection:
         #Step -1: Defininig some parameters:
         self.min_sep = min_sep
         if max_sep == None:
-            self.max_sep = 2*self.min_sep 
+            self.max_sep = 2*self.min_sep
         else:
             self.max_sep = max_sep
 
@@ -57,7 +57,7 @@ class DiskCollection:
             #   near it:
             np.random.shuffle( activeList )
             curPos = activeList.pop() #Popping it out; will put it back later
-            #2. Generate up to k random points uniformly from the spherical 
+            #2. Generate up to k random points uniformly from the spherical
             #   annulus on (minsep, maxsep); try to put them on:
             for a in xrange(k): #with a continue statement if it works
                 thisPoint = np.random.randn( len( self.diskGrid.shape ) )
@@ -109,7 +109,7 @@ class DiskCollection:
         #checks using self.diskGrid
         toReturn = toReturn or np.any( curGrid * mask )
         return toReturn
-            
+
     def float_to_index(self, floatTuple):
         return np.round(floatTuple).astype('int')
 
