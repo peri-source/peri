@@ -158,7 +158,7 @@ class PSF(object):
 class AnisotropicGaussian(PSF):
     _fourier_space = False
 
-    def __init__(self, params, shape, error=1e-3, *args, **kwargs):
+    def __init__(self, params, shape, error=1.0/255, *args, **kwargs):
         self.error = error
         super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
 
