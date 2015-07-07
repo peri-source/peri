@@ -1,12 +1,39 @@
-class Component(object):
-    # TODO make all components serializable via _getinitargs_
-    def __init__(self, params, shape):
-        pass
+class ParameterGroup(object):
+    category = 'param'
+
+    def __init__(self, params):
+        self.p2i = {}
+        self.params = np.array(params)
+
+    def _setup_param_dict(self):
+        for i, param in enumerate(self.params):
+            self.p2i[self.category+'-'+i] = i
+
+    def _update_values(self, params, values):
+        for param, value in zip(params, values):
+            self.params[self.p2i[param]] = value
 
     def initialize(self):
         pass
 
-    def update(self, params, value):
+    def update(self, params, values):
+        self._update_values(params, values)
+
+    def get_param(self, param):
+        return self.params[self.p2i[param]]
+
+    def get_param_vector(self):
+        return self.params
+
+    def get_param_names(self):
+        pass
+
+    def get_param_categories(self):
+        pass
+
+class Component(ParameterGroup):
+    # TODO make all components serializable via _getinitargs_
+    def __init__(self, params, shape):
         pass
 
     def set_tile(self, tile):
@@ -18,13 +45,5 @@ class Component(object):
     def get_field(self):
         pass
 
-    def get_param_vector(self):
-        return self.params
-
-    def get_param_names(self):
-        return self.params
-
-class Parameter(object):
-    category = 'pos'
-    label = 'pos-1-x'
-
+class Prior(ParameterGroup):
+    pass
