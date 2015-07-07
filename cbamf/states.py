@@ -148,14 +148,15 @@ class LinearFit(State):
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
-            pad=16, sigma=0.1, doprior=True, constoff=False,
-            varyn=False, allowdimers=False, *args, **kwargs):
+            pad=24, sigma=0.1, doprior=True, constoff=False,
+            varyn=False, allowdimers=False, nlogs=False, *args, **kwargs):
         self.pad = pad
         self.index = None
         self.sigma = sigma
         self.doprior = doprior
         self.constoff = constoff
         self.allowdimers = allowdimers
+        self.nlogs = nlogs
 
         self.psf = psf
         self.ilm = ilm
@@ -192,7 +193,7 @@ class ConfocalImagePython(State):
         self.set_image(image)
 
     def set_image(self, image):
-        self.image = image
+        self.image = image.copy()
         self.image_mask = (image > -10).astype('float')
         self.image *= self.image_mask
 
@@ -201,6 +202,9 @@ class ConfocalImagePython(State):
 
     def get_model_image(self):
         return self.model_image * self.image_mask
+
+    def get_true_image(self):
+        return self.image * self.image_mask
 
     def _build_state(self):
         out = []
@@ -280,13 +284,15 @@ class ConfocalImagePython(State):
 
     def _update_ll_field(self, data=None, slicer=np.s_[:]):
         if data is None:
+            self._loglikelihood *= 0
+            self._loglikelihood_field *= 0
             data = self.get_model_image()
 
         oldll = self._loglikelihood_field[slicer].sum()
 
         self._loglikelihood_field[slicer] = (
                 -self.image_mask[slicer] * (data - self.image[slicer])**2 / (2*self.sigma**2)
-                -np.log( np.sqrt(2*np.pi) * self.sigma )
+                -np.log( np.sqrt(2*np.pi) * self.sigma )*self.nlogs
             )
 
         newll = self._loglikelihood_field[slicer].sum()

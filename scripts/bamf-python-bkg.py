@@ -39,7 +39,7 @@ def scan_sigma(s, n=200):
         lls.append(s.loglikelihood())
     return sigmas, np.array(lls)
 
-raise IOError
+#raise IOError
 if True:
     h = []
     for i in xrange(sweeps):
