@@ -300,7 +300,7 @@ def full_feature(s, rad, sweeps=3, particle_group_size=100, add_remove_tries=8):
         sample_block(s, 'ilm', stepout=0.1)
         sample_block(s, 'off', stepout=0.1)
 
-    for i in xrange(sweeps);
+    for i in xrange(sweeps):
         total = 0
         accepts = 1
         while accepts > 0 and total <= particle_group_size:
