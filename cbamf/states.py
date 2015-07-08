@@ -1,6 +1,5 @@
 import os
 import numpy as np
-from collections import OrderedDict
 
 from cbamf import const
 from cbamf import initializers
@@ -258,6 +257,10 @@ class ConfocalImagePython(State):
 
                 LL = -(p_i - I_i)^2/(2*\sigma^2) - \log{\sqrt{2\pi} \sigma} 
 
+        difference : boolean [default: True]
+            To only modify difference images (thanks to linear FTs).  Set True by
+            default because ~8x faster.
+
         pad : integer (optional)
             No recommended to set by hand.  The padding level of the raw image needed
             by the PSF support.
@@ -279,7 +282,7 @@ class ConfocalImagePython(State):
         self.offset = offset
         self.N = self.obj.N
 
-        self.param_dict = OrderedDict({
+        self.param_dict = {
             'pos': 3*self.obj.N,
             'rad': self.obj.N,
             'typ': self.obj.N*self.varyn,
@@ -288,7 +291,7 @@ class ConfocalImagePython(State):
             'off': 1,
             'zscale': 1,
             'sigma': 1,
-        })
+        }
 
         self.param_order = ['pos', 'rad', 'typ', 'psf', 'ilm', 'off', 'zscale', 'sigma']
         self.param_lengths = [self.param_dict[k] for k in self.param_order]
@@ -380,7 +383,7 @@ class ConfocalImagePython(State):
 
     def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
         psc = self.psf.get_support_size()
-        rsc = self.obj.get_support_size()/2.0
+        rsc = self.obj.get_support_size()/2.0 # FIXME -- this shouldn't be 2.0
 
         zsc = np.array([1.0/self.zscale, 1, 1])
         r0, r1 = zsc*r0, zsc*r1

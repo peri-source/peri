@@ -5,6 +5,9 @@ import scipy.ndimage as nd
 from cbamf import const
 from cbamf.mc import samplers, engines, observers
 
+#=============================================================================
+# Sampling methods that run through blocks and sample
+#=============================================================================
 def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
     eng = engines.SequentialBlockEngine(state)
     opsay = observers.Printer()
@@ -17,7 +20,7 @@ def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
     eng.dosteps(N)
     return ohist
 
-def sample_ll(state, element, size=0.1, N=1000):
+def scan_ll(state, element, size=0.1, N=1000):
     start = state.state[element]
 
     ll = []
@@ -115,6 +118,9 @@ def do_samples(s, sweeps, burn, stepout=0.1):
     ll = np.array(ll)
     return h, ll
 
+#=============================================================================
+# Optimization methods like gradient descent
+#=============================================================================
 def build_bounds(state):
     bounds = []
 
@@ -157,6 +163,9 @@ def gd(state, N=1, ratio=1e-1):
         state.set_state(n)
         print state.loglikelihood()
 
+#=============================================================================
+# Initialization methods to go full circle
+#=============================================================================
 def pad_fake_particles(pos, rad, nfake):
     opos = np.vstack([pos, np.zeros((nfake, 3))])
     orad = np.hstack([rad, rad[0]*np.ones(nfake)])
@@ -165,32 +174,30 @@ def pad_fake_particles(pos, rad, nfake):
 def zero_particles(n):
     return np.zeros((n,3)), np.ones(n), np.zeros(n)
 
-def feature(rawimage, sweeps=20, samples=15, prad=7.3, psize=9,
-        pad=22, imsize=-1, imzstart=0, zscale=1.06, sigma=0.02, invert=False,
-        PSF=(2.0, 4.1), ORDER=(3,3,2), threads=-1, addsubtract=True, phi=0.5):
-
+def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, invert=False,
+        pad_for_extra=True, threads=-1, phi=0.5, sigma=0.05, zscale=1.0,
+        PSF=(2.0, 4.0), ORDER=(3,3,2)):
     from cbamf import states, initializers
     from cbamf.comp import objs, psfs, ilms
 
-    burn = sweeps - samples
-
-    print "Initial featuring"
     itrue = initializers.normalize(rawimage[imzstart:,:imsize,:imsize], invert)
     feat = initializers.remove_background(itrue.copy(), order=ORDER)
 
-    xstart, proc = initializers.local_max_featuring(feat, psize, psize/3.)
-    image, pos, rad = states.prepare_for_state(itrue, xstart, prad, invert=True)
+    xstart, proc = initializers.local_max_featuring(feat, frad, frad/3.)
+    image, pos, rad = states.prepare_for_state(itrue, xstart, rad, invert=True)
 
-    nfake = xstart.shape[0]
-    pos, rad = pad_fake_particles(pos, rad, nfake)
+    if pad_for_extra:
+        nfake = xstart.shape[0]
+        pos, rad = pad_fake_particles(pos, rad, nfake)
+    else:
+        nfake = None
 
-    print "Making state"
     imsize = image.shape
-    obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize, pad=nfake)
+    obj = objs.SphereCollectionRealSpace(pos=pos, rad=rad, shape=imsize, pad=nfake)
     psf = psfs.AnisotropicGaussian(PSF, shape=imsize, threads=threads)
     ilm = ilms.LegendrePoly3D(order=ORDER, shape=imsize)
     ilm.from_data(image, mask=image > const.PADVAL)
-    
+
     diff = (ilm.get_field() - image)
     ptp = diff[image > const.PADVAL].ptp()
 
@@ -199,18 +206,35 @@ def feature(rawimage, sweeps=20, samples=15, prad=7.3, psize=9,
     ilm.update(params)
 
     s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm,
-            zscale=zscale, pad=pad, sigma=sigma, offset=ptp, doprior=(not addsubtract),
-            nlogs=(not addsubtract), varyn=addsubtract)
+            zscale=zscale, sigma=sigma, offset=ptp, doprior=(not pad_for_extra),
+            nlogs=(not pad_for_extra), varyn=pad_for_extra)
+
+    return s
+
+def feature_addsubtract(s, sweeps=3, rad=5):
+    addsubtract(s, rad=rad, sweeps=sweeps, particle_group_size=s.N/sweeps)
+
+    initializers.remove_overlaps(obj.pos, obj.rad, zscale=s.zscale)
+    s = states.ConfocalImagePython(image, obj=s.obj, psf=s.psf, ilm=s.ilm,
+            zscale=s.zscale, sigma=s.sigma, offset=s.offset, doprior=True,
+            nlogs=True, varyn=False)
+    return s
+
+def feature(rawimage, sweeps=20, samples=15, rad=7.3, frad=9,
+        imsize=-1, imzstart=0, zscale=1.06, sigma=0.02, invert=False,
+        PSF=(2.0, 4.1), ORDER=(3,3,2), threads=-1, addsubtract=True, phi=0.5):
+
+    burn = sweeps - samples
+
+    print "Initial featuring"
+    s = raw_to_state(rawimage, rad=rad, frad=frad, imsize=imsize,
+            imzstart=imzstart, invert=invert, pad_for_extra=addsubtract,
+            threads=threads, phi=phi, sigma=sigma, zscale=zscale, PSF=PSF, ORDER=ORDER)
 
     if addsubtract:
-        full_feature(s, rad=prad, sweeps=3, particle_group_size=nfake/3)
+        print "Adding, removing particles"
+        s = feature_addsubtract(s, rad=rad)
 
-        initializers.remove_overlaps(obj.pos, obj.rad, zscale=s.zscale)
-        s = states.ConfocalImagePython(image, obj=s.obj, psf=s.psf, ilm=s.ilm,
-                zscale=s.zscale, pad=s.pad, sigma=s.sigma, offset=s.offset, doprior=True,
-                nlogs=True)
-
-    #return s
     return do_samples(s, sweeps, burn, stepout=0.10)
 
 
@@ -290,7 +314,7 @@ def sample_n_remove(s, rad, tries=5):
             accepts += 1
     return accepts
 
-def full_feature(s, rad, sweeps=3, particle_group_size=100, add_remove_tries=8):
+def addsubtract(s, rad, sweeps=3, particle_group_size=100, add_remove_tries=8):
     total = 1
 
     print "Relaxing current configuration"

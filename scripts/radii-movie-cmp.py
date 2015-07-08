@@ -5,12 +5,15 @@ import pylab as pl
 from cbamf import runner, initializers
 import pickle
 
-imsize = 128
+imsize = 64
 movie = initializers.load_tiffs("/media/scratch/bamf/tmp/hyperfine*.tif")
 
 for i, (f, frame) in enumerate(movie):
     print f
-    state, ll = runner.feature(rawimage=frame, sweeps=20, samples=10,
-            prad=5.3, psize=5, pad=16, imsize=imsize, imzstart=4, sigma=0.05, zscale=1.06,
-            invert=True, threads=4, addsubtract=True)
-    pickle.dump([state, ll], open("%s-%i-featured.pkl" % (imsize, f), 'w'))
+    s = runner.raw_to_state(rawimage=frame, rad=5.3, frad=5, imsize=imsize,
+            imzstart=4, sigma=0.05, zscale=1.06, invert=True, threads=4,
+            pad_for_extra=True)
+    s = runner.feature_addsubtract(s, rad=5.3)
+    h, l = runner.do_samples(s, 30, 10, stepout=0.1)
+
+    pickle.dump([h, l], open("%s-%i-featured.pkl" % (f, imsize), 'w'))
