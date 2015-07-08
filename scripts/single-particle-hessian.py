@@ -8,7 +8,7 @@ from cbamf.test import init
 from cbamf.viz import plots
 
 s = init.create_single_particle_state(imsize=64, radius=5.0, sigma=0.05,
-        psf=(2.0, 4.0), seed=10)
+        psfargs=(2.0, 4.0), seed=10)
 
 hess = s.hessloglikelihood()
 
