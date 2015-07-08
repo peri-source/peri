@@ -10,6 +10,8 @@ import glob
 import itertools
 from PIL import Image
 
+from cbamf import const
+
 #=======================================================================
 # Image loading functions
 #=======================================================================
@@ -64,8 +66,11 @@ def load_tiff_iter_libtiff(filename, iter_slice_size):
 #=======================================================================
 def normalize(im, invert=False):
     out = im.astype('float').copy()
-    out -= 1.0*out.min()
-    out /= 1.0*out.max()
+
+    if out.ptp() != 0 and out.max() != 0:
+        out -= 1.0*out.min()
+        out /= 1.0*out.max()
+
     if invert:
         out = 1 - out
     return out
@@ -87,8 +92,9 @@ def local_max_featuring(im, radius=10, smooth=4):
     g = nd.gaussian_filter(im, smooth, mode='mirror')
     e = nd.maximum_filter(g, footprint=generate_sphere(radius))
     lbl = nd.label(e == g)[0]
-    pos = np.array(nd.measurements.center_of_mass(e==g, lbl, np.unique(lbl)))
-    return pos[1:], e
+    ind = np.sort(np.unique(lbl))[1:]
+    pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
+    return pos, e
 
 def trackpy_featuring(im, size=10):
     from trackpy.feature import locate
@@ -119,9 +125,3 @@ def remove_background(im, order=(5,5,4), mask=None):
     ilm.from_data(im, mask=mask)
 
     return im - ilm.get_field()
-
-#=======================================================================
-# Generating fake data
-#=======================================================================
-def fake_image(pos, rad, psf=(1, 2), shape=(128,128,128)):
-    pass

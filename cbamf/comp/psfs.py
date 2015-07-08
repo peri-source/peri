@@ -158,13 +158,13 @@ class PSF(object):
 class AnisotropicGaussian(PSF):
     _fourier_space = False
 
-    def __init__(self, params, shape, error=1e-3, *args, **kwargs):
+    def __init__(self, params, shape, error=1.0/255, *args, **kwargs):
         self.error = error
         super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
 
     def _set_tile_precalc(self):
-        self.pr = self.params[0]*np.sqrt(-2*np.log(self.error))
-        self.pz = self.params[1]*np.sqrt(-2*np.log(self.error))
+        self.pr = np.sqrt(-2*np.log(self.error)*self.params[0]**2)
+        self.pz = np.sqrt(-2*np.log(self.error)*self.params[1]**2)
 
     def rpsf_func(self, params):
         rt2 = np.sqrt(2)

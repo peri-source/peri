@@ -2,7 +2,7 @@ import numpy as np
 from numpy.polynomial.legendre import legval
 from itertools import product
 
-from ..util import Tile
+from cbamf.util import Tile
 
 class Polynomial3D(object):
     def __init__(self, shape, coeffs=None, order=(1,1,1)):
