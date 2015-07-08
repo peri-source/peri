@@ -20,7 +20,7 @@ def _toarr(i):
 # Generating fake data
 #=======================================================================
 def create_state(image, pos, rad, sigma=0.05, psftype='gaussian_anisotropic',
-        ilmtype='polynomial', psfargs=(1.8, 3.6), ilmorder=(1,1,1)):
+        ilmtype='polynomial', psfargs=(2.0, 4.0), ilmorder=(1,1,1)):
     """
     Create a state from a blank image, set of pos and radii
 

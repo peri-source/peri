@@ -226,7 +226,7 @@ def feature(rawimage, sweeps=20, samples=15, prad=7.3, psize=9,
 #=======================================================================
 # More involved featuring functions using MC
 #=======================================================================
-def sample_particle_add(s, rad, tries=5):
+def sample_n_add(s, rad, tries=5):
     diff = (s.get_model_image() - s.get_true_image()).copy()
 
     smoothdiff = nd.gaussian_filter(diff, rad/2.0)
@@ -267,7 +267,7 @@ def sample_particle_add(s, rad, tries=5):
             accepts += 1
     return accepts
 
-def sample_particle_remove(s, rad, tries=5):
+def sample_n_remove(s, rad, tries=5):
     diff = (s.get_model_image() - s.get_true_image()).copy()
 
     smoothdiff = nd.gaussian_filter(diff, rad/2.0)
@@ -312,8 +312,8 @@ def full_feature(s, rad, sweeps=3, particle_group_size=100, add_remove_tries=8):
         accepts = 1
         while accepts > 0 and total <= particle_group_size:
             accepts = 0
-            accepts += sample_particle_add(s, rad=rad, tries=add_remove_tries)
-            accepts += sample_particle_remove(s, rad=rad, tries=add_remove_tries/2)
+            accepts += sample_n_add(s, rad=rad, tries=add_remove_tries)
+            accepts += sample_n_remove(s, rad=rad, tries=add_remove_tries/2)
 
             print "Added / removed %i particles" % accepts
             total += accepts

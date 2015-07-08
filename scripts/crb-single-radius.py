@@ -1,21 +1,19 @@
-import matplotlib as mpl
-mpl.use('Agg')
 import numpy as np
 import pylab as pl
 
-from cbamf import runner
 from cbamf.test import init
-from cbamf.viz import plots
 
 crbs = []
 rads = np.arange(1, 10, 1./5)
 rads = np.linspace(1, 10, 39)
 rads = np.logspace(0, 1, 50)
 
+s = init.create_single_particle_state(imsize=64, radius=1, sigma=0.05)
+blocks = s.blocks_particle(0)
+
 for rad in rads:
     print "Radius", rad
-    s = init.create_single_particle_state(imsize=64, radius=rad, sigma=0.05)
-    blocks = s.blocks_particle(0)
+    s.update(blocks[-1], np.array([rad]))
 
     crb = []
     for block in blocks:
