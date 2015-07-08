@@ -114,8 +114,8 @@ class State(object):
             hess = np.zeros((len(blocks), len(blocks)))
 
             for i, bi in enumerate(blocks):
-                for j, bj in enumerate(blocks[i+1:]):
-                    J = j + i+1
+                for j, bj in enumerate(blocks[i:]):
+                    J = j + i
                     thess = self._hess_two_param(bi, bj, dl)
                     hess[i,J] = thess
                     hess[J,i] = thess
@@ -583,6 +583,33 @@ class ConfocalImagePython(State):
         off = sum(self.param_lengths[:index])
         end = off + self.param_lengths[index]
         return off, end
+
+    def _grad_image(self, bl, dl=1e-3):
+        self.push_update(bl, self.state[bl]+dl)
+        m1 = self.get_model_image()
+        self.pop_update()
+
+        self.push_update(bl, self.state[bl]-dl)
+        m0 = self.get_model_image()
+        self.pop_update()
+
+        return (m1 - m0) / (2*dl)
+
+    def fisher_information(self, blocks=None, dl=1e-3):
+        if blocks is None:
+            blocks = self.explode(self.block_all())
+        fish = np.zeros((len(blocks), len(blocks)))
+
+        for i, bi in enumerate(blocks):
+            for j, bj in enumerate(blocks[i:]):
+                J = j + i
+                di = self._grad_image(bi, dl=dl)
+                dj = self._grad_image(bj, dl=dl)
+                tfish = (di*dj).sum()
+                fish[i,J] = tfish
+                fish[J,i] = tfish
+
+        return fish
 
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
