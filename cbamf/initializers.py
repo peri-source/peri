@@ -125,9 +125,3 @@ def remove_background(im, order=(5,5,4), mask=None):
     ilm.from_data(im, mask=mask)
 
     return im - ilm.get_field()
-
-#=======================================================================
-# Generating fake data
-#=======================================================================
-def fake_image(pos, rad, psf=(1, 2), shape=(128,128,128)):
-    pass

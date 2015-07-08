@@ -163,8 +163,8 @@ class AnisotropicGaussian(PSF):
         super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
 
     def _set_tile_precalc(self):
-        self.pr = self.params[0]*np.sqrt(-2*np.log(self.error))
-        self.pz = self.params[1]*np.sqrt(-2*np.log(self.error))
+        self.pr = np.sqrt(-2*np.log(self.error)*self.params[0]**2)
+        self.pz = np.sqrt(-2*np.log(self.error)*self.params[1]**2)
 
     def rpsf_func(self, params):
         rt2 = np.sqrt(2)
