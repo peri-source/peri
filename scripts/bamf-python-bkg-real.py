@@ -42,18 +42,14 @@ if FILE == 4:
 
 feat = initializers.normalize(raw[zstart:,:IMSIZE,:IMSIZE], INVERT)
 xstart, proc = initializers.local_max_featuring(feat, FSIZE, FSIZE/3.)
-itrue = initializers.normalize(feat, True)
-itrue = np.pad(itrue, PAD, mode='constant', constant_values=-10)
-xstart += PAD
-rstart = RAD*np.ones(xstart.shape[0])
-initializers.remove_overlaps(xstart, rstart)
+image, pos, rad = states.prepare_for_state(feat, xstart, RAD*np.ones(xstart.shape[0]))
 
-imsize = itrue.shape
-obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize)
+imsize = image.shape
+obj = objs.SphereCollectionRealSpace(pos=pos, rad=rad, shape=imsize)
 psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
 ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
-s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
-        zscale=zscale, pad=16, sigma=sigma)
+s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm,
+        zscale=zscale, sigma=sigma)
 
 def sample(s):
     h = []

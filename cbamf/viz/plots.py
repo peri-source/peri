@@ -114,3 +114,17 @@ def scan_together(im, p, delay=2, vmin=0, vmax=1, cmap='bone'):
         pl.draw()
         time.sleep(delay)
 
+def sample_compare(N, samples, truestate, burn=0):
+    h = samples[burn:]
+    strue = truestate
+
+    mu = h.mean(axis=0)
+    std = h.std(axis=0)
+    pl.figure(figsize=(20,4))
+    pl.errorbar(xrange(len(mu)), (mu-strue), yerr=5*std/np.sqrt(h.shape[0]),
+            fmt='.', lw=0.15, alpha=0.5)
+    pl.vlines([0,3*N-0.5, 4*N-0.5], -1, 1, linestyle='dashed', lw=4, alpha=0.5)
+    pl.hlines(0, 0, len(mu), linestyle='dashed', lw=5, alpha=0.5)
+    pl.xlim(0, len(mu))
+    pl.ylim(-0.02, 0.02)
+    pl.show()

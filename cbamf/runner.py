@@ -2,6 +2,7 @@ import sys
 import numpy as np
 import scipy.ndimage as nd
 
+from cbamf import const
 from cbamf.mc import samplers, engines, observers
 
 def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
@@ -42,6 +43,15 @@ def scan_noise(image, state, element, size=0.01, N=1000):
         ys.append(y)
 
     return xs, ys
+
+def scan_sigma(s, n=200):
+    sigmas = np.linspace(np.max(0.01,s.sigma-0.1), sigma+0.1, n)
+    lls = []
+    for ss in sigmas:
+        s.sigma = ss
+        s._update_ll_field()
+        lls.append(s.loglikelihood())
+    return sigmas, np.array(lls)
 
 def sample_particles(state, stepout=1):
     print '{:-^39}'.format(' POS / RAD ')
@@ -176,31 +186,28 @@ def feature(rawimage, sweeps=20, samples=15, prad=7.3, psize=9,
     print "Initial featuring"
     itrue = initializers.normalize(rawimage[imzstart:,:imsize,:imsize], invert)
     feat = initializers.remove_background(itrue.copy(), order=ORDER)
+
     xstart, proc = initializers.local_max_featuring(feat, psize, psize/3.)
-    itrue = initializers.normalize(itrue, True)
-    itrue = np.pad(itrue, pad, mode='constant', constant_values=-10)
-    xstart += pad
-    rstart = prad*np.ones(xstart.shape[0])
+    image, pos, rad = states.prepare_for_state(itrue, xstart, prad, invert=True)
 
     nfake = xstart.shape[0]
-    initializers.remove_overlaps(xstart, rstart)
-    xstart, rstart = pad_fake_particles(xstart, rstart, nfake)
+    pos, rad = pad_fake_particles(pos, rad, nfake)
 
     print "Making state"
-    imsize = itrue.shape
+    imsize = image.shape
     obj = objs.SphereCollectionRealSpace(pos=xstart, rad=rstart, shape=imsize, pad=nfake)
     psf = psfs.AnisotropicGaussian(PSF, shape=imsize, threads=threads)
     ilm = ilms.LegendrePoly3D(order=ORDER, shape=imsize)
-    ilm.from_data(itrue, mask=itrue > -10)
+    ilm.from_data(image, mask=image > const.PADVAL)
     
-    diff = (ilm.get_field() - itrue)
-    ptp = diff[itrue > -10].ptp()
+    diff = (ilm.get_field() - image)
+    ptp = diff[image > const.PADVAL].ptp()
 
     params = ilm.get_params()
     params[0] += ptp * (1-phi)
     ilm.update(params)
 
-    s = states.ConfocalImagePython(itrue, obj=obj, psf=psf, ilm=ilm,
+    s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm,
             zscale=zscale, pad=pad, sigma=sigma, offset=ptp, doprior=(not addsubtract),
             nlogs=(not addsubtract), varyn=addsubtract)
 
@@ -208,7 +215,7 @@ def feature(rawimage, sweeps=20, samples=15, prad=7.3, psize=9,
         full_feature(s, rad=prad, sweeps=3, particle_group_size=nfake/3)
 
         initializers.remove_overlaps(obj.pos, obj.rad, zscale=s.zscale)
-        s = states.ConfocalImagePython(itrue, obj=s.obj, psf=s.psf, ilm=s.ilm,
+        s = states.ConfocalImagePython(image, obj=s.obj, psf=s.psf, ilm=s.ilm,
                 zscale=s.zscale, pad=s.pad, sigma=s.sigma, offset=s.offset, doprior=True,
                 nlogs=True)
 
