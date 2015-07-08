@@ -1,7 +1,9 @@
 import os
 import numpy as np
 from collections import OrderedDict
-from cbamf.const import ZEROLOGPRIOR, PRIORCUT
+
+from cbamf import const
+from cbamf import initializers
 from cbamf.util import Tile, amin, amax
 from cbamf.priors import overlap
 
@@ -146,10 +148,120 @@ class LinearFit(State):
         return -((self._calculate(state) - self.dy)**2).sum()
 
 
+def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD):
+    """
+    Prepares a set of positions, radii, and a test image for use
+    in the ConfocalImagePython object
+
+    Parameters:
+    -----------
+    image : (Nz, Ny, Nx) ndarray
+        the raw image from which to feature pos, rad, etc.
+
+    pos : (N,3) ndarray
+        list of positions of particles in pixel units, where the positions
+        are listed in the same order as the image, (pz, py, px)
+
+    rad : (N,) ndarray | float
+        list of particle radii in pixel units if ndarray.  If float, 
+        a list of radii of that value will be returned
+
+    invert : boolean (optional)
+        True indicates that the raw image is light particles on dark background,
+        and needs to be inverted, otherwise, False
+
+    pad : integer (optional)
+        The amount of padding to add to the raw image, should be at least
+        2 times the PSF size.  Not recommended to set manually
+    """
+    # normalize and pad the image, add the same offset to the positions
+    image = initializers.normalize(image, invert)
+    image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
+    pos += pad
+
+    if not isinstance(rad, np.ndarray):
+        rad = rad*np.ones(pos.shape[0])
+
+    bound_left = np.zeros(3)
+    bound_right = np.array(image.shape)
+
+    # clip particles that are outside of the image or have negative radii
+    keeps = np.ones(rad.shape[0]).astype('bool')
+    for i, (p, r) in enumerate(zip(pos, rad)):
+        if (p < bound_left).any() or (p > bound_right).any():
+            print "Particle %i out of bounds at %r, removing..." % (i, p)
+            keeps[i] = False
+        if r < 0:
+            print "Particle %i with negative radius %f, removing..." % (i, r)
+            keeps[i] = False
+
+    pos = pos[keeps]
+    rad = rad[keeps]
+
+    # change overlapping particles so that the radii do not coincide
+    initializers.remove_overlaps(pos, rad)
+    return image, pos, rad
+
+
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
-            pad=24, sigma=0.1, doprior=True, constoff=False,
-            varyn=False, allowdimers=False, nlogs=False, *args, **kwargs):
+            sigma=0.04, doprior=True, constoff=False,
+            varyn=False, allowdimers=False, nlogs=False, pad=const.PAD, *args, **kwargs):
+        """
+        The state object to create a confocal image.  The model is that of
+        a spatially varying illumination field, from which platonic particle
+        shapes are subtracted.  This is then spread with a point spread function
+        (PSF).  Summarized as follows:
+
+            Image = \int PSF(x-x') (ILM(x)*(1-SPH(x))) dx'
+
+        Parameters:
+        -----------
+        image : (Nz, Ny, Nx) ndarray
+            The raw image with which to compare the model image from this class.
+            This image should have been prepared through prepare_for_state, which
+            does things such as padding necessary for this class.
+
+        obj : component
+            A component object which handles the platonic image creation, e.g., 
+            cbamf.comp.objs.SphereCollectionRealSpace.  Also, needs to be created
+            after prepare_for_state.
+
+        psf : component
+            The PSF component which has the same image size as padded image.
+
+        ilm : component
+            Illumination field component from cbamf.comp.ilms
+
+        zscale : float, typically (1, 1.5) [default: 1]
+            The initial zscaling for the pixel sizes.  Bigger is more compressed.
+
+        offset : float, typically (0, 1) [default: 1]
+            The level that particles inset into the illumination field
+
+        doprior: boolean [default: True]
+            Whether or not to turn on overlap priors using neighborlists
+
+        constoff: boolean [default: False]
+            Changes the model so to:
+
+                Image = \int PSF(x-x') (ILM(x)*-OFF*SPH(x)) dx'
+
+        varyn: boolean [default: False]
+            allow the variation of particle number (only recommended in that case)
+
+        allowdimers: boolean [default: False]
+            allow dimers to be created out of two separate overlapping particles
+
+        nlogs: boolean [default: False]
+            Include in the Loglikelihood calculate the term:
+
+                LL = -(p_i - I_i)^2/(2*\sigma^2) - \log{\sqrt{2\pi} \sigma} 
+
+        pad : integer (optional)
+            No recommended to set by hand.  The padding level of the raw image needed
+            by the PSF support.
+        """
         self.pad = pad
         self.index = None
         self.sigma = sigma
@@ -194,12 +306,26 @@ class ConfocalImagePython(State):
         self.set_image(image)
 
     def set_image(self, image):
+        """
+        Update the current comparison (real) image
+        """
         self.image = image.copy()
-        self.image_mask = (image > -10).astype('float')
-        self.image *= self.image_mask
+        self.image_mask = (image > const.PADVAL).astype('float')
+        self.image *= self.image_mask # FIXME -- this was on, not sure why, so commented
 
         self._build_internal_variables()
         self._initialize()
+
+    def model_to_true_image(self):
+        """
+        In the case of generating fake data, use this method to add
+        noise to the created image (only for fake data) and rotate
+        the model image into the true image
+        """
+        im = self.get_model_image()
+        im = im + self.image_mask * np.random.normal(0, self.sigma, size=self.image.shape)
+        im = im + (1 - self.image_mask) * const.PADVAL
+        self.set_image(im)
 
     def get_model_image(self):
         return self.model_image * self.image_mask
@@ -239,7 +365,7 @@ class ConfocalImagePython(State):
             bounds = (np.array([0,0,0]), np.array(self.image.shape))
             self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad, self.obj.typ,
                     zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
-            self._logprior = self.nbl.logprior() + ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
+            self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
 
         self.psf.update(self.state[self.b_psf])
         self.obj.initialize(self.zscale)
@@ -270,7 +396,7 @@ class ConfocalImagePython(State):
             pl = np.zeros(3)
             pr = np.array(self.image.shape)
 
-        ipsc = np.ceil(psc)
+        ipsc = np.ceil(psc).astype('int')
 
         outer = Tile(pl, pr, 0, self.image.shape)
         inner = Tile(pl+ipsc, pr-ipsc, ipsc, np.array(self.image.shape)-ipsc)
@@ -364,11 +490,11 @@ class ConfocalImagePython(State):
 
             if self.doprior:
                 self.nbl.update(particles, pos, rad, typ)
-                self._logprior = self.nbl.logprior() + ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
+                self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
 
-                if self._logprior < PRIORCUT:
+                if self._logprior < const.PRIORCUT:
                     self.nbl.update(particles, pos0, rad0, typ0)
-                    self._logprior = self.nbl.logprior() + ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
+                    self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
 
                     self.state[block] = prev[block]
                     return False
@@ -405,12 +531,12 @@ class ConfocalImagePython(State):
                     tnbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad, self.obj.typ,
                             zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
 
-                    if tnbl.logprior() < PRIORCUT:
+                    if tnbl.logprior() < const.PRIORCUT:
                         self.state[block] = prev[block]
                         return False
 
                     self.nbl = tnbl
-                    self._logprior = self.nbl.logprior() + ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
+                    self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
 
                 self.obj.initialize(self.zscale)
                 self._update_tile(*self._tile_global())
