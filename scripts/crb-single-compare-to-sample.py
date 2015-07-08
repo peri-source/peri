@@ -4,42 +4,39 @@ import pylab as pl
 from cbamf import runner
 from cbamf.test import init
 
-samples = 50
+samples = 100
 
 # the final answers, crbs and stds
 crbs = []
 stds = []
+hists = []
 
 # options for the size distribution
 rads = np.arange(1, 10, 1./5)
 rads = np.linspace(1, 10, 39)
 rads = np.logspace(0, 1, 10)
 
-# create a single particle state and get pos/rad blocks
-s = init.create_single_particle_state(imsize=64, radius=1, sigma=0.05)
-blocks = s.blocks_particle(0)
-
-# store the original configuration for a while
-posrad = np.array(blocks).any(axis=0)
-start = s.state[posrad].copy()
-
 for rad in rads:
     print "Radius", rad
-    s.update(posrad, start)
-    s.update(blocks[-1], np.array([rad]))
+
+    # create a single particle state and get pos/rad blocks
+    s = init.create_single_particle_state(imsize=64, radius=rad, sigma=0.05)
+    blocks = s.blocks_particle(0)
 
     crb = []
     for block in blocks:
         crb.append( s.fisher_information([block])[0,0] )
     crbs.append(crb)
 
-    h = []
+    hist = []
     for i in xrange(samples):
-        h.append(runner.sample_particles(s, stepout=0.1))
-    h = np.array(h)
-    stds.append(h.std(axis=0)) 
+        hist.append(runner.sample_particles(s, stepout=0.1))
+    hist = np.array(hist)
+    hists.append(hist)
+    stds.append(hist.std(axis=0)) 
 
 crbs = 1.0 / np.sqrt(np.array(crbs))
+stds = np.array(stds)
 
 pl.figure()
 pl.loglog(rads, crbs[:,0], 'o-', lw=1, label='crb pos-z')
