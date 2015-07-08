@@ -10,6 +10,8 @@ import glob
 import itertools
 from PIL import Image
 
+from cbamf import const
+
 #=======================================================================
 # Image loading functions
 #=======================================================================
@@ -64,8 +66,11 @@ def load_tiff_iter_libtiff(filename, iter_slice_size):
 #=======================================================================
 def normalize(im, invert=False):
     out = im.astype('float').copy()
-    out -= 1.0*out.min()
-    out /= 1.0*out.max()
+
+    if out.ptp() != 0 and out.max() != 0:
+        out -= 1.0*out.min()
+        out /= 1.0*out.max()
+
     if invert:
         out = 1 - out
     return out
