@@ -26,6 +26,19 @@ def create_state(image, pos, rad, sigma=0.05, psftype='gaussian_anisotropic',
 
     Parameters:
     -----------
+    image : blank image of already padded
+    pos : padded positions
+    rad : radii array
+    sigma : float, noise level
+
+    psftype : ['gaussian_anisotropic', 'gaussian_pca']
+        which type of psf to use in the state
+
+    ilmtype : ['polynomial', 'legendre']
+        which type of illumination field
+
+    psfargs : arguments to the psf object
+    ilmorder : the order of the polynomial for illumination field
     """
     tpsfs = ['gaussian_anisotropic', 'gaussian_pca']
     tilms = ['polynomial', 'legendre']
@@ -43,6 +56,22 @@ def create_state(image, pos, rad, sigma=0.05, psftype='gaussian_anisotropic',
     return s 
 
 def create_state_random_packing(imsize, radius=5.0, phi=0.5, seed=None, *args, **kwargs):
+    """
+    Creates a random packing of spheres and generates the state
+
+    Parameters:
+    -----------
+    imsize : tuple, array_like, or integer
+        the unpadded image size to fill with particles
+
+    radius : float
+        radius of particles to add
+
+    seed : integer
+        set the seed if desired
+
+    *args, **kwargs : see create_state
+    """
     _seed_or_not(seed)
     imsize = _toarr(imsize)
 
@@ -54,6 +83,22 @@ def create_state_random_packing(imsize, radius=5.0, phi=0.5, seed=None, *args, *
     return create_state(image, pos, rad, *args, **kwargs)
 
 def create_single_particle_state(imsize, radius=5.0, seed=None, *args, **kwargs):
+    """
+    Creates a single particle state
+
+    Parameters:
+    -----------
+    imsize : tuple, array_like, or integer
+        the unpadded image size to fill with particles
+
+    radius : float
+        radius of particles to add
+
+    seed : integer
+        set the seed if desired
+
+    *args, **kwargs : see create_state
+    """
     _seed_or_not(seed)
     imsize = _toarr(imsize)
 
