@@ -17,6 +17,3 @@ pl.imshow(np.log10(np.abs(hess)))
 pl.title("Log Hessian matrix")
 pl.colorbar()
 pl.show()
-
-#h, ll = runner.do_samples(s, 30, 5)
-#plots.summary_plot(s, h, truestate=strue)

@@ -609,7 +609,7 @@ class ConfocalImagePython(State):
                 fish[i,J] = tfish
                 fish[J,i] = tfish
 
-        return fish
+        return fish / self.sigma**2
 
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
