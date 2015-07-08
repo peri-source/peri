@@ -22,8 +22,9 @@ class SphereCollectionRealSpace(object):
         z,y,x = np.meshgrid(*(xrange(i) for i in self.shape), indexing='ij')
         self.rvecs = np.rollaxis(np.array(np.broadcast_arrays(z,y,x)), 0, 4)
         self.particles = np.zeros(self.shape)
+        self._diff_field = np.zeros(self.shape)
 
-    def _particle(self, pos, rad, zscale, sign=1):
+    def _particle(self, pos, rad, zscale, sign=1, dodiff=False):
         p = np.round(pos)
         r = np.round(np.array([1.0/zscale,1,1])*np.ceil(rad)+self.support_size)
 
@@ -37,18 +38,23 @@ class SphereCollectionRealSpace(object):
         # happened to fit right at pi -- what?!
         rvec[...,0] *= zscale
         rdist = np.sqrt((rvec**2).sum(axis=-1))
-        self.particles[tile.slicer] += sign/(1.0 + np.exp(np.pi*(rdist - rad)))
 
-    def _update_particle(self, n, p, r, t, zscale):
+        t = sign/(1.0 + np.exp(np.pi*(rdist - rad)))
+        self.particles[tile.slicer] += t
+
+        if dodiff:
+            self._diff_field[tile.slicer] += t
+
+    def _update_particle(self, n, p, r, t, zscale, dodiff=True):
         if self.typ[n] == 1:
-            self._particle(self.pos[n], self.rad[n], zscale, -1)
+            self._particle(self.pos[n], self.rad[n], zscale, -1, dodiff=dodiff)
 
         self.pos[n] = p
         self.rad[n] = r
         self.typ[n] = t
 
         if self.typ[n] == 1:
-            self._particle(self.pos[n], self.rad[n], zscale, +1)
+            self._particle(self.pos[n], self.rad[n], zscale, +1, dodiff=dodiff)
 
     def initialize(self, zscale):
         if len(self.pos.shape) != 2:
@@ -62,12 +68,17 @@ class SphereCollectionRealSpace(object):
     def set_tile(self, tile):
         self.tile = tile
 
-    def update(self, ns, pos, rad, typ, zscale):
+    def update(self, ns, pos, rad, typ, zscale, difference=True):
         for n, p, r, t in zip(ns, pos, rad, typ):
-            self._update_particle(n, p, r, t, zscale)
+            self._update_particle(n, p, r, t, zscale, dodiff=difference)
 
     def get_field(self):
         return self.particles[self.tile.slicer]
+
+    def get_diff_field(self):
+        c = self._diff_field[self.tile.slicer].copy()
+        self._diff_field[self.tile.slicer] *= 0
+        return c
 
     def get_params(self):
         return np.hstack([self.pos.ravel(), self.rad])

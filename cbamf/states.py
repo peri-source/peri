@@ -55,7 +55,6 @@ class State(object):
         return blocks
 
     def _grad_single_param(self, block, dl, action='ll'):
-        # TODO -- add option for model_data grad / hess
         self.push_update(block, self.state[block]+dl)
         loglr = self.loglikelihood()
         self.pop_update()
@@ -66,7 +65,7 @@ class State(object):
 
         return (loglr - logll) / (2*dl)
 
-    def _hess_two_param(self, b0, b1, dl, action='ll'):
+    def _hess_two_param(self, b0, b1, dl):
         self.push_update(b0, self.state[b0]+dl)
         self.push_update(b1, self.state[b1]+dl)
         logl_01 = self.loglikelihood()
@@ -206,7 +205,8 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD):
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
             sigma=0.04, doprior=True, constoff=False,
-            varyn=False, allowdimers=False, nlogs=False, pad=const.PAD, *args, **kwargs):
+            varyn=False, allowdimers=False, nlogs=False, difference=True,
+            pad=const.PAD, *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -270,6 +270,7 @@ class ConfocalImagePython(State):
         self.allowdimers = allowdimers
         self.nlogs = nlogs
         self.varyn = varyn
+        self.difference = difference
 
         self.psf = psf
         self.ilm = ilm
@@ -313,7 +314,7 @@ class ConfocalImagePython(State):
         """
         self.image = image.copy()
         self.image_mask = (image > const.PADVAL).astype('float')
-        self.image *= self.image_mask # FIXME -- this was on, not sure why, so commented
+        self.image *= self.image_mask
 
         self._build_internal_variables()
         self._initialize()
@@ -375,7 +376,7 @@ class ConfocalImagePython(State):
         self.obj.initialize(self.zscale)
         self.ilm.initialize()
 
-        self._update_tile(*self._tile_global())
+        self._update_global()
 
     def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
         psc = self.psf.get_support_size()
@@ -384,8 +385,11 @@ class ConfocalImagePython(State):
         zsc = np.array([1.0/self.zscale, 1, 1])
         r0, r1 = zsc*r0, zsc*r1
 
-        off0 = r0 + 2*psc + rsc
-        off1 = r1 + 2*psc + rsc
+        pref = 1 if self.difference else 2
+        extr = 1 if self.difference else 0
+
+        off0 = r0 + pref*psc + rsc + extr
+        off1 = r1 + pref*psc + rsc + extr
 
         if t0[0] == 1 and t1[0] == 1:
             pl = np.floor(amin(p0-off0-1, p1-off1-1)).astype('int')
@@ -403,8 +407,13 @@ class ConfocalImagePython(State):
         ipsc = np.ceil(psc).astype('int')
 
         outer = Tile(pl, pr, 0, self.image.shape)
-        inner = Tile(pl+ipsc, pr-ipsc, ipsc, np.array(self.image.shape)-ipsc)
-        ioslice = tuple([np.s_[ipsc[i]:-ipsc[i]] for i in xrange(3)])
+
+        if self.difference:
+            inner = Tile(pl+extr, pr-extr, extr, np.array(self.image.shape)-extr)
+            ioslice = tuple([np.s_[extr:-extr] for i in xrange(3)])
+        else:
+            inner = Tile(pl+ipsc, pr-ipsc, ipsc, np.array(self.image.shape)-ipsc)
+            ioslice = tuple([np.s_[ipsc[i]:-ipsc[i]] for i in xrange(3)])
         return outer, inner, ioslice
 
     def _tile_global(self):
@@ -429,7 +438,10 @@ class ConfocalImagePython(State):
         newll = self._loglikelihood_field[slicer].sum()
         self._loglikelihood += newll - oldll
 
-    def _update_tile(self, otile, itile, ioslice):
+    def _update_global(self):
+        self._update_tile(*self._tile_global(), difference=False)
+
+    def _update_tile(self, otile, itile, ioslice, difference=False):
         self._last_slices = (otile, itile, ioslice)
 
         self.obj.set_tile(otile)
@@ -438,18 +450,33 @@ class ConfocalImagePython(State):
 
         islice = itile.slicer
 
-        platonic = self.obj.get_field()
-        if self.allowdimers:
-            platonic = np.clip(platonic, 0, 1)
+        if difference:
+            platonic = self.obj.get_diff_field()
 
-        if self.constoff:
-            replacement = self.ilm.get_field() - self.offset*platonic
+            if self.constoff:
+                replacement = self.offset*platonic
+            else:
+                replacement = self.ilm.get_field() * self.offset*platonic
+
         else:
-            replacement = self.ilm.get_field() * (1 - self.offset*platonic)
+            platonic = self.obj.get_field()
+
+            if self.allowdimers:
+                platonic = np.clip(platonic, -1, 1)
+
+            if self.constoff:
+                replacement = self.ilm.get_field() - self.offset*platonic
+            else:
+                replacement = self.ilm.get_field() * (1 - self.offset*platonic)
+
         replacement = self.psf.execute(replacement)
 
-        self.model_image[islice] = replacement[ioslice]
-        self._update_ll_field(replacement[ioslice], islice)
+        if difference:
+            self.model_image[islice] -= replacement[ioslice]
+        else:
+            self.model_image[islice] = replacement[ioslice]
+
+        self._update_ll_field(self.model_image[islice], islice)
 
     def update(self, block, data):
         prev = self.state.copy()
@@ -464,6 +491,8 @@ class ConfocalImagePython(State):
         particles = np.arange(self.obj.N)[pmask | rmask | tmask]
 
         self._logprior = 0
+
+        # FIXME -- obj.create_diff_field not guaranteed to work for multiple particles
         # if the particle was changed, update locally
         if len(particles) > 0:
             pos0 = prev[self.b_pos].copy().reshape(-1,3)[particles]
@@ -507,8 +536,8 @@ class ConfocalImagePython(State):
                 return False
 
             # Finally, modify the image
-            self.obj.update(particles, pos, rad, typ, self.zscale)
-            self._update_tile(*tiles)
+            self.obj.update(particles, pos, rad, typ, self.zscale, difference=self.difference)
+            self._update_tile(*tiles, difference=self.difference)
         else:
             docalc = False
 
@@ -547,10 +576,10 @@ class ConfocalImagePython(State):
                     self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
 
                 self.obj.initialize(self.zscale)
-                self._update_tile(*self._tile_global())
+                self._update_global()
 
             if docalc:
-                self._update_tile(*self._tile_global())
+                self._update_global()
 
         return True
 

@@ -20,7 +20,7 @@ def _toarr(i):
 # Generating fake data
 #=======================================================================
 def create_state(image, pos, rad, sigma=0.05, psftype='gaussian_anisotropic',
-        ilmtype='polynomial', psfargs=(2.0, 4.0), ilmorder=(1,1,1)):
+        ilmtype='polynomial', psfargs=(2.0, 4.0), ilmorder=(1,1,1), stateargs={}):
     """
     Create a state from a blank image, set of pos and radii
 
@@ -39,6 +39,7 @@ def create_state(image, pos, rad, sigma=0.05, psftype='gaussian_anisotropic',
 
     psfargs : arguments to the psf object
     ilmorder : the order of the polynomial for illumination field
+    stateargs : dictionary of arguments to pass to state
     """
     tpsfs = ['gaussian_anisotropic', 'gaussian_pca']
     tilms = ['polynomial', 'legendre']
@@ -51,7 +52,7 @@ def create_state(image, pos, rad, sigma=0.05, psftype='gaussian_anisotropic',
     if ilmtype == 'legendre':
         ilm = ilms.LegendrePoly3D(order=ilmorder, shape=image.shape)
 
-    s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm, sigma=sigma)
+    s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm, sigma=sigma, **stateargs)
     s.model_to_true_image()
     return s 
 
