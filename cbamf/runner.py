@@ -44,15 +44,6 @@ def scan_noise(image, state, element, size=0.01, N=1000):
 
     return xs, ys
 
-def scan_sigma(s, n=200):
-    sigmas = np.linspace(np.max(0.01,s.sigma-0.1), sigma+0.1, n)
-    lls = []
-    for ss in sigmas:
-        s.sigma = ss
-        s._update_ll_field()
-        lls.append(s.loglikelihood())
-    return sigmas, np.array(lls)
-
 def sample_particles(state, stepout=1):
     print '{:-^39}'.format(' POS / RAD ')
     for particle in xrange(state.obj.N):

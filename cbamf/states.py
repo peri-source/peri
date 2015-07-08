@@ -285,10 +285,11 @@ class ConfocalImagePython(State):
             'psf': len(self.psf.get_params()),
             'ilm': len(self.ilm.get_params()),
             'off': 1,
-            'zscale': 1
+            'zscale': 1,
+            'sigma': 1,
         })
 
-        self.param_order = ['pos', 'rad', 'typ', 'psf', 'ilm', 'off', 'zscale']
+        self.param_order = ['pos', 'rad', 'typ', 'psf', 'ilm', 'off', 'zscale', 'sigma']
         self.param_lengths = [self.param_dict[k] for k in self.param_order]
 
         total_params = sum(self.param_lengths)
@@ -301,6 +302,7 @@ class ConfocalImagePython(State):
         self.b_ilm = self.create_block('ilm')
         self.b_off = self.create_block('off')
         self.b_zscale = self.create_block('zscale')
+        self.b_sigma = self.create_block('sigma')
 
         self._build_state()
         self.set_image(image)
@@ -350,6 +352,8 @@ class ConfocalImagePython(State):
                 out.append(self.offset)
             if param == 'zscale':
                 out.append(self.zscale)
+            if param == 'sigma':
+                out.append(self.sigma)
 
         self.state = np.hstack(out).astype('float')
 
@@ -419,7 +423,7 @@ class ConfocalImagePython(State):
 
         self._loglikelihood_field[slicer] = (
                 -self.image_mask[slicer] * (data - self.image[slicer])**2 / (2*self.sigma**2)
-                -np.log( np.sqrt(2*np.pi) * self.sigma )*self.nlogs
+                -self.image_mask[slicer] * np.log( np.sqrt(2*np.pi) * self.sigma )*self.nlogs
             )
 
         newll = self._loglikelihood_field[slicer].sum()
@@ -522,6 +526,10 @@ class ConfocalImagePython(State):
             if block[self.b_off].any():
                 self.offset = self.state[self.b_off]
                 docalc = True
+
+            if block[self.b_sigma].any():
+                self.sigma = self.state[self.b_sigma]
+                self._update_ll_field()
 
             if block[self.b_zscale].any():
                 self.zscale = self.state[self.b_zscale][0]
