@@ -1,4 +1,5 @@
 import numpy as np
+import code, traceback, signal
 
 def amin(a, b):
     return np.vstack([a, b]).min(axis=0)
@@ -34,3 +35,20 @@ class Tile(object):
         self.bounds = (l, r)
         self.shape = self.r - self.l
         self.slicer = np.s_[l[0]:r[0], l[1]:r[1], l[2]:r[2]]
+
+
+def debug(sig, frame):
+    """Interrupt running process, and provide a python prompt for
+    interactive debugging."""
+    d={'_frame':frame}         # Allow access to frame object.
+    d.update(frame.f_globals)  # Unless shadowed by global
+    d.update(frame.f_locals)
+
+    i = code.InteractiveConsole(d)
+    message  = "Signal received : entering python shell.\nTraceback:\n"
+    message += ''.join(traceback.format_stack(frame))
+    i.interact(message)
+
+def listen():
+    # register handler 
+    signal.signal(signal.SIGUSR1, debug)
