@@ -42,7 +42,7 @@ if FILE == 4:
 
 feat = initializers.normalize(raw[zstart:,:IMSIZE,:IMSIZE], INVERT)
 xstart, proc = initializers.local_max_featuring(feat, FSIZE, FSIZE/3.)
-image, pos, rad = states.prepare_for_state(feat, xstart, RAD*np.ones(xstart.shape[0]))
+image, pos, rad = states.prepare_for_state(feat, xstart, RAD*np.ones(xstart.shape[0]), invert=True)
 
 imsize = image.shape
 obj = objs.SphereCollectionRealSpace(pos=pos, rad=rad, shape=imsize)
@@ -50,20 +50,3 @@ psf = psfs.AnisotropicGaussian(PSF, shape=imsize)
 ilm = ilms.Polynomial3D(order=ORDER, shape=imsize)
 s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm,
         zscale=zscale, sigma=sigma)
-
-def sample(s):
-    h = []
-    for i in xrange(sweeps):
-        print '{:=^79}'.format(' Sweep '+str(i)+' ')
-
-        runner.sample_particles(s, stepout=1.0)
-        runner.sample_block(s, 'ilm', stepout=0.1)
-        runner.sample_block(s, 'off', stepout=0.1)
-        runner.sample_block(s, 'psf', stepout=0.1)
-        runner.sample_block(s, 'zscale', stepout=0.1)
-
-        if i > burn:
-            h.append(s.state.copy())
-
-    h = np.array(h)
-    return h

@@ -13,10 +13,10 @@ except ImportError as e:
 from multiprocessing import cpu_count
 
 from cbamf.util import Tile
+from cbamf.conf import get_wisdom
 
 if hasfftw:
-    WISDOM_FILE = os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl")
-
+    WISDOM_FILE = get_wisdom()
     def save_wisdom():
         pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'))
 
