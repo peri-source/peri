@@ -16,4 +16,4 @@ for i, (f, frame) in enumerate(movie):
     s = runner.feature_addsubtract(s, rad=5.3)
     h, l = runner.do_samples(s, 30, 10, stepout=0.1)
 
-    pickle.dump([h, l], open("%s-%i-featured.pkl" % (f, imsize), 'w'))
+    pickle.dump([s, h, l], open("%s-%i-featured.pkl" % (f, imsize), 'w'))

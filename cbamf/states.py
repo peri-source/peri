@@ -428,7 +428,7 @@ class ConfocalImagePython(State):
 
     def _update_ll_field(self, data=None, slicer=np.s_[:]):
         if data is None:
-            self._loglikelihood *= 0
+            self._loglikelihood = 0
             self._loglikelihood_field *= 0
             data = self.get_model_image()
 
