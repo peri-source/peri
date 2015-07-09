@@ -3,7 +3,7 @@ import numpy as np
 
 from cbamf import const
 from cbamf import initializers
-from cbamf.util import Tile, amin, amax
+from cbamf.util import Tile, amin, amax, ProgressBar
 from cbamf.priors import overlap
 
 class State:
@@ -97,7 +97,9 @@ class State:
             blocks = self.explode(self.block_all())
         grad = np.zeros(len(blocks))
 
+        p = ProgressBar(len(blocks), 'Gradient')
         for i, b in enumerate(blocks):
+            p.update(i)
             grad[i] = self._grad_single_param(b, dl)
 
         return grad
@@ -111,7 +113,9 @@ class State:
                 blocks = self.explode(self.block_all())
             hess = np.zeros((len(blocks), len(blocks)))
 
+            p = ProgressBar(len(blocks), 'Hessian')
             for i, bi in enumerate(blocks):
+                p.update(i)
                 for j, bj in enumerate(blocks[i:]):
                     J = j + i
                     thess = self._hess_two_param(bi, bj, dl)
@@ -641,7 +645,9 @@ class ConfocalImagePython(State):
             blocks = self.explode(self.block_all())
         fish = np.zeros((len(blocks), len(blocks)))
 
+        p = ProgressBar(len(blocks), 'Fisher')
         for i, bi in enumerate(blocks):
+            p.update(i)
             for j, bj in enumerate(blocks[i:]):
                 J = j + i
                 di = self._grad_image(bi, dl=dl)

@@ -1,6 +1,10 @@
+import sys
 import numpy as np
 import code, traceback, signal
 
+#=============================================================================
+# Tiling utilities
+#=============================================================================
 def amin(a, b):
     return np.vstack([a, b]).min(axis=0)
 
@@ -44,6 +48,49 @@ def cdd(d, k):
         if d.has_key(i):
             d.pop(i)
 
+#=============================================================================
+# Progress bar
+#=============================================================================
+class ProgressBar(object):
+    def __init__(self, num, label='Progress', value=0, dobar=True, symbol='='):
+        self.num = num
+        self.value = value
+        self.percent = 0
+
+        self.label = label
+        self.dobar = dobar
+        self.symbol = symbol
+
+        # the space available for the progress bar is
+        # 79 (size of screen) - (label) - 3 (number) - 2 ([]) - 2 (space)
+        self._bar_size = 79 - len(self.label) - 3 - 2 - 2
+        self._formatstr = '{} [{: <'+str(self._bar_size)+'}] {: >3}\r'
+
+        self._calc_precent()
+        self.draw()
+
+    def _calc_precent(self):
+        self.percent = int(100 * self.value / self.num)
+
+    def draw(self):
+        bar = np.round(self.percent / 100. * self._bar_size)
+        print self._formatstr.format(self.label, '='*bar, self.percent),
+        sys.stdout.flush()
+
+    def update(self, value=0):
+        curr_percent = self.percent
+        self.value = value
+        self._calc_precent()
+
+        if curr_percent != self.percent:
+            self.draw()
+
+    def end(self):
+        print '\r\n'
+
+#=============================================================================
+# debugging / python interpreter / logging
+#=============================================================================
 def debug(sig, frame):
     """Interrupt running process, and provide a python prompt for
     interactive debugging."""
@@ -57,5 +104,5 @@ def debug(sig, frame):
     i.interact(message)
 
 def listen():
-    # register handler 
+    # register handler
     signal.signal(signal.SIGUSR1, debug)
