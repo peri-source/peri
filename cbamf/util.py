@@ -36,6 +36,13 @@ class Tile(object):
         self.shape = self.r - self.l
         self.slicer = np.s_[l[0]:r[0], l[1]:r[1], l[2]:r[2]]
 
+def cdd(d, k):
+    """ Conditionally delete key (or list of keys) 'k' from dict 'd' """
+    if not isinstance(k, list):
+        k = [k]
+    for i in k:
+        if d.has_key(i):
+            d.pop(i)
 
 def debug(sig, frame):
     """Interrupt running process, and provide a python prompt for

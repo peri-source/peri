@@ -212,12 +212,15 @@ def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, invert=False,
     return s
 
 def feature_addsubtract(s, sweeps=3, rad=5):
-    addsubtract(s, rad=rad, sweeps=sweeps, particle_group_size=s.N/sweeps)
+    from cbamf import states, initializers
+    addsubtract(s, rad=rad, sweeps=sweeps, particle_group_size=s.N/(sweeps+1))
 
-    initializers.remove_overlaps(obj.pos, obj.rad, zscale=s.zscale)
-    s = states.ConfocalImagePython(image, obj=s.obj, psf=s.psf, ilm=s.ilm,
+    """
+    initializers.remove_overlaps(s.obj.pos, s.obj.rad, zscale=s.zscale)
+    s = states.ConfocalImagePython(s.image, obj=s.obj, psf=s.psf, ilm=s.ilm,
             zscale=s.zscale, sigma=s.sigma, offset=s.offset, doprior=True,
             nlogs=True, varyn=False)
+    """
     return s
 
 def feature(rawimage, sweeps=20, samples=15, rad=7.3, frad=9,
@@ -237,6 +240,10 @@ def feature(rawimage, sweeps=20, samples=15, rad=7.3, frad=9,
 
     return do_samples(s, sweeps, burn, stepout=0.10)
 
+def trim_extra_particles(s):
+    # TODO -- take out particles that are already
+    # not able to be sampled (according to the sampler methods)
+    raise AttributeError("STUB")
 
 #=======================================================================
 # More involved featuring functions using MC

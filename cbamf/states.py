@@ -6,7 +6,7 @@ from cbamf import initializers
 from cbamf.util import Tile, amin, amax
 from cbamf.priors import overlap
 
-class State(object):
+class State:
     def __init__(self, nparams, state=None, logpriors=None):
         self.nparams = nparams
         self.state = state if state is not None else np.zeros(self.nparams, dtype='double')
@@ -203,7 +203,7 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD):
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
-            sigma=0.04, doprior=True, constoff=False,
+            sigma=0.04, doprior=True, constoff=True,
             varyn=False, allowdimers=False, nlogs=False, difference=True,
             pad=const.PAD, *args, **kwargs):
         """
@@ -241,7 +241,7 @@ class ConfocalImagePython(State):
         doprior: boolean [default: True]
             Whether or not to turn on overlap priors using neighborlists
 
-        constoff: boolean [default: False]
+        constoff: boolean [default: True]
             Changes the model so to:
 
                 Image = \int PSF(x-x') (ILM(x)*-OFF*SPH(x)) dx'
@@ -297,7 +297,8 @@ class ConfocalImagePython(State):
         self.param_lengths = [self.param_dict[k] for k in self.param_order]
 
         total_params = sum(self.param_lengths)
-        super(ConfocalImagePython, self).__init__(nparams=total_params, *args, **kwargs)
+        #super(ConfocalImagePython, self).__init__(nparams=total_params, *args, **kwargs)
+        State.__init__(self, nparams=total_params, *args, **kwargs)
 
         self.b_pos = self.create_block('pos')
         self.b_rad = self.create_block('rad')
@@ -653,3 +654,16 @@ class ConfocalImagePython(State):
 
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
+
+    def __getstate__(self):
+        return {}
+
+    def __setstate__(self, idct):
+        pass
+
+    def __getinitargs__(self):
+        return ((self.image + const.PADVAL*(1-self.image_mask)),
+            self.obj, self.psf, self.ilm, self.zscale, self.offset,
+            self.sigma, self.doprior, self.constoff,
+            self.varyn, self.allowdimers, self.nlogs, self.difference,
+            self.pad)
