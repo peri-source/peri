@@ -1,5 +1,5 @@
 import os
-import pickle
+import cPickle as pickle
 import numpy as np
 
 try:
@@ -12,13 +12,13 @@ except ImportError as e:
 
 from multiprocessing import cpu_count
 
-from cbamf.util import Tile
+from cbamf.util import Tile, cdd
 from cbamf.conf import get_wisdom
 
 if hasfftw:
     WISDOM_FILE = get_wisdom()
     def save_wisdom():
-        pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'))
+        pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'), protocol=-1)
 
     try:
         with open(WISDOM_FILE) as wisdom:
@@ -155,6 +155,20 @@ class PSF(object):
     def __del__(self):
         save_wisdom()
 
+    def __getstate__(self):
+        odict = self.__dict__.copy()
+        cdd(odict, ['_rx', '_ry', '_rz', '_rvecs', '_rlen'])
+        cdd(odict, ['_kx', '_ky', '_kz', '_kvecs', '_klen'])
+        cdd(odict, ['_fftn', '_ifftn', '_fftn_data', '_ifftn_data'])
+        cdd(odict, ['rpsf', 'kpsf'])
+        odict['_cache'] = {}
+        return odict
+
+    def __setstate__(self, idict):
+        self.__dict__.update(idict)
+        self.tile = Tile((0,0,0))
+        self.set_tile(Tile(self.shape))
+
 class AnisotropicGaussian(PSF):
     _fourier_space = False
 
@@ -217,6 +231,12 @@ class GaussianPolynomialPCA(PSF):
         self._psf_vecs = np.real(vecs[:,:self.comp])
         self._psf_mean = np.real(mean)
 
+        # TODO -- proper calculation?
+        #self._polys = [np.polynomial.polynomial.polyval2d(
+        #    rho, z, (self._psf_vecs[:,i] + self._psf_mean).reshape(*self.poly_shape)
+        #) for i in xrange(self.comp)]
+        #poly = (self._polys * self.params[2:]).sum(axis=-1)
+
     def rpsf_func(self):
         coeff = self.params
         rvec = self._rvecs
@@ -228,4 +248,7 @@ class GaussianPolynomialPCA(PSF):
         poly = np.polynomial.polynomial.polyval2d(rho, z, polycoeffs.reshape(*self.poly_shape))
         return poly * np.exp(-rho**2) * np.exp(-z**2)
 
+    def get_support_size(self):
+        self._set_tile_precalc()
+        return np.array([self.pz, self.pr, self.pr])
 

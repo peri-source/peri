@@ -1,5 +1,5 @@
 import numpy as np
-from cbamf.util import Tile
+from cbamf.util import Tile, cdd
 
 class SphereCollectionRealSpace(object):
     def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None):
@@ -94,3 +94,12 @@ class SphereCollectionRealSpace(object):
 
     def get_support_size(self):
         return self.support_size
+
+    def __getstate__(self):
+        odict = self.__dict__.copy()
+        cdd(odict, ['rvecs', 'particles', '_diff_field'])
+        return odict
+
+    def __setstate__(self, idict):
+        self.__dict__.update(idict)
+        self._setup()

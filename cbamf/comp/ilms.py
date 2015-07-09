@@ -2,7 +2,7 @@ import numpy as np
 from numpy.polynomial.legendre import legval
 from itertools import product
 
-from cbamf.util import Tile
+from cbamf.util import Tile, cdd
 
 class Polynomial3D(object):
     def __init__(self, shape, coeffs=None, order=(1,1,1)):
@@ -57,6 +57,17 @@ class Polynomial3D(object):
     def get_params(self):
         return self.params
 
+    def __getstate__(self):
+        odict = self.__dict__.copy()
+        cdd(odict, ['_poly', 'rx', 'ry', 'rz', 'bkg'])
+        return odict
+
+    def __setstate__(self, idict):
+        self.__dict__.update(idict)
+        self._setup_rvecs()
+        self.tile = Tile(self.shape)
+        self.set_tile(Tile(self.shape))
+        self.update()
 
 class LegendrePoly3D(Polynomial3D):
     def __init__(self, shape, coeffs=None, order=(1,1,1)):
