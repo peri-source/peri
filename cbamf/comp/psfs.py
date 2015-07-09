@@ -1,6 +1,11 @@
 import os
+import atexit
 import cPickle as pickle
 import numpy as np
+from multiprocessing import cpu_count
+
+from cbamf.util import Tile, cdd
+from cbamf.conf import get_wisdom
 
 try:
     import pyfftw
@@ -10,21 +15,24 @@ except ImportError as e:
     print "*WARNING* pyfftw not found, switching to numpy.fft (20x slower)"
     hasfftw = False
 
-from multiprocessing import cpu_count
-
-from cbamf.util import Tile, cdd
-from cbamf.conf import get_wisdom
-
-if hasfftw:
+def load_wisdom():
     WISDOM_FILE = get_wisdom()
-    def save_wisdom():
-        pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'), protocol=-1)
-
     try:
-        with open(WISDOM_FILE) as wisdom:
-            pyfftw.import_wisdom(pickle.load(open(WISDOM_FILE)))
+        pyfftw.import_wisdom(pickle.load(open(WISDOM_FILE)))
     except IOError as e:
         save_wisdom()
+
+def save_wisdom():
+    WISDOM_FILE = get_wisdom()
+    pickle.dump(pyfftw.export_wisdom(), open(WISDOM_FILE, 'w'), protocol=-1)
+
+@atexit.register
+def goodbye():
+    if hasfftw:
+        save_wisdom()
+
+if hasfftw:
+    load_wisdom()
 
 FFTW_PLAN_FAST = 'FFTW_ESTIMATE'
 FFTW_PLAN_NORMAL = 'FFTW_MEASURE'
@@ -151,9 +159,6 @@ class PSF(object):
 
     def get_support_size(self):
         return np.zeros(3)
-
-    def __del__(self):
-        save_wisdom()
 
     def __getstate__(self):
         odict = self.__dict__.copy()
