@@ -1,4 +1,6 @@
 import sys
+import time
+import datetime
 import numpy as np
 import code, traceback, signal
 
@@ -53,7 +55,8 @@ def cdd(d, k):
 #=============================================================================
 class ProgressBar(object):
     def __init__(self, num, label='Progress', value=0, screen=79,
-            bar=True, bar_symbol='=', bar_caps='[]', bar_decimals=2):
+            time_remaining=True, bar=True, bar_symbol='=', bar_caps='[]',
+            bar_decimals=2):
         """
         ProgressBar class which creates a dynamic ASCII progress bar of two
         different varieties:
@@ -77,6 +80,9 @@ class ProgressBar(object):
         screen : integer [default: 79]
             Size the screen to use for the progress bar
 
+        time_remaining : boolean [default: True]
+            Display estimated time remaining
+
         bar : boolean [default: True]
             Whether or not to display the bar chart
 
@@ -88,62 +94,72 @@ class ProgressBar(object):
             half and each half put on a side of the chart
 
         bar_decimals: integer [default: 2]
-            Number of decimal places to include in the percentage
+            Number of decimal places to include in the _percentage
         """
+        # TODO -- add estimated time remaining
         self.num = num
         self.value = value
-        self.percent = 0
+        self._percent = 0
+        self.time_remaining = time_remaining
+        self._deltas = []
 
         self.label = label
         self.bar = bar
-        self.bar_symbol = bar_symbol
-        self.bar_caps = bar_caps
-        self.bar_decimals = bar_decimals
+        self._bar_symbol = bar_symbol
+        self._bar_caps = bar_caps
+        self._decimals = bar_decimals
         self.screen = screen
 
-        if len(self.bar_caps) % 2 != 0:
+        if len(self._bar_caps) % 2 != 0:
             raise AttributeError("End caps must be even number of symbols")
 
         if self.bar:
-            # 3 digit percent + decimal places + '.'
-            self._num_size = 3 + self.bar_decimals + 1
+            # 3 digit _percent + decimal places + '.'
+            self._numsize = 3 + self._decimals + 1
 
             # end caps size calculation
-            self._cap_len = len(self.bar_caps)/2
-            self._cap_l = self.bar_caps[:self._cap_len]
-            self._cap_r = self.bar_caps[self._cap_len:]
+            self._cap_len = len(self._bar_caps)/2
+            self._capl = self._bar_caps[:self._cap_len]
+            self._capr = self._bar_caps[self._cap_len:]
+
+            # time remaining calculation for space
+            self._time_space = 11 if self.time_remaining else 0
 
             # the space available for the progress bar is
             # 79 (screen) - (label) - (number) - 2 ([]) - 2 (space) - 1 (%)
-            self._bar_size = (
-                    self.screen - len(self.label) - self._num_size -
-                    len(self.bar_caps) - 2 - 1
+            self._barsize = (
+                    self.screen - len(self.label) - self._numsize -
+                    len(self._bar_caps) - 2 - 1 - self._time_space
                 )
 
-            self.pdict = {
-                "label": self.label,
-                "bars": '',
-                "barsize": self._bar_size,
-                "numsize": self._num_size,
-                "decs": self.bar_decimals,
-                "capl": self._cap_l,
-                "capr": self._cap_r,
-                "percent": '',
-            }
-            self._formatstr = '\r{label} {capl}{bars:<{barsize}}{capr} {percent:>{numsize}.{decs}f}%'
+            self._formatstr = '\r{label} {_capl}{_bars:<{_barsize}}{_capr} {_percent:>{_numsize}.{_decimals}f}%'
+
+            self._percent = 0
+            self._dt = '--:--:--'
+            self._bars = ''
+
+            if self.time_remaining:
+                self._formatstr += " ({_dt})"
         else:
             self._digits = str(int(np.ceil(np.log10(self.num))))
-            self._formatstr = '\r{label} : {value:>{_digits}} / {num:>{_digits}}'
+            self._formatstr = '\r{label} : {value:>{_digits}} / {num:>{_digits}} ({_dt})'
+
+            self._dt = '--:--:--'
+            if self.time_remaining:
+                self._formatstr += " ({_dt})"
 
         self.update()
 
+    def _estimate_time(self):
+        if len(self._deltas) < 3:
+            self._dt = '--:--:--'
+        else:
+            dt = np.diff(self._deltas[-5:]).mean() * (self.num - self.value)
+            self._dt = time.strftime('%H:%M:%S', time.gmtime(dt))
+
     def _draw(self):
         """ Interal draw method, simply prints to screen """
-        if self.bar:
-            self.pdict.update({"percent": self.percent, "bars": self.bar_symbol*self.bars})
-            print self._formatstr.format(**self.pdict),
-        else:
-            print self._formatstr.format(**self.__dict__),
+        print self._formatstr.format(**self.__dict__),
         sys.stdout.flush()
 
     def update(self, value=0):
@@ -155,11 +171,13 @@ class ProgressBar(object):
         value : integer
             The current iteration of the progress
         """
-        self.value = value
-        self.percent = 100.0 * self.value / self.num
+        self._deltas.append(time.time())
 
-        if self.bar:
-            self.bars = int(np.round(self.percent / 100. * self._bar_size))
+        self.value = value
+        self._percent = 100.0 * self.value / self.num
+        self._bars = self._bar_symbol*int(np.round(self._percent / 100. * self._barsize))
+
+        self._estimate_time()
         self._draw()
 
         if self.value == self.num:
