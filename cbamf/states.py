@@ -101,6 +101,7 @@ class State:
         for i, b in enumerate(blocks):
             p.update(i)
             grad[i] = self._grad_single_param(b, dl)
+        p.end()
 
         return grad
 
@@ -121,6 +122,7 @@ class State:
                     thess = self._hess_two_param(bi, bj, dl)
                     hess[i,J] = thess
                     hess[J,i] = thess
+            p.end()
 
             return hess
 
@@ -655,6 +657,7 @@ class ConfocalImagePython(State):
                 tfish = (di*dj).sum()
                 fish[i,J] = tfish
                 fish[J,i] = tfish
+        p.end()
 
         return fish / self.sigma**2
 

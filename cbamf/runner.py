@@ -98,6 +98,11 @@ def sample_block(state, blockname, explode=True, stepout=0.1):
 
     return sample_state(state, blocks, stepout)
 
+def sample_block_list(state, blocklist, stepout=0.1):
+    for bl in blockslist:
+        sample_block(state, bl, stepout=stepout)
+    return state.state.copy(), state.loglikelihood()
+
 def do_samples(s, sweeps, burn, stepout=0.1):
     h = []
     ll = []
@@ -174,13 +179,13 @@ def pad_fake_particles(pos, rad, nfake):
 def zero_particles(n):
     return np.zeros((n,3)), np.ones(n), np.zeros(n)
 
-def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, invert=False,
+def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, imzstop=-1, invert=False,
         pad_for_extra=True, threads=-1, phi=0.5, sigma=0.05, zscale=1.0,
         PSF=(2.0, 4.0), ORDER=(3,3,2)):
     from cbamf import states, initializers
     from cbamf.comp import objs, psfs, ilms
 
-    itrue = initializers.normalize(rawimage[imzstart:,:imsize,:imsize], invert)
+    itrue = initializers.normalize(rawimage[imzstart:imzstop,:imsize,:imsize], invert)
     feat = initializers.remove_background(itrue.copy(), order=ORDER)
 
     xstart, proc = initializers.local_max_featuring(feat, frad, frad/3.)
@@ -224,14 +229,14 @@ def feature_addsubtract(s, sweeps=3, rad=5):
     return s
 
 def feature(rawimage, sweeps=20, samples=15, rad=7.3, frad=9,
-        imsize=-1, imzstart=0, zscale=1.06, sigma=0.02, invert=False,
+        imsize=-1, imzstart=0, imzstop=-1, zscale=1.06, sigma=0.02, invert=False,
         PSF=(2.0, 4.1), ORDER=(3,3,2), threads=-1, addsubtract=True, phi=0.5):
 
     burn = sweeps - samples
 
     print "Initial featuring"
     s = raw_to_state(rawimage, rad=rad, frad=frad, imsize=imsize,
-            imzstart=imzstart, invert=invert, pad_for_extra=addsubtract,
+            imzstart=imzstart, imzstop=imzstop, invert=invert, pad_for_extra=addsubtract,
             threads=threads, phi=phi, sigma=sigma, zscale=zscale, PSF=PSF, ORDER=ORDER)
 
     if addsubtract:
