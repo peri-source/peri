@@ -93,9 +93,6 @@ class PSF(object):
         self._rvecs = np.rollaxis(np.array(np.broadcast_arrays(rz,ry,rx)), 0, 4)
         self._rlen = np.sqrt(rx**2 + ry**2 + rz**2)
 
-    def _set_tile_precalc(self):
-        pass
-
     def _min_to_tile(self):
         d = ((self.tile.shape - self._min_support)/2)
 
@@ -151,9 +148,10 @@ class PSF(object):
         self.params = params
 
         # calculate the minimum supported real-space PSF
-        self._min_support = 2*np.ceil(self.get_support_size()).astype('int')
+        self._min_support = np.ceil(self.get_support_size()).astype('int')
+        self._min_support += self._min_support % 2
         self._setup_rvecs(self._min_support)
-        self._min_rpsf = self.rpsf_func(self.params)
+        self._min_rpsf = self.rpsf_func()
 
         # clean out the cache since it is no longer useful
         self._cache = {}
@@ -201,11 +199,8 @@ class AnisotropicGaussian(PSF):
         self.error = error
         super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
 
-    def _set_tile_precalc(self):
-        self.pr = np.sqrt(-2*np.log(self.error)*self.params[0]**2)
-        self.pz = np.sqrt(-2*np.log(self.error)*self.params[1]**2)
-
-    def rpsf_func(self, params):
+    def rpsf_func(self):
+        params = self.params
         rt2 = np.sqrt(2)
         rhosq = self._rx**2 + self._ry**2
         arg = np.exp(-(rhosq)/(rt2*params[0])**2 - (self._rz/(rt2*params[1]))**2)
@@ -217,22 +212,17 @@ class AnisotropicGaussian(PSF):
         return np.array([self.pz, self.pr, self.pr])
 
 class GaussianPolynomialPCA(PSF):
-    def __init__(self, cov_mat_file, mean_mat_file, shape, gaussian=(1,1), components=5, *args, **kwargs):
+    def __init__(self, cov_mat_file, mean_mat_file, shape, gaussian=(2,4),
+            components=5, error=1.0/255, *args, **kwargs):
         self.cov_mat_file = cov_mat_file
         self.mean_mat_file = mean_mat_file
         self.comp = components
+        self.error = error
 
         self._setup_from_files()
         params0 = np.hstack([gaussian, np.zeros(self.comp)])
 
         super(GaussianPolynomialPCA, self).__init__(*args, params=params0, shape=shape, **kwargs)
-
-    def _set_tile_precalc(self):
-        # normalize the vectors to be small and managable
-        mx = np.max(self.tile.shape)
-        self._rx = self._rx / mx
-        self._ry = self._ry / mx
-        self._rz = self._rz / mx
 
     def _setup_from_files(self):
         covm = np.load(self.cov_mat_file)
@@ -243,7 +233,8 @@ class GaussianPolynomialPCA(PSF):
         self._psf_vecs = np.real(vecs[:,:self.comp])
         self._psf_mean = np.real(mean)
 
-        # TODO -- proper calculation?
+        # TODO -- proper calculation? it seems there is almost no opportunity to
+        # cache these values, so perhaps we won't be doing this
         #self._polys = [np.polynomial.polynomial.polyval2d(
         #    rho, z, (self._psf_vecs[:,i] + self._psf_mean).reshape(*self.poly_shape)
         #) for i in xrange(self.comp)]
@@ -251,16 +242,16 @@ class GaussianPolynomialPCA(PSF):
 
     def rpsf_func(self):
         coeff = self.params
-        rvec = self._rvecs
 
-        rho = np.sqrt(rvec[...,1]**2 + rvec[...,2]**2) / coeff[0]
-        z = rvec[...,0] / coeff[1]
+        rho = np.sqrt(self._rx**2 + self._ry**2) / coeff[0]
+        z = self._rz / coeff[1]
 
         polycoeffs = self._psf_vecs.dot(coeff[2:]) + self._psf_mean
         poly = np.polynomial.polynomial.polyval2d(rho, z, polycoeffs.reshape(*self.poly_shape))
-        return poly * np.exp(-rho**2) * np.exp(-z**2)
+        return poly * np.exp(-rho**2) * np.exp(-z**2) * (rho <= self.pr/coeff[0]) * (np.abs(self._rz) <= self.pz/coeff[1])
 
     def get_support_size(self):
-        self._set_tile_precalc()
+        self.pr = 2.0*np.sqrt(-2*np.log(self.error)*self.params[0]**2)
+        self.pz = 2.0*np.sqrt(-2*np.log(self.error)*self.params[1]**2)
         return np.array([self.pz, self.pr, self.pr])
 
