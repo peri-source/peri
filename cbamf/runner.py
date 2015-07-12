@@ -99,7 +99,7 @@ def sample_block(state, blockname, explode=True, stepout=0.1):
     return sample_state(state, blocks, stepout)
 
 def sample_block_list(state, blocklist, stepout=0.1):
-    for bl in blockslist:
+    for bl in blocklist:
         sample_block(state, bl, stepout=stepout)
     return state.state.copy(), state.loglikelihood()
 
@@ -208,7 +208,7 @@ def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, imzstop=-1, i
 
     params = ilm.get_params()
     params[0] += ptp * (1-phi)
-    ilm.update(params)
+    ilm.update(ilm.block, params)
 
     s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm,
             zscale=zscale, sigma=sigma, offset=ptp, doprior=(not pad_for_extra),
@@ -288,7 +288,8 @@ def sample_n_add(s, rad, tries=5):
         ll1 = s.loglikelihood()
 
         print p, ll0, ll1
-        if not (np.log(np.random.rand()) < (ll0**2).sum() - (ll1**2).sum()):
+        #if not (np.log(np.random.rand()) < (ll0**2).sum() - (ll1**2).sum()):
+        if (ll0**2).sum() < (ll1**2).sum():
             s.update(bt, np.array([0]))
         else:
             accepts += 1
@@ -320,7 +321,8 @@ def sample_n_remove(s, rad, tries=5):
         ll1 = s.loglikelihood()
 
         print s.obj.pos[n], ll0, ll1
-        if not (np.log(np.random.rand()) < (ll0**2).sum() - (ll1**2).sum()):
+        #if not (np.log(np.random.rand()) < (ll0**2).sum() - (ll1**2).sum()):
+        if (ll0**2).sum() < (ll1**2).sum():
             s.update(bt, np.array([1]))
         else:
             accepts += 1
