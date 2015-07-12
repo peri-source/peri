@@ -39,10 +39,15 @@ FFTW_PLAN_NORMAL = 'FFTW_MEASURE'
 FFTW_PLAN_SLOW = 'FFTW_PATIENT'
 
 class PSF(object):
-    _fourier_space = True
-
-    def __init__(self, params, shape, fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1):
+    def __init__(self, params, shape, fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1,
+            cache_tiles=True, cache_max_size=1e9):
+        self.cache_max_size = cache_max_size
+        self.cache_tiles = cache_tiles
         self._cache = {}
+        self._cache_size = 0
+        self._cache_hits = 0
+        self._cache_misses = 0
+
         self.shape = shape
         self.params = np.array(params).astype('float')
 
@@ -50,6 +55,7 @@ class PSF(object):
         self.fftw_planning_level = fftw_planning_level
 
         self.tile = Tile((0,0,0))
+        self.update(self.params)
         self.set_tile(Tile(self.shape))
 
     def _setup_ffts(self):
@@ -70,18 +76,18 @@ class PSF(object):
         self._kvecs = np.rollaxis(np.array(np.broadcast_arrays(kz,ky,kx)), 0, 4)
         self._klen = np.sqrt(kx**2 + ky**2 + kz**2)
 
-    def _setup_rvecs(self, centered=False):
-        sp = self.tile.shape
+    def _setup_rvecs(self, shape, centered=True):
+        sp = shape
         mx = np.max(sp)
 
-        if not centered:
-            rz = 2*sp[0]*np.fft.fftfreq(sp[0])[:,None,None]
-            ry = 2*sp[1]*np.fft.fftfreq(sp[1])[None,:,None]
-            rx = 2*sp[2]*np.fft.fftfreq(sp[2])[None,None,:]
-        else:
-            rz = (np.arange(sp[0], dtype='float')[:,None,None] - sp[0]/2)
-            ry = (np.arange(sp[1], dtype='float')[None,:,None] - sp[1]/2)
-            rx = (np.arange(sp[2], dtype='float')[None,None,:] - sp[2]/2)
+        rz = 2*sp[0]*np.fft.fftfreq(sp[0])[:,None,None]
+        ry = 2*sp[1]*np.fft.fftfreq(sp[1])[None,:,None]
+        rx = 2*sp[2]*np.fft.fftfreq(sp[2])[None,None,:]
+
+        if centered:
+            rz = np.fft.fftshift(rz)
+            ry = np.fft.fftshift(ry)
+            rx = np.fft.fftshift(rx)
 
         self._rx, self._ry, self._rz = rx, ry, rz
         self._rvecs = np.rollaxis(np.array(np.broadcast_arrays(rz,ry,rx)), 0, 4)
@@ -89,6 +95,15 @@ class PSF(object):
 
     def _set_tile_precalc(self):
         pass
+
+    def _min_to_tile(self):
+        d = ((self.tile.shape - self._min_support)/2)
+
+        pad = tuple((d[i],d[i]) for i in [0,1,2])
+        self.rpsf = np.pad(self._min_rpsf, pad, mode='constant', constant_values=0)
+        self.rpsf = np.fft.fftshift(self.rpsf)
+        self.kpsf = self.fftn(self.rpsf)
+        self.normalize_kpsf()
 
     def fftn(self, arr):
         if hasfftw:
@@ -111,37 +126,38 @@ class PSF(object):
         pass
 
     def set_tile(self, tile):
-        if any(self.tile.shape != tile.shape):
+        if any(tile.shape < self._min_support):
+            raise IndexError("PSF tile size is less than minimum support size")
+
+        if (self.tile.shape != tile.shape).any():
             self.tile = tile
             self._setup_ffts()
 
-            key = tuple(self.tile.shape)
-            if key in self._cache:
-                self.kpsf = self._cache[key]
-            else:
-                if self._fourier_space:
-                    self._setup_kvecs()
-                else:
-                    self._setup_rvecs()
+        key = tuple(self.tile.shape)
+        if key in self._cache:
+            self.kpsf = self._cache[key]
+            self._cache_hits += 1
+        else:
+            self._min_to_tile()
 
-                self._set_tile_precalc()
-                self.update(self.params, clearcache=False)
-                # TODO - caching not working, figure it out
-                #self._cache[key] = self.kpsf.copy()
+            # if we have cache space left, keep this kpsf around
+            newsize = self.kpsf.nbytes + self._cache_size
+            if self.cache_tiles and newsize < self.cache_max_size:
+                self._cache[key] = self.kpsf.copy()
+                self._cache_size = newsize
+                self._cache_misses += 1
 
-    def update(self, params, clearcache=True):
+    def update(self, params):
         self.params = params
 
-        if self._fourier_space:
-            self.kpsf = self.kpsf_func(self.params)
-        else:
-            self.rpsf = self.rpsf_func(self.params)
-            self.kpsf = self.fftn(self.rpsf)
+        # calculate the minimum supported real-space PSF
+        self._min_support = 2*np.ceil(self.get_support_size()).astype('int')
+        self._setup_rvecs(self._min_support)
+        self._min_rpsf = self.rpsf_func(self.params)
 
-        self.normalize_kpsf()
-
-        if clearcache:
-            self._cache = {}
+        # clean out the cache since it is no longer useful
+        self._cache = {}
+        self._cache_size = 0
 
     def execute(self, field):
         if any(field.shape != self.tile.shape):
@@ -174,9 +190,13 @@ class PSF(object):
         self.tile = Tile((0,0,0))
         self.set_tile(Tile(self.shape))
 
-class AnisotropicGaussian(PSF):
-    _fourier_space = False
+    def __str__(self):
+        return self.__repr__()
 
+    def __repr__(self):
+        return str(self.__class__.__name__)+" {} ".format(self.params)
+
+class AnisotropicGaussian(PSF):
     def __init__(self, params, shape, error=1.0/255, *args, **kwargs):
         self.error = error
         super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
@@ -192,24 +212,11 @@ class AnisotropicGaussian(PSF):
         return arg * (rhosq <= self.pr**2) * (np.abs(self._rz) <= self.pz)
 
     def get_support_size(self):
-        self._set_tile_precalc()
+        self.pr = np.sqrt(-2*np.log(self.error)*self.params[0]**2)
+        self.pz = np.sqrt(-2*np.log(self.error)*self.params[1]**2)
         return np.array([self.pz, self.pr, self.pr])
 
-class AnisotropicGaussianKSpace(PSF):
-    def __init__(self, params, shape, support_factor=1.4, *args, **kwargs):
-        """ Do not set support_factor to an integral value """
-        self.support_factor = support_factor
-        super(AnisotropicGaussianKSpace, self).__init__(*args, params=params, shape=shape, **kwargs)
-
-    def kpsf_func(self, params):
-        return np.exp(-(self._kx*params[0])**2 - (self._ky*params[0])**2 - (self._kz*params[1])**2)
-
-    def get_support_size(self):
-        return self.support_factor*np.array([self.params[1], self.params[0], self.params[0]])
-
 class GaussianPolynomialPCA(PSF):
-    _fourier_space = False
-
     def __init__(self, cov_mat_file, mean_mat_file, shape, gaussian=(1,1), components=5, *args, **kwargs):
         self.cov_mat_file = cov_mat_file
         self.mean_mat_file = mean_mat_file
