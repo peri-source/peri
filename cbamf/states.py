@@ -552,7 +552,7 @@ class ConfocalImagePython(State):
 
             # update the background if it has been changed
             if block[self.b_ilm].any():
-                self.ilm.update(self.state[self.b_ilm])
+                self.ilm.update(block[self.b_ilm], self.state[self.b_ilm])
                 docalc = True
 
             # we actually don't have to do anything if the offset is changed
