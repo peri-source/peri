@@ -72,7 +72,7 @@ class ProgressBar(object):
             The number of tasks that need to be completed
 
         label : string [default: 'Progress']
-            The label for this particular progress indicator, 
+            The label for this particular progress indicator,
 
         value : integer [default: 0]
             Starting value
@@ -142,7 +142,7 @@ class ProgressBar(object):
                 self._formatstr += " ({_dt})"
         else:
             self._digits = str(int(np.ceil(np.log10(self.num))))
-            self._formatstr = '\r{label} : {value:>{_digits}} / {num:>{_digits}} ({_dt})'
+            self._formatstr = '\r{label} : {value:>{_digits}} / {num:>{_digits}}'
 
             self._dt = '--:--:--'
             if self.time_remaining:
@@ -154,13 +154,16 @@ class ProgressBar(object):
         if len(self._deltas) < 3:
             self._dt = '--:--:--'
         else:
-            dt = np.diff(self._deltas[-5:]).mean() * (self.num - self.value)
+            dt = np.diff(self._deltas[-25:]).mean() * (self.num - self.value)
             self._dt = time.strftime('%H:%M:%S', time.gmtime(dt))
 
     def _draw(self):
         """ Interal draw method, simply prints to screen """
         print self._formatstr.format(**self.__dict__),
         sys.stdout.flush()
+
+    def increment(self):
+        self.update(self.value + 1)
 
     def update(self, value=0):
         """
@@ -175,10 +178,13 @@ class ProgressBar(object):
 
         self.value = value
         self._percent = 100.0 * self.value / self.num
-        self._bars = self._bar_symbol*int(np.round(self._percent / 100. * self._barsize))
 
-        self._estimate_time()
-        self._draw()
+        if self.bar:
+            self._bars = self._bar_symbol*int(np.round(self._percent / 100. * self._barsize))
+
+        if (len(self._deltas) < 2) or (self._deltas[-1] - self._deltas[-2]) > 1e-1:
+            self._estimate_time()
+            self._draw()
 
         if self.value == self.num:
             self.end()
