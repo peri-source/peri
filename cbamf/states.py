@@ -410,6 +410,8 @@ class ConfocalImagePython(State):
 
         ipsc = np.ceil(psc).astype('int')
 
+        pl += pl % 2
+        pr += pr % 2
         outer = Tile(pl, pr, 0, self.image.shape)
 
         if self.difference:
