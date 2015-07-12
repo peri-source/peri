@@ -5,9 +5,10 @@ from itertools import product
 from cbamf.util import Tile, cdd
 
 class Polynomial3D(object):
-    def __init__(self, shape, coeffs=None, order=(1,1,1)):
+    def __init__(self, shape, coeffs=None, order=(1,1,1), partial_update=True):
         self.shape = shape
         self.order = order
+        self.partial_update = partial_update
 
         if coeffs is None:
             self.params = np.zeros(np.prod(order), dtype='float')
@@ -18,7 +19,9 @@ class Polynomial3D(object):
         self._setup_rvecs()
         self.tile = Tile(self.shape)
         self.set_tile(Tile(self.shape))
-        self.update()
+
+        self.block = np.ones(self.params.shape).astype('bool')
+        self.update(self.block, self.params)
 
     def _poly_orders(self):
         return product(*(xrange(o) for o in self.order))
@@ -38,18 +41,22 @@ class Polynomial3D(object):
         if mask is None:
             mask = np.s_[:]
         fit, _, _, _ = np.linalg.lstsq(self._poly[mask].reshape(-1, self.params.shape[0]), f[mask].ravel())
-        self.update(fit)
+        self.update(self.block, fit)
 
     def initialize(self):
-        self.update(self.params)
+        self.update(self.block, self.params)
 
     def set_tile(self, tile):
         self.tile = tile
 
-    def update(self, params=None):
-        if params is not None:
+    def update(self, blocks, params):
+        if self.partial_update and blocks.sum() < self.block.sum()/2:
+            self.bkg -= (self._poly[...,blocks] * self.params[blocks]).sum(axis=-1)
             self.params = params
-        self.bkg = (self._poly * self.params).sum(axis=-1)
+            self.bkg += (self._poly[...,blocks] * self.params[blocks]).sum(axis=-1)
+        else:
+            self.params = params
+            self.bkg = (self._poly * self.params).sum(axis=-1)
 
     def get_field(self):
         return self.bkg[self.tile.slicer]
@@ -67,7 +74,7 @@ class Polynomial3D(object):
         self._setup_rvecs()
         self.tile = Tile(self.shape)
         self.set_tile(Tile(self.shape))
-        self.update()
+        self.update(self.block, self.params)
 
 class LegendrePoly3D(Polynomial3D):
     def __init__(self, shape, coeffs=None, order=(1,1,1)):
