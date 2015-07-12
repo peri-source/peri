@@ -42,6 +42,13 @@ class Tile(object):
         self.shape = self.r - self.l
         self.slicer = np.s_[l[0]:r[0], l[1]:r[1], l[2]:r[2]]
 
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        return str(self.__class__.__name__)+" {} -> {} ({})".format(
+                list(self.l), list(self.r), list(self.shape))
+
 def cdd(d, k):
     """ Conditionally delete key (or list of keys) 'k' from dict 'd' """
     if not isinstance(k, list):

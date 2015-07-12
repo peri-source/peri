@@ -97,11 +97,8 @@ class State:
             blocks = self.explode(self.block_all())
         grad = np.zeros(len(blocks))
 
-        p = ProgressBar(len(blocks), 'Gradient')
         for i, b in enumerate(blocks):
-            p.update(i)
             grad[i] = self._grad_single_param(b, dl)
-        p.end()
 
         return grad
 
@@ -114,15 +111,12 @@ class State:
                 blocks = self.explode(self.block_all())
             hess = np.zeros((len(blocks), len(blocks)))
 
-            p = ProgressBar(len(blocks), 'Hessian')
             for i, bi in enumerate(blocks):
-                p.update(i)
                 for j, bj in enumerate(blocks[i:]):
                     J = j + i
                     thess = self._hess_two_param(bi, bj, dl)
                     hess[i,J] = thess
                     hess[J,i] = thess
-            p.end()
 
             return hess
 
@@ -390,7 +384,7 @@ class ConfocalImagePython(State):
 
     def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
         psc = self.psf.get_support_size()
-        rsc = self.obj.get_support_size()/2.0 # FIXME -- this shouldn't be 2.0
+        rsc = self.obj.get_support_size() # FIXME -- this shouldn't be 2.0
 
         zsc = np.array([1.0/self.zscale, 1, 1])
         r0, r1 = zsc*r0, zsc*r1
@@ -647,9 +641,7 @@ class ConfocalImagePython(State):
             blocks = self.explode(self.block_all())
         fish = np.zeros((len(blocks), len(blocks)))
 
-        p = ProgressBar(len(blocks), 'Fisher')
         for i, bi in enumerate(blocks):
-            p.update(i)
             for j, bj in enumerate(blocks[i:]):
                 J = j + i
                 di = self._grad_image(bi, dl=dl)
@@ -657,7 +649,6 @@ class ConfocalImagePython(State):
                 tfish = (di*dj).sum()
                 fish[i,J] = tfish
                 fish[J,i] = tfish
-        p.end()
 
         return fish / self.sigma**2
 
