@@ -114,7 +114,8 @@ class PSF(object):
         if hasfftw:
             self._ifftn_data[:] = arr
             self._ifftn.execute()
-            return (self._ifftn.get_output_array() / self._fftn_data.size).copy()
+            v = 1.0/self._fftn_data.size
+            return self._ifftn.get_output_array() * v
         else:
             return np.fft.ifftn(arr)
 
@@ -248,10 +249,10 @@ class GaussianPolynomialPCA(PSF):
 
         polycoeffs = self._psf_vecs.dot(coeff[2:]) + self._psf_mean
         poly = np.polynomial.polynomial.polyval2d(rho, z, polycoeffs.reshape(*self.poly_shape))
-        return poly * np.exp(-rho**2) * np.exp(-z**2) * (rho <= self.pr/coeff[0]) * (np.abs(self._rz) <= self.pz/coeff[1])
+        return poly * np.exp(-rho**2) * np.exp(-z**2) * (rho <= self.pr/coeff[0]) * (np.abs(z) <= self.pz/coeff[1])
 
     def get_support_size(self):
-        self.pr = 2.0*np.sqrt(-2*np.log(self.error)*self.params[0]**2)
-        self.pz = 2.0*np.sqrt(-2*np.log(self.error)*self.params[1]**2)
+        self.pr = 1.4*np.sqrt(-2*np.log(self.error)*self.params[0]**2)
+        self.pz = 1.4*np.sqrt(-2*np.log(self.error)*self.params[1]**2)
         return np.array([self.pz, self.pr, self.pr])
 
