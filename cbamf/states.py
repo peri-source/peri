@@ -126,6 +126,17 @@ class State:
     def neggradloglikelihood(self, state):
         return -self.gradloglikelihood(state)
 
+"""
+class JointState(State):
+    def __init__(self, states, shared_params):
+        self.states = states
+        self.shared_params = shared_params
+
+    def update(self, params, values):
+        for param in params:
+            if param in self.shared_params:
+                pass
+"""
 
 class LinearFit(State):
     def __init__(self, x, y, *args, **kwargs):
@@ -205,7 +216,7 @@ class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
             sigma=0.04, doprior=True, constoff=True,
             varyn=False, allowdimers=False, nlogs=False, difference=True,
-            pad=const.PAD, *args, **kwargs):
+            pad=const.PAD, sigmapad=True, *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -264,6 +275,10 @@ class ConfocalImagePython(State):
         pad : integer (optional)
             No recommended to set by hand.  The padding level of the raw image needed
             by the PSF support.
+
+        sigmapad : boolean [default: True]
+            If True, varies the sigma values at the edge of the image, changing them
+            slowly to zero over the size of the psf support
         """
         self.pad = pad
         self.index = None
@@ -274,6 +289,7 @@ class ConfocalImagePython(State):
         self.nlogs = nlogs
         self.varyn = varyn
         self.difference = difference
+        self.sigmapad = sigmapad
 
         self.psf = psf
         self.ilm = ilm
@@ -368,6 +384,22 @@ class ConfocalImagePython(State):
         self._logprior = 0
         self._loglikelihood = 0
         self._loglikelihood_field = np.zeros(self.image.shape)
+        self._build_sigma_field()
+
+    def _build_sigma_field(self):
+        self._sigma_field = np.zeros(self.image.shape)
+
+        if not self.sigmapad:
+            self._sigma_field += self.sigma
+        else:
+            p = self.psf.get_support_size()/4
+            l = self.pad + p
+            self._sigma_field[:] = 3*self.sigma
+            self._sigma_field[l[0]:-l[0], l[1]:-l[1], l[2]:-l[2]] = self.sigma
+            #self._sigma_field = 1.0 / self._sigma_field
+
+            self.psf.set_tile(Tile(self._sigma_field.shape))
+            self._sigma_field = self.psf.execute(self._sigma_field)
 
     def _initialize(self):
         if self.doprior:
@@ -384,7 +416,7 @@ class ConfocalImagePython(State):
 
     def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
         psc = self.psf.get_support_size()
-        rsc = self.obj.get_support_size() # FIXME -- this shouldn't be 2.0
+        rsc = self.obj.get_support_size()
 
         zsc = np.array([1.0/self.zscale, 1, 1])
         r0, r1 = zsc*r0, zsc*r1
@@ -437,8 +469,8 @@ class ConfocalImagePython(State):
         oldll = self._loglikelihood_field[slicer].sum()
 
         self._loglikelihood_field[slicer] = (
-                -self.image_mask[slicer] * (data - self.image[slicer])**2 / (2*self.sigma**2)
-                -self.image_mask[slicer] * np.log( np.sqrt(2*np.pi) * self.sigma )*self.nlogs
+                -self.image_mask[slicer] * (data - self.image[slicer])**2 / (2*self._sigma_field[slicer]**2)
+                -self.image_mask[slicer] * np.log( np.sqrt(2*np.pi) * self._sigma_field[slicer] )*self.nlogs
             )
 
         newll = self._loglikelihood_field[slicer].sum()
@@ -523,7 +555,7 @@ class ConfocalImagePython(State):
 
             tiles = self._tile_from_particle_change(pos0, rad0, typ0, pos, rad, typ)
             for tile in tiles[:2]:
-                if (np.array(tile.shape) < 0).any():
+                if (np.array(tile.shape) < 2*self.psf.get_support_size()).any():
                     self.state[block] = prev[block]
                     return False
 
@@ -550,6 +582,7 @@ class ConfocalImagePython(State):
             # if the psf was changed, update globally
             if block[self.b_psf].any():
                 self.psf.update(self.state[self.b_psf])
+                self._build_sigma_field()
                 docalc = True
 
             # update the background if it has been changed
@@ -564,6 +597,7 @@ class ConfocalImagePython(State):
 
             if block[self.b_sigma].any():
                 self.sigma = self.state[self.b_sigma]
+                self._build_sigma_field()
                 self._update_ll_field()
 
             if block[self.b_zscale].any():
