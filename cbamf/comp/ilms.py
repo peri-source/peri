@@ -27,8 +27,12 @@ class Polynomial3D(object):
         return product(*(xrange(o) for o in self.order))
 
     def _setup_rvecs(self):
+        # normalize all sizes to a strict upper bound on image size
+        # so we can transfer ILM between different images
+        MAX = 1024.0
+
         o = self.shape
-        self.rz, self.ry, self.rx = np.mgrid[0:o[0], 0:o[1], 0:o[2]] / float(max(o))
+        self.rz, self.ry, self.rx = np.mgrid[0:o[0], 0:o[1], 0:o[2]] / MAX
         self._poly = []
 
         for i,j,k in self._poly_orders():
