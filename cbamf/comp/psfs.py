@@ -256,3 +256,58 @@ class GaussianPolynomialPCA(PSF):
         self.pz = 1.4*np.sqrt(-2*np.log(self.error)*self.params[1]**2)
         return np.array([self.pz, self.pr, self.pr])
 
+class ASymmetricGaussianPolynomialPCA(PSF):
+    def __init__(self, symm_cov_file, symm_mean_file, asymm_cov_file, asymm_mean_file, shape, gaussian=(2,4),
+            components=5, error=1.0/255, *args, **kwargs):
+        self.symm_cov_file = symm_cov_file
+        self.symm_mean_file = symm_mean_file
+        self.asymm_cov_file = asymm_cov_file
+        self.asymm_mean_file = asymm_mean_file
+
+        self.comp = components
+        self.error = error
+
+        self._setup_from_files()
+        params0 = np.hstack([gaussian, np.zeros(2*self.comp)])
+
+        super(ASymmetricGaussianPolynomialPCA, self).__init__(*args, params=params0, shape=shape, **kwargs)
+
+    def _setup_from_files(self):
+        symm_covm = np.load(self.symm_cov_file)
+        symm_mean = np.load(self.symm_mean_file)
+        asymm_covm = np.load(self.asymm_cov_file)
+        asymm_mean = np.load(self.asymm_mean_file)
+
+        self.poly_shape = (np.round(np.sqrt(symm_mean.shape[0])),)*2
+
+        symm_vals, symm_vecs = np.linalg.eig(symm_covm)
+        self._psf_symm_vecs = np.real(symm_vecs[:,:self.comp])
+        self._psf_symm_mean = np.real(symm_mean)
+
+        asymm_vals, asymm_vecs = np.linalg.eig(asymm_covm)
+        self._psf_asymm_vecs = np.real(asymm_vecs[:,:self.comp])
+        self._psf_asymm_mean = np.real(asymm_mean)
+
+    def rpsf_func(self):
+        coeff = self.params
+
+        rho = np.sqrt(self._rx**2 + self._ry**2) / coeff[0]
+        z = self._rz / coeff[1]
+
+        symm = coeff[2:2+self.comp]
+        symm_polycoeffs = self._psf_symm_vecs.dot(symm) + self._psf_symm_mean
+        symm_poly = np.polynomial.polynomial.polyval2d(rho, z, symm_polycoeffs.reshape(*self.poly_shape))
+
+        asymm = coeff[2+self.comp:]
+        asymm_polycoeffs = self._psf_asymm_vecs.dot(asymm) + self._psf_asymm_mean
+        asymm_poly = np.polynomial.polynomial.polyval2d(rho, z, asymm_polycoeffs.reshape(*self.poly_shape))
+
+        phi = np.arctan2(self._ry, self._rx)
+        out = (symm_poly + np.cos(2*phi)*asymm_poly) * np.exp(-rho**2) * np.exp(-z**2)
+        return out * (rho <= self.pr/coeff[0]) * (np.abs(z) <= self.pz/coeff[1])
+
+    def get_support_size(self):
+        self.pr = 1.4*np.sqrt(-2*np.log(self.error)*self.params[0]**2)
+        self.pz = 1.4*np.sqrt(-2*np.log(self.error)*self.params[1]**2)
+        return np.array([self.pz, self.pr, self.pr])
+
