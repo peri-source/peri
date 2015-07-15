@@ -623,6 +623,28 @@ class ConfocalImagePython(State):
 
         return True
 
+    def add_particle(self, p, r):
+        n = self.obj.typ.argmin()
+
+        bp = self.block_particle_pos(n)
+        br = self.block_particle_rad(n)
+        bt = self.block_particle_typ(n)
+
+        self.update(bp, p)
+        self.update(br, np.array([r]))
+        self.update(bt, np.array([1]))
+
+        return n
+
+    def remove_particle(self, n):
+        bt = self.block_particle_typ(n)
+        self.update(bt, np.array([0]))
+        return self.obj.pos[n], self.obj.rad[n]
+
+    def remove_closest_particle(self, x):
+        n = ((self.obj.typ==0)*1e5 + ((self.obj.pos - x)**2).sum(axis=-1)).argmin()
+        return self.remove_particle(n)
+
     def isactive(self, particle):
         if self.varyn:
             return self.state[self.block_particle_typ(particle)] == 1

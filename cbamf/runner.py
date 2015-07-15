@@ -272,23 +272,14 @@ def sample_n_add(s, rad, tries=5):
         ll0 = s.loglikelihood()
 
         p = pos[i].reshape(-1,3)
-        n = s.obj.typ.argmin()
 
-        bp = s.block_particle_pos(n)
-        br = s.block_particle_rad(n)
-        bt = s.block_particle_typ(n)
-
-        s.update(bp, p)
-        s.update(br, np.array([rad]))
-        s.update(bt, np.array([1]))
-
+        n = s.add_particle(p, rad)
         bl = s.blocks_particle(n)[:-1]
         sample_state(s, bl, stepout=1, N=1)
 
         ll1 = s.loglikelihood()
 
         print p, ll0, ll1
-        #if not (np.log(np.random.rand()) < (ll0**2).sum() - (ll1**2).sum()):
         if (ll0**2).sum() < (ll1**2).sum():
             s.update(bt, np.array([0]))
         else:
@@ -313,15 +304,11 @@ def sample_n_remove(s, rad, tries=5):
     for _, i in vals[-tries:]:
         ll0 = s.loglikelihood()
 
-        n = ((s.obj.pos - pos[i])**2).sum(axis=0).argmin()
-
-        bt = s.block_particle_typ(n)
-        s.update(bt, np.array([0]))
+        s.remove_closest_particle(pos[i])
 
         ll1 = s.loglikelihood()
 
         print s.obj.pos[n], ll0, ll1
-        #if not (np.log(np.random.rand()) < (ll0**2).sum() - (ll1**2).sum()):
         if (ll0**2).sum() < (ll1**2).sum():
             s.update(bt, np.array([1]))
         else:
