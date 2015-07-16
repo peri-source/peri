@@ -212,6 +212,23 @@ class AnisotropicGaussian(PSF):
         self.pz = np.sqrt(-2*np.log(self.error)*self.params[1]**2)
         return np.array([self.pz, self.pr, self.pr])
 
+class AnisotropicGaussianXYZ(PSF):
+    def __init__(self, params, shape, error=1.0/255, *args, **kwargs):
+        self.error = error
+        super(AnisotropicGaussianXYZ, self).__init__(*args, params=params, shape=shape, **kwargs)
+
+    def rpsf_func(self):
+        params = self.params
+        rt2 = np.sqrt(2)
+        arg = np.exp(-(self._rx/(rt2*params[0]))**2 - (self._ry/(rt2*params[1]))**2 - (self._rz/(rt2*params[2]))**2)
+        return arg * (np.abs(self._rx) <= self.px) * (np.abs(self._ry) <= self.py) * (np.abs(self._rz) <= self.pz)
+
+    def get_support_size(self):
+        self.px = np.sqrt(-2*np.log(self.error)*self.params[0]**2)
+        self.py = np.sqrt(-2*np.log(self.error)*self.params[1]**2)
+        self.pz = np.sqrt(-2*np.log(self.error)*self.params[2]**2)
+        return np.array([self.pz, self.py, self.px])
+
 class GaussianPolynomialPCA(PSF):
     def __init__(self, cov_mat_file, mean_mat_file, shape, gaussian=(2,4),
             components=5, error=1.0/255, *args, **kwargs):
