@@ -4,7 +4,7 @@ import matplotlib.pylab as pl
 from matplotlib.gridspec import GridSpec
 
 class OrthoManipulator(object):
-    def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', vmin=0, vmax=1, incsize=18.0):
+    def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', vmin=0.0, vmax=1.0, incsize=18.0):
         self.incsize = incsize
         self.mode = 'view'
         self.views = ['field', 'diff', 'cropped']
@@ -44,17 +44,18 @@ class OrthoManipulator(object):
         ax.set_yticks([])
 
     def draw(self):
-        self.draw_ortho(self.state.image, self.gl)
+        self.draw_ortho(self.state.image, self.gl, cmap=self.cmap_abs,
+                vmin=self.vmin, vmax=self.vmax)
 
         if self.view == 'field':
             self.draw_ortho(self.state.model_image, self.gr,
                 cmap=self.cmap_abs, vmin=self.vmin, vmax=self.vmax)
         if self.view == 'diff':
             self.draw_ortho(self.state.image - self.state.get_model_image(),
-                self.gr, cmap=self.cmap_diff, vmin=-self.vmax, vmax=self.vmax)
+                self.gr, cmap=self.cmap_diff, vmin=-self.vmax/5, vmax=self.vmax/5)
         if self.view == 'cropped':
             self.draw_ortho(self.state.get_model_image(),
-                self.gr, cmap=self.cmap_diff, vmin=self.vmin, vmax=self.vmax)
+                self.gr, cmap=self.cmap_abs, vmin=self.vmin, vmax=self.vmax)
 
     def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
         slices = self.slices
