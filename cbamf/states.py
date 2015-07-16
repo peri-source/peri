@@ -92,17 +92,20 @@ class State:
             loglike += self.logpriors(state)
         return loglike
 
-    def gradloglikelihood(self, dl=1e-3, blocks=None):
+    def gradloglikelihood(self, dl=1e-3, blocks=None, progress=False):
         if blocks is None:
             blocks = self.explode(self.block_all())
         grad = np.zeros(len(blocks))
 
+        p = ProgressBar(len(blocks), display=progress)
         for i, b in enumerate(blocks):
+            p.increment()
             grad[i] = self._grad_single_param(b, dl)
+        p.end()
 
         return grad
 
-    def hessloglikelihood(self, dl=1e-3, jtj=False, blocks=None):
+    def hessloglikelihood(self, dl=1e-3, jtj=False, blocks=None, progress=False):
         if jtj:
             grad = self.gradloglikelihood(dl=dl, blocks=blocks)
             return grad.T[None,:] * grad[:,None]
@@ -111,13 +114,15 @@ class State:
                 blocks = self.explode(self.block_all())
             hess = np.zeros((len(blocks), len(blocks)))
 
+            p = ProgressBar(len(blocks), display=progress)
             for i, bi in enumerate(blocks):
+                p.increment()
                 for j, bj in enumerate(blocks[i:]):
                     J = j + i
                     thess = self._hess_two_param(bi, bj, dl)
                     hess[i,J] = thess
                     hess[J,i] = thess
-
+            p.end()
             return hess
 
     def negloglikelihood(self, state):
@@ -157,7 +162,7 @@ class LinearFit(State):
         return -((self._calculate(state) - self.dy)**2).sum()
 
 
-def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD):
+def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True):
     """
     Prepares a set of positions, radii, and a test image for use
     in the ConfocalImagePython object
@@ -185,8 +190,9 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD):
     """
     # normalize and pad the image, add the same offset to the positions
     image = initializers.normalize(image, invert)
-    image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
-    pos += pad
+    if dopad:
+        image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
+        pos += pad
 
     if not isinstance(rad, np.ndarray):
         rad = rad*np.ones(pos.shape[0])
@@ -641,9 +647,11 @@ class ConfocalImagePython(State):
         self.update(bt, np.array([0]))
         return self.obj.pos[n], self.obj.rad[n]
 
+    def closest_particle(self, x):
+        return ((self.obj.typ==0)*1e5 + ((self.obj.pos - x)**2).sum(axis=-1)).argmin()
+
     def remove_closest_particle(self, x):
-        n = ((self.obj.typ==0)*1e5 + ((self.obj.pos - x)**2).sum(axis=-1)).argmin()
-        return self.remove_particle(n)
+        return self.remove_particle(self.closest_particle(x))
 
     def isactive(self, particle):
         if self.varyn:
