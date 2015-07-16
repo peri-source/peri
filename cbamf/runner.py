@@ -114,6 +114,7 @@ def do_samples(s, sweeps, burn, stepout=0.1):
         sample_block(s, 'ilm', stepout=stepout)
         sample_block(s, 'off', stepout=stepout)
         sample_block(s, 'zscale', stepout=stepout)
+        sample_block(s, 'sigma', stepout=0.005)
 
         if i >= burn:
             h.append(s.state.copy())
@@ -126,38 +127,28 @@ def do_samples(s, sweeps, burn, stepout=0.1):
 #=============================================================================
 # Optimization methods like gradient descent
 #=============================================================================
-def build_bounds(state):
-    bounds = []
+def modify(state, blocks, vec):
+    for bl, val in zip(blocks, vec):
+        state.update(bl, np.array([val]))
 
-    bound_dict = {
-        'pos': (1,512),
-        'rad': (0, 20),
-        'typ': (0,1),
-        'psf': (0, 10),
-        'bkg': (-100, 100),
-        'amp': (-3, 3),
-        'zscale': (0.5, 1.5)
-    }
-
-    for i,p in enumerate(state.param_order):
-        bounds.extend([bound_dict[p]]*state.param_lengths[i])
-    return np.array(bounds)
-
-def loglikelihood(vec, state):
-    state.set_state(vec)
-    state.create_final_image()
+def loglikelihood(vec, state, blocks):
+    modify(state, blocks, vec)
     return -state.loglikelihood()
 
-def gradloglikelihood(vec, state):
-    state.set_state(vec)
+def gradloglikelihood(vec, state, blocks):
+    modify(state, blocks, vec)
     return -state.gradloglikelihood()
 
-def gradient_descent(state, method='L-BFGS-B'):
+def hessloglikelihood(vec, state, blocks):
+    modify(state, blocks, vec)
+    return -state.hessloglikelihood()
+
+def gradient_descent(state, blocks, method='L-BFGS-B'):
     from scipy.optimize import minimize
 
-    bounds = build_bounds(state)
-    minimize(loglikelihood, state.state, args=(state,),
-            method=method, jac=gradloglikelihood, bounds=bounds)
+    t = np.array(blocks).any(axis=0)
+    return minimize(loglikelihood, state.state[t], args=(state, blocks),
+            method=method, jac=gradloglikelihood, hess=hessloglikelihood)
 
 def gd(state, N=1, ratio=1e-1):
     state.set_current_particle()
