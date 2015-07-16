@@ -63,7 +63,7 @@ def cdd(d, k):
 class ProgressBar(object):
     def __init__(self, num, label='Progress', value=0, screen=79,
             time_remaining=True, bar=True, bar_symbol='=', bar_caps='[]',
-            bar_decimals=2):
+            bar_decimals=2, display=True):
         """
         ProgressBar class which creates a dynamic ASCII progress bar of two
         different varieties:
@@ -102,6 +102,10 @@ class ProgressBar(object):
 
         bar_decimals: integer [default: 2]
             Number of decimal places to include in the _percentage
+
+        display : boolean [default: True]
+            a crutch so that we don't have a lot of `if`s later.  display
+            or don't display the progress bar
         """
         # TODO -- add estimated time remaining
         self.num = num
@@ -109,6 +113,7 @@ class ProgressBar(object):
         self._percent = 0
         self.time_remaining = time_remaining
         self._deltas = []
+        self.display = display
 
         self.label = label
         self.bar = bar
@@ -166,8 +171,9 @@ class ProgressBar(object):
 
     def _draw(self):
         """ Interal draw method, simply prints to screen """
-        print self._formatstr.format(**self.__dict__),
-        sys.stdout.flush()
+        if self.display:
+            print self._formatstr.format(**self.__dict__),
+            sys.stdout.flush()
 
     def increment(self):
         self.update(self.value + 1)
@@ -197,7 +203,8 @@ class ProgressBar(object):
             self.end()
 
     def end(self):
-        print '\r{lett:>{screen}}'.format(**{'lett':'', 'screen': self.screen})
+        if self.display:
+            print '\r{lett:>{screen}}'.format(**{'lett':'', 'screen': self.screen})
 
 #=============================================================================
 # debugging / python interpreter / logging
