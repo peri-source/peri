@@ -1,6 +1,8 @@
 import sys
 import numpy as np
 import scipy.ndimage as nd
+import tempfile
+import pickle
 
 from cbamf import const
 from cbamf.mc import samplers, engines, observers
@@ -12,7 +14,7 @@ def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
     eng = engines.SequentialBlockEngine(state)
     opsay = observers.Printer()
     ohist = observers.HistogramObserver(block=blocks[0])
-    eng.add_samplers([samplers.SliceSampler(stepout, block=b) for b in blocks])
+    eng.add_samplers([samplers.SliceSampler1D(stepout, block=b, procedure='uniform') for b in blocks])
 
     eng.add_likelihood_observers(opsay) if doprint else None
     eng.add_state_observers(ohist)
@@ -103,10 +105,19 @@ def sample_block_list(state, blocklist, stepout=0.1):
         sample_block(state, bl, stepout=stepout)
     return state.state.copy(), state.loglikelihood()
 
-def do_samples(s, sweeps, burn, stepout=0.1):
+def do_samples(s, sweeps, burn, stepout=0.1, save_period=10,
+        prefix='cbamf', save_name=None):
     h = []
     ll = []
+    if not save_name:
+        with tempfile.NamedTemporaryFile(suffix='.cbamf-state.pkl', prefix=prefix) as f:
+            save_name = f.name
+
     for i in xrange(sweeps):
+        if save_period > 0 and i % save_period == 0:
+            with open(save_name, 'w') as tfile:
+                pickle.dump([s,h,ll], tfile)
+
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
         sample_particles(s, stepout=stepout)
