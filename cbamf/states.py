@@ -713,14 +713,17 @@ class ConfocalImagePython(State):
 
     def _grad_residuals(self, bl, dl=1e-3):
         self.push_update(bl, self.state[bl]+dl)
-        m1 = self._loglikelihood_field.copy()
+        m1 = self.residuals()
         self.pop_update()
 
         self.push_update(bl, self.state[bl]-dl)
-        m0 = self._loglikelihood_field.copy()
+        m0 = self.residuals()
         self.pop_update()
 
         return (m1 - m0) / (2*dl)
+
+    def residuals(self):
+        return self.image_mask*(self.image - self.get_model_image())
 
     def fisher_information(self, blocks=None, dl=1e-3):
         if blocks is None:
@@ -738,7 +741,7 @@ class ConfocalImagePython(State):
 
         return fish / self.sigma**2
 
-    def jtj(self, blocks=None, dl=1e-3, maxmem=1e9):
+    def jac(self, blocks=None, dl=1e-3, maxmem=1e9, flat=True):
         if blocks is None:
             blocks = self.explode(self.block_all())
 
@@ -749,8 +752,15 @@ class ConfocalImagePython(State):
         J = np.zeros((len(blocks), self._loglikelihood_field.size))
 
         for i, bi in enumerate(blocks):
-            J[i] = self._grad_residuals(bi, dl=dl).flatten()
+            tJ = self._grad_residuals(bi, dl=dl).flatten()
+            if flat:
+                J[i] = tJ.flatten()
+            else:
+                J[i] = tJ
+        return J
 
+    def jtj(self, blocks=None, dl=1e-3, maxmem=1e9):
+        J = self.jac(blocks=blocks, dl=dl, maxmem=maxmem)
         return J.dot(J.T)
 
     def loglikelihood(self):
