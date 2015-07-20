@@ -9,7 +9,7 @@ from cbamf.conf import get_wisdom
 
 try:
     import pyfftw
-    from pyfftw.builders import fftn, ifftn
+    from pyfftw.builders import fftn, ifftn, fft2, ifft2
     hasfftw = True
 except ImportError as e:
     print "*WARNING* pyfftw not found, switching to numpy.fft (20x slower)"
@@ -100,7 +100,10 @@ class PSF(object):
         self.rpsf = np.pad(self._min_rpsf, pad, mode='constant', constant_values=0)
         self.rpsf = np.fft.fftshift(self.rpsf)
         self.kpsf = self.fftn(self.rpsf)
-        self.normalize_kpsf()
+        self.kpsf /= (np.real(self.kpsf[0,0,0]) + 1e-15)
+
+    def _cache_key(self):
+        return tuple(self.tile.shape)
 
     def fftn(self, arr):
         if hasfftw:
@@ -119,10 +122,6 @@ class PSF(object):
         else:
             return np.fft.ifftn(arr)
 
-    def normalize_kpsf(self):
-        self.kpsf /= np.real(self.kpsf[0,0,0])
-        pass
-
     def set_tile(self, tile):
         if any(tile.shape < self._min_support):
             raise IndexError("PSF tile size is less than minimum support size")
@@ -131,7 +130,7 @@ class PSF(object):
             self.tile = tile
             self._setup_ffts()
 
-        key = tuple(self.tile.shape)
+        key = self._cache_key()
         if key in self._cache:
             self.kpsf = self._cache[key]
             self._cache_hits += 1
@@ -327,4 +326,244 @@ class ASymmetricGaussianPolynomialPCA(PSF):
         self.pr = 1.4*np.sqrt(-2*np.log(self.error)*self.params[0]**2)
         self.pz = 1.4*np.sqrt(-2*np.log(self.error)*self.params[1]**2)
         return np.array([self.pz, self.pr, self.pr])
+
+
+class PSF4D(object):
+    def __init__(self, params, shape, fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1,
+            cache_tiles=True, cache_max_size=1e9):
+        self.cache_max_size = cache_max_size
+        self.cache_tiles = cache_tiles
+        self._cache = {}
+        self._cache_size = 0
+        self._cache_hits = 0
+        self._cache_misses = 0
+
+        self.shape = shape
+        self.params = np.array(params).astype('float')
+
+        self.threads = threads if threads > 0 else cpu_count()
+        self.fftw_planning_level = fftw_planning_level
+
+        self.tile = Tile(self.shape)
+        #self.update(self.params)
+        #self.set_tile(Tile(self.shape))
+
+    def _setup_ffts(self):
+        if hasfftw:
+            self._fftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
+            self._ifftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
+            self._fftn = fftn(self._fftn_data, overwrite_input=False,
+                    planner_effort=self.fftw_planning_level, threads=self.threads)
+            self._ifftn = ifftn(self._ifftn_data, overwrite_input=False,
+                    planner_effort=self.fftw_planning_level, threads=self.threads)
+
+    def _setup_kvecs(self):
+        sp = self.tile.shape
+        kz = 2*np.pi*np.fft.fftfreq(sp[0])[:,None,None]
+        ky = 2*np.pi*np.fft.fftfreq(sp[1])[None,:,None]
+        kx = 2*np.pi*np.fft.fftfreq(sp[2])[None,None,:]
+        self._kx, self._ky, self._kz = kx, ky, kz
+        self._kvecs = np.rollaxis(np.array(np.broadcast_arrays(kz,ky,kx)), 0, 4)
+        self._klen = np.sqrt(kx**2 + ky**2 + kz**2)
+
+    def _setup_rvecs(self, shape, centered=True):
+        sp = shape
+        mx = np.max(sp)
+
+        rz = 2*sp[0]*np.fft.fftfreq(sp[0])[:,None,None]
+        ry = 2*sp[1]*np.fft.fftfreq(sp[1])[None,:,None]
+        rx = 2*sp[2]*np.fft.fftfreq(sp[2])[None,None,:]
+
+        if centered:
+            rz = np.fft.fftshift(rz)
+            ry = np.fft.fftshift(ry)
+            rx = np.fft.fftshift(rx)
+
+        self._rx, self._ry, self._rz = rx, ry, rz
+        self._rvecs = np.rollaxis(np.array(np.broadcast_arrays(rz,ry,rx)), 0, 4)
+        self._rlen = np.sqrt(rx**2 + ry**2 + rz**2)
+
+    def _min_to_tile(self):
+        d = ((self.tile.shape - self._min_support)/2)
+
+        pad = tuple((d[i],d[i]) for i in [0,1,2])
+        self.rpsf = np.pad(self._min_rpsf, pad, mode='constant', constant_values=0)
+        self.rpsf = np.fft.fftshift(self.rpsf)
+        self.kpsf = self.fftn(self.rpsf)
+        self.kpsf /= (np.real(self.kpsf[0,0,0]) + 1e-15)
+
+    def _cache_key(self):
+        return tuple(self.tile.shape)
+
+    def fftn(self, arr):
+        if hasfftw:
+            self._fftn_data[:] = arr
+            self._fftn.execute()
+            return self._fftn.get_output_array().copy()
+        else:
+            return np.fft.fftn(arr)
+
+    def ifftn(self, arr):
+        if hasfftw:
+            self._ifftn_data[:] = arr
+            self._ifftn.execute()
+            v = 1.0/self._fftn_data.size
+            return self._ifftn.get_output_array() * v
+        else:
+            return np.fft.ifftn(arr)
+
+    def set_tile(self, tile):
+        if any(tile.shape < self._min_support):
+            raise IndexError("PSF tile size is less than minimum support size")
+
+        if (self.tile.shape != tile.shape).any():
+            self.tile = tile
+            self._setup_ffts()
+
+        key = self._cache_key()
+        if key in self._cache:
+            self.kpsf = self._cache[key]
+            self._cache_hits += 1
+        else:
+            self._min_to_tile()
+
+            # if we have cache space left, keep this kpsf around
+            newsize = self.kpsf.nbytes + self._cache_size
+            if self.cache_tiles and newsize < self.cache_max_size:
+                self._cache[key] = self.kpsf.copy()
+                self._cache_size = newsize
+                self._cache_misses += 1
+
+    def update(self, params):
+        self.params = params
+
+        # calculate the minimum supported real-space PSF
+        self._min_support = np.ceil(self.get_support_size()).astype('int')
+        self._min_support += self._min_support % 2
+        self._setup_rvecs(self._min_support)
+        self._min_rpsf = self.rpsf_func()
+
+        # clean out the cache since it is no longer useful
+        self._cache = {}
+        self._cache_size = 0
+
+    def _cache_key(self):
+        return (tuple(self.tile.l), tuple(self.tile.r))
+
+    def _zpos(self):
+        return np.arange(self.tile.l[0], self.tile.r[0]).astype('float')
+
+    def _sigma_rho(self, z):
+        alpha = self.params[3]
+        return self.params[0]*(1 + alpha*z)
+
+    def _sigma_z(self, z):
+        alpha = self.params[4]
+        return self.params[1]*(1 + alpha*z)
+
+    def _gauss(self, z, zp, s):
+        return 1.0/np.sqrt(2*np.pi*s**2) * np.exp(-(z-zp)**2 / (2*s**2))
+
+    def execute(self, field):
+        if any(field.shape != self.tile.shape):
+            raise AttributeError("Field passed to PSF incorrect shape")
+
+        if not np.iscomplex(field.ravel()[0]):
+            infield = self.fftn(field)
+        else:
+            infield = field
+
+        cov2d = np.real(self.ifftn(infield * self.kpsf))
+
+        out = np.zeros_like(cov2d)
+        z = self._zpos()
+
+        for i in xrange(len(cov2d)):
+            s = self._sigma_z(z[i])
+            m = (z > z[i]-3*s) & (z < z[i]+3*s)
+            g = self._gauss(z[m], z[i], s)
+
+            for gp, fpp in zip(g, cov2d[m]):
+                out[i] += (gp * fpp)
+
+    def rpsf_func(self):
+        # TODO -- create 2d slices of the x-y psf
+        zp = self._zpos()
+        gauss = np.zeros(self._rlen.shape)
+
+        x = self._rx
+        y = self._ry
+
+        for i in xrange(len(zp)):
+            s = self._sigma_rho(zp[i])
+            gauss[i] = np.exp(-(x[0]**2 + y[0]**2) / (2*s**2))
+            gauss[i] /= gauss[i,0,0]
+
+        mask = (
+            (np.abs(self._rx) <= self.px) *
+            (np.abs(self._ry) <= self.py) *
+            (np.abs(self._rz) <= self.pz)
+        )
+        return gauss #* mask
+
+
+    def execute(self, field):
+        if any(field.shape != self.tile.shape):
+            raise AttributeError("Field passed to PSF incorrect shape")
+
+        if not np.iscomplex(field.ravel()[0]):
+            infield = self.fftn(field)
+        else:
+            infield = field
+
+        return np.real(self.ifftn(infield * self.kpsf))
+
+    def get_params(self):
+        return self.params
+
+    def get_support_size(self):
+        return np.zeros(3)
+
+    def __getstate__(self):
+        odict = self.__dict__.copy()
+        cdd(odict, ['_rx', '_ry', '_rz', '_rvecs', '_rlen'])
+        cdd(odict, ['_kx', '_ky', '_kz', '_kvecs', '_klen'])
+        cdd(odict, ['_fftn', '_ifftn', '_fftn_data', '_ifftn_data'])
+        cdd(odict, ['rpsf', 'kpsf'])
+        odict['_cache'] = {}
+        return odict
+
+    def __setstate__(self, idict):
+        self.__dict__.update(idict)
+        self.tile = Tile((0,0,0))
+        self.set_tile(Tile(self.shape))
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        return str(self.__class__.__name__)+" {} ".format(self.params)
+
+class Gaussian4D(PSF):
+    def __init__(self, shape, params=(2,2,4), order=(2,2), error=1.0/255, *args, **kwargs):
+        self.order = order
+        self.error = error
+        params = np.hstack([params, np.zeros(np.prod(order))])
+        super(Gaussian4D, self).__init__(params=params, shape=shape, *args, **kwargs)
+
+    def _setup_ffts(self):
+        if hasfftw:
+            self._fftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
+            self._ifftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
+            self._fftn = fft2(self._fftn_data, overwrite_input=False,
+                    planner_effort=self.fftw_planning_level, threads=self.threads)
+            self._ifftn = ifft2(self._ifftn_data, overwrite_input=False,
+                    planner_effort=self.fftw_planning_level, threads=self.threads)
+
+    def get_support_size(self):
+        self.px = np.sqrt(-2*np.log(self.error)*self.params[0]**2)
+        self.py = np.sqrt(-2*np.log(self.error)*self.params[1]**2)
+        self.pz = np.sqrt(-2*np.log(self.error)*self.params[2]**2)
+        return np.array([self.pz, self.py, self.px])
+
 
