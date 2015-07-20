@@ -86,10 +86,10 @@ class State:
     def get_model_data(self):
         pass
 
-    def loglikelihood(self, state):
-        loglike = self.dologlikelihood(state)
+    def loglikelihood(self):
+        loglike = self.dologlikelihood()
         if self.logpriors is not None:
-            loglike += self.logpriors(state)
+            loglike += self.logpriors()
         return loglike
 
     def gradloglikelihood(self, dl=1e-3, blocks=None, progress=False):
@@ -105,9 +105,9 @@ class State:
 
         return grad
 
-    def hessloglikelihood(self, dl=1e-3, jtj=False, blocks=None, progress=False):
+    def hessloglikelihood(self, dl=1e-3, blocks=None, progress=False, jtj=False):
         if jtj:
-            grad = self.gradloglikelihood(dl=dl, blocks=blocks)
+            grad = self.gradloglikelihood(dl=dl, blocks=blocks, progress=progress)
             return grad.T[None,:] * grad[:,None]
         else:
             if blocks is None:
@@ -125,11 +125,11 @@ class State:
             p.end()
             return hess
 
-    def negloglikelihood(self, state):
-        return -self.loglikelihood(state)
+    def negloglikelihood(self):
+        return -self.loglikelihood()
 
-    def neggradloglikelihood(self, state):
-        return -self.gradloglikelihood(state)
+    def neggradloglikelihood(self):
+        return -self.gradloglikelihood()
 
 """
 class JointState(State):
@@ -145,7 +145,7 @@ class JointState(State):
 
 class LinearFit(State):
     def __init__(self, x, y, *args, **kwargs):
-        super(LinearFit, self).__init__(*args, **kwargs)
+        State.__init__(self, nparams=2, *args, **kwargs)
         self.dx, self.dy = (np.array(i) for i in zip(*sorted(zip(x, y))))
 
     def plot(self, state):
@@ -155,12 +155,14 @@ class LinearFit(State):
         pl.plot(self.dx, self.docalculate(state), '-')
         pl.show()
 
-    def _calculate(self, state):
-        return state.state[0]*self.dx + state.state[1]
+    def _calculate(self):
+        return self.state[0]*self.dx + self.state[1]
 
-    def dologlikelihood(self, state):
-        return -((self._calculate(state) - self.dy)**2).sum()
+    def dologlikelihood(self):
+        return -((self._calculate() - self.dy)**2).sum()
 
+    def reset(self):
+        self.state *= 0
 
 def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True):
     """
@@ -406,6 +408,13 @@ class ConfocalImagePython(State):
 
             self.psf.set_tile(Tile(self._sigma_field.shape))
             self._sigma_field = self.psf.execute(self._sigma_field)
+
+    def set_state(self, state):
+        self.obj.pos = state[self.b_pos]
+        self.obj.rad = state[self.b_rad]
+        self.ilm.params = state[self.b_ilm]
+        self.psf.params = state[self.b_psf]
+        self._initialize()
 
     def _initialize(self):
         if self.doprior:
@@ -702,6 +711,17 @@ class ConfocalImagePython(State):
 
         return (m1 - m0) / (2*dl)
 
+    def _grad_residuals(self, bl, dl=1e-3):
+        self.push_update(bl, self.state[bl]+dl)
+        m1 = self._loglikelihood_field.copy()
+        self.pop_update()
+
+        self.push_update(bl, self.state[bl]-dl)
+        m0 = self._loglikelihood_field.copy()
+        self.pop_update()
+
+        return (m1 - m0) / (2*dl)
+
     def fisher_information(self, blocks=None, dl=1e-3):
         if blocks is None:
             blocks = self.explode(self.block_all())
@@ -717,6 +737,21 @@ class ConfocalImagePython(State):
                 fish[J,i] = tfish
 
         return fish / self.sigma**2
+
+    def jtj(self, blocks=None, dl=1e-3, maxmem=1e9):
+        if blocks is None:
+            blocks = self.explode(self.block_all())
+
+        if self._loglikelihood_field.nbytes * len(blocks) > maxmem:
+            raise AttributeError("Maximum memory would be violated" +
+                    ", please select fewer blocks")
+
+        J = np.zeros((len(blocks), self._loglikelihood_field.size))
+
+        for i, bi in enumerate(blocks):
+            J[i] = self._grad_residuals(bi, dl=dl).flatten()
+
+        return J.dot(J.T)
 
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
