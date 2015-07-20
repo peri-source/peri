@@ -14,7 +14,7 @@ def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
     eng = engines.SequentialBlockEngine(state)
     opsay = observers.Printer()
     ohist = observers.HistogramObserver(block=blocks[0])
-    eng.add_samplers([samplers.SliceSampler1D(stepout, block=b, procedure='uniform') for b in blocks])
+    eng.add_samplers([samplers.SliceSampler1D(stepout, block=b, procedure='overrelaxed') for b in blocks])
 
     eng.add_likelihood_observers(opsay) if doprint else None
     eng.add_state_observers(ohist)
@@ -142,6 +142,16 @@ def modify(state, blocks, vec):
     for bl, val in zip(blocks, vec):
         state.update(bl, np.array([val]))
 
+def residual(vec, state, blocks):
+    print '-'
+    modify(state, blocks, vec)
+    print state.loglikelihood()
+    return state.residuals().flatten()
+
+def jac(vec, state, blocks):
+    modify(state, blocks, vec)
+    return state.jac(blocks=blocks)
+
 def loglikelihood(vec, state, blocks):
     modify(state, blocks, vec)
     return -state.loglikelihood()
@@ -158,8 +168,21 @@ def gradient_descent(state, blocks, method='L-BFGS-B'):
     from scipy.optimize import minimize
 
     t = np.array(blocks).any(axis=0)
-    return minimize(loglikelihood, state.state[t], args=(state, blocks),
-            method=method, jac=gradloglikelihood, hess=hessloglikelihood)
+    return minimize(residual_sq, state.state[t], args=(state, blocks),
+            method=method)#, jac=gradloglikelihood, hess=hessloglikelihood)
+
+def lm(state, blocks, method='lm'):
+    from scipy.optimize import root
+
+    t = np.array(blocks).any(axis=0)
+    return root(residual, state.state[t], args=(state, blocks),
+            method=method)
+
+def leastsq(state, blocks):
+    from scipy.optimize import leastsq
+
+    t = np.array(blocks).any(axis=0)
+    return leastsq(residual, state.state[t], args=(state, blocks), Dfun=jac, col_deriv=True)
 
 def gd(state, N=1, ratio=1e-1):
     state.set_current_particle()

@@ -186,6 +186,7 @@ class SliceSampler1D(Sampler):
         return xl, xr
 
     def sampling_uniform(self, state, xl, xr, x0, p0):
+        steps = 0
         while True:
             u = np.random.rand()
             x1 = xl + u*(xr - xl)
@@ -199,6 +200,11 @@ class SliceSampler1D(Sampler):
                 xl = x1
             else:
                 xr = x1
+
+            steps += 1
+
+            if steps > self.maxsteps:
+                return p0, self.getstate(state, x0)
 
     def sampling_doubling(self, state, xl, xr, x0, p0):
         size = x0.shape
