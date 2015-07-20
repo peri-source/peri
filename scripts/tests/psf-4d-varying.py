@@ -19,14 +19,13 @@ def gauss(x, xp, sigma, alpha):
 
 def conv(f, sigma=1.0, alpha=1.0):
     o = f*0
-    fp = conv2d(f, sigma)
+    fp = conv2d_varying(f, sigma, alpha)
     z = np.arange(f.shape[0]).astype('float')
-    alpha /= z[-1]
 
     for i in xrange(len(fp)):
-        s = sig(sigma, alpha, z[i])
+        s = sig(sigma, alpha/z[-1], z[i])
         m = (z > z[i]-3*s) & (z < z[i]+3*s)
-        g = gauss(z[m] - z[i], z[i], sigma, alpha)
+        g = gauss(z[m] - z[i], z[i], sigma, alpha/z[-1])
         o[i] *= 0
 
         for gp, fpp in zip(g, fp[m]):
@@ -38,6 +37,20 @@ def conv2d(f, sigma):
     gauss = np.exp(-(x[0]**2 + y[0]**2) / (2*sigma**2))
     q1 = np.fft.fft2(gauss)
     q1 /= q1[0,0]
+    q2 = np.fft.fft2(f)
+    return np.real(np.fft.ifft2(q1*q2))
+
+def conv2d_varying(f, sigma, alpha):
+    z, y, x = rvecs(f)
+
+    zp = np.arange(f.shape[0]).astype('float')
+    gauss = 0*x
+    for i in xrange(len(zp)):
+        s = sig(sigma, alpha/zp[-1], zp[i])
+        gauss[i] = np.exp(-(x[0]**2 + y[0]**2) / (2*s**2))
+        gauss[i] /= gauss[i,0,0]
+
+    q1 = np.fft.fft2(gauss)
     q2 = np.fft.fft2(f)
     return np.real(np.fft.ifft2(q1*q2))
 
