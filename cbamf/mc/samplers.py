@@ -7,9 +7,6 @@ import numpy as np
 
 from cbamf.const import PRIORCUT
 
-def createBlock(imin, imax=None, skip=None):
-    return np.s_[imin:imax:skip]
-
 class Sampler(object):
     def __init__(self, block=None):
         self.block = block
@@ -30,6 +27,24 @@ class Sampler(object):
 
     def sample(self, state):
         pass
+
+class TWalkSampler(Sampler):
+    def __init__(self, *args, **kwargs):
+        import pytwalk
+        super(TWalkSampler, self).__init__(*args, **kwargs)
+        self.walker = pytwalk.pytwalk(n=1, U=self.ll, Supp=self.supp)
+
+    def ll(self, x):
+        return -self.loglikelihood(state, x)
+
+    def supp(self, x):
+        return True
+
+    def sample(self, state, curloglike=None):
+        self.state = state
+        self.walker.Run(T=2, x0=self.state[self.block], xp0=self.state[self.block]+0.01)
+        xout = self.walker.Output[-1,0]
+        return self.loglikelihood(self.state, xout), self.getstate(state, xout)
 
 class MHSampler(Sampler):
     def __init__(self, var=None, varsteps=True, *args, **kwargs):
@@ -109,12 +124,13 @@ class SliceSampler(Sampler):
                 return up, self.getstate(state, x)
 
 class SliceSampler1D(Sampler):
-    def __init__(self, width=None, maxsteps=10, procedure='uniform', aparam=6, *args, **kwargs):
+    def __init__(self, width=None, maxsteps=10, procedure='uniform', aparam=6, mixrate=0.1, *args, **kwargs):
         super(SliceSampler1D, self).__init__(*args, **kwargs)
         self.width = width or 1
         self.maxsteps = maxsteps
         self.aparam = aparam
         self.procedure = procedure
+        self.mixrate = mixrate
 
         self._procedure = ['uniform', 'doubling', 'overrelaxed']
         if self.procedure not in self._procedure:
@@ -279,7 +295,10 @@ class SliceSampler1D(Sampler):
         if self.procedure == 'doubling':
             ll, xn = self.sampling_doubling(state, xl, xr, x, up)
         if self.procedure == 'overrelaxed':
-            ll, xn = self.sampling_overrelaxed(state, xl, xr, x, up)
+            if np.random.rand() < self.mixrate:
+                ll, xn = self.sampling_uniform(state, xl, xr, x, up)
+            else:
+                ll, xn = self.sampling_overrelaxed(state, xl, xr, x, up)
 
         return ll, self.getstate(state, xn)
 
