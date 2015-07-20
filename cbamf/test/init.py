@@ -107,3 +107,33 @@ def create_single_particle_state(imsize, radius=5.0, seed=None, *args, **kwargs)
             imsize.reshape(-1,3)/2.0, radius)
 
     return create_state(image, pos, rad, *args, **kwargs)
+
+def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, *args, **kwargs):
+    """
+    Creates a two particle state
+
+    Parameters:
+    -----------
+    imsize : tuple, array_like, or integer
+        the unpadded image size to fill with particles
+
+    radius : float
+        radius of particles to add
+
+    delta : float
+        separation between the two particles
+
+    seed : integer
+        set the seed if desired
+
+    *args, **kwargs : see create_state
+    """
+    _seed_or_not(seed)
+    imsize = _toarr(imsize)
+
+    d = np.array([0.0, 0.0, float(radius)+float(delta)/2])
+    pos = np.array([imsize/2 - d, imsize/2 + d]).reshape(-1,3)
+    rad = np.array([radius, radius])
+
+    image, pos, rad = states.prepare_for_state(np.zeros(imsize), pos, rad)
+    return create_state(image, pos, rad, *args, **kwargs)
