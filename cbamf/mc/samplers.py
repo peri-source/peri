@@ -204,7 +204,7 @@ class SliceSampler1D(Sampler):
             steps += 1
 
             if steps > self.maxsteps:
-                return p0, self.getstate(state, x0)
+                return p0, x0
 
     def sampling_doubling(self, state, xl, xr, x0, p0):
         size = x0.shape

@@ -1,3 +1,4 @@
+import os
 import sys
 import numpy as np
 import scipy.ndimage as nd
@@ -106,7 +107,7 @@ def sample_block_list(state, blocklist, stepout=0.1):
     return state.state.copy(), state.loglikelihood()
 
 def do_samples(s, sweeps, burn, stepout=0.1, save_period=10,
-        prefix='cbamf', save_name=None):
+        prefix='cbamf', save_name=None, sigma=False):
     h = []
     ll = []
     if not save_name:
@@ -125,11 +126,16 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=10,
         sample_block(s, 'ilm', stepout=stepout)
         sample_block(s, 'off', stepout=stepout)
         sample_block(s, 'zscale', stepout=stepout)
-        sample_block(s, 'sigma', stepout=0.005)
+
+        if sigma:
+            sample_block(s, 'sigma', stepout=0.005)
 
         if i >= burn:
             h.append(s.state.copy())
             ll.append(s.loglikelihood())
+
+    if save_period > 0 and save_name:
+        os.remove(save_name)
 
     h = np.array(h)
     ll = np.array(ll)
