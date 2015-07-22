@@ -42,6 +42,15 @@ class Tile(object):
         self.shape = self.r - self.l
         self.slicer = np.s_[l[0]:r[0], l[1]:r[1], l[2]:r[2]]
 
+    def center(self, norm=1.0):
+        return (self.r + self.l)/2.0 / norm
+
+    def coords(self, norm=1.0):
+        z = np.arange(self.l[0], self.r[0]) / norm
+        y = np.arange(self.l[1], self.r[1]) / norm
+        x = np.arange(self.l[2], self.r[2]) / norm
+        return np.meshgrid(z, y, x, indexing='ij')
+
     def __str__(self):
         return self.__repr__()
 

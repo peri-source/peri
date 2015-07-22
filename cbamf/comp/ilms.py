@@ -29,15 +29,11 @@ class Polynomial3D(object):
     def _setup_rvecs(self):
         # normalize all sizes to a strict upper bound on image size
         # so we can transfer ILM between different images
-        MAX = 1024.0
+        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024.)
 
-        o = self.shape
-        self.rz, self.ry, self.rx = np.mgrid[0:o[0], 0:o[1], 0:o[2]] / MAX
         self._poly = []
-
         for i,j,k in self._poly_orders():
             self._poly.append( self.rx**i * self.ry**j * self.rz**k )
-
         self._poly = np.rollaxis( np.array(self._poly), 0, len(self.shape)+1 )
 
     def from_data(self, f, mask=None, dopriors=False, multiplier=1):
