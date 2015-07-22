@@ -414,7 +414,7 @@ class PSF4D(PSF):
         self._cache_size = 0
 
     def _zpos(self):
-        return np.arange(self.tile.l[0], self.tile.r[0]).astype('float')
+        return 2*np.arange(self.tile.l[0], self.tile.r[0]).astype('float')
 
     def execute(self, field):
         if any(field.shape != self.tile.shape):
@@ -425,14 +425,15 @@ class PSF4D(PSF):
         else:
             infield = field
 
-        cov2d = np.real(self.ifftn(infield * self.kpsf))
+        cov2d = np.real(self.ifftn(infield * self.kpsf)) * self.tile.shape[0]
 
         out = np.zeros_like(cov2d)
         z = self._zpos()
 
+        #print self.get_support_size(z[0])[0], self.get_support_size(z[-1])[0]
         for i in xrange(len(z)):
-            size = self.get_support_size(z=z[i])
-            m = (z > z[i]-size[0]) & (z < z[i]+size[0])
+            size = np.ceil(self.get_support_size(z=z[i]))
+            m = (z >= z[i]-size[0]) & (z <= z[i]+size[0])
             g = self.rpsf_z(z[m], z[i])
             g /= g.sum()
 
@@ -470,21 +471,21 @@ class Gaussian4D(PSF4D):
         pass
 
     def _sigma_x(self, z):
-        alpha = self.params[3]
+        alpha = np.abs(self.params[3])
         return self.params[0]*(1 + alpha*z)
 
     def _sigma_y(self, z):
-        alpha = self.params[4]
+        alpha = np.abs(self.params[4])
         return self.params[1]*(1 + alpha*z)
 
     def _sigma_z(self, z):
-        alpha = self.params[5]
+        alpha = np.abs(self.params[5])
         return self.params[2]*(1 + alpha*z)
 
     def rpsf_z(self, z, zp):
         s = self._sigma_z(zp)
         size = self.get_support_size(z=zp)
-        return 1.0/np.sqrt(2*np.pi*s**2) * np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
+        return np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
 
     def rpsf_xy(self, zp):
         size = self.get_support_size(z=zp)
@@ -492,7 +493,7 @@ class Gaussian4D(PSF4D):
 
         sx = self._sigma_x(zp)
         sy = self._sigma_y(zp)
-        gauss = np.exp(-(self._rx[0]/sx)**2/2 + (self._ry[0]/sy)**2/2)
+        gauss = np.exp(-(self._rx/sx)**2/2-(self._ry/sy)**2/2)
 
         return gauss * mask
 
