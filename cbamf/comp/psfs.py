@@ -361,10 +361,13 @@ class PSF4D(PSF):
         sp = shape
         mx = np.max(sp)
 
-        ry = 2*sp[1]*np.fft.fftfreq(sp[1])[:,None]
-        rx = 2*sp[2]*np.fft.fftfreq(sp[2])[None,:]
+        ry = sp[1]*np.fft.fftfreq(sp[1])[:,None]
+        rx = sp[2]*np.fft.fftfreq(sp[2])[None,:]
 
         self._rx, self._ry = rx, ry
+
+    def _zpos(self):
+        return np.arange(self.tile.l[0], self.tile.r[0]).astype('float')
 
     def _cache_key(self):
         return (tuple(self.tile.l), tuple(self.tile.r))
@@ -413,9 +416,6 @@ class PSF4D(PSF):
         self._cache = {}
         self._cache_size = 0
 
-    def _zpos(self):
-        return 2*np.arange(self.tile.l[0], self.tile.r[0]).astype('float')
-
     def execute(self, field):
         if any(field.shape != self.tile.shape):
             raise AttributeError("Field passed to PSF incorrect shape")
@@ -430,12 +430,12 @@ class PSF4D(PSF):
         out = np.zeros_like(cov2d)
         z = self._zpos()
 
-        #print self.get_support_size(z[0])[0], self.get_support_size(z[-1])[0]
         for i in xrange(len(z)):
-            size = np.ceil(self.get_support_size(z=z[i]))
+            #size = np.ceil(self.get_support_size(z=z[i]))+1
+            size = self.get_support_size(z=z[i])
             m = (z >= z[i]-size[0]) & (z <= z[i]+size[0])
             g = self.rpsf_z(z[m], z[i])
-            g /= g.sum()
+            #g /= g.sum()
 
             for gp, fpp in zip(g, cov2d[m]):
                 out[i] += (gp * fpp)
@@ -445,9 +445,10 @@ class PSF4D(PSF):
         pass
 
 class Gaussian4D(PSF4D):
-    def __init__(self, shape, params=(2.0,1.0,4.0), order=(1,1,1), error=1.0/255, *args, **kwargs):
+    def __init__(self, shape, params=(2.0,1.0,4.0), order=(1,1,1), error=1.0/255, zrange=128, *args, **kwargs):
         self.order = order
         self.error = error
+        self.zrange = float(zrange)
         params = np.hstack([params, np.zeros(np.sum(order))])
         super(Gaussian4D, self).__init__(params=params, shape=shape, *args, **kwargs)
 
@@ -462,9 +463,9 @@ class Gaussian4D(PSF4D):
 
     def get_support_size(self, z):
         s = np.array([self._sigma_x(z), self._sigma_y(z), self._sigma_z(z)])
-        self.px = np.sqrt(-2*np.log(self.error)*s[0]**2)
-        self.py = np.sqrt(-2*np.log(self.error)*s[1]**2)
-        self.pz = np.sqrt(-2*np.log(self.error)*s[2]**2)
+        self.px = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
+        self.py = np.max([np.sqrt(-2*np.log(self.error)*s[1]**2), 2.1*np.ones_like(s[1])], axis=0)
+        self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[2]**2), 2.1*np.ones_like(s[2])], axis=0)
         return np.array([self.pz, self.py, self.px])
 
     def _sigma(self, z, dir='x'):
@@ -472,20 +473,20 @@ class Gaussian4D(PSF4D):
 
     def _sigma_x(self, z):
         alpha = np.abs(self.params[3])
-        return self.params[0]*(1 + alpha*z)
+        return self.params[0]*(1 + alpha*z/self.zrange)
 
     def _sigma_y(self, z):
         alpha = np.abs(self.params[4])
-        return self.params[1]*(1 + alpha*z)
+        return self.params[1]*(1 + alpha*z/self.zrange)
 
     def _sigma_z(self, z):
         alpha = np.abs(self.params[5])
-        return self.params[2]*(1 + alpha*z)
+        return self.params[2]*(1 + alpha*z/self.zrange)
 
     def rpsf_z(self, z, zp):
         s = self._sigma_z(zp)
         size = self.get_support_size(z=zp)
-        return np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
+        return 1.0/np.sqrt(2*np.pi*s**2) * np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
 
     def rpsf_xy(self, zp):
         size = self.get_support_size(z=zp)

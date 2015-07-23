@@ -1,5 +1,5 @@
 import numpy as np
-from cbamf.util import Tile, cdd
+from cbamf.util import Tile, cdd, amin, amax
 
 class SphereCollectionRealSpace(object):
     def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None):
@@ -19,7 +19,7 @@ class SphereCollectionRealSpace(object):
         self._setup()
 
     def _setup(self):
-        z,y,x = np.meshgrid(*(xrange(i) for i in self.shape), indexing='ij')
+        z,y,x = Tile(self.shape).coords()
         self.rvecs = np.rollaxis(np.array(np.broadcast_arrays(z,y,x)), 0, 4)
         self.particles = np.zeros(self.shape)
         self._diff_field = np.zeros(self.shape)
@@ -80,6 +80,30 @@ class SphereCollectionRealSpace(object):
         self._diff_field[self.tile.slicer] *= 0
         return c
 
+    def get_support_size(self, p0, r0, t0, p1, r1, t1, zscale):
+        rsc = self.support_size
+
+        zsc = np.array([1.0/zscale, 1, 1])
+        r0, r1 = zsc*r0, zsc*r1
+
+        off0 = r0 + rsc
+        off1 = r1 + rsc
+
+        if t0[0] == 1 and t1[0] == 1:
+            pl = amin(p0-off0-1, p1-off1-1)
+            pr = amax(p0+off0+1, p1+off1+1)
+        if t0[0] != 1 and t1[0] == 1:
+            pl = (p1-off1-1)
+            pr = (p1+off1+1)
+        if t0[0] == 1 and t1[0] != 1:
+            pl = (p0-off0-1)
+            pr = (p0+off0+1)
+        if t0[0] != 1 and t1[0] != 1:
+            pl = np.zeros(3)
+            pr = np.array(self.image.shape)
+
+        return pl, pr
+
     def get_params(self):
         return np.hstack([self.pos.ravel(), self.rad])
 
@@ -92,12 +116,62 @@ class SphereCollectionRealSpace(object):
     def get_params_typ(self):
         return self.typ
 
-    def get_support_size(self):
-        return self.support_size
-
     def __getstate__(self):
         odict = self.__dict__.copy()
         cdd(odict, ['rvecs', 'particles', '_diff_field'])
+        return odict
+
+    def __setstate__(self, idict):
+        self.__dict__.update(idict)
+        self._setup()
+
+
+class Slab(object):
+    def __init__(self, pos, shape, normal=(1,0,0), support_size=4, typ=None, pad=None):
+        self.support_size = support_size
+
+        self.pos = np.array(pos).astype('float')
+        self.normal = np.array(normal).astype('float')
+        self.normal /= np.sqrt(self.normal.dot(self.normal))
+
+        self.shape = shape
+        self._setup()
+
+    def _setup(self):
+        z,y,x = Tile(self.shape).coords()
+        self.rvecs = np.rollaxis(np.array(np.broadcast_arrays(z,y,x)), 0, 4)
+        self.image = np.zeros(self.shape)
+
+    def _slab(self, pos, norm, sign=1):
+        p = (self.rvecs - pos).dot(norm)
+        t = sign/(1.0 + np.exp(np.pi*p))
+        self.image += t
+
+    def initialize(self):
+        self.image = np.zeros(self.shape)
+        self._slab(self.pos, self.normal)
+
+    def set_tile(self, tile):
+        self.tile = tile
+
+    def update(self, pos, norm):
+        self._slab(self.pos, self.normal, -1)
+        self.pos = pos
+        self.normal = norm / np.sqrt(norm.dot(norm))
+        self._slab(self.pos, self.normal, +1)
+
+    def get_field(self):
+        return self.image[self.tile.slicer]
+
+    def get_support_size(self, p=None):
+        return pl, pr
+
+    def get_params(self):
+        return np.hstack([self.pos.ravel(), self.normal.ravel()])
+
+    def __getstate__(self):
+        odict = self.__dict__.copy()
+        cdd(odict, ['rvecs', 'image'])
         return odict
 
     def __setstate__(self, idict):

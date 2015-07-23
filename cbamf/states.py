@@ -17,6 +17,9 @@ class State:
         self.state[block] = data.astype(self.state.dtype)
         return True
 
+    # TODO -- should this be a context manager?
+    # with s.push_update(b, d):
+    #   s.loglikelihood()
     def push_update(self, block, data):
         curr = self.state[block].copy()
         self.stack.append((block, curr))
@@ -82,9 +85,6 @@ class State:
         logl = self.loglikelihood()
 
         return (logl_01 - logl_0 - logl_1 + logl) / (dl**2)
-
-    def get_model_data(self):
-        pass
 
     def loglikelihood(self):
         loglike = self.dologlikelihood()
@@ -303,38 +303,33 @@ class ConfocalImagePython(State):
         self.ilm = ilm
         self.obj = obj
         self.zscale = zscale
+        self.rscale = 1.0
         self.offset = offset
         self.N = self.obj.N
 
-        self.param_dict = {
-            'pos': 3*self.obj.N,
-            'rad': self.obj.N,
-            'typ': self.obj.N*self.varyn,
-            'psf': len(self.psf.get_params()),
-            'ilm': len(self.ilm.get_params()),
-            'off': 1,
-            'zscale': 1,
-            'sigma': 1,
-        }
-
-        self.param_order = ['pos', 'rad', 'typ', 'psf', 'ilm', 'off', 'zscale', 'sigma']
-        self.param_lengths = [self.param_dict[k] for k in self.param_order]
-
-        total_params = sum(self.param_lengths)
-        #super(ConfocalImagePython, self).__init__(nparams=total_params, *args, **kwargs)
-        State.__init__(self, nparams=total_params, *args, **kwargs)
-
-        self.b_pos = self.create_block('pos')
-        self.b_rad = self.create_block('rad')
-        self.b_typ = self.create_block('typ')
-        self.b_psf = self.create_block('psf')
-        self.b_ilm = self.create_block('ilm')
-        self.b_off = self.create_block('off')
-        self.b_zscale = self.create_block('zscale')
-        self.b_sigma = self.create_block('sigma')
-
         self._build_state()
         self.set_image(image)
+
+    def reset(self):
+        self._build_state()
+        self.set_image(self.padded_image())
+
+    def set_obj(self, obj):
+        self.obj = obj
+        self.reset()
+
+    def set_psf(self, psf):
+        self.psf = psf
+        self.reset()
+
+    def set_ilm(self, ilm):
+        self.ilm = ilm
+        self.reset()
+
+    def padded_image(self):
+        o = self.image.copy()
+        o[self.image_mask == 0] = const.PADVAL
+        return o
 
     def set_image(self, image):
         """
@@ -365,6 +360,24 @@ class ConfocalImagePython(State):
         return self.image * self.image_mask
 
     def _build_state(self):
+        self.param_dict = {
+            'pos': 3*self.obj.N,
+            'rad': self.obj.N,
+            'typ': self.obj.N*self.varyn,
+            'psf': len(self.psf.get_params()),
+            'ilm': len(self.ilm.get_params()),
+            'off': 1,
+            'rscale': 1,
+            'zscale': 1,
+            'sigma': 1,
+        }
+
+        self.param_order = [
+            'pos', 'rad', 'typ', 'psf', 'ilm', 'off',
+            'rscale', 'zscale', 'sigma'
+        ]
+        self.param_lengths = [self.param_dict[k] for k in self.param_order]
+
         out = []
         for param in self.param_order:
             if param == 'pos':
@@ -379,12 +392,27 @@ class ConfocalImagePython(State):
                 out.append(self.ilm.get_params())
             if param == 'off':
                 out.append(self.offset)
+            if param == 'rscale':
+                out.append(self.rscale)
             if param == 'zscale':
                 out.append(self.zscale)
             if param == 'sigma':
                 out.append(self.sigma)
 
+        self.nparams = sum(self.param_lengths)
+        State.__init__(self, nparams=self.nparams)
+
         self.state = np.hstack(out).astype('float')
+
+        self.b_pos = self.create_block('pos')
+        self.b_rad = self.create_block('rad')
+        self.b_typ = self.create_block('typ')
+        self.b_psf = self.create_block('psf')
+        self.b_ilm = self.create_block('ilm')
+        self.b_off = self.create_block('off')
+        self.b_rscale = self.create_block('rscale')
+        self.b_zscale = self.create_block('zscale')
+        self.b_sigma = self.create_block('sigma')
 
     def _build_internal_variables(self):
         self.model_image = np.zeros_like(self.image)
@@ -400,11 +428,12 @@ class ConfocalImagePython(State):
         if not self.sigmapad:
             self._sigma_field += self.sigma
         else:
-            p = self.psf.get_support_size()/4
+            top = self.image.shape[0] - self.pad
+
+            p = self.psf.get_support_size(top)/4
             l = self.pad + p
-            self._sigma_field[:] = 3*self.sigma
+            self._sigma_field[:] = 3*self.sigma #FIXME -- this should be 2 ??
             self._sigma_field[l[0]:-l[0], l[1]:-l[1], l[2]:-l[2]] = self.sigma
-            #self._sigma_field = 1.0 / self._sigma_field
 
             self.psf.set_tile(Tile(self._sigma_field.shape))
             self._sigma_field = self.psf.execute(self._sigma_field)
@@ -430,32 +459,21 @@ class ConfocalImagePython(State):
         self._update_global()
 
     def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
-        psc = self.psf.get_support_size()
-        rsc = self.obj.get_support_size()
-
-        zsc = np.array([1.0/self.zscale, 1, 1])
-        r0, r1 = zsc*r0, zsc*r1
-
         pref = 1 if self.difference else 2
         extr = 1 if self.difference else 0
 
-        off0 = r0 + pref*psc + rsc + extr
-        off1 = r1 + pref*psc + rsc + extr
+        sl, sr = self.obj.get_support_size(p0, r0, t0, p1, r1, t1, self.zscale)
 
-        if t0[0] == 1 and t1[0] == 1:
-            pl = np.floor(amin(p0-off0-1, p1-off1-1)).astype('int')
-            pr = np.ceil (amax(p0+off0+1, p1+off1+1)).astype('int')
-        if t0[0] != 1 and t1[0] == 1:
-            pl = np.floor(p1-off1-1).astype('int')
-            pr = np.ceil (p1+off1+1).astype('int')
-        if t0[0] == 1 and t1[0] != 1:
-            pl = np.floor(p0-off0-1).astype('int')
-            pr = np.ceil (p0+off0+1).astype('int')
-        if t0[0] != 1 and t1[0] != 1:
-            pl = np.zeros(3)
-            pr = np.array(self.image.shape)
+        tl = self.psf.get_support_size(sl)
+        tr = self.psf.get_support_size(sr)
+        t_xy = np.max([tl, tr], axis=0)[1:]
+        tl[1:] = t_xy
+        tr[1:] = t_xy
 
-        ipsc = np.ceil(psc).astype('int')
+        pl = sl - pref*tl - extr
+        pr = sr + pref*tr + extr
+        pl = np.floor(pl).astype('int')
+        pr = np.ceil (pr).astype('int')
 
         pl += pl % 2
         pr += pr % 2
@@ -465,14 +483,18 @@ class ConfocalImagePython(State):
             inner = Tile(pl+extr, pr-extr, extr, np.array(self.image.shape)-extr)
             ioslice = tuple([np.s_[extr:-extr] for i in xrange(3)])
         else:
-            inner = Tile(pl+ipsc, pr-ipsc, ipsc, np.array(self.image.shape)-ipsc)
+            ipl = np.ceil(self.psf.get_support_size(sl)).astype('int')
+            ipr = np.ceil(self.psf.get_support_size(sr)).astype('int')
+
+            inner = Tile(pl+ipl, pr-ipr, ipl, np.array(self.image.shape)-ipr)
             ioslice = tuple([np.s_[ipsc[i]:-ipsc[i]] for i in xrange(3)])
+
         return outer, inner, ioslice
 
     def _tile_global(self):
         outer = Tile(0, self.image.shape)
-        inner = Tile(self.pad/2, np.array(self.image.shape)-self.pad/2)
-        ioslice = (np.s_[self.pad/2:-self.pad/2],)*3
+        inner = Tile(1, np.array(self.image.shape)-1)
+        ioslice = (np.s_[1:-1],)*3
         return outer, inner, ioslice
 
     def _update_ll_field(self, data=None, slicer=np.s_[:]):
@@ -481,14 +503,15 @@ class ConfocalImagePython(State):
             self._loglikelihood_field *= 0
             data = self.get_model_image()
 
-        oldll = self._loglikelihood_field[slicer].sum()
+        s = slicer
+        oldll = self._loglikelihood_field[s].sum()
 
-        self._loglikelihood_field[slicer] = (
-                -self.image_mask[slicer] * (data - self.image[slicer])**2 / (2*self._sigma_field[slicer]**2)
-                -self.image_mask[slicer] * np.log( np.sqrt(2*np.pi) * self._sigma_field[slicer] )*self.nlogs
+        self._loglikelihood_field[s] = (
+                -self.image_mask[s] * (data - self.image[s])**2 / (2*self._sigma_field[s]**2)
+                -self.image_mask[s] * np.log( np.sqrt(2*np.pi) * self._sigma_field[s] )*self.nlogs
             )
 
-        newll = self._loglikelihood_field[slicer].sum()
+        newll = self._loglikelihood_field[s].sum()
         self._loglikelihood += newll - oldll
 
     def _update_global(self):
@@ -570,7 +593,8 @@ class ConfocalImagePython(State):
 
             tiles = self._tile_from_particle_change(pos0, rad0, typ0, pos, rad, typ)
             for tile in tiles[:2]:
-                if (np.array(tile.shape) < 2*self.psf.get_support_size()).any():
+                top = self.image.shape[0] - self.pad
+                if (np.array(tile.shape) < 2*self.psf.get_support_size(top)).any():
                     self.state[block] = prev[block]
                     return False
 
@@ -632,6 +656,16 @@ class ConfocalImagePython(State):
 
                 self.obj.initialize(self.zscale)
                 self._update_global()
+
+            if block[self.b_rscale].any():
+                new_rscale = self.state[self.b_rscale][0]
+                f = new_rscale / self.rscale
+
+                self.obj.rad *= f
+                self.obj.initialize(self.zscale)
+                self._update_global()
+
+                self.rscale = new_rscale
 
             if docalc:
                 self._update_global()
