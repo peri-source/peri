@@ -83,9 +83,9 @@ class PSF(object):
         sp = shape
         mx = np.max(sp)
 
-        rz = 2*sp[0]*np.fft.fftfreq(sp[0])[:,None,None]
-        ry = 2*sp[1]*np.fft.fftfreq(sp[1])[None,:,None]
-        rx = 2*sp[2]*np.fft.fftfreq(sp[2])[None,None,:]
+        rz = sp[0]*np.fft.fftfreq(sp[0])[:,None,None]
+        ry = sp[1]*np.fft.fftfreq(sp[1])[None,:,None]
+        rx = sp[2]*np.fft.fftfreq(sp[2])[None,None,:]
 
         if centered:
             rz = np.fft.fftshift(rz)
@@ -203,7 +203,7 @@ class AnisotropicGaussian(PSF):
         super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
 
     def rpsf_func(self):
-        params = self.params
+        params = self.params/2
         rt2 = np.sqrt(2)
         rhosq = self._rx**2 + self._ry**2
         arg = np.exp(-(rhosq)/(rt2*params[0])**2 - (self._rz/(rt2*params[1]))**2)
@@ -220,7 +220,7 @@ class AnisotropicGaussianXYZ(PSF):
         super(AnisotropicGaussianXYZ, self).__init__(*args, params=params, shape=shape, **kwargs)
 
     def rpsf_func(self):
-        params = self.params
+        params = self.params/2
         rt2 = np.sqrt(2)
         arg = np.exp(-(self._rx/(rt2*params[0]))**2 - (self._ry/(rt2*params[1]))**2 - (self._rz/(rt2*params[2]))**2)
         return arg * (np.abs(self._rx) <= self.px) * (np.abs(self._ry) <= self.py) * (np.abs(self._rz) <= self.pz)
@@ -262,6 +262,7 @@ class GaussianPolynomialPCA(PSF):
 
     def rpsf_func(self):
         coeff = self.params
+        coeff[:2] /= 2
 
         rho = np.sqrt(self._rx**2 + self._ry**2) / coeff[0]
         z = self._rz / coeff[1]
@@ -309,6 +310,7 @@ class ASymmetricGaussianPolynomialPCA(PSF):
 
     def rpsf_func(self):
         coeff = self.params
+        coeff[:2] /= 2
 
         rho = np.sqrt(self._rx**2 + self._ry**2) / coeff[0]
         z = self._rz / coeff[1]
@@ -431,25 +433,34 @@ class PSF4D(PSF):
         z = self._zpos()
 
         for i in xrange(len(z)):
-            #size = np.ceil(self.get_support_size(z=z[i]))+1
             size = self.get_support_size(z=z[i])
             m = (z >= z[i]-size[0]) & (z <= z[i]+size[0])
             g = self.rpsf_z(z[m], z[i])
-            #g /= g.sum()
 
             for gp, fpp in zip(g, cov2d[m]):
                 out[i] += (gp * fpp)
         return out
 
-    def rpsf_xy(self, pos):
+    def rpsf_xy(self, z):
+        """
+        Returns the x-y plane real space psf function as a function of z values.
+        This function does not necessarily have to be normalized, it will be
+        normalized in k-space layer by layer later.
+        """
+        pass
+
+    def rpsf_z(self, z):
+        """
+        Returns the z dependence of the PSF.  This section needs to be noramlized.
+        """
         pass
 
 class Gaussian4D(PSF4D):
-    def __init__(self, shape, params=(2.0,1.0,4.0), order=(1,1,1), error=1.0/255, zrange=128, *args, **kwargs):
+    def __init__(self, shape, params=(1.0,0.5,2.0), order=(1,1,1), error=1.0/255, zrange=128, *args, **kwargs):
         self.order = order
         self.error = error
         self.zrange = float(zrange)
-        params = np.hstack([params, np.zeros(np.sum(order))])
+        params = np.hstack([np.array(params)[:3], np.zeros(np.sum(order))])
         super(Gaussian4D, self).__init__(params=params, shape=shape, *args, **kwargs)
 
     def _setup_ffts(self):
@@ -462,29 +473,25 @@ class Gaussian4D(PSF4D):
                     planner_effort=self.fftw_planning_level, threads=self.threads)
 
     def get_support_size(self, z):
-        s = np.array([self._sigma_x(z), self._sigma_y(z), self._sigma_z(z)])
+        s = np.array([self._sigma(z, 0), self._sigma(z, 1), self._sigma(z, 2)])
         self.px = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
         self.py = np.max([np.sqrt(-2*np.log(self.error)*s[1]**2), 2.1*np.ones_like(s[1])], axis=0)
         self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[2]**2), 2.1*np.ones_like(s[2])], axis=0)
         return np.array([self.pz, self.py, self.px])
 
-    def _sigma(self, z, dir='x'):
-        pass
+    def _sigma_coeffs(self, d=0):
+        s = 3 + np.sum(self.order[:d+0])
+        e = 3 + np.sum(self.order[:d+1])
+        return np.hstack([1, self.params[s:e]])
 
-    def _sigma_x(self, z):
-        alpha = np.abs(self.params[3])
-        return self.params[0]*(1 + alpha*z/self.zrange)
+    def _poly(self, z, coeffs):
+        return np.polyval(coeffs[::-1], z)
 
-    def _sigma_y(self, z):
-        alpha = np.abs(self.params[4])
-        return self.params[1]*(1 + alpha*z/self.zrange)
-
-    def _sigma_z(self, z):
-        alpha = np.abs(self.params[5])
-        return self.params[2]*(1 + alpha*z/self.zrange)
+    def _sigma(self, z, d=0):
+        return self.params[d]*self._poly(z/self.zrange, self._sigma_coeffs(d=d))
 
     def rpsf_z(self, z, zp):
-        s = self._sigma_z(zp)
+        s = self._sigma(zp, 2)
         size = self.get_support_size(z=zp)
         return 1.0/np.sqrt(2*np.pi*s**2) * np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
 
@@ -492,9 +499,8 @@ class Gaussian4D(PSF4D):
         size = self.get_support_size(z=zp)
         mask = (np.abs(self._rx) <= size[2]) * (np.abs(self._ry) <= size[1])
 
-        sx = self._sigma_x(zp)
-        sy = self._sigma_y(zp)
+        sx = self._sigma(zp, 0)
+        sy = self._sigma(zp, 1)
         gauss = np.exp(-(self._rx/sx)**2/2-(self._ry/sy)**2/2)
 
         return gauss * mask
-
