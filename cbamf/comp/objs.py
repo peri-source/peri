@@ -100,7 +100,7 @@ class SphereCollectionRealSpace(object):
             pr = (p0+off0+1)
         if t0[0] != 1 and t1[0] != 1:
             pl = np.zeros(3)
-            pr = np.array(self.image.shape)
+            pr = np.array(self.shape)
 
         return pl, pr
 
