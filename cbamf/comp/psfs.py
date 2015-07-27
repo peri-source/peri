@@ -276,6 +276,31 @@ class GaussianPolynomialPCA(PSF):
         self.pz = 1.4*np.sqrt(-2*np.log(self.error)*self.params[1]**2)
         return np.array([self.pz, self.pr, self.pr])
 
+class GaussianPolynomialPCA_XYZ(GaussianPolynomialPCA):
+    def __init__(self, *args, **kwargs):
+        super(GaussianPolynomialPCA_XYZ, self).__init__(*args, **kwargs)
+
+    def rpsf_func(self):
+        coeff = self.params
+        coeff[:2] /= 2
+
+        sigma_rho = np.sqrt(coeff[0]**2 + coeff[1]**2)
+        rho = np.sqrt(self._rx**2 + self._ry**2) / sigma_rho
+        x = self._rx / coeff[0]
+        y = self._ry / coeff[1]
+        z = self._rz / coeff[2]
+
+        polycoeffs = self._psf_vecs.dot(coeff[3:]) + self._psf_mean
+        poly = np.polynomial.polynomial.polyval2d(rho, z, polycoeffs.reshape(*self.poly_shape))
+        mask = (np.abs(x) < self.px/coeff[0]) * (np.abs(y) < self.py/coeff[1]) * (np.abs(z) < self.pz/coeff[2])
+        return poly * np.exp(-x**2) * np.exp(-y**2) * np.exp(-z**2) * mask
+
+    def get_support_size(self, z=None):
+        self.px = 1.4*np.sqrt(-2*np.log(self.error)*self.params[0]**2)
+        self.py = 1.4*np.sqrt(-2*np.log(self.error)*self.params[1]**2)
+        self.pz = 1.4*np.sqrt(-2*np.log(self.error)*self.params[2]**2)
+        return np.array([self.pz, self.py, self.px])
+
 class ASymmetricGaussianPolynomialPCA(PSF):
     def __init__(self, symm_cov_file, symm_mean_file, asymm_cov_file, asymm_mean_file, shape, gaussian=(2,4),
             components=5, error=1.0/255, *args, **kwargs):
