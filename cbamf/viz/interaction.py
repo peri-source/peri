@@ -3,6 +3,11 @@ import matplotlib as mpl
 import matplotlib.pylab as pl
 from matplotlib.gridspec import GridSpec
 
+"""
+TODO -- plans for web-based GUI
+    - bokeh graphs from matplotlib
+    - tornado backend
+"""
 class OrthoManipulator(object):
     def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', vmin=0.0, vmax=1.0, incsize=18.0):
         self.incsize = incsize
@@ -14,20 +19,21 @@ class OrthoManipulator(object):
         self.cmap_abs = cmap_abs
         self.cmap_diff = cmap_diff
 
-        self.fig = pl.figure(figsize=(20,10))
-        self.gl = GridSpec(2,2)
-        self.gr = GridSpec(2,2)
+        sh = self.state.image.shape
+        q = float(sh[1]) / (sh[0]+sh[1])
 
-        self.gl.update(left=0.05, right=0.50, bottom=0.01, top=0.95, hspace=0.00, wspace=0.05)
-        self.gr.update(left=0.51, right=0.94, bottom=0.01, top=0.95, hspace=0.00, wspace=0.05)
+        self.fig = pl.figure(figsize=(12,6))
 
-        self.gl.xy = pl.subplot(self.gl[0,0])
-        self.gl.yz = pl.subplot(self.gl[0,1])
-        self.gl.xz = pl.subplot(self.gl[1,0])
+        h = 0.5
+        self.gl = {}
+        self.gl['xy'] = self.fig.add_axes((h*0.0, 1-q, h*q,     q))
+        self.gl['yz'] = self.fig.add_axes((h*q,   1-q, h*(1-q), q))
+        self.gl['xz'] = self.fig.add_axes((h*0.0, 0.0, h*q,     1-q))
 
-        self.gr.xy = pl.subplot(self.gr[0,0])
-        self.gr.yz = pl.subplot(self.gr[0,1])
-        self.gr.xz = pl.subplot(self.gr[1,0])
+        self.gr = {}
+        self.gr['xy'] = self.fig.add_axes((h+h*0.0, 1-q, h*q,     q))
+        self.gr['yz'] = self.fig.add_axes((h+h*q,   1-q, h*(1-q), q))
+        self.gr['xz'] = self.fig.add_axes((h+h*0.0, 0.0, h*q,     1-q))
 
         self.slices = (np.array(self.state.image.shape)/2).astype('int')
 
@@ -60,24 +66,24 @@ class OrthoManipulator(object):
     def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
         slices = self.slices
 
-        g.xy.cla()
-        g.yz.cla()
-        g.xz.cla()
+        g['xy'].cla()
+        g['yz'].cla()
+        g['xz'].cla()
 
-        g.xy.imshow(im[slices[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
-        g.xy.hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
-        g.xy.vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(g.xy)
+        g['xy'].imshow(im[slices[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
+        g['xy'].hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
+        g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(g['xy'])
 
-        g.yz.imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
-        g.yz.hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
-        g.yz.vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(g.yz)
+        g['yz'].imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
+        g['yz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        g['yz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(g['yz'])
 
-        g.xz.imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
-        g.xz.hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
-        g.xz.vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(g.xz)
+        g['xz'].imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
+        g['xz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
+        g['xz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(g['xz'])
 
         pl.draw()
 
@@ -137,17 +143,17 @@ class OrthoManipulator(object):
 
         f = False
         for g in [self.gl, self.gr]:
-            if event.inaxes == g.xy:
+            if event.inaxes == g['xy']:
                 z = self.slices[0]
                 x = x0
                 y = y0
                 f = True
-            if event.inaxes == g.yz:
+            if event.inaxes == g['yz']:
                 z = x0
                 x = self.slices[2]
                 y = y0
                 f = True
-            if event.inaxes == g.xz:
+            if event.inaxes == g['xz']:
                 y = self.slices[1]
                 z = y0
                 x = x0
