@@ -1,6 +1,5 @@
 class SequentialBlockEngine(object):
-    def __init__(self, model, state):
-        self.model = model
+    def __init__(self, state):
         self.state = state
         self.loglike = None
         self.samplers = []
@@ -51,7 +50,7 @@ class SequentialBlockEngine(object):
             for sampler in self.samplers:
                 if ll is not None and ll < -1e50:
                     print 'huh'
-                ll, s = sampler.sample(self.model, s, ll)
+                ll, s = sampler.sample(s, ll)
                 if ll < -1e50:
                     print 'huh'
 

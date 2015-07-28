@@ -4,7 +4,7 @@ class Observer(object):
     def __init__(self):
         pass
 
-    def update(self, model, state):
+    def update(self, state):
         pass
 
     def reset(self):

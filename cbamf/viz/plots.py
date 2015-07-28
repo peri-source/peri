@@ -1,22 +1,28 @@
 import matplotlib as mpl
 import matplotlib.pylab as pl
 import numpy as np
+import time
 
-def summary_plot(state, samples):
+def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     def MAD(d):
         return np.median(np.abs(d - np.median(d)))
 
     s = state
-    s.set_current_particle()
-    t = s.create_final_image()
+    t = s.get_model_image()
+
+    if zlayer is None:
+        zlayer = t.shape[0]/2
+
+    if xlayer is None:
+        xlayer = t.shape[2]/2
 
     mu = samples.mean(axis=0)
     std = samples.std(axis=0)
 
-    fig, axs = pl.subplots(2,3, figsize=(30,12))
-    axs[0][0].imshow((s.image[s._cmp_region]*s._cmp_mask)[43], vmin=0, vmax=1)
-    axs[0][1].imshow((t[s._cmp_region]*s._cmp_mask)[43], vmin=0, vmax=1)
-    axs[0][2].imshow(((s.image-t)[s._cmp_region]*s._cmp_mask)[43], vmin=-1, vmax=1)
+    fig, axs = pl.subplots(3,3, figsize=(20,12))
+    axs[0][0].imshow(s.image[zlayer], vmin=0, vmax=1)
+    axs[0][1].imshow(t[zlayer], vmin=0, vmax=1)
+    axs[0][2].imshow((s.image-t)[zlayer], vmin=-1, vmax=1)
     axs[0][0].set_xticks([])
     axs[0][0].set_yticks([])
     axs[0][1].set_xticks([])
@@ -24,13 +30,38 @@ def summary_plot(state, samples):
     axs[0][2].set_xticks([])
     axs[0][2].set_yticks([])
 
-    axs[1][0].hist(std[s.b_pos], bins=np.logspace(-3,0,50), label='Positions',
-            histtype='stepfilled', alpha=0.8)
-    axs[1][0].hist(std[s.b_rad], bins=np.logspace(-3,0,50), label='Radii',
-            histtype='stepfilled', alpha=0.8)
-    axs[1][0].semilogx()
-    axs[1][0].legend(loc='upper right')
-    axs[1][0].set_xlabel("Estimated standard deviation")
+    axs[1][0].imshow(s.image[:,:,xlayer], vmin=0, vmax=1)
+    axs[1][1].imshow(t[:,:,xlayer], vmin=0, vmax=1)
+    axs[1][2].imshow((s.image-t)[:,:,xlayer], vmin=-1, vmax=1)
+    axs[1][0].set_xticks([])
+    axs[1][0].set_yticks([])
+    axs[1][1].set_xticks([])
+    axs[1][1].set_yticks([])
+    axs[1][2].set_xticks([])
+    axs[1][2].set_yticks([])
+
+    try:
+        alpha = 0.5 if truestate is not None else 0.8
+        axs[2][0].hist(std[s.b_rad], bins=np.logspace(-3,0,50), label='Radii',
+                histtype='stepfilled', alpha=alpha, color='red')
+        if truestate is not None:
+            d = np.abs(mu - truestate)
+            axs[2][0].hist(d[s.b_pos], bins=np.logspace(-3,0,50), color='red',
+                    histtype='step', alpha=1)
+        axs[2][0].semilogx()
+
+        axs[2][0].hist(std[s.b_pos], bins=np.logspace(-3,0,50), label='Positions',
+                histtype='stepfilled', alpha=alpha, color='blue')
+        if truestate is not None:
+            d = np.abs(mu - truestate)
+            axs[2][0].hist(d[s.b_rad], bins=np.logspace(-3,0,50), color='blue',
+                    histtype='step', alpha=1)
+        axs[2][0].semilogx()
+        axs[2][0].legend(loc='upper right')
+        axs[2][0].set_xlabel("Estimated standard deviation")
+        axs[2][0].set_ylim(bottom=0)
+    except Exception as e:
+        pass
 
     d = s.state[s.b_rad]
     m = 2*1.4826 * MAD(d)
@@ -38,14 +69,65 @@ def summary_plot(state, samples):
 
     d = d[(d > mb - m) & (d < mb +m)]
     d = s.state[s.b_rad]
-    axs[1][1].hist(d, bins=50, histtype='stepfilled', alpha=0.8)
-    axs[1][1].set_xlabel("Radii")
+    axs[2][1].hist(d, bins=50, histtype='stepfilled', alpha=0.8)
+    axs[2][1].set_xlabel("Radii")
+    axs[2][1].set_ylim(bottom=0)
 
-    axs[1][2].hist(((s.image-t)[s._cmp_region]*s._cmp_mask).ravel(), bins=150,
+    if truestate is not None:
+        axs[2][1].hist(truestate[s.b_rad], bins=50, histtype='step', alpha=0.8)
+
+    axs[2][2].hist((s.image-t)[s.image_mask==1].ravel(), bins=150,
             histtype='stepfilled', alpha=0.8)
-    axs[1][2].set_xlim(-0.35, 0.35)
-    axs[1][2].semilogy()
-    axs[1][2].set_xlabel("Pixel value differences")
+    axs[2][2].set_xlim(-0.35, 0.35)
+    axs[2][2].semilogy()
+    axs[2][2].set_ylim(bottom=0)
+    axs[2][2].set_xlabel("Pixel value differences")
 
+    pl.subplots_adjust(left=0, right=1, bottom=0, top=1, wspace=0.05, hspace=0.05)
     pl.tight_layout()
 
+def scan(im, cycles=1, sleep=0.3, vmin=0, vmax=1, cmap='bone'):
+    pl.figure(1)
+    pl.show()
+    time.sleep(3)
+    for c in xrange(cycles):
+        for i, sl in enumerate(im):
+            print i
+            pl.clf()
+            pl.imshow(sl, cmap=cmap, interpolation='nearest',
+                    origin='lower', vmin=vmin, vmax=vmax)
+            pl.draw()
+            time.sleep(sleep)
+
+def scan_together(im, p, delay=2, vmin=0, vmax=1, cmap='bone'):
+    pl.figure(1)
+    pl.show()
+    time.sleep(3)
+    z,y,x = p.T
+    for i in xrange(len(im)):
+        print i
+        sl = im[i]
+        pl.clf()
+        pl.imshow(sl, cmap=cmap, interpolation='nearest', origin='lower',
+                vmin=vmin, vmax=vmax)
+        m = z.astype('int') == i
+        pl.plot(x[m], y[m], 'o')
+        pl.xlim(0, sl.shape[0])
+        pl.ylim(0, sl.shape[1])
+        pl.draw()
+        time.sleep(delay)
+
+def sample_compare(N, samples, truestate, burn=0):
+    h = samples[burn:]
+    strue = truestate
+
+    mu = h.mean(axis=0)
+    std = h.std(axis=0)
+    pl.figure(figsize=(20,4))
+    pl.errorbar(xrange(len(mu)), (mu-strue), yerr=5*std/np.sqrt(h.shape[0]),
+            fmt='.', lw=0.15, alpha=0.5)
+    pl.vlines([0,3*N-0.5, 4*N-0.5], -1, 1, linestyle='dashed', lw=4, alpha=0.5)
+    pl.hlines(0, 0, len(mu), linestyle='dashed', lw=5, alpha=0.5)
+    pl.xlim(0, len(mu))
+    pl.ylim(-0.02, 0.02)
+    pl.show()

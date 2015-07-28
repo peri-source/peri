@@ -6,125 +6,81 @@ from scipy.misc import imread
 from scipy import signal
 import matplotlib as mpl
 import time
+import glob
+import itertools
+from PIL import Image
 
-def remove_overlaps(pos, rad):
-    N = rad.shape[0]
-    for i in xrange(N):
-        for j in xrange(N):
-            if i == j:
-                continue;
-            d = np.sqrt(((pos[i] - pos[j])**2).sum())
-            r = rad[i] + rad[j]
-            diff = d - r
-            if diff < 0:
-                rad[i] -= np.abs(diff)/2 + 1e-10
-                rad[j] -= np.abs(diff)/2 + 1e-10
+from cbamf import const
 
-def load_stack(filename, do3d=False):
-    if do3d:
-        z = load_tiff(filename, do3d=True)
-    else:
+#=======================================================================
+# Image loading functions
+#=======================================================================
+def _sliceiter(img):
+    i = 0
+    while True:
         try:
-            z = imread(filename)
-        except Exception as e:
-            z = load_tiff(filename, do3d)
-    return z
+            img.seek(i)
+            yield np.array(img)
+            i += 1
+        except EOFError as e:
+            break
 
-def load_tiff(filename, do3d=False):
-    if do3d:
-        import libtiff
-        tif = libtiff.TIFF.open(filename)
-        z = np.array([a for a in tif.iter_images()])
-    else:
-        import libtiff
-        tif = libtiff.TIFF.open(filename)
-        it = tif.iter_images()
-        for i in xrange(4):
-            it.next()
-        z = it.next()
-        #z = imread("./colloids.tif")
-    return z
+def load_tiff(filename):
+    img = Image.open(filename)
+    return np.array(list(_sliceiter(img)))
 
-def remove_z_mean(im):
-    for i in xrange(im.shape[0]):
-        im[i] -= im[i].mean()
-    return im
+def load_tiffs(fileglob):
+    files = glob.glob(fileglob)
+    files.sort()
 
+    for f in files:
+        yield f, load_tiff(f)
+
+def load_tiff_layer(filename, layer):
+    img = Image.open(filename)
+    return np.array(list(itertools.islice(_sliceiter(img), layer, layer+1)))
+
+def load_tiff_iter(filename, iter_slice_size):
+    img = Image.open(filename)
+    slices = _sliceiter(img)
+    while True:
+        ims = np.array(list(itertools.islice(slices, iter_slice_size)))
+        if len(ims.shape) > 1:
+            yield ims
+        else:
+            break
+
+def load_tiff_iter_libtiff(filename, iter_slice_size):
+    import libtiff
+    tifs = libtiff.TIFF.open(filename).iter_images()
+
+    while True:
+        ims = [a for a in itertools.islice(tifs, iter_slice_size)]
+        if len(ims) > 0:
+            yield np.array(ims)
+        else:
+            break
+
+#=======================================================================
+# Featuring functions
+#=======================================================================
 def normalize(im, invert=False):
     out = im.astype('float').copy()
-    out -= 1.0*out.min()
-    out /= 1.0*out.max()
+
+    if out.ptp() != 0 and out.max() != 0:
+        out -= 1.0*out.min()
+        out /= 1.0*out.max()
+
     if invert:
         out = 1 - out
     return out
 
-def scan(im, cycles=1):
-    pl.figure(1)
-    pl.show()
-    time.sleep(3)
-    for c in xrange(cycles):
-        for i, sl in enumerate(im):
-            print i
-            pl.clf()
-            pl.imshow(sl, cmap=pl.cm.bone, interpolation='nearest',
-                    origin='lower', vmin=0, vmax=1)
-            pl.draw()
-            time.sleep(0.3)
-
-def scan_together(im, p, delay=2):
-    pl.figure(1)
-    pl.show()
-    time.sleep(3)
-    z,y,x = p.T
-    for i in xrange(len(im)):
-        print i
-        sl = im[i]
-        pl.clf()
-        pl.imshow(sl, cmap=pl.cm.bone, interpolation='nearest', origin='lower')
-        m = z.astype('int') == i
-        #pl.plot(y[m], x[m], 'o')
-        pl.plot(x[m], y[m], 'o')
-        pl.xlim(0, sl.shape[0])
-        pl.ylim(0, sl.shape[1])
-        pl.draw()
-        time.sleep(delay)
-
-def highpass(im, frac):
-    fx = np.fft.fftfreq(im.shape[2])[None,None,:]
-    fy = np.fft.fftfreq(im.shape[1])[None,:,None]
-    fz = np.fft.fftfreq(im.shape[0])[:,None,None]
-    fr = np.sqrt(fx**2 + fy**2 + fz**2)
-    ff = np.fft.fftn(im)
-    return np.real( np.fft.ifftn( ff * (fr > frac / np.sqrt(2))))
-
-def smooth(im, sigma):
-    return nd.gaussian_filter(im, sigma)
-
-def log_featuring(im, size_range=[0,20]):
-    from skimage.feature import blob_log
-
-    potpos = []
-    potim = []
-    for layer in im:
-        ll = smooth(highpass(layer, 5./512), 1)
-
-        bl = blob_log(ll, min_sigma=5, max_sigma=20, threshold=0.09, overlap=0.2)
-
-        ll *= 0
-        if len(bl) > 0:
-            x = np.clip(bl[:,1], 0, ll.shape[1])
-            y = np.clip(bl[:,0], 0, ll.shape[0])
-            ll[x, y] = 1
-
-    a = potpos
-    b = np.array(potim)
-
-    q = nd.gaussian_filter(np.array(potim), 2)
-    s = q*(q > 0.02)
-    r = nd.label(s)[0]
-    p = np.array(nd.measurements.center_of_mass(q, labels=r, index=np.unique(r)))
-
-    return p, q, s
+def fsmooth(im, sigma):
+    kz, ky, kx = np.meshgrid(*[np.fft.fftfreq(i) for i in feat.shape], indexing='ij')
+    ksq = kx**2 + ky**2 + kz**2
+    kim = np.fft.fftn(im)
+    kim *= np.exp(-ksq * sigma**2)
+    return np.real(np.fft.ifftn(kim))
 
 def generate_sphere(radius):
     x,y,z = np.mgrid[0:2*radius,0:2*radius,0:2*radius]
@@ -132,18 +88,13 @@ def generate_sphere(radius):
     sphere = r < radius - 1
     return sphere
 
-def local_max_featuring(im, radius=10):
-    footprint = generate_sphere(radius)
-
-    tim = im.copy()
-    tim = remove_z_mean(tim)
-    tim = smooth(tim, 2)
-    maxes = nd.maximum_filter(tim, footprint=footprint)
-    equal = maxes == tim
-
-    label = nd.label(equal)[0]
-    pos = np.array(nd.measurements.center_of_mass(equal, labels=label, index=np.unique(label)))
-    return pos[1:], tim
+def local_max_featuring(im, radius=10, smooth=4):
+    g = nd.gaussian_filter(im, smooth, mode='mirror')
+    e = nd.maximum_filter(g, footprint=generate_sphere(radius))
+    lbl = nd.label(e == g)[0]
+    ind = np.sort(np.unique(lbl))[1:]
+    pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
+    return pos, e
 
 def trackpy_featuring(im, size=10):
     from trackpy.feature import locate
@@ -151,3 +102,26 @@ def trackpy_featuring(im, size=10):
     a = locate(im, size, invert=True)
     pos = np.vstack([a.z, a.y, a.x]).T
     return pos
+
+def remove_overlaps(pos, rad, zscale=1, doprint=False):
+    N = rad.shape[0]
+    z = np.array([zscale, 1, 1])
+    for i in xrange(N):
+        for j in xrange(N):
+            if i == j:
+                continue;
+            d = np.sqrt(( (z*(pos[i] - pos[j]))**2 ).sum())
+            r = rad[i] + rad[j]
+            diff = d - r
+            if diff < 0:
+                rad[i] -= np.abs(diff)*rad[i]/(rad[i]+rad[j]) + 1e-10
+                rad[j] -= np.abs(diff)*rad[j]/(rad[i]+rad[j]) + 1e-10
+                if doprint:
+                    print diff, rad[i], rad[j]
+
+def remove_background(im, order=(5,5,4), mask=None):
+    from cbamf.comp import ilms
+    ilm = ilms.Polynomial3D(order=order, shape=im.shape) 
+    ilm.from_data(im, mask=mask)
+
+    return im - ilm.get_field()

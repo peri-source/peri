@@ -5,7 +5,7 @@ setup(name='cbamf',
       author='Matt Bierbaum, Brian Leahy, Alex Alemi',
       version='0.1.1',
 
-      packages=['cbamf', 'cbamf.comp', 'cbamf.psf', 'cbamf.viz', 'cbamf.priors'],
+      packages=['cbamf', 'cbamf.mc', 'cbamf.comp', 'cbamf.psf', 'cbamf.viz', 'cbamf.priors', 'cbamf.test'],
       install_requires=[
           "numpy>=1.8.1",
           "scipy>=0.14.0",
