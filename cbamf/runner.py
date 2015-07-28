@@ -107,7 +107,7 @@ def sample_block_list(state, blocklist, stepout=0.1):
     return state.state.copy(), state.loglikelihood()
 
 def do_samples(s, sweeps, burn, stepout=0.1, save_period=10,
-        prefix='cbamf', save_name=None, sigma=False):
+        prefix='cbamf', save_name=None, sigma=False, pos=False):
     h = []
     ll = []
     if not save_name:
@@ -121,7 +121,10 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=10,
 
         print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
-        sample_particles(s, stepout=stepout)
+        #sample_particles(s, stepout=stepout)
+        if pos:
+            sample_particle_pos(s, stepout=stepout)
+        sample_particle_rad(s, stepout=stepout)
         sample_block(s, 'psf', stepout=stepout)
         sample_block(s, 'ilm', stepout=stepout)
         sample_block(s, 'off', stepout=stepout)
@@ -149,12 +152,12 @@ def modify(state, blocks, vec):
         state.update(bl, np.array([val]))
 
 def residual(vec, state, blocks):
-    print '-'
+    print 'res', state.loglikelihood()
     modify(state, blocks, vec)
-    print state.loglikelihood()
     return state.residuals().flatten()
 
 def jac(vec, state, blocks):
+    print 'jac', state.loglikelihood()
     modify(state, blocks, vec)
     return state.jac(blocks=blocks)
 
