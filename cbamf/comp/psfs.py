@@ -97,9 +97,13 @@ class PSF(object):
         self._rlen = np.sqrt(rx**2 + ry**2 + rz**2)
 
     def _min_to_tile(self):
-        d = ((self.tile.shape - self._min_support)/2)
+        d = ((self.tile.shape - self._min_support))
 
-        pad = tuple((d[i],d[i]) for i in [0,1,2])
+        # fix off-by-one issues when going odd to even tile sizes
+        o = d % 2
+        d /= 2
+
+        pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
         self.rpsf = np.pad(self._min_rpsf, pad, mode='constant', constant_values=0)
         self.rpsf = np.fft.fftshift(self.rpsf)
         self.kpsf = self.fftn(self.rpsf)
