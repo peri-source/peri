@@ -40,25 +40,28 @@ def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     axs[1][2].set_xticks([])
     axs[1][2].set_yticks([])
 
-    alpha = 0.5 if truestate is not None else 0.8
-    axs[2][0].hist(std[s.b_pos], bins=np.logspace(-3,0,50), label='Positions',
-            histtype='stepfilled', alpha=alpha)
-    if truestate is not None:
-        d = np.abs(mu - truestate)
-        axs[2][0].hist(d[s.b_pos], bins=np.logspace(-3,0,50), color='red',
-                histtype='step', alpha=1)
+    try:
+        alpha = 0.5 if truestate is not None else 0.8
+        axs[2][0].hist(std[s.b_rad], bins=np.logspace(-3,0,50), label='Radii',
+                histtype='stepfilled', alpha=alpha, color='red')
+        if truestate is not None:
+            d = np.abs(mu - truestate)
+            axs[2][0].hist(d[s.b_pos], bins=np.logspace(-3,0,50), color='red',
+                    histtype='step', alpha=1)
+        axs[2][0].semilogx()
 
-    axs[2][0].hist(std[s.b_rad], bins=np.logspace(-3,0,50), label='Radii',
-            histtype='stepfilled', alpha=alpha)
-    if truestate is not None:
-        d = np.abs(mu - truestate)
-        axs[2][0].hist(d[s.b_rad], bins=np.logspace(-3,0,50), color='blue',
-                histtype='step', alpha=1)
-
-    axs[2][0].semilogx()
-    axs[2][0].legend(loc='upper right')
-    axs[2][0].set_xlabel("Estimated standard deviation")
-    axs[2][0].set_ylim(bottom=0)
+        axs[2][0].hist(std[s.b_pos], bins=np.logspace(-3,0,50), label='Positions',
+                histtype='stepfilled', alpha=alpha, color='blue')
+        if truestate is not None:
+            d = np.abs(mu - truestate)
+            axs[2][0].hist(d[s.b_rad], bins=np.logspace(-3,0,50), color='blue',
+                    histtype='step', alpha=1)
+        axs[2][0].semilogx()
+        axs[2][0].legend(loc='upper right')
+        axs[2][0].set_xlabel("Estimated standard deviation")
+        axs[2][0].set_ylim(bottom=0)
+    except Exception as e:
+        pass
 
     d = s.state[s.b_rad]
     m = 2*1.4826 * MAD(d)
