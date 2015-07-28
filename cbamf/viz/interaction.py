@@ -12,7 +12,9 @@ class OrthoManipulator(object):
     def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', vmin=0.0, vmax=1.0, incsize=18.0):
         self.incsize = incsize
         self.mode = 'view'
+        self.inset = 'none'
         self.views = ['field', 'diff', 'cropped']
+        self.insets = ['exposure']
         self.view = self.views[0]
 
         self.state = state
@@ -22,18 +24,20 @@ class OrthoManipulator(object):
         sh = self.state.image.shape
         q = float(sh[1]) / (sh[0]+sh[1])
 
-        self.fig = pl.figure(figsize=(12,6))
+        self.fig = pl.figure(figsize=(16,8))
 
         h = 0.5
         self.gl = {}
         self.gl['xy'] = self.fig.add_axes((h*0.0, 1-q, h*q,     q))
         self.gl['yz'] = self.fig.add_axes((h*q,   1-q, h*(1-q), q))
         self.gl['xz'] = self.fig.add_axes((h*0.0, 0.0, h*q,     1-q))
+        self.gl['in'] = self.fig.add_axes((h*q,   0.0, h*(1-q), 1-q))
 
         self.gr = {}
         self.gr['xy'] = self.fig.add_axes((h+h*0.0, 1-q, h*q,     q))
         self.gr['yz'] = self.fig.add_axes((h+h*q,   1-q, h*(1-q), q))
         self.gr['xz'] = self.fig.add_axes((h+h*0.0, 0.0, h*q,     1-q))
+        self.gr['in'] = self.fig.add_axes((h+h*q,   0.0, h*(1-q), 1-q))
 
         self.slices = (np.array(self.state.image.shape)/2).astype('int')
 
@@ -69,6 +73,7 @@ class OrthoManipulator(object):
         g['xy'].cla()
         g['yz'].cla()
         g['xz'].cla()
+        g['in'].cla()
 
         g['xy'].imshow(im[slices[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
         g['xy'].hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
@@ -85,6 +90,20 @@ class OrthoManipulator(object):
         g['xz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
         self._format_ax(g['xz'])
 
+        if self.inset == 'exposure':
+            m = im*self.state.image_mask
+            self.pix = np.r_[m[slices[0],:,:], m[:,:,slices[2]], m[:,slices[1],:]].ravel()
+            self.pix = self.pix[self.pix != 0.]
+            g['in'].hist(self.pix, bins=300, histtype='step')
+            g['in'].semilogy()
+
+            g['in'].set_xlim(0, 1)
+            g['in'].set_ylim(9e-1, 1e3)
+
+            if self.view == 'diff' and g == self.gr:
+                g['in'].set_xlim(-0.3, 0.3)
+
+        self._format_ax(g['in'])
         pl.draw()
 
     def register_events(self):
