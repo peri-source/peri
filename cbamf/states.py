@@ -437,6 +437,7 @@ class ConfocalImagePython(State):
 
             self.psf.set_tile(Tile(self._sigma_field.shape))
             self._sigma_field = self.psf.execute(self._sigma_field)
+            self._sigma_field_log = np.log(self._sigma_field)
 
     def set_state(self, state):
         self.obj.pos = state[self.b_pos]
@@ -506,9 +507,15 @@ class ConfocalImagePython(State):
         s = slicer
         oldll = self._loglikelihood_field[s].sum()
 
+        # make temporary variables since slicing is 'hard'
+        im = self.image[s]
+        sig = self._sigma_field[s]
+        lsig = self._sigma_field_log[s]
+        tmask = self.image_mask[s]
+
         self._loglikelihood_field[s] = (
-                -self.image_mask[s] * (data - self.image[s])**2 / (2*self._sigma_field[s]**2)
-                -self.image_mask[s] * np.log( np.sqrt(2*np.pi) * self._sigma_field[s] )*self.nlogs
+                -tmask * (data - im)**2 / (2*sig**2)
+                -tmask * (lsig + np.log(np.sqrt(2*np.pi)))*self.nlogs
             )
 
         newll = self._loglikelihood_field[s].sum()
