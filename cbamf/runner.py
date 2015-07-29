@@ -50,9 +50,9 @@ def scan_noise(image, state, element, size=0.01, N=1000):
 
     return xs, ys
 
-def sample_particles(state, stepout=1):
+def sample_particles(state, stepout=1, start=0):
     print '{:-^39}'.format(' POS / RAD ')
-    for particle in xrange(state.obj.N):
+    for particle in xrange(start, state.obj.N):
         if not state.isactive(particle):
             continue
 
@@ -64,9 +64,9 @@ def sample_particles(state, stepout=1):
 
     return state.state.copy()
 
-def sample_particle_pos(state, stepout=1):
+def sample_particle_pos(state, stepout=1, start=0):
     print '{:-^39}'.format(' POS ')
-    for particle in xrange(state.obj.N):
+    for particle in xrange(start, state.obj.N):
         if not state.isactive(particle):
             continue
 
@@ -78,9 +78,9 @@ def sample_particle_pos(state, stepout=1):
 
     return state.state.copy()
 
-def sample_particle_rad(state, stepout=1):
+def sample_particle_rad(state, stepout=1, start=0):
     print '{:-^39}'.format(' RAD ')
-    for particle in xrange(state.obj.N):
+    for particle in xrange(start, state.obj.N):
         if not state.isactive(particle):
             continue
 
@@ -106,8 +106,8 @@ def sample_block_list(state, blocklist, stepout=0.1):
         sample_block(state, bl, stepout=stepout)
     return state.state.copy(), state.loglikelihood()
 
-def do_samples(s, sweeps, burn, stepout=0.1, save_period=10,
-        prefix='cbamf', save_name=None, sigma=False, pos=False):
+def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
+        prefix='cbamf', save_name=None, sigma=True, pos=True):
     h = []
     ll = []
     if not save_name:
@@ -315,6 +315,7 @@ def sample_n_add(s, rad, tries=5):
 
         print p, ll0, ll1
         if (ll0**2).sum() < (ll1**2).sum():
+            bt = s.block_particle_typ(n)
             s.update(bt, np.array([0]))
         else:
             accepts += 1
@@ -342,8 +343,9 @@ def sample_n_remove(s, rad, tries=5):
 
         ll1 = s.loglikelihood()
 
-        print s.obj.pos[n], ll0, ll1
+        print pos[i], ll0, ll1
         if (ll0**2).sum() < (ll1**2).sum():
+            bt = s.block_particle_typ(s.closest_particle(pos[i]))
             s.update(bt, np.array([1]))
         else:
             accepts += 1
