@@ -107,6 +107,25 @@ def remove_overlaps(pos, rad, zscale=1, doprint=False):
     N = rad.shape[0]
     z = np.array([zscale, 1, 1])
     for i in xrange(N):
+        o = np.arange(i+1, N)
+        d = np.sqrt( ((z*(pos[i] - pos[o]))**2).sum(axis=-1) )
+        r = rad[i] + rad[o]
+
+        diff = d-r
+        mask = diff < 0
+        imask = o[mask]
+        dmask = diff[mask]
+
+        for j, d in zip(imask, dmask):
+            rad[i] -= np.abs(d)*rad[i]/(rad[i]+rad[j]) + 1e-10
+            rad[j] -= np.abs(d)*rad[j]/(rad[i]+rad[j]) + 1e-10
+            if doprint:
+                print diff, rad[i], rad[j]
+
+def remove_overlaps_naive(pos, rad, zscale=1, doprint=False):
+    N = rad.shape[0]
+    z = np.array([zscale, 1, 1])
+    for i in xrange(N):
         for j in xrange(N):
             if i == j:
                 continue;
