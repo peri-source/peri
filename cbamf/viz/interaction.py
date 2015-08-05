@@ -15,7 +15,7 @@ class OrthoManipulator(object):
         self.inset = 'none'
         self.views = ['field', 'diff', 'cropped']
         self.insets = ['exposure']
-        self.view = self.views[0]
+        self.view = self.views[2]
 
         self.state = state
         self.cmap_abs = cmap_abs
