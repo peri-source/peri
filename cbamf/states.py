@@ -6,6 +6,8 @@ from cbamf import initializers
 from cbamf.util import Tile, amin, amax, ProgressBar
 from cbamf.priors import overlap
 
+log2pi = np.log(np.sqrt(2*np.pi))
+
 class State:
     def __init__(self, nparams, state=None, logpriors=None):
         self.nparams = nparams
@@ -144,9 +146,12 @@ class JointState(State):
 """
 
 class LinearFit(State):
-    def __init__(self, x, y, *args, **kwargs):
-        State.__init__(self, nparams=2, *args, **kwargs)
+    def __init__(self, x, y, sigma=1, *args, **kwargs):
+        State.__init__(self, nparams=3, *args, **kwargs)
         self.dx, self.dy = (np.array(i) for i in zip(*sorted(zip(x, y))))
+
+        self.b_sigma = self.explode(self.block_all())[-1]
+        self.state[self.b_sigma] = sigma
 
     def plot(self, state):
         import pylab as pl
@@ -159,7 +164,9 @@ class LinearFit(State):
         return self.state[0]*self.dx + self.state[1]
 
     def dologlikelihood(self):
-        return -((self._calculate() - self.dy)**2).sum()
+        sig = self.state[self.b_sigma]
+        return (-((self._calculate() - self.dy)**2).sum() / (2*sig**2) + 
+                -(np.log(abs(sig)) + np.log(np.sqrt(2*np.pi))))
 
     def reset(self):
         self.state *= 0
@@ -515,7 +522,7 @@ class ConfocalImagePython(State):
 
         self._loglikelihood_field[s] = (
                 -tmask * (data - im)**2 / (2*sig**2)
-                -tmask * (lsig + np.log(np.sqrt(2*np.pi)))*self.nlogs
+                -tmask * (lsig + log2pi)*self.nlogs
             )
 
         newll = self._loglikelihood_field[s].sum()

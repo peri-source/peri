@@ -8,14 +8,28 @@ import pickle
 from cbamf import const
 from cbamf.mc import samplers, engines, observers
 
+# Linear fit function, because I can
+def linear_fit(x, y, sigma=1, N=100, burn=1000):
+    from cbamf.states import LinearFit
+    poly = np.polyfit(x,y,1)
+
+    s = LinearFit(x, y, sigma=sigma)
+    s.state[:2] = poly
+
+    bl = s.explode(s.block_all())
+    h = sample_state(s, s.explode(s.block_all()), N=burn, doprint=True, procedure='uniform')
+    h = sample_state(s, s.explode(s.block_all()), N=burn, doprint=True, procedure='uniform')
+
+    return s, h.get_histogram()
+
 #=============================================================================
 # Sampling methods that run through blocks and sample
 #=============================================================================
-def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
+def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False, procedure='overrelaxed'):
     eng = engines.SequentialBlockEngine(state)
     opsay = observers.Printer()
-    ohist = observers.HistogramObserver(block=blocks[0])
-    eng.add_samplers([samplers.SliceSampler1D(stepout, block=b, procedure='overrelaxed') for b in blocks])
+    ohist = observers.HistogramObserver(block=np.array(blocks).any(axis=0))
+    eng.add_samplers([samplers.SliceSampler1D(stepout, block=b, procedure=procedure) for b in blocks])
 
     eng.add_likelihood_observers(opsay) if doprint else None
     eng.add_state_observers(ohist)
