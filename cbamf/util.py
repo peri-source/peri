@@ -215,6 +215,82 @@ class ProgressBar(object):
         if self.display:
             print '\r{lett:>{screen}}'.format(**{'lett':'', 'screen': self.screen})
 
+
+#=============================================================================
+# useful decorators
+#=============================================================================
+import collections
+import functools
+import types
+
+def newcache():
+    out = {}
+    out['hits'] = 0
+    out['misses'] = 0
+    out['size'] = 0
+    return out
+
+def memoize(cache_max_size=1e9):
+    def memoize_inner(obj):
+        cache_name = str(obj)
+
+        @functools.wraps(obj)
+        def wrapper(self, *args, **kwargs):
+            # add the memoize cache to the object first, if not present
+            # provide a method to the object to clear the cache too
+            if not hasattr(self, '_memoize_caches'):
+                def clear_cache(self):
+                    for k,v in self._memoize_caches.iteritems():
+                        self._memoize_caches[k] = newcache()
+                self._memoize_caches = {}
+                self._memoize_clear = types.MethodType(clear_cache, self)
+
+            # next, add the particular cache for this method if it does
+            # not already exist in the parent 'self'
+            cache = self._memoize_caches.get(cache_name)
+            if not cache:
+                cache = newcache()
+                self._memoize_caches[cache_name] = cache
+
+            size = 0
+            hashed = []
+
+            # let's hash the arguments (both args, kwargs) and be mindful of
+            # numpy arrays -- that is, only take care of its data, not the obj
+            # itself
+            for arg in args:
+                if isinstance(arg, np.ndarray):
+                    hashed.append(arg.tostring())
+                else:
+                    hashed.append(arg)
+            for k,v in kwargs.iteritems():
+                if isinstance(v, np.ndarray):
+                    hashed.append(v.tostring())
+                else:
+                    hashed.append(v)
+
+            hashed = tuple(hashed)
+            if hashed not in cache:
+                ans = obj(self, *args, **kwargs)
+
+                # if it is not too much to ask, place the answer in the cache
+                if isinstance(ans, np.ndarray):
+                    size = ans.nbytes
+
+                newsize = size + cache['size']
+                if newsize < cache_max_size:
+                    cache[hashed] = ans
+                    cache['misses'] += 1
+                    cache['size'] = newsize
+                return ans
+
+            cache['hits'] += 1
+            return cache[hashed]
+
+        return wrapper
+
+    return memoize_inner
+
 #=============================================================================
 # debugging / python interpreter / logging
 #=============================================================================
