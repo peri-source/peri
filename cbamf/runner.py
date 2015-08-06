@@ -25,7 +25,7 @@ def linear_fit(x, y, sigma=1, N=100, burn=1000):
 #=============================================================================
 # Sampling methods that run through blocks and sample
 #=============================================================================
-def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False, procedure='overrelaxed'):
+def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False, procedure='uniform'):
     eng = engines.SequentialBlockEngine(state)
     opsay = observers.Printer()
     ohist = observers.HistogramObserver(block=np.array(blocks).any(axis=0))
@@ -161,6 +161,15 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
 #=============================================================================
 # Optimization methods like gradient descent
 #=============================================================================
+def optimize_particle(state, index):
+    blocks = state.blocks_particle(index)
+    g = state.gradloglikelihood(blocks=blocks)
+    h = np.zeros_like(g)
+    for i in xrange(len(g)):
+        h[i] = state.hessloglikelihood(blocks=[blocks[i]])
+        state.update(blocks[i], state.state[blocks[i]] - g[i]/h[i])
+    return g,h
+
 def modify(state, blocks, vec):
     for bl, val in zip(blocks, vec):
         state.update(bl, np.array([val]))
