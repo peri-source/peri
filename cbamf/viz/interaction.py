@@ -9,13 +9,19 @@ TODO -- plans for web-based GUI
     - tornado backend
 """
 class OrthoManipulator(object):
-    def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', vmin=0.0, vmax=1.0, incsize=18.0):
+    def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', incsize=18.0):
         self.incsize = incsize
-        self.mode = 'view'
-        self.inset = 'none'
-        self.views = ['field', 'diff', 'cropped']
+        self.modes = ['view', 'add', 'remove', 'grab']
+        self.mode = self.modes[0]
+
         self.insets = ['exposure']
+        self.inset = 'none'
+
+        self.views = ['field', 'diff', 'cropped']
         self.view = self.views[2]
+
+        self.modifiers = ['none', 'fft']
+        self.modifier = self.modifiers[0]
 
         self.state = state
         self.cmap_abs = cmap_abs
@@ -41,11 +47,8 @@ class OrthoManipulator(object):
 
         self.slices = (np.array(self.state.image.shape)/2).astype('int')
 
-        #self.vmin = min([self.state.image.min(), self.state.get_model_image().min()])
-        #self.vmax = max([self.state.image.max(), self.state.get_model_image().max()])
         self._grab = None
-        self.vmin = vmin
-        self.vmax = vmax
+        self.set_field()
         self.draw()
         self.register_events()
 
@@ -53,19 +56,38 @@ class OrthoManipulator(object):
         ax.set_xticks([])
         ax.set_yticks([])
 
-    def draw(self):
-        self.draw_ortho(self.state.image, self.gl, cmap=self.cmap_abs,
-                vmin=self.vmin, vmax=self.vmax)
-
+    def set_field(self):
         if self.view == 'field':
-            self.draw_ortho(self.state.model_image, self.gr,
-                cmap=self.cmap_abs, vmin=self.vmin, vmax=self.vmax)
+            out = self.state.model_image
+            vmin, vmax = 0.0, 1.0
+            cmap = self.cmap_abs
+
         if self.view == 'diff':
-            self.draw_ortho(self.state.image - self.state.get_model_image(),
-                self.gr, cmap=self.cmap_diff, vmin=-self.vmax/5, vmax=self.vmax/5)
+            out = (self.state.image - self.state.get_model_image())
+            vmin, vmax = -0.2, 0.2
+            cmap = self.cmap_diff
+
         if self.view == 'cropped':
-            self.draw_ortho(self.state.get_model_image(),
-                self.gr, cmap=self.cmap_abs, vmin=self.vmin, vmax=self.vmax)
+            out = self.state.get_model_image()
+            vmin, vmax = 0.0, 1.0
+            cmap = self.cmap_abs
+
+        if self.modifier == 'fft':
+            out = np.real(np.abs(np.fft.fftn(out)))**0.2
+            out[0,0,0] = 1.0
+            out = np.fft.fftshift(out)
+            vmin = out.min()
+            vmax = out.max()
+            cmap = self.cmap_abs
+
+        self.field = out
+        self.vmin = vmin
+        self.vmax = vmax
+        self.cmap = cmap
+
+    def draw(self):
+        self.draw_ortho(self.state.image, self.gl, cmap=self.cmap_abs, vmin=0.0, vmax=1.0)
+        self.draw_ortho(self.field, self.gr, cmap=self.cmap, vmin=self.vmin, vmax=self.vmax)
 
     def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
         slices = self.slices
@@ -208,6 +230,9 @@ class OrthoManipulator(object):
             self.state.remove_closest_particle(p)
         self.draw()
 
+    def cycle(self, c, clist):
+        return clist[(clist.index(c)+1) % len(clist)]
+
     def key_press_event(self, event):
         self.event = event
 
@@ -220,7 +245,13 @@ class OrthoManipulator(object):
         if event.key == 'g':
             self.mode = 'grab'
         if event.key == 'q':
-            self.view = self.views[(self.views.index(self.view)+1) % len(self.views)]
+            self.view = self.cycle(self.view, self.views)
+            self.set_field()
+            self.draw()
+            return
+        if event.key == 'w':
+            self.modifier = self.cycle(self.modifier, self.modifiers)
+            self.set_field()
             self.draw()
             return
 
