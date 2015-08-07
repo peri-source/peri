@@ -165,8 +165,8 @@ class PSF(object):
         cdd(odict, ['_rx', '_ry', '_rz', '_rvecs', '_rlen'])
         cdd(odict, ['_kx', '_ky', '_kz', '_kvecs', '_klen'])
         cdd(odict, ['_fftn', '_ifftn', '_fftn_data', '_ifftn_data'])
+        cdd(odict, ['_memoize_clear', '_memoize_caches'])
         cdd(odict, ['rpsf', 'kpsf'])
-        odict['_memoize_caches'] = {}
         return odict
 
     def __setstate__(self, idict):
