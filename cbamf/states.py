@@ -6,8 +6,6 @@ from cbamf import initializers
 from cbamf.util import Tile, amin, amax, ProgressBar
 from cbamf.priors import overlap
 
-log2pi = np.log(np.sqrt(2*np.pi))
-
 class State:
     def __init__(self, nparams, state=None, logpriors=None):
         self.nparams = nparams
@@ -522,7 +520,7 @@ class ConfocalImagePython(State):
 
         self._loglikelihood_field[s] = (
                 -tmask * (data - im)**2 / (2*sig**2)
-                -tmask * (lsig + log2pi)*self.nlogs
+                -tmask * (lsig + np.log(np.sqrt(2*np.pi)))*self.nlogs
             )
 
         newll = self._loglikelihood_field[s].sum()

@@ -166,6 +166,7 @@ class OrthoManipulator(object):
         if p is not None and self._grab is not None:
             b = self.state.block_particle_pos(self._grab)
             self.state.update(b, p)
+            self.set_field()
             self.draw()
 
     def mouse_scroll_grab(self, event):
@@ -176,6 +177,7 @@ class OrthoManipulator(object):
             n = self.state.closest_particle(p)
             b = self.state.block_particle_rad(n)
             self.state.update(b, self.state.obj.rad[n]+event.step/self.incsize)
+            self.set_field()
             self.draw()
 
     def _pt_xyz(self, event):
@@ -219,6 +221,7 @@ class OrthoManipulator(object):
         if p is not None:
             print "Adding particle at", p
             self.state.add_particle(p, self.state.obj.rad.mean())
+        self.set_field()
         self.draw()
 
     def mouse_press_remove(self, event):
@@ -228,6 +231,7 @@ class OrthoManipulator(object):
         if p is not None:
             print "Removing particle near", p
             self.state.remove_closest_particle(p)
+        self.set_field()
         self.draw()
 
     def cycle(self, c, clist):
