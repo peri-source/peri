@@ -2,7 +2,7 @@ import numpy as np
 from numpy.polynomial.polynomial import polyval3d
 from numpy.polynomial.legendre import legval
 import scipy.optimize as opt
-from itertools import product
+from itertools import product, chain
 
 from cbamf.util import Tile, cdd
 
@@ -12,9 +12,10 @@ class Polynomial3D(object):
         self.order = order
         self.cache = cache
         self.partial_update = partial_update
+        self.nparams = len(list(self._poly_orders()))
 
         if coeffs is None:
-            self.params = np.zeros(np.prod(order), dtype='float')
+            self.params = np.zeros(self.nparams, dtype='float')
             self.params[0] = 1
         else:
             self.params = coeffs.astype('float')
@@ -24,7 +25,7 @@ class Polynomial3D(object):
         self.tile = Tile(self.shape)
         self.set_tile(Tile(self.shape))
 
-        self.block = np.ones(self.params.shape).astype('bool')
+        self.block = np.ones(self.nparams).astype('bool')
         self.update(self.block, self.params)
 
     def _poly_orders(self):
@@ -33,9 +34,14 @@ class Polynomial3D(object):
     def _setup_rvecs(self):
         # normalize all sizes to a strict upper bound on image size
         # so we can transfer ILM between different images
-        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024.)
+        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024., meshed=False)
 
     def _setup_cache(self):
+        self._last_index = None
+
+        if not hasattr(self, 'cache'):
+            self.cache = True
+
         if self.cache:
             self._poly = []
             for index in self._poly_orders():
@@ -53,27 +59,34 @@ class Polynomial3D(object):
     def _score(self, coeffs, f, mask):
         test = np.zeros(f.shape)
         for i, c in enumerate(coeffs):
-            self.bkg += c * self._term(self._indices[i])
-        return f[mask] - test[mask]
+            test += c * self._term(self._indices[i])
+        return (f[mask] - test[mask]).flatten()
 
     def _from_data(self, f, mask=None, dopriors=False, multiplier=1):
-        # TODO -- add priors to the fit
         if mask is None:
             mask = np.s_[:]
         res = opt.leastsq(self._score, x0=self.params, args=(f, mask))
         self.update(self.block, res[0])
 
     def _from_data_cache(self, f, mask=None, dopriors=False, multiplier=1):
-        # TODO -- add priors to the fit
         if mask is None:
             mask = np.s_[:]
         fit, _, _, _ = np.linalg.lstsq(self._poly[mask].reshape(-1, self.params.shape[0]), f[mask].ravel())
         self.update(self.block, fit)
 
-    def _term(self, index):
-        # TODO -- per index cache, so if called multiple times in a row, keep the answer
+    def _term_ijk(self, index):
         i,j,k = index
         return self.rx**i * self.ry**j * self.rz**k
+
+    def _term(self, index):
+        # per index cache, so if called multiple times in a row, keep the answer
+        if self._last_index == index:
+            return self._last_term
+
+        # otherwise, just calculate this one term
+        self._last_index = index
+        self._last_term = self._term_ijk(index)
+        return self._last_term
 
     def initialize(self):
         self.update(self.block, self.params)
@@ -110,7 +123,7 @@ class Polynomial3D(object):
 
     def __getstate__(self):
         odict = self.__dict__.copy()
-        cdd(odict, ['_poly', 'rx', 'ry', 'rz', 'bkg'])
+        cdd(odict, ['_poly', 'rx', 'ry', 'rz', 'bkg', '_last_term', '_last_index'])
         return odict
 
     def __setstate__(self, idict):
@@ -127,9 +140,12 @@ class LegendrePoly3D(Polynomial3D):
 
     def _setup_rvecs(self):
         o = self.shape
-        self.rz, self.ry, self.rx = np.meshgrid(*[np.linspace(-1, 1, i) for i in o], indexing='ij')
+        self.rz, self.ry, self.rx = [np.linspace(-1, 1, i) for i in o]
+        self.rz = self.rz[:,None,None]
+        self.ry = self.ry[None,:,None]
+        self.rx = self.rx[None,None,:]
 
-    def _term(self, index):
+    def _term_ijk(self, index):
         i,j,k = index
         ci = np.zeros(i+1)
         cj = np.zeros(j+1)
@@ -138,3 +154,104 @@ class LegendrePoly3D(Polynomial3D):
         cj[-1] = 1
         ck[-1] = 1
         return legval(self.rx, ci) * legval(self.ry, cj) * legval(self.rz, ck)
+
+class Polynomial2P1D(object):
+    def __init__(self, shape, order=(1,1,1)):
+        self.shape = shape
+        self.xyorder = order[:2]
+        self.zorder = order[-1]
+
+        self.order = order
+        self.nparams = len(list(self._poly_orders()))
+
+        self.params = np.zeros(self.nparams, dtype='float')
+        self.params[0] = 1
+        self.params[np.prod(self.xyorder)] = 1
+
+        self._setup()
+        self.tile = Tile(self.shape)
+        self.set_tile(Tile(self.shape))
+
+        self.block = np.ones(self.nparams).astype('bool')
+        self.initialize()
+
+    def _poly_orders(self):
+        o2d = product(*(xrange(o) for o in self.order[:2]))
+        o1d = product(xrange(self.order[-1]))
+        return chain(o2d, o1d)
+
+    def _setup(self):
+        # normalize all sizes to a strict upper bound on image size
+        # so we can transfer ILM between different images
+        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024., meshed=False)
+
+        self._last_index = None
+        self._indices = list(self._poly_orders())
+
+    def from_data(self, f, mask=None, dopriors=False, multiplier=1):
+        if mask is None:
+            mask = np.s_[:]
+        res = opt.leastsq(self._score, x0=self.params, args=(f, mask))
+        self.update(self.block, res[0])
+
+    def _score(self, coeffs, f, mask):
+        test = np.zeros(f.shape)
+        for i, c in enumerate(coeffs):
+            self.bkg += c * self._term(self._indices[i])
+        return f[mask] - test[mask]
+
+    def _term_ijk(self, index):
+        if len(index) == 2:
+            i,j = index
+            return self.rx**i * self.ry**j
+        if len(index) == 1:
+            k = index[0]
+            return self.rz**k
+
+    def _term(self, index):
+        # per index cache, so if called multiple times in a row, keep the answer
+        if self._last_index == index:
+            return self._last_term
+
+        # otherwise, just calculate this one term
+        self._last_index = index
+        self._last_term = self._term_ijk(index)
+        return self._last_term
+
+    def initialize(self):
+        self.update(self.block, self.params)
+
+    def set_tile(self, tile):
+        self.tile = tile
+
+    def update(self, blocks, params):
+        if blocks.sum() < self.block.sum()/2:
+            for b in np.arange(len(blocks))[blocks]:
+                self.bkg -= self.params[b] * self._term(self._indices[b])
+                self.params[b] = params[b]
+                self.bkg += self.params[b] * self._term(self._indices[b])
+        else:
+            self.params = params
+            self.bkg = np.zeros(self.shape)
+            for b in np.arange(len(blocks))[blocks]:
+                self.bkg += self.params[b] * self._term(self._indices[b])
+
+    def get_field(self):
+        return self.bkg[self.tile.slicer]
+
+    def get_params(self):
+        return self.params
+
+    def __getstate__(self):
+        odict = self.__dict__.copy()
+        cdd(odict, ['_poly', 'rx', 'ry', 'rz', 'bkg', '_last_term', '_last_index'])
+        return odict
+
+    def __setstate__(self, idict):
+        self.__dict__.update(idict)
+        self._setup()
+        self.tile = Tile(self.shape)
+        self.set_tile(Tile(self.shape))
+        self.initialize()
+
+
