@@ -45,11 +45,13 @@ class Tile(object):
     def center(self, norm=1.0):
         return (self.r + self.l)/2.0 / norm
 
-    def coords(self, norm=1.0):
+    def coords(self, norm=1.0, meshed=True):
         z = np.arange(self.l[0], self.r[0]) / norm
         y = np.arange(self.l[1], self.r[1]) / norm
         x = np.arange(self.l[2], self.r[2]) / norm
-        return np.meshgrid(z, y, x, indexing='ij')
+        if meshed:
+            return np.meshgrid(z, y, x, indexing='ij')
+        return z[:,None,None], y[None,:,None], x[None,None,:]
 
     def __str__(self):
         return self.__repr__()
@@ -57,6 +59,24 @@ class Tile(object):
     def __repr__(self):
         return str(self.__class__.__name__)+" {} -> {} ({})".format(
                 list(self.l), list(self.r), list(self.shape))
+
+class ImageOnDisk(object):
+    def __init__(self, filename, tile=None, zstart=None, zstop=None, xysize=None,
+            xyunits=1):
+        self.filename = filename
+
+    def get_image(self):
+        return self.image
+
+    def __getstate__(self):
+        return {}
+
+    def __setstate__(self):
+        pass
+
+    def __initargs__(self):
+        return (self.filename, self.slicer, self.zstart, self.zstop,
+                self.xysize, self.xyunits)
 
 def cdd(d, k):
     """ Conditionally delete key (or list of keys) 'k' from dict 'd' """
