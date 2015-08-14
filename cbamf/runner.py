@@ -199,8 +199,8 @@ def hessloglikelihood(vec, state, blocks):
 def gradient_descent(state, blocks, method='L-BFGS-B'):
     from scipy.optimize import minimize
 
-    t = np.array(blocks).any(axis=0)
-    return minimize(residual_sq, state.state[t], args=(state, blocks),
+    t = np.array([state.state[b] for b in blocks])
+    return minimize(residual_sq, t, args=(state, blocks),
             method=method)#, jac=gradloglikelihood, hess=hessloglikelihood)
 
 def lm(state, blocks, method='lm'):
@@ -213,8 +213,8 @@ def lm(state, blocks, method='lm'):
 def leastsq(state, blocks):
     from scipy.optimize import leastsq
 
-    t = np.array(blocks).any(axis=0)
-    return leastsq(residual, state.state[t], args=(state, blocks), Dfun=jac, col_deriv=True)
+    t = np.array([state.state[b] for b in blocks])
+    return leastsq(residual, t, args=(state, blocks), Dfun=jac, col_deriv=True)
 
 def gd(state, N=1, ratio=1e-1):
     state.set_current_particle()
