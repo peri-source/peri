@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.polynomial.polynomial import polyval3d
 from numpy.polynomial.legendre import legval
+from numpy.polynomial.chebyshev import chebval
 import scipy.optimize as opt
 from itertools import product, chain
 
@@ -57,10 +58,10 @@ class Polynomial3D(object):
             self._from_data(f, mask=mask, dopriors=dopriors, multiplier=multiplier)
 
     def _score(self, coeffs, f, mask):
-        test = np.zeros(f.shape)
-        for i, c in enumerate(coeffs):
-            test += c * self._term(self._indices[i])
-        return (f[mask] - test[mask]).flatten()
+        self.params = coeffs
+        test = self._bkg()
+        out = (f[mask] - test[mask]).flatten()
+        return out
 
     def _from_data(self, f, mask=None, dopriors=False, multiplier=1):
         if mask is None:
@@ -73,6 +74,15 @@ class Polynomial3D(object):
             mask = np.s_[:]
         fit, _, _, _ = np.linalg.lstsq(self._poly[mask].reshape(-1, self.params.shape[0]), f[mask].ravel())
         self.update(self.block, fit)
+
+    def _bkg(self):
+        self.bkg = np.zeros(self.shape)
+
+        for order in self._poly_orders():
+            ind = self._indices.index(order)
+            self.bkg += self.params[ind] * self._term(order)
+
+        return self.bkg
 
     def _term_ijk(self, index):
         i,j,k = index
@@ -95,25 +105,14 @@ class Polynomial3D(object):
         self.tile = tile
 
     def update(self, blocks, params):
-        if self.cache:
-            if self.partial_update and blocks.sum() < self.block.sum()/2:
-                self.bkg -= (self._poly[...,blocks] * self.params[blocks]).sum(axis=-1)
-                self.params = params
-                self.bkg += (self._poly[...,blocks] * self.params[blocks]).sum(axis=-1)
-            else:
-                self.params = params
-                self.bkg = (self._poly * self.params).sum(axis=-1)
+        if self.partial_update and blocks.sum() < self.block.sum()/2:
+            for b in np.arange(len(blocks))[blocks]:
+                self.bkg -= self.params[b] * self._term(self._indices[b])
+                self.params[b] = params[b]
+                self.bkg += self.params[b] * self._term(self._indices[b])
         else:
-            if self.partial_update and blocks.sum() < self.block.sum()/2:
-                for b in np.arange(len(blocks))[blocks]:
-                    self.bkg -= self.params[b] * self._term(self._indices[b])
-                    self.params[b] = params[b]
-                    self.bkg += self.params[b] * self._term(self._indices[b])
-            else:
-                self.params = params
-                self.bkg = np.zeros(self.shape)
-                for b in np.arange(len(blocks))[blocks]:
-                    self.bkg += self.params[b] * self._term(self._indices[b])
+            self.params = params
+            self._bkg()
 
     def get_field(self):
         return self.bkg[self.tile.slicer]
@@ -166,7 +165,7 @@ class Polynomial2P1D(object):
 
         self.params = np.zeros(self.nparams, dtype='float')
         self.params[0] = 1
-        self.params[np.prod(self.xyorder)] = 1
+        self.params[len(list(self._poly_orders_xy()))] = 1
 
         self._setup()
         self.tile = Tile(self.shape)
@@ -175,10 +174,14 @@ class Polynomial2P1D(object):
         self.block = np.ones(self.nparams).astype('bool')
         self.initialize()
 
+    def _poly_orders_xy(self):
+        return product(*(xrange(o) for o in self.order[:2]))
+
+    def _poly_orders_z(self):
+        return product(xrange(self.order[-1]))
+
     def _poly_orders(self):
-        o2d = product(*(xrange(o) for o in self.order[:2]))
-        o1d = product(xrange(self.order[-1]))
-        return chain(o2d, o1d)
+        return chain(self._poly_orders_xy(), self._poly_orders_z())
 
     def _setup(self):
         # normalize all sizes to a strict upper bound on image size
@@ -187,6 +190,24 @@ class Polynomial2P1D(object):
 
         self._last_index = None
         self._indices = list(self._poly_orders())
+        self._indices_xy = list(self._poly_orders_xy())
+        self._indices_z = list(self._poly_orders_z())
+
+    def _bkg(self):
+        self.bkg = np.zeros(self.shape)
+        self._polyxy = 0*self.bkg
+        self._polyz = 0*self.bkg
+
+        for order in self._poly_orders_xy():
+            ind = self._indices.index(order)
+            self._polyxy += self.params[ind] * self._term(order)
+
+        for order in self._poly_orders_z():
+            ind = self._indices.index(order)
+            self._polyz += self.params[ind] * self._term(order)
+
+        self.bkg = self._polyxy * self._polyz
+        return self.bkg
 
     def from_data(self, f, mask=None, dopriors=False, multiplier=1):
         if mask is None:
@@ -195,18 +216,18 @@ class Polynomial2P1D(object):
         self.update(self.block, res[0])
 
     def _score(self, coeffs, f, mask):
-        test = np.zeros(f.shape)
-        for i, c in enumerate(coeffs):
-            self.bkg += c * self._term(self._indices[i])
-        return f[mask] - test[mask]
+        self.params = coeffs
+        test = self._bkg()
+        out = (f[mask] - test[mask]).flatten()
+        return out
 
-    def _term_ijk(self, index):
-        if len(index) == 2:
-            i,j = index
-            return self.rx**i * self.ry**j
-        if len(index) == 1:
-            k = index[0]
-            return self.rz**k
+    def _term_xy(self, index):
+        i,j = index
+        return self.rx**i * self.ry**j
+
+    def _term_z(self, index):
+        k = index[0]
+        return self.rz**k
 
     def _term(self, index):
         # per index cache, so if called multiple times in a row, keep the answer
@@ -215,7 +236,10 @@ class Polynomial2P1D(object):
 
         # otherwise, just calculate this one term
         self._last_index = index
-        self._last_term = self._term_ijk(index)
+        if len(index) == 2:
+            self._last_term = self._term_xy(index)
+        if len(index) == 1:
+            self._last_term = self._term_z(index)
         return self._last_term
 
     def initialize(self):
@@ -227,14 +251,20 @@ class Polynomial2P1D(object):
     def update(self, blocks, params):
         if blocks.sum() < self.block.sum()/2:
             for b in np.arange(len(blocks))[blocks]:
-                self.bkg -= self.params[b] * self._term(self._indices[b])
+                order = self._indices[b]
+
+                if order in self._indices_xy:
+                    _term = self._polyxy
+                else:
+                    _term = self._polyz
+
+                _term -= self.params[b] * self._term(order)
                 self.params[b] = params[b]
-                self.bkg += self.params[b] * self._term(self._indices[b])
+                _term += self.params[b] * self._term(order)
+                self.bkg = self._polyxy * self._polyz
         else:
             self.params = params
-            self.bkg = np.zeros(self.shape)
-            for b in np.arange(len(blocks))[blocks]:
-                self.bkg += self.params[b] * self._term(self._indices[b])
+            self._bkg()
 
     def get_field(self):
         return self.bkg[self.tile.slicer]
@@ -245,6 +275,7 @@ class Polynomial2P1D(object):
     def __getstate__(self):
         odict = self.__dict__.copy()
         cdd(odict, ['_poly', 'rx', 'ry', 'rz', 'bkg', '_last_term', '_last_index'])
+        cdd(odict, ['_polyxy', '_polyz'])
         return odict
 
     def __setstate__(self, idict):
@@ -254,4 +285,45 @@ class Polynomial2P1D(object):
         self.set_tile(Tile(self.shape))
         self.initialize()
 
+class LegendrePoly2P1D(Polynomial3D):
+    def __init__(self, shape, coeffs=None, order=(1,1,1), *args, **kwargs):
+        super(LegendrePoly2P1D, self).__init__(*args, shape=shape, coeffs=coeffs, order=order, **kwargs)
+
+    def _setup_rvecs(self):
+        o = self.shape
+        self.rz, self.ry, self.rx = [np.linspace(-1, 1, i) for i in o]
+        self.rz = self.rz[:,None,None]
+        self.ry = self.ry[None,:,None]
+        self.rx = self.rx[None,None,:]
+
+    def _term_xy(self, index):
+        i,j = index
+        ci = np.zeros(i+1)
+        cj = np.zeros(j+1)
+        ci[-1], cj[-1] = 1, 1
+        return legval(self.rx, ci) * legval(self.ry, cj)
+
+    def _term_z(self, index):
+        k = index[0]
+        ck = np.zeros(k+1)
+        ck[-1] = 1
+        return legval(self.rz, ck)
+
+class ChebyshevPoly2P1D(Polynomial3D):
+    def __init__(self, shape, coeffs=None, order=(1,1,1), *args, **kwargs):
+        super(ChebyshevPoly2P1D, self).__init__(*args,
+                shape=shape, coeffs=coeffs, order=order, **kwargs)
+
+    def _term_xy(self, index):
+        i,j = index
+        ci = np.zeros(i+1)
+        cj = np.zeros(j+1)
+        ci[-1], cj[-1] = 1, 1
+        return chebval(self.rx, ci) * chebval(self.ry, cj)
+
+    def _term_z(self, index):
+        k = index[0]
+        ck = np.zeros(k+1)
+        ck[-1] = 1
+        return chebval(self.rz, ck)
 
