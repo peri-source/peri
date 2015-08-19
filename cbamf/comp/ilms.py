@@ -219,6 +219,7 @@ class Polynomial2P1D(object):
         self.params = coeffs
         test = self._bkg()
         out = (f[mask] - test[mask]).flatten()
+        #print np.abs(out).mean()
         return out
 
     def _term_xy(self, index):
@@ -285,9 +286,9 @@ class Polynomial2P1D(object):
         self.set_tile(Tile(self.shape))
         self.initialize()
 
-class LegendrePoly2P1D(Polynomial3D):
+class LegendrePoly2P1D(Polynomial2P1D):
     def __init__(self, shape, coeffs=None, order=(1,1,1), *args, **kwargs):
-        super(LegendrePoly2P1D, self).__init__(*args, shape=shape, coeffs=coeffs, order=order, **kwargs)
+        super(LegendrePoly2P1D, self).__init__(*args, shape=shape, order=order, **kwargs)
 
     def _setup_rvecs(self):
         o = self.shape
@@ -309,10 +310,10 @@ class LegendrePoly2P1D(Polynomial3D):
         ck[-1] = 1
         return legval(self.rz, ck)
 
-class ChebyshevPoly2P1D(Polynomial3D):
+class ChebyshevPoly2P1D(Polynomial2P1D):
     def __init__(self, shape, coeffs=None, order=(1,1,1), *args, **kwargs):
         super(ChebyshevPoly2P1D, self).__init__(*args,
-                shape=shape, coeffs=coeffs, order=order, **kwargs)
+                shape=shape, order=order, **kwargs)
 
     def _term_xy(self, index):
         i,j = index
