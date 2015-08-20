@@ -3,11 +3,6 @@ import matplotlib as mpl
 import matplotlib.pylab as pl
 from matplotlib.gridspec import GridSpec
 
-"""
-TODO -- plans for web-based GUI
-    - bokeh graphs from matplotlib
-    - tornado backend
-"""
 class OrthoManipulator(object):
     def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', incsize=18.0):
         self.incsize = incsize
@@ -211,6 +206,7 @@ class OrthoManipulator(object):
 
         p = self._pt_xyz(event)
         if p is not None:
+            print "Moving view to %r" % p
             self.slices = p
         self.draw()
 

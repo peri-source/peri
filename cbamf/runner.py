@@ -161,6 +161,20 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
 #=============================================================================
 # Optimization methods like gradient descent
 #=============================================================================
+def diag_grad(state, blocks):
+    out = np.zeros(len(blocks))
+    for i in xrange(len(blocks)):
+        print i
+        out[i] = state.gradloglikelihood(blocks=[blocks[i]])
+    return out
+
+def diag_hess(state, blocks):
+    out = np.zeros(len(blocks))
+    for i in xrange(len(blocks)):
+        print i
+        out[i] = state.hessloglikelihood(blocks=[blocks[i]])
+    return out
+
 def optimize_particle(state, index):
     blocks = state.blocks_particle(index)
     g = state.gradloglikelihood(blocks=blocks)
@@ -210,11 +224,16 @@ def lm(state, blocks, method='lm'):
     return root(residual, state.state[t], args=(state, blocks),
             method=method)
 
-def leastsq(state, blocks):
+def leastsq(state, blocks, dojac=True):
     from scipy.optimize import leastsq
 
+    if dojac:
+        jacfunc = jac
+    else:
+        jacfunc = None
+
     t = np.array([state.state[b] for b in blocks])
-    return leastsq(residual, t, args=(state, blocks), Dfun=jac, col_deriv=True)
+    return leastsq(residual, t, args=(state, blocks), Dfun=jacfunc, col_deriv=True)
 
 def gd(state, N=1, ratio=1e-1):
     state.set_current_particle()

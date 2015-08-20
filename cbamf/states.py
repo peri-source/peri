@@ -604,11 +604,11 @@ class ConfocalImagePython(State):
                 return False
 
             tiles = self._tile_from_particle_change(pos0, rad0, typ0, pos, rad, typ)
-            for tile in tiles[:2]:
-                top = self.image.shape[0] - self.pad
-                if (np.array(tile.shape) < 2*self.psf.get_support_size(top)).any():
-                    self.state[block] = prev[block]
-                    return False
+            #for tile in tiles[:2]:
+            #    top = self.image.shape[0] - self.pad
+            #    if (np.array(tile.shape) < 2*self.psf.get_support_size(top)).any():
+            #        self.state[block] = prev[block]
+            #        return False
 
             if self.doprior:
                 self.nbl.update(particles, pos, rad, typ)
