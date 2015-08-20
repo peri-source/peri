@@ -3,6 +3,8 @@ import atexit
 import cPickle as pickle
 import numpy as np
 from multiprocessing import cpu_count
+from numpy.polynomial.legendre import legval
+from numpy.polynomial.chebyshev import chebval
 
 from cbamf.util import Tile, cdd, memoize
 from cbamf.conf import get_wisdom
@@ -507,3 +509,31 @@ class Gaussian4D(PSF4D):
         gauss = np.exp(-(self._rx/sx)**2/2-(self._ry/sy)**2/2)
 
         return gauss * mask
+
+class Gaussian4DPoly(Gaussian4D):
+    def __init__(self, shape, params=(1.0,0.5,2.0), order=(1,1,1),
+            error=1.0/255, zrange=128, *args, **kwargs):
+        super(Gaussian4DPoly, self).__init__(shape=shape, params=params,
+                order=order, error=error, zrange=zrange, *args, **kwargs)
+
+    def _sigma_coeffs(self, d=0):
+        s = 3 + np.sum(self.order[:d+0])
+        e = 3 + np.sum(self.order[:d+1])
+        return np.hstack([self.params[d], self.params[s:e]])
+
+    def _poly(self, z, coeffs):
+        return np.polyval(coeffs[::-1], z)
+
+    @memoize()
+    def _sigma(self, z, d=0):
+        return self._poly(z/self.zrange, self._sigma_coeffs(d=d))
+
+class Gaussian4DLegPoly(Gaussian4DPoly):
+    def __init__(self, shape, params=(1.0,0.5,2.0), order=(1,1,1),
+            error=1.0/255, zrange=128, *args, **kwargs):
+        super(Gaussian4DLegPoly, self).__init__(shape=shape, params=params,
+                order=order, error=error, zrange=zrange, *args, **kwargs)
+
+    def _poly(self, z, coeffs):
+        return legval(z, coeffs)
+
