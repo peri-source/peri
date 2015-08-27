@@ -537,3 +537,67 @@ class Gaussian4DLegPoly(Gaussian4DPoly):
     def _poly(self, z, coeffs):
         return legval(z, coeffs)
 
+class FromArray(PSF):
+    def __init__(self, array, *args, **kwargs):
+        """
+        Only thing to pass is the values of the point spread function (does not
+        need to be normalized) in the form of a numpy ndarray of shape
+
+        (z', z, y, x)
+
+        so if there are 50 layers in the image and the psf is at most 16 wide
+        then it must be shaped (50,50,16,16). The values of the psf must
+        be centered in this array. Hint: np.fft.fftfreq provides the correct
+        ordering of values for both even and odd lattices.
+        """
+        self.support = array.shape[:-1]
+        super(FromArray, self).__init__(*args, params=array, shape=self.support, **kwargs)
+
+    def set_tile(self, tile):
+        if (self.tile.shape != tile.shape).any():
+            self.tile = tile
+            self._setup_ffts()
+
+    def _pad(self, field):
+        if any(self.tile.shape < self.get_support_size()):
+            raise IndexError("PSF tile size is less than minimum support size")
+
+        d = self.tile.shape - self.get_support_size()
+
+        # fix off-by-one issues when going odd to even tile sizes
+        o = d % 2
+        d /= 2
+
+        pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
+        rpsf = np.pad(field, pad, mode='constant', constant_values=0)
+        rpsf = np.fft.fftshift(rpsf)
+        kpsf = np.fft.fftn(rpsf)
+        kpsf /= (np.real(kpsf[0,0,0]) + 1e-15)
+        return kpsf
+
+    def update(self, params):
+        pass
+
+    def execute(self, field):
+        if any(field.shape != self.tile.shape):
+            raise AttributeError("Field passed to PSF incorrect shape")
+
+        if not np.iscomplex(field.ravel()[0]):
+            infield = self.fftn(field)
+        else:
+            infield = field
+
+        outfield = np.zeros_like(infield, dtype='float')
+
+        for i in xrange(field.shape[0]):
+            z = int(self.tile.l[0] + i)
+            kpsf = self._pad(self.params[z])
+            outfield[i] = np.real(self.ifftn(infield * kpsf))[i]
+
+        return outfield
+
+    def get_params(self):
+        return self.params
+
+    def get_support_size(self, z=None):
+        return self.support
