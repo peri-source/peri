@@ -768,8 +768,10 @@ class ConfocalImagePython(State):
 
         return (m1 - m0) / (2*dl)
 
-    def residuals(self):
-        return self.image_mask*(self.image - self.get_model_image())
+    def residuals(self, masked=False):
+        if not masked:
+            return self.image_mask*(self.image - self.get_model_image())
+        return (self.image - self.get_model_image())[self.image_mask == 1.0]
 
     def fisher_information(self, blocks=None, dl=1e-3):
         if blocks is None:
