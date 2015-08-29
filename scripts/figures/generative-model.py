@@ -1,6 +1,6 @@
 import numpy as np
 import scipy as sp
-from cbamf import runner
+from cbamf import runner, util
 import pickle
 
 import matplotlib.pyplot as pl
@@ -22,8 +22,8 @@ def sample_center_particle(state):
     return x,y,z,r
 
 def load():
-    s,h,l = pickle.load(open('./crystal_fcc.tif_t001.tif-fit-gaussian-4d.pkl'))
-    x,y,z,r = np.load('./crystal_fcc.tif_t001.tif-fit-gaussian-4d-sample-xyzr.npy').T
+    s,h,l = pickle.load(open('/media/scratch/bamf/crystal-fcc/crystal_fcc.tif_t001.tif-fit-gaussian-4d.pkl'))
+    x,y,z,r = np.load('/media/scratch/bamf/crystal-fcc/crystal_fcc.tif_t001.tif-fit-gaussian-4d-sample-xyzr.npy').T
     x -= s.pad
     y -= s.pad
     return s,x,y,z,r
@@ -89,11 +89,17 @@ def f(s,x,y,z,r):
     ax_ilm2.set_xticks([])
     ax_ilm2.set_yticks([])
 
-    ax_psf1.imshow(s.ilm.get_field()[slicer1], cmap=pl.cm.bone_r)
+    t = s.ilm.get_field().copy()
+    t *= 0
+    t[np.array(t.shape)/2] = 1
+    s.psf.set_tile(util.Tile(t.shape))
+    psf = s.psf.execute(t)
+
+    ax_psf1.imshow(psf[slicer1], cmap=pl.cm.bone_r)
     ax_psf1.set_xticks([])
     ax_psf1.set_yticks([])
     ax_psf1.set_ylabel("PSF", fontsize=22)
-    ax_psf2.imshow(s.ilm.get_field()[slicer2], cmap=pl.cm.bone_r)
+    ax_psf2.imshow(psf[slicer2], cmap=pl.cm.bone_r)
     ax_psf2.set_xticks([])
     ax_psf2.set_yticks([])
 
@@ -125,6 +131,8 @@ def f(s,x,y,z,r):
     zoom1.hexbin(x,y,gridsize=32, mincnt=1, cmap=pl.cm.hot)
     zoom1.set_xticks([])
     zoom1.set_yticks([])
+    zoom1.hlines(cy-1.0/6 + 1.0/32, cx-1.0/6+5e-2, cx-1.0/6+5e-2+1e-1, lw=3)
+    zoom1.text(cx-1.0/6 + 1.0/24, cy-1.0/6+5e-2, '0.1px')
     mark_inset(ax_zoom, zoom1, loc1=2, loc2=4, fc="none", ec="0.5")
 
     #zoom2 = zoomed_inset_axes(ax_zoom, 10, loc=4)
