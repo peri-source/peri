@@ -35,6 +35,7 @@ def f(s,x,y,z,r):
     slicex = s.image.shape[2]/2
     slicer1 = np.s_[slicez,s.pad:-s.pad,s.pad:-s.pad]
     slicer2 = np.s_[s.pad:-s.pad,s.pad:-s.pad,slicex]
+    center = (slicez, s.image.shape[1]/2, slicex)
 
     fig = pl.figure(figsize=(13,10))
 
@@ -91,23 +92,21 @@ def f(s,x,y,z,r):
 
     t = s.ilm.get_field().copy()
     t *= 0
-    t[np.array(t.shape)/2] = 1
+    t[center] = 1
     s.psf.set_tile(util.Tile(t.shape))
     psf = s.psf.execute(t)
+    print slicer1, slicer2, center
 
-    ax_psf1.imshow(psf[slicer1], cmap=pl.cm.bone_r)
+    ax_psf1.imshow(psf[slicer1], cmap=pl.cm.bone)
     ax_psf1.set_xticks([])
     ax_psf1.set_yticks([])
     ax_psf1.set_ylabel("PSF", fontsize=22)
-    ax_psf2.imshow(psf[slicer2], cmap=pl.cm.bone_r)
+    ax_psf2.imshow(psf[slicer2], cmap=pl.cm.bone)
     ax_psf2.set_xticks([])
     ax_psf2.set_yticks([])
 
     #=========================================================================
     #=========================================================================
-    #gs3 = ImageGrid(fig, rect=[0.48, 0.020, 0.45, 0.55], nrows_ncols=(1,1),
-    #        axes_pad=0.1)
-    #ax_zoom = gs3[0]
     ax_zoom = fig.add_axes([0.48, 0.018, 0.45, 0.52])
 
     im = s.image[slicer1]
@@ -122,13 +121,13 @@ def f(s,x,y,z,r):
     ax_zoom.set_xlim(cx-12, cx+12)
     ax_zoom.set_ylim(cy-12, cy+12)
     ax_zoom.set_title("Sampling", fontsize=24)
-    ax_zoom.hexbin(x,y, gridsize=32, mincnt=1, cmap=pl.cm.hot)
+    ax_zoom.hexbin(x,y, gridsize=32, mincnt=5, cmap=pl.cm.hot)
 
     zoom1 = zoomed_inset_axes(ax_zoom, 30, loc=3)
     zoom1.imshow(im, extent=extent, cmap=pl.cm.bone_r)
     zoom1.set_xlim(cx-1.0/6, cx+1.0/6)
     zoom1.set_ylim(cy-1.0/6, cy+1.0/6)
-    zoom1.hexbin(x,y,gridsize=32, mincnt=1, cmap=pl.cm.hot)
+    zoom1.hexbin(x,y,gridsize=32, mincnt=5, cmap=pl.cm.hot)
     zoom1.set_xticks([])
     zoom1.set_yticks([])
     zoom1.hlines(cy-1.0/6 + 1.0/32, cx-1.0/6+5e-2, cx-1.0/6+5e-2+1e-1, lw=3)
