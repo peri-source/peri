@@ -1,7 +1,16 @@
 import matplotlib as mpl
 import matplotlib.pylab as pl
+from matplotlib.gridspec import GridSpec
+from mpl_toolkits.axes_grid1 import ImageGrid
+
+from cbamf.test import analyze
+
 import numpy as np
 import time
+import pickle
+
+def trim_box(state, p):
+    return ((p > state.pad) & (p < np.array(state.image.shape) - state.pad)).all(axis=-1)
 
 def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     def MAD(d):
@@ -85,6 +94,97 @@ def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
 
     pl.subplots_adjust(left=0, right=1, bottom=0, top=1, wspace=0.05, hspace=0.05)
     pl.tight_layout()
+
+def pretty_summary(state, samples, zlayer=None, xlayer=None):
+    s = state
+    h = np.array(samples)
+
+    slicez = zlayer or s.image.shape[0]/2
+    slicex = xlayer or s.image.shape[2]/2
+    slicer1 = np.s_[slicez,s.pad:-s.pad,s.pad:-s.pad]
+    slicer2 = np.s_[s.pad:-s.pad,s.pad:-s.pad,slicex]
+    center = (slicez, s.image.shape[1]/2, slicex)
+
+    fig = pl.figure(figsize=(24,8))
+
+    #=========================================================================
+    #=========================================================================
+    gs1 = ImageGrid(fig, rect=[0.02, 0.0, 0.4, 1.00], nrows_ncols=(2,3),
+            axes_pad=0.1)
+
+    for i,slicer in enumerate([slicer1, slicer2]):
+        ax_real = gs1[3*i+0]
+        ax_fake = gs1[3*i+1]
+        ax_diff = gs1[3*i+2]
+
+        diff = s.get_model_image() - s.image
+        ax_real.imshow(s.image[slicer], cmap=pl.cm.bone_r)
+        ax_real.set_xticks([])
+        ax_real.set_yticks([])
+        ax_fake.imshow(s.get_model_image()[slicer], cmap=pl.cm.bone_r)
+        ax_fake.set_xticks([])
+        ax_fake.set_yticks([])
+        ax_diff.imshow(diff[slicer], cmap=pl.cm.RdBu, vmin=-1.0, vmax=1.0)
+        ax_diff.set_xticks([])
+        ax_diff.set_yticks([])
+
+        if i == 0:
+            ax_real.set_title("Confocal image", fontsize=24)
+            ax_fake.set_title("Model image", fontsize=24)
+            ax_diff.set_title("Difference", fontsize=24)
+            ax_real.set_ylabel('x-y')
+        else:
+            ax_real.set_ylabel('x-z')
+
+    #=========================================================================
+    #=========================================================================
+    mu = h.mean(axis=0)
+    std = h.std(axis=0)
+
+    gs2 = GridSpec(2,2, left=0.50, bottom=0.12, right=0.95, top=0.95, wspace=0.35, hspace=0.35)
+    
+    ax_hist = pl.subplot(gs2[0,0])
+    ax_hist.hist(std[s.b_pos], bins=np.logspace(-2.5, 0, 50), alpha=0.7, label='POS', histtype='stepfilled')
+    ax_hist.hist(std[s.b_rad], bins=np.logspace(-2.5, 0, 50), alpha=0.7, label='RAD', histtype='stepfilled')
+    ax_hist.set_xlim((10**-2.4, 1))
+    ax_hist.semilogx()
+    ax_hist.set_xlabel(r"$\bar{\sigma}$")
+    ax_hist.set_ylabel(r"$P(\bar{\sigma})$")
+    ax_hist.legend(loc='upper right')
+
+    ax_diff = pl.subplot(gs2[0,1])
+    ax_diff.hist((s.get_model_image() - s.image)[s.image_mask==1.].ravel(), bins=1000, histtype='stepfilled', alpha=0.7)
+    ax_diff.semilogy()
+    ax_diff.set_ylabel(r"$P(\delta)$")
+    ax_diff.set_xlabel(r"$\delta = M_i - d_i$")
+
+    pos = mu[s.b_pos].reshape(-1,3)
+    rad = mu[s.b_rad]
+    mask = trim_box(s, pos)
+    pos = pos[mask]
+    rad = rad[mask]
+
+    gx, gy = analyze.gofr_full(pos, rad, mu[s.b_zscale][0], resolution=5e-2,mask_start=0.5)
+    mask = gx < 5
+    gx = gx[mask]
+    gy = gy[mask]
+    gy /= gy[-1]
+    ax_gofr = pl.subplot(gs2[1,0])
+    ax_gofr.plot(gx, gy, '-', lw=1)
+    ax_gofr.set_xlabel(r"$r/a$")
+    ax_gofr.set_ylabel(r"$g(r/a)$")
+    #ax_gofr.semilogy()
+
+    gx, gy = analyze.gofr_full(pos, rad, mu[s.b_zscale][0], method=analyze.gofr_surfaces)
+    mask = gx < 5
+    gx = gx[mask]
+    gy = gy[mask]
+    gy /= gy[-1]
+    ax_gofrs = pl.subplot(gs2[1,1])
+    ax_gofrs.plot(gx, gy, '-', lw=1)
+    ax_gofrs.set_xlabel(r"$r/a$")
+    ax_gofrs.set_ylabel(r"$g_{\rm{surface}}(r/a)$")
+    ax_gofrs.semilogy()
 
 def scan(im, cycles=1, sleep=0.3, vmin=0, vmax=1, cmap='bone'):
     pl.figure(1)
