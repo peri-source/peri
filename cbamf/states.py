@@ -442,6 +442,7 @@ class ConfocalImagePython(State):
 
             self.psf.set_tile(Tile(self._sigma_field.shape))
             self._sigma_field = self.psf.execute(self._sigma_field)
+
         self._sigma_field_log = np.log(self._sigma_field)
 
     def set_state(self, state):
