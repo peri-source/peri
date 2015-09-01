@@ -550,8 +550,9 @@ class FromArray(PSF):
         be centered in this array. Hint: np.fft.fftfreq provides the correct
         ordering of values for both even and odd lattices.
         """
-        self.support = array.shape[:-1]
-        super(FromArray, self).__init__(*args, params=array, shape=self.support, **kwargs)
+        self.param_shape = array.shape
+        self.support = np.array(array.shape[1:])
+        super(FromArray, self).__init__(*args, params=array.flatten(), **kwargs)
 
     def set_tile(self, tile):
         if (self.tile.shape != tile.shape).any():
@@ -591,7 +592,7 @@ class FromArray(PSF):
 
         for i in xrange(field.shape[0]):
             z = int(self.tile.l[0] + i)
-            kpsf = self._pad(self.params[z])
+            kpsf = self._pad(self.params.reshape(self.param_shape)[z])
             outfield[i] = np.real(self.ifftn(infield * kpsf))[i]
 
         return outfield
