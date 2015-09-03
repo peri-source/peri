@@ -3,10 +3,12 @@ import matplotlib as mpl
 import matplotlib.pylab as pl
 from matplotlib.gridspec import GridSpec
 
+from cbamf import runner
+
 class OrthoManipulator(object):
     def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', incsize=18.0):
         self.incsize = incsize
-        self.modes = ['view', 'add', 'remove', 'grab']
+        self.modes = ['view', 'add', 'remove', 'grab', 'optimize']
         self.mode = self.modes[0]
 
         self.insets = ['exposure']
@@ -134,6 +136,8 @@ class OrthoManipulator(object):
             self._calls.append(self.fig.canvas.mpl_connect('button_press_event', self.mouse_press_add))
         if self.mode == 'remove':
             self._calls.append(self.fig.canvas.mpl_connect('button_press_event', self.mouse_press_remove))
+        if self.mode == 'optimize':
+            self._calls.append(self.fig.canvas.mpl_connect('button_press_event', self.mouse_press_optimize))
         if self.mode == 'grab':
             self._calls.append(self.fig.canvas.mpl_connect('button_press_event', self.mouse_press_grab))
             self._calls.append(self.fig.canvas.mpl_connect('motion_notify_event', self.mouse_move_grab))
@@ -233,6 +237,19 @@ class OrthoManipulator(object):
         self.set_field()
         self.draw()
 
+    def mouse_press_optimize(self, event):
+        self.event = event
+        p = self._pt_xyz(event)
+
+        if p is not None:
+            print "Optimizing particle near", p
+            n = self.state.closest_particle(p)
+            bl = self.state.blocks_particle(n)
+            runner.sample_state(self.state, bl, stepout=0.1, doprint=True, N=3)
+
+        self.set_field()
+        self.draw()
+
     def cycle(self, c, clist):
         return clist[(clist.index(c)+1) % len(clist)]
 
@@ -247,6 +264,8 @@ class OrthoManipulator(object):
             self.mode = 'remove'
         if event.key == 'g':
             self.mode = 'grab'
+        if event.key == 'e':
+            self.mode = 'optimize'
         if event.key == 'q':
             self.view = self.cycle(self.view, self.views)
             self.set_field()
