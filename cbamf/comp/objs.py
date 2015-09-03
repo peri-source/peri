@@ -99,9 +99,13 @@ class SphereCollectionRealSpace(object):
             pl = (p0-off0-1)
             pr = (p0+off0+1)
         if t0[0] != 1 and t1[0] != 1:
-            pl = np.zeros(3)
-            pr = np.array(self.shape)
+            c = np.array(self.shape)
+            pl = c/2 - c/8
+            pr = c/2 + c/8
 
+        if len(pl.shape) > 1:
+            pl = pl[0]
+            pr = pr[0]
         return pl, pr
 
     def get_params(self):

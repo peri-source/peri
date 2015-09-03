@@ -215,8 +215,11 @@ class OrthoManipulator(object):
 
         p = self._pt_xyz(event)
         if p is not None:
-            print "Adding particle at", p
-            self.state.add_particle(p, self.state.obj.rad.mean())
+            p = np.array(p)
+            r = self.state.obj.rad[self.state.obj.typ==1.].mean()
+
+            print "Adding particle at", p, r
+            self.state.add_particle(p, r)
         self.set_field()
         self.draw()
 
