@@ -19,8 +19,8 @@ def _toarr(i):
 #=======================================================================
 # Generating fake data
 #=======================================================================
-def create_state(image, pos, rad, sigma=0.05, psftype='gaussian_anisotropic',
-        ilmtype='polynomial', psfargs=(2.0, 4.0), ilmorder=(1,1,1), stateargs={}):
+def create_state(image, pos, rad, sigma=0.05, psftype='gauss3d',
+        ilmtype='poly3d', psfargs={}, ilmargs={}, stateargs={}):
     """
     Create a state from a blank image, set of pos and radii
 
@@ -31,28 +31,46 @@ def create_state(image, pos, rad, sigma=0.05, psftype='gaussian_anisotropic',
     rad : radii array
     sigma : float, noise level
 
-    psftype : ['gaussian_anisotropic', 'gaussian_pca']
+    psftype : ['gauss2d', 'gauss3d', 'gauss4d', 'gaussian_pca']
         which type of psf to use in the state
 
-    ilmtype : ['polynomial', 'legendre']
+    ilmtype : ['poly3d', 'leg3d', 'cheb3d', 'poly2p1d', 'leg2p1d']
         which type of illumination field
 
     psfargs : arguments to the psf object
-    ilmorder : the order of the polynomial for illumination field
+    ilmargs: the order of the polynomial for illumination field
     stateargs : dictionary of arguments to pass to state
     """
-    tpsfs = ['gaussian_anisotropic', 'gaussian_pca']
-    tilms = ['polynomial', 'legendre']
+    tpsfs = ['gauss3d', 'gauss4d']
+    tilms = ['poly3d', 'leg3d', 'cheb3d', 'poly2p1d', 'leg2p1d']
 
     obj = objs.SphereCollectionRealSpace(pos=pos, rad=rad, shape=image.shape)
-    psf = psfs.AnisotropicGaussian(psfargs, shape=image.shape)
 
-    if ilmtype == 'polynomial':
-        ilm = ilms.Polynomial3D(order=ilmorder, shape=image.shape)
-    if ilmtype == 'legendre':
-        ilm = ilms.LegendrePoly3D(order=ilmorder, shape=image.shape)
+    def_psf = {'shape': image.shape}
+    def_ilm = {'order': (1,1,1), 'shape': image.shape}
 
-    s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm, sigma=sigma, **stateargs)
+    if ilmtype == 'poly3d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.Polynomial3D(**def_ilm)
+    if ilmtype == 'leg3d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.LegendrePoly3D(**def_ilm)
+
+    if psftype == 'gauss2d':
+        def_psf.update({'params': (2.0, 4.0)})
+        def_psf.update(psfargs)
+        psf = psfs.AnisotropicGaussian(**def_psf)
+    if psftype == 'gauss3d':
+        def_psf.update({'params': (2.0, 1.0, 4.0)})
+        def_psf.update(psfargs)
+        psf = psfs.AnisotropicGaussianXYZ(**def_psf)
+    if psftype == 'gauss4d':
+        def_psf.update({'params': (2.0, 1.0, 4.0)})
+        def_psf.update(psfargs)
+        psf = psfs.Gaussian4DPoly(**def_psf)
+
+    s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm,
+            sigma=sigma, **stateargs)
     s.model_to_true_image()
     return s 
 

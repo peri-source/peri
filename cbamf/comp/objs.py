@@ -39,7 +39,7 @@ class SphereCollectionRealSpace(object):
         rvec[...,0] *= zscale
         rdist = np.sqrt((rvec**2).sum(axis=-1))
 
-        t = sign/(1.0 + np.exp(np.pi*(rdist - rad)))
+        t = sign/(1.0 + np.exp(5.0*(rdist - rad)))
         self.particles[tile.slicer] += t
 
         if dodiff:
