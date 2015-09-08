@@ -91,6 +91,36 @@ def fit_single_particle_rad(radii, samples=100, imsize=64, sigma=0.05):
 
     return np.array(crbs), np.array(terrors), np.array(berrors)
 
+def fit_single_particle_psf(psf_scale, samples=100, imsize=64, sigma=0.05):
+    terrors = []
+    berrors = []
+    crbs = []
+
+    psf0 = np.array([2.0, 1.0, 4.0])
+    for scale in psf_scale:
+        print '='*79
+        print 'scale =', scale
+
+        s = init.create_single_particle_state(imsize, radius=5.0,
+                sigma=0.05, psfargs={'params': scale*psf0})
+        p = s.state[s.b_pos].reshape(-1,3).copy()
+
+        bl = s.explode(s.b_pos)
+        crbs.append(np.sqrt(np.diag(np.linalg.inv(s.fisher_information(blocks=bl)))).reshape(-1,3))
+        tmp_tp, tmp_bf = [],[]
+        for i in xrange(samples):
+            print i
+            jiggle_particles(s, pos=p)
+            t = trackpy(s)
+            b = bamfpy_positions(s, sweeps=30)
+
+            tmp_tp.append(error(s, t))
+            tmp_bf.append(error(s, b))
+        terrors.append(tmp_tp)
+        berrors.append(tmp_bf)
+
+    return np.array(crbs), np.array(terrors), np.array(berrors)
+
 def fit_two_particle_separation(separation, radius=5.0, samples=100, imsize=64, sigma=0.05):
     terrors = []
     berrors = []
@@ -100,7 +130,7 @@ def fit_two_particle_separation(separation, radius=5.0, samples=100, imsize=64, 
         print '='*79
         print 'sep =', sep
 
-        s = init.create_two_particle_state(imsize, radius=radius, delta=sep, sigma=0.05)
+        s = init.create_two_particle_state(imsize, radius=radius, delta=sep, sigma=0.05, axis='z')
         p = s.state[s.b_pos].reshape(-1,3).copy()
 
         bl = s.explode(s.b_pos)
