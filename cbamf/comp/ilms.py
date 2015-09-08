@@ -158,7 +158,7 @@ class LegendrePoly3D(Polynomial3D):
         return legval(self.rx, ci) * legval(self.ry, cj) * legval(self.rz, ck)
 
 #=============================================================================
-# 2+1d functional representations of ILMs, p(x,y)*q(z)
+# 2+1d functional representations of ILMs, p(x,y)+q(z)
 #=============================================================================
 class Polynomial2P1D(object):
     def __init__(self, shape, order=(1,1,1)):
@@ -214,7 +214,7 @@ class Polynomial2P1D(object):
             ind = self._indices.index(order)
             self._polyz += self.params[ind] * self._term(order)
 
-        self.bkg = self._polyxy + self._polyz
+        self.bkg = self._polyxy * self._polyz
         return self.bkg
 
     def from_data(self, f, mask=None, dopriors=False, multiplier=1):
@@ -270,7 +270,7 @@ class Polynomial2P1D(object):
                 _term -= self.params[b] * self._term(order)
                 self.params[b] = params[b]
                 _term += self.params[b] * self._term(order)
-                self.bkg = self._polyxy + self._polyz
+                self.bkg = self._polyxy * self._polyz
         else:
             self.params = params
             self._bkg()
@@ -338,9 +338,9 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 
 #=============================================================================
 # a complex hidden variable representation of the ILM
-# something like (p(x,y)+m(x,y))*q(z) where m is determined by local models
+# something like (p(x,y)+m(x,y))+q(z) where m is determined by local models
 #=============================================================================
-class GaussianStreak2P1D(object):
+class PiecewisePolyStreak2P1D(object):
     def __init__(self, shape, order=(1,1,1), num=30):
         self.shape = shape
         self.xyorder = order[:2]
