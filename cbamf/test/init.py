@@ -126,7 +126,7 @@ def create_single_particle_state(imsize, radius=5.0, seed=None, *args, **kwargs)
 
     return create_state(image, pos, rad, *args, **kwargs)
 
-def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, *args, **kwargs):
+def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, axis='x', *args, **kwargs):
     """
     Creates a two particle state
 
@@ -149,7 +149,11 @@ def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, *args, *
     _seed_or_not(seed)
     imsize = _toarr(imsize)
 
-    d = np.array([0.0, 0.0, float(radius)+float(delta)/2])
+    comp = {'x': 2, 'y': 1, 'z': 0}
+    t = float(radius)+float(delta)/2
+    d = np.array([0.0, 0.0, 0.0])
+    d[comp[axis]] = t
+
     pos = np.array([imsize/2 - d, imsize/2 + d]).reshape(-1,3)
     rad = np.array([radius, radius])
 
