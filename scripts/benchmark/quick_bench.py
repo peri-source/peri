@@ -1,13 +1,26 @@
 import numpy as np
 import scipy as sp
+import pylab as pl
+import itertools
 
 from cbamf import initializers, runner
 from cbamf.test import init
 from trackpy import locate
 
-def bamfpy(state, sweeps=50, burn=10):
+def bamfpy_full(state, sweeps=50, burn=10):
     h,l = runner.do_samples(state, sweeps, burn, stepout=0.05, sigma=False)
-    return h[:,s.b_pos].mean(axis=0).reshape(-1,3)
+    return h[:,state.b_pos].mean(axis=0).reshape(-1,3)
+
+def bamfpy_positions(state, sweeps=20, burn=5):
+    blocks = list(itertools.chain.from_iterable([state.explode(state.block_particle_pos(i)) for i in xrange(state.N)]))
+    vals = [state.state[bl] for bl in blocks]
+    h = runner.sample_state(state, blocks, stepout=0.10, N=burn)
+    h = runner.sample_state(state, blocks, stepout=0.10, N=sweeps, doprint=True)
+    h = h.get_histogram()
+
+    for bl, val in zip(blocks, vals):
+        state.update(bl, val)
+    return h.mean(axis=0).reshape(-1,3)
 
 def trackpy(state):
     image = totiff(state)
@@ -24,14 +37,22 @@ def nearest(p0, p1):
         ind.append(dist.argmin())
     return ind
 
+def error(state, pos):
+    preal = state.state[state.b_pos].reshape(-1,3)
+    ind = nearest(preal, pos)
+    return preal - pos[ind]
+
 def totiff(state):
     p = state.pad
     q = initializers.normalize(state.image[p:-p, p:-p, p:-p])
     return (q*255).astype('uint8')
 
-def jiggle_particles(state, pos=None, sig=0.5, indices=(0,)):
+def jiggle_particles(state, pos=None, sig=0.5, indices=None):
     if pos is None:
-        pos = (np.array(state.image.shape)/2,)*len(indices)
+        pos = state.state[state.b_pos].reshape(-1,3)
+
+    if indices is None:
+        indices = xrange(state.N)
 
     for i, p in enumerate(indices):
         tpos = pos[i]
@@ -43,16 +64,99 @@ def jiggle_particles(state, pos=None, sig=0.5, indices=(0,)):
     state.model_to_true_image()
 
 def fit_single_particle_rad(radii, samples=100, imsize=64, sigma=0.05):
-    errors = []
+    terrors = []
+    berrors = []
+    crbs = []
 
     for rad in radii:
+        print '='*79
+        print 'radius =', rad
+
         s = init.create_single_particle_state(imsize, radius=rad, sigma=0.05)
-        p = s.state[s.b_pos].copy()
+        p = s.state[s.b_pos].reshape(-1,3).copy()
 
+        bl = s.explode(s.b_pos)
+        crbs.append(np.sqrt(np.diag(np.linalg.inv(s.fisher_information(blocks=bl)))).reshape(-1,3))
+        tmp_tp, tmp_bf = [],[]
         for i in xrange(samples):
+            print i
             jiggle_particles(s, pos=p)
+            t = trackpy(s)
+            b = bamfpy_positions(s, sweeps=30)
 
+            tmp_tp.append(error(s, t))
+            tmp_bf.append(error(s, b))
+        terrors.append(tmp_tp)
+        berrors.append(tmp_bf)
 
-#init.create_single_particle_state()
-#init.create_two_particle_state()
+    return np.array(crbs), np.array(terrors), np.array(berrors)
 
+def fit_two_particle_separation(separation, radius=5.0, samples=100, imsize=64, sigma=0.05):
+    terrors = []
+    berrors = []
+    crbs = []
+
+    for sep in separation:
+        print '='*79
+        print 'sep =', sep
+
+        s = init.create_two_particle_state(imsize, radius=radius, delta=sep, sigma=0.05)
+        p = s.state[s.b_pos].reshape(-1,3).copy()
+
+        bl = s.explode(s.b_pos)
+        crbs.append(np.sqrt(np.diag(np.linalg.inv(s.fisher_information(blocks=bl)))).reshape(-1,3))
+        tmp_tp, tmp_bf = [],[]
+        for i in xrange(samples):
+            print i
+            jiggle_particles(s, pos=p)
+            t = trackpy(s)
+            b = bamfpy_positions(s, sweeps=30)
+
+            tmp_tp.append(error(s, t))
+            tmp_bf.append(error(s, b))
+        terrors.append(tmp_tp)
+        berrors.append(tmp_bf)
+
+    return np.array(crbs), np.array(terrors), np.array(berrors)
+
+def plot_errors_single(rad, crb, errors, labels=['trackpy', 'cbamf']):
+    fig = pl.figure()
+    comps = ['z', 'y', 'x']
+    colors = ['r', 'g', 'b']
+    markers = ['o', '^', '*']
+
+    for i in reversed(xrange(3)):
+        pl.plot(rad, crb[:,0,i], lw=2.5, label='CRB-'+comps[i], color=colors[i])
+
+    for c, (error, label) in enumerate(zip(errors, labels)):
+        mu = np.sqrt((error**2).mean(axis=1))[:,0,:]
+        std = np.std(np.sqrt((error**2)), axis=1)[:,0,:]
+
+        for i in reversed(xrange(len(mu[0]))):
+            pl.plot(rad, mu[:,i], marker=markers[c], color=colors[i], lw=0, label=label+"-"+comps[i], ms=13)
+
+    pl.ylim(1e-3, 8e0)
+    pl.semilogy()
+    pl.legend(loc='upper left', ncol=3, numpoints=1, prop={"size": 16})
+    pl.xlabel(r"radius (pixels)")
+    pl.ylabel(r"CRB / $\Delta$ (pixels)")
+    """ 
+    ax = fig.add_axes([0.6, 0.6, 0.28, 0.28])
+    ax.plot(rad, crb[:,0,:], lw=2.5)
+    for c, error in enumerate(errors):
+        mu = np.sqrt((error**2).mean(axis=1))[:,0,:]
+        std = np.std(np.sqrt((error**2)), axis=1)[:,0,:]
+
+        for i in xrange(len(mu[0])):
+            ax.errorbar(rad, mu[:,i], yerr=std[:,i], fmt=markers[c], color=colors[i], lw=1)
+    ax.set_ylim(-0.1, 1.5)
+    ax.grid('off')
+    """
+
+def doall():
+    r = linspace(2.0, 10.0, 20)
+    s = logspace(-3, np.log10(5), 2)
+    crb,a,b = fit_single_particle_rad(r, samples=30)
+    crb,a,b = fit_two_particle_separation(s, samples=30)
+
+    plot_errors_single(s, crb, [a,b])
