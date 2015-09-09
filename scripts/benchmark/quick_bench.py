@@ -27,7 +27,7 @@ def trackpy(state):
     diameter = int(2*state.state[state.b_rad].mean())
     diameter -= 1 - diameter % 2
     out = locate(image, diameter=diameter, invert=True,
-            minmass=100*(diameter/2)**3)
+            minmass=145*(diameter/2)**3)
     return np.vstack([out.z, out.y, out.x]).T + state.pad
 
 def nearest(p0, p1):
@@ -182,6 +182,50 @@ def plot_errors_single(rad, crb, errors, labels=['trackpy', 'cbamf']):
     ax.set_ylim(-0.1, 1.5)
     ax.grid('off')
     """
+
+def plot_errors_two(rad, crb, errors, labels=['trackpy', 'cbamf']):
+    fig = pl.figure()
+    comps = ['z', 'y', 'x']
+    colors = ['r', 'g', 'b']
+    markers = ['o', '^', '*']
+
+    for i in reversed(xrange(3)):
+        pl.plot(rad, crb[:,0,i], lw=2.5, label='CRB-'+comps[i], color=colors[i])
+
+    for c, (error, label) in enumerate(zip(errors, labels)):
+        mu = np.sqrt((error**2).mean(axis=1))[:,0,:]
+        std = np.std(np.sqrt((error**2)), axis=1)[:,0,:]
+
+        for i in reversed(xrange(len(mu[0]))):
+            pl.plot(rad, mu[:,i], marker=markers[c], color=colors[i], lw=0, label=label+"-"+comps[i], ms=13)
+
+    pl.ylim(1e-3, 8e0)
+    pl.loglog()
+    #pl.legend(loc='lower left', ncol=3, numpoints=1, prop={"size": 16})
+    pl.xlabel(r"$\Delta z$ (pixels)")
+    pl.ylabel(r"CRB / $\Delta$ (pixels)")
+
+def plot_errors_psf(rad, crb, errors, labels=['trackpy', 'cbamf']):
+    fig = pl.figure()
+    comps = ['z', 'y', 'x']
+    colors = ['r', 'g', 'b']
+    markers = ['o', '^', '*']
+
+    for i in reversed(xrange(3)):
+        pl.plot(rad, crb[:,0,i], lw=2.5, label='CRB-'+comps[i], color=colors[i])
+
+    for c, (error, label) in enumerate(zip(errors, labels)):
+        mu = np.sqrt((error**2).mean(axis=1))[:,0,:]
+        std = np.std(np.sqrt((error**2)), axis=1)[:,0,:]
+
+        for i in reversed(xrange(len(mu[0]))):
+            pl.plot(rad, mu[:,i], marker=markers[c], color=colors[i], lw=0, label=label+"-"+comps[i], ms=13)
+
+    pl.ylim(1e-3, 8e0)
+    pl.semilogy()
+    #pl.legend(loc='lower left', ncol=3, numpoints=1, prop={"size": 16})
+    pl.xlabel(r"$\sigma_z$ (pixels)")
+    pl.ylabel(r"CRB / $\Delta$ (pixels)")
 
 def doall():
     r = linspace(2.0, 10.0, 20)
