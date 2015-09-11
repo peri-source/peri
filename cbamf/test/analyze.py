@@ -4,6 +4,13 @@ import scipy as sp
 from cbamf.priors import overlap
 from cbamf.util import Tile
 
+def nearest(p0, p1):
+    ind = []
+    for i in xrange(len(p0)):
+        dist = np.sqrt(((p0[i] - p1)**2).sum(axis=-1))
+        ind.append(dist.argmin())
+    return ind
+
 def iter_pos_rad(state, samples):
     for sample in samples:
         pos = sample[state.b_pos].reshape(-1,3)

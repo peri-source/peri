@@ -4,7 +4,7 @@ import pylab as pl
 import itertools
 
 from cbamf import initializers, runner
-from cbamf.test import init
+from cbamf.test import init, analyze
 from trackpy import locate
 
 def bamfpy_full(state, sweeps=50, burn=10):
@@ -30,16 +30,9 @@ def trackpy(state):
             minmass=145*(diameter/2)**3)
     return np.vstack([out.z, out.y, out.x]).T + state.pad
 
-def nearest(p0, p1):
-    ind = []
-    for i in xrange(len(p0)):
-        dist = np.sqrt(((p0[i] - p1)**2).sum(axis=-1))
-        ind.append(dist.argmin())
-    return ind
-
 def error(state, pos):
     preal = state.state[state.b_pos].reshape(-1,3)
-    ind = nearest(preal, pos)
+    ind = analyze.nearest(preal, pos)
     return preal - pos[ind]
 
 def totiff(state):
