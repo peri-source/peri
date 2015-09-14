@@ -433,21 +433,22 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
         ax_fake = gs0[3*i+1]
         ax_diff = gs0[3*i+2]
 
-        diff = s0.get_model_image() - s0.image
-        ax_real.imshow(s0.image[slicer], cmap=pl.cm.bone_r)
+        diff0 = s0.get_model_image() - s0.image
+        diff1 = s1.get_model_image() - s1.image
+        ax_real.imshow((s0.image-s1.image)[slicer], cmap=pl.cm.bone_r)
         ax_real.set_xticks([])
         ax_real.set_yticks([])
-        ax_fake.imshow(s0.get_model_image()[slicer], cmap=pl.cm.bone_r)
+        ax_fake.imshow((s0.get_model_image()-s1.get_model_image())[slicer], cmap=pl.cm.bone_r)
         ax_fake.set_xticks([])
         ax_fake.set_yticks([])
-        ax_diff.imshow(diff[slicer], cmap=pl.cm.RdBu, vmin=-1.0, vmax=1.0)
+        ax_diff.imshow((diff0-diff1)[slicer], cmap=pl.cm.bone_r)#cmap=pl.cm.RdBu, vmin=-1.0, vmax=1.0)
         ax_diff.set_xticks([])
         ax_diff.set_yticks([])
 
         if i == 0:
-            ax_real.set_title("Confocal image", fontsize=24)
-            ax_fake.set_title("Model image", fontsize=24)
-            ax_diff.set_title("Difference", fontsize=24)
+            ax_real.set_title(r"$\Delta$ Confocal image", fontsize=24)
+            ax_fake.set_title(r"$\Delta$ Model image", fontsize=24)
+            ax_diff.set_title(r"$\Delta$ Difference", fontsize=24)
             ax_real.set_ylabel('x-y')
         else:
             ax_real.set_ylabel('x-z')
@@ -461,6 +462,12 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     spos1 = std1[s1.b_pos].reshape(-1,3)[active1]
     srad0 = std0[s0.b_rad][active0]
     srad1 = std1[s1.b_rad][active1]
+
+    def hist(ax, vals, bins, *args, **kwargs):
+        y,x = np.histogram(vals, bins=bins)
+        x = (x[1:] + x[:-1])/2
+        y /= len(vals)
+        ax.plot(x,y, *args, **kwargs)
 
     def pp(ind, tarr, tsim, tcrb, var='x'):
         bins = 10**np.linspace(-3, 0.0, 30)
@@ -493,7 +500,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
         else:
             ax_crb.set_yticks([])
 
-    f = 4.0
+    f = 1.0
     sim = sim_crb_diff(spos0[:,1], spos1[:,1][link])
     crb = f*sim_crb_diff(crb0[0][:,1], crb1[0][:,1][link])
     pp(0, dpos[:,1], sim, crb, 'x')
@@ -515,9 +522,9 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
                 wspace=0.35, hspace=0.35)
 
     ax_hist = pl.subplot(gs2[0,0])
-    ax_hist.hist(std0[s0.b_pos], bins=np.logspace(-2.5, 0, 50), alpha=0.7, label='POS', histtype='stepfilled')
-    ax_hist.hist(std0[s0.b_rad], bins=np.logspace(-2.5, 0, 50), alpha=0.7, label='RAD', histtype='stepfilled')
-    ax_hist.set_xlim((10**-2.4, 1))
+    ax_hist.hist(std0[s0.b_pos], bins=np.logspace(-3.0, 0, 50), alpha=0.7, label='POS', histtype='stepfilled')
+    ax_hist.hist(std0[s0.b_rad], bins=np.logspace(-3.0, 0, 50), alpha=0.7, label='RAD', histtype='stepfilled')
+    ax_hist.set_xlim((10**-3.0, 1))
     ax_hist.semilogx()
     ax_hist.set_xlabel(r"$\bar{\sigma}$")
     ax_hist.set_ylabel(r"$P(\bar{\sigma})$")
@@ -563,6 +570,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     gx = gx[mask]
     gy = gy[mask]
     gy /= gy[-1]
+    gy[gy <= 0.] = gy[gy>0].min()
     ax_gofrs = pl.subplot(gs2[1,1])
     ax_gofrs.plot(gx, gy, '-', lw=1)
     ax_gofrs.set_xlabel(r"$r/a$")
