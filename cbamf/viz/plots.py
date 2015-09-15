@@ -404,9 +404,13 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
 
     std0 = h0.std(axis=0)
     std1 = h1.std(axis=0)
-    
-    active0 = np.arange(s0.N)[s0.state[s0.b_typ]==1.]
-    active1 = np.arange(s1.N)[s1.state[s1.b_typ]==1.]
+
+    mask0 = (s0.state[s0.b_typ]==1.) & (
+        trim_box(s0, mu0[s0.b_pos].reshape(-1,3)))
+    mask1 = (s1.state[s1.b_typ]==1.) & (
+        trim_box(s1, mu1[s1.b_pos].reshape(-1,3)))
+    active0 = np.arange(s0.N)[mask0]#s0.state[s0.b_typ]==1.]
+    active1 = np.arange(s1.N)[mask1]#s1.state[s1.b_typ]==1.]
 
     pos0 = mu0[s0.b_pos].reshape(-1,3)[active0]
     pos1 = mu1[s1.b_pos].reshape(-1,3)[active1]
@@ -435,13 +439,19 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
 
         diff0 = s0.get_model_image() - s0.image
         diff1 = s1.get_model_image() - s1.image
-        ax_real.imshow((s0.image-s1.image)[slicer], cmap=pl.cm.bone_r)
+        a = (s0.image - s1.image)
+        b = (s0.get_model_image() - s1.get_model_image())
+        c = (diff0 - diff1)
+
+        ptp = 0.7*max([np.abs(a).max(), np.abs(b).max(), np.abs(c).max()])
+        cmap = pl.cm.RdBu_r
+        ax_real.imshow(a[slicer], cmap=cmap, vmin=-ptp, vmax=ptp)
         ax_real.set_xticks([])
         ax_real.set_yticks([])
-        ax_fake.imshow((s0.get_model_image()-s1.get_model_image())[slicer], cmap=pl.cm.bone_r)
+        ax_fake.imshow(b[slicer], cmap=cmap, vmin=-ptp, vmax=ptp)
         ax_fake.set_xticks([])
         ax_fake.set_yticks([])
-        ax_diff.imshow((diff0-diff1)[slicer], cmap=pl.cm.bone_r)#cmap=pl.cm.RdBu, vmin=-1.0, vmax=1.0)
+        ax_diff.imshow(c[slicer], cmap=cmap, vmin=-ptp, vmax=ptp)#cmap=pl.cm.RdBu, vmin=-1.0, vmax=1.0)
         ax_diff.set_xticks([])
         ax_diff.set_yticks([])
 
@@ -474,7 +484,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
         bin2 = 10**np.linspace(-3, 0.0, 100)
         #bins = np.linspace(0.0, 1.0, 30)
         #bin2 = np.linspace(0.0, 1.0, 100)
-        xlim = (1e-3, 1)
+        xlim = (1e-3, 1e-1)
         ylim = (1e-2, 30)
 
         ticks = ticker.FuncFormatter(lambda x, pos: '{:0.0f}'.format(np.log10(x)))
@@ -502,15 +512,15 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
 
     f = 1.0
     sim = sim_crb_diff(spos0[:,1], spos1[:,1][link])
-    crb = f*sim_crb_diff(crb0[0][:,1], crb1[0][:,1][link])
+    crb = f*sim_crb_diff(crb0[0][:,1][active0], crb1[0][:,1][active1][link])
     pp(0, dpos[:,1], sim, crb, 'x')
 
     sim = sim_crb_diff(spos0[:,0], spos1[:,0][link])
-    crb = f*sim_crb_diff(crb0[0][:,0], crb1[0][:,0][link])
+    crb = f*sim_crb_diff(crb0[0][:,0][active0], crb1[0][:,0][active1][link])
     pp(1, dpos[:,0], sim, crb, 'z')
 
     sim = sim_crb_diff(srad0, srad1[link])
-    crb = f*sim_crb_diff(crb0[1], crb1[1][link])
+    crb = f*sim_crb_diff(crb0[1][active0], crb1[1][active1][link])
     pp(2, drad, sim, crb, 'a')
 
     #ax_crb_r.locator_params(axis='both', nbins=3)
