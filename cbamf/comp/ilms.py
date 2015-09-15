@@ -66,10 +66,10 @@ class Polynomial3D(object):
         out = (f[mask] - test[mask]).flatten()
         return out
 
-    def _from_data(self, f, mask=None, dopriors=False, multiplier=1):
+    def _from_data(self, f, mask=None, dopriors=False, multiplier=1, maxcalls=200):
         if mask is None:
             mask = np.s_[:]
-        res = opt.leastsq(self._score, x0=self.params, args=(f, mask))
+        res = opt.leastsq(self._score, x0=self.params, args=(f, mask), maxfev=maxcalls*(self.nparams+1))
         self.update(self.block, res[0])
 
     def _from_data_cache(self, f, mask=None, dopriors=False, multiplier=1):
@@ -217,10 +217,10 @@ class Polynomial2P1D(object):
         self.bkg = self._polyxy * self._polyz
         return self.bkg
 
-    def from_data(self, f, mask=None, dopriors=False, multiplier=1):
+    def from_data(self, f, mask=None, dopriors=False, multiplier=1, maxcalls=200):
         if mask is None:
             mask = np.s_[:]
-        res = opt.leastsq(self._score, x0=self.params, args=(f, mask))
+        res = opt.leastsq(self._score, x0=self.params, args=(f, mask), maxfev=maxcalls*(self.nparams+1))
         self.update(self.block, res[0])
 
     def _score(self, coeffs, f, mask):
