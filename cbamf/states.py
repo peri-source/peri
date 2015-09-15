@@ -169,6 +169,12 @@ class LinearFit(State):
     def reset(self):
         self.state *= 0
 
+def prepare_image(image, imz=(0,-1), imsize=-1, invert=False, pad=const.PAD, dopad=True):
+    image = initializers.normalize(image[imz[0]:imz[1],:imsize,:imsize], invert)
+    if dopad:
+        image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
+    return image
+
 def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True):
     """
     Prepares a set of positions, radii, and a test image for use
