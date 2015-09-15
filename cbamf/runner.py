@@ -175,8 +175,8 @@ def diag_hess(state, blocks):
         out[i] = state.hessloglikelihood(blocks=[blocks[i]])
     return out
 
-def optimize_particle(state, index):
-    blocks = state.blocks_particle(index)
+def optimize_particle_pos(state, index):
+    blocks = state.blocks_particle(index)[:-1]
     g = state.gradloglikelihood(blocks=blocks)
     h = np.zeros_like(g)
     for i in xrange(len(g)):
