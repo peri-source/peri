@@ -537,6 +537,9 @@ class Gaussian4DLegPoly(Gaussian4DPoly):
     def _poly(self, z, coeffs):
         return legval(z, coeffs)
 
+#=============================================================================
+# Array-based specification of PSF
+#=============================================================================
 class FromArray(PSF):
     def __init__(self, array, *args, **kwargs):
         """

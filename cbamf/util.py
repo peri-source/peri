@@ -4,6 +4,8 @@ import datetime
 import numpy as np
 import code, traceback, signal
 
+from cbamf import const, initializers
+
 #=============================================================================
 # Tiling utilities
 #=============================================================================
@@ -60,13 +62,17 @@ class Tile(object):
         return str(self.__class__.__name__)+" {} -> {} ({})".format(
                 list(self.l), list(self.r), list(self.shape))
 
-class ImageOnDisk(object):
+class ConfocalImage(object):
     def __init__(self, filename, tile=None, zstart=None, zstop=None, xysize=None,
             xyunits=1):
         self.filename = filename
+        self.image = initializers.load_tiff(self.filename)
+
+        if tile is not None:
+            self.tile = tile
 
     def get_image(self):
-        return self.image
+        return self.image[self.tile.slicer]
 
     def __getstate__(self):
         return {}
