@@ -4,6 +4,7 @@ import matplotlib.pylab as pl
 from matplotlib import ticker
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredText, AnchoredOffsetbox
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 from mpl_toolkits.axes_grid1 import ImageGrid
 from matplotlib.patches import Circle, Rectangle
@@ -17,6 +18,19 @@ import pickle
 
 def trim_box(state, p):
     return ((p > state.pad) & (p < np.array(state.image.shape) - state.pad)).all(axis=-1)
+
+def lbl(axis, label):
+    """ Put a figure label in an axis """
+    at = AnchoredText(label, loc=2, prop=dict(size=22), frameon=True)
+    at.patch.set_boxstyle("round,pad=0.,rounding_size=0.0")
+    #bb = axis.get_yaxis_transform()
+    #at = AnchoredText(label,
+    #        loc=3, prop=dict(size=18), frameon=True,
+    #        bbox_to_anchor=(-0.5,1),#(-.255, 0.90),
+    #        bbox_transform=bb,#axis.transAxes
+    #    )
+    axis.add_artist(at)
+
 
 def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     def MAD(d):
@@ -432,6 +446,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     #=========================================================================
     gs0 = ImageGrid(fig, rect=[0.02, 0.4, 0.4, 0.60], nrows_ncols=(2,3), axes_pad=0.1)
 
+    lbl(gs0[0], 'A')
     for i,slicer in enumerate([slicer1, slicer2]):
         ax_real = gs0[3*i+0]
         ax_fake = gs0[3*i+1]
@@ -484,7 +499,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
         bin2 = 10**np.linspace(-3, 0.0, 100)
         #bins = np.linspace(0.0, 1.0, 30)
         #bin2 = np.linspace(0.0, 1.0, 100)
-        xlim = (1e-3, 1e-1)
+        xlim = (1e-3, 1e0)
         ylim = (1e-2, 30)
 
         ticks = ticker.FuncFormatter(lambda x, pos: '{:0.0f}'.format(np.log10(x)))
@@ -506,21 +521,22 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
         ax_crb.grid(b=False, which='both', axis='both')
 
         if ind == 0:
+            lbl(ax_crb, 'B')
             ax_crb.set_ylabel(r"$P(\Delta)$")
         else:
             ax_crb.set_yticks([])
 
-    f = 1.0
-    sim = sim_crb_diff(spos0[:,1], spos1[:,1][link])
-    crb = f*sim_crb_diff(crb0[0][:,1][active0], crb1[0][:,1][active1][link])
+    f,g = 1.5, 1.95
+    sim = f*sim_crb_diff(spos0[:,1], spos1[:,1][link])
+    crb = g*sim_crb_diff(crb0[0][:,1][active0], crb1[0][:,1][active1][link])
     pp(0, dpos[:,1], sim, crb, 'x')
 
-    sim = sim_crb_diff(spos0[:,0], spos1[:,0][link])
-    crb = f*sim_crb_diff(crb0[0][:,0][active0], crb1[0][:,0][active1][link])
+    sim = f*sim_crb_diff(spos0[:,0], spos1[:,0][link])
+    crb = g*sim_crb_diff(crb0[0][:,0][active0], crb1[0][:,0][active1][link])
     pp(1, dpos[:,0], sim, crb, 'z')
 
-    sim = sim_crb_diff(srad0, srad1[link])
-    crb = f*sim_crb_diff(crb0[1][active0], crb1[1][active1][link])
+    sim = f*sim_crb_diff(srad0, srad1[link])
+    crb = g*sim_crb_diff(crb0[1][active0], crb1[1][active1][link])
     pp(2, drad, sim, crb, 'a')
 
     #ax_crb_r.locator_params(axis='both', nbins=3)
@@ -539,6 +555,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     ax_hist.set_xlabel(r"$\bar{\sigma}$")
     ax_hist.set_ylabel(r"$P(\bar{\sigma})$")
     ax_hist.legend(loc='upper right')
+    lbl(ax_hist, 'C')
 
     imdiff = ((s0.get_model_image() - s0.image)/s0._sigma_field)[s0.image_mask==1.].ravel()
     mu = imdiff.mean()
@@ -556,6 +573,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     ax_diff.grid(b=False, which='minor', axis='y')
     ax_diff.set_xlim(-5, 5)
     ax_diff.set_ylim(1e-4, 1e0)
+    lbl(ax_diff, 'D')
 
     pos = mu0[s0.b_pos].reshape(-1,3)
     rad = mu0[s0.b_rad]
@@ -574,6 +592,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     ax_gofr.set_ylabel(r"$g(r/a)$")
     ax_gofr.locator_params(axis='both', nbins=5)
     #ax_gofr.semilogy()
+    lbl(ax_gofr, 'E')
 
     gx, gy = analyze.gofr_full(pos, rad, mu0[s0.b_zscale][0], method=analyze.gofr_surfaces)
     mask = gx < 5
@@ -588,5 +607,8 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     ax_gofrs.locator_params(axis='both', nbins=5)
     ax_gofrs.grid(b=False, which='minor', axis='y')
     ax_gofrs.semilogy()
+    lbl(ax_gofrs, 'F')
 
+    ylim = ax_gofrs.get_ylim()
+    ax_gofrs.set_ylim(gy.min(), ylim[1])
     #gs2.tight_layout(fig)
