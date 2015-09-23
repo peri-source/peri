@@ -39,7 +39,19 @@ class Component(ParameterGroup):
     def set_tile(self, tile):
         pass
 
-    def get_support_size(self):
+    def get_support_size(self, blocks):
+        """
+        This method returns the actual image area to be modified by
+        the update to `blocks'. 
+
+        Parameters:
+        -----------
+        blocks: list-like, Block object
+            an array 
+        """
+        pass
+
+    def get_pad_size(self):
         pass
 
     def get_field(self):
