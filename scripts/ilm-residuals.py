@@ -10,7 +10,7 @@ import matplotlib.pyplot as pl
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.axes_grid1 import ImageGrid
 
-ilm_file = "/media/scratch/bamf/illumination_field.tif"
+ilm_file = "/media/scratch/bamf/illumination_field/illumination_field.tif"
 
 def load_background_image():
     return normalize(load_tiff(ilm_file))
@@ -48,6 +48,111 @@ def doplot(diffs, orders):
         ax.set_title(str(order))
         ax.set_xticks([])
         ax.set_yticks([])
+
+def pole_removal(noise, poles=None, sig=3):
+    """
+    Remove the noise poles from a 2d noise distribution to show that affects
+    the real-space noise picture.  
+    
+    noise -- fftshifted 2d array of q values
+
+    poles -- N,2 list of pole locations. the last index is in the order y,x as
+    determined by mpl interactive plots
+
+    for example: poles = np.array([[190,277], [227,253], [233, 256]]
+    """
+    center = np.array(noise.shape)/2
+
+    v = np.rollaxis(
+            np.array(
+                np.meshgrid(*(np.arange(s) for s in noise.shape), indexing='ij')
+            ), 0, 3
+        ).astype("float")
+    filter = np.zeros_like(noise, dtype='float')
+
+    for p in poles:
+        for pp in [p, center - (p-center)]:
+            dist = ((v-pp)**2).sum(axis=-1)
+            filter += np.exp(-dist / (2*sig**2))
+
+    filter[filter > 1] = 1
+    return noise*(1-filter)
+
+def plot_noise_pole(diff):
+    center = np.array(diff.shape)/2
+    poles = np.array([
+        [190,277],
+        [227,253],
+        [233, 256],
+        [255, 511],
+        [255, 271],
+        #[255, 240],
+        #[198, 249],
+        #[247, 253]
+    ])
+
+    q = np.fft.fftshift(np.fft.fftn(diff))
+    t = pole_removal(q, poles, sig=4)
+    r = np.real(np.fft.ifftn(np.fft.fftshift(t)))
+
+    fig = pl.figure(figsize=(20,10))
+    gs = ImageGrid(fig, rect=[0.05, 0.05, 0.45, 0.90], nrows_ncols=(2,2), axes_pad=0.05)
+    
+    images = [[diff, q], [r, t]]
+    maxs, mins = [], []
+    for i, im in enumerate(images):
+        a,b = im[0], np.abs(im[1])**0.2
+        maxs.append([a.max(), b.max()])
+        mins.append([a.min(), b.min()])
+
+    maxs, mins = np.array(maxs), np.array(mins)
+    maxs = maxs.max(axis=0)
+    mins = mins.min(axis=0)
+
+    labels = [['A', 'B'], ['C', 'D']]
+    for i, (im, lb) in enumerate(zip(images, labels)):
+        ax = [gs[2*i+0], gs[2*i+1]]
+
+        ax[0].imshow(im[0], vmin=mins[0], vmax=maxs[0], cmap=pl.cm.bone)
+        ax[1].imshow(np.abs(im[1])**0.2, vmin=mins[1], vmax=maxs[1], cmap=pl.cm.bone)
+        lbl(ax[0], lb[0])
+        lbl(ax[1], lb[1])
+
+        for a in ax:
+            a.grid(False, which='both', axis='both')
+            a.set_xticks([])
+            a.set_yticks([])
+
+        if i == 0:
+            ax[0].set_title("Real-space")
+            ax[1].set_title("k-space")
+            ax[0].set_ylabel("Raw difference")
+
+        if i == 1:
+            ax[0].set_ylabel("Poles removed")
+            for p in poles:
+                for pp in [p, 2*center - p]:
+                    a.plot(pp[1], pp[0], 'wo')
+
+    ax = fig.add_axes([0.57, 0.15, 0.40, 0.7])
+    sig = diff.std()
+
+    y,x = np.histogram(diff, bins=np.linspace(-5*sig, 5*sig, 300), normed=True)
+    x = (x[1:] + x[:-1])/2
+    ax.plot(x, y, '-', lw=2, alpha=0.6, label='Raw noise')
+
+    y,x = np.histogram(r, bins=np.linspace(-5*sig, 5*sig, 300), normed=True)
+    x = (x[1:] + x[:-1])/2
+    ax.plot(x, y, '-', lw=2, alpha=0.6, label='Poles removed')
+    ax.plot(x, 1/np.sqrt(2*np.pi*sig**2) * np.exp(-x**2/(2*sig**2)), 'k--', lw=1.5, label='Gaussian fit')
+
+    ax.set_xlabel("Pixel value")
+    ax.set_ylabel("Probability")
+    ax.legend(loc='best', prop={'size':18})
+    ax.grid(False, which='minor', axis='y')
+    lbl(ax, 'E')
+
+    ax.semilogy()
 
 def plot_noise(diff):
     dat = diff.flatten()
