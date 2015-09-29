@@ -95,8 +95,8 @@ def plot_noise_pole(diff):
     t = pole_removal(q, poles, sig=4)
     r = np.real(np.fft.ifftn(np.fft.fftshift(t)))
 
-    fig = pl.figure(figsize=(20,10))
-    gs = ImageGrid(fig, rect=[0.05, 0.05, 0.45, 0.90], nrows_ncols=(2,2), axes_pad=0.05)
+    fig = pl.figure(figsize=(24,8))
+    gs = ImageGrid(fig, rect=[0.05, 0.05, 0.33, 0.85], nrows_ncols=(2,2), axes_pad=0.05)
     
     images = [[diff, q], [r, t]]
     maxs, mins = [], []
@@ -106,8 +106,8 @@ def plot_noise_pole(diff):
         mins.append([a.min(), b.min()])
 
     maxs, mins = np.array(maxs), np.array(mins)
-    maxs = maxs.max(axis=0)
-    mins = mins.min(axis=0)
+    maxs = 0.8*maxs.max(axis=0)
+    mins = 0.8*mins.min(axis=0)
 
     labels = [['A', 'B'], ['C', 'D']]
     for i, (im, lb) in enumerate(zip(images, labels)):
@@ -126,7 +126,7 @@ def plot_noise_pole(diff):
         if i == 0:
             ax[0].set_title("Real-space")
             ax[1].set_title("k-space")
-            ax[0].set_ylabel("Raw difference")
+            ax[0].set_ylabel("Raw noise")
 
         if i == 1:
             ax[0].set_ylabel("Poles removed")
@@ -134,7 +134,14 @@ def plot_noise_pole(diff):
                 for pp in [p, 2*center - p]:
                     a.plot(pp[1], pp[0], 'wo')
 
-    ax = fig.add_axes([0.57, 0.15, 0.40, 0.7])
+    ax = fig.add_axes([0.37, 0.15, 0.28, 0.7])
+    ax.imshow(diff - r, cmap=pl.cm.bone)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_title("Correction")
+    lbl(ax, 'E')
+
+    ax = fig.add_axes([0.70, 0.15, 0.25, 0.7])
     sig = diff.std()
 
     y,x = np.histogram(diff, bins=np.linspace(-5*sig, 5*sig, 300), normed=True)
@@ -150,7 +157,9 @@ def plot_noise_pole(diff):
     ax.set_ylabel("Probability")
     ax.legend(loc='best', prop={'size':18})
     ax.grid(False, which='minor', axis='y')
-    lbl(ax, 'E')
+    ax.locator_params(axis='x', nbins=5)
+    #ax.set_title("Distribution of residuals")
+    lbl(ax, 'F')
 
     ax.semilogy()
 
