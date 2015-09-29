@@ -4,57 +4,8 @@ import pylab as pl
 import itertools
 
 from cbamf import initializers, runner
-from cbamf.test import init, analyze
+from cbamf.test import init, analyze, bench
 from trackpy import locate
-
-def bamfpy_full(state, sweeps=50, burn=10):
-    h,l = runner.do_samples(state, sweeps, burn, stepout=0.05, sigma=False)
-    return h[:,state.b_pos].mean(axis=0).reshape(-1,3)
-
-def bamfpy_positions(state, sweeps=20, burn=5):
-    blocks = list(itertools.chain.from_iterable([state.explode(state.block_particle_pos(i)) for i in xrange(state.N)]))
-    vals = [state.state[bl] for bl in blocks]
-    h = runner.sample_state(state, blocks, stepout=0.10, N=burn)
-    h = runner.sample_state(state, blocks, stepout=0.10, N=sweeps, doprint=True)
-    h = h.get_histogram()
-
-    for bl, val in zip(blocks, vals):
-        state.update(bl, val)
-    return h.mean(axis=0).reshape(-1,3)
-
-def trackpy(state):
-    image = totiff(state)
-    diameter = int(2*state.state[state.b_rad].mean())
-    diameter -= 1 - diameter % 2
-    out = locate(image, diameter=diameter, invert=True,
-            minmass=145*(diameter/2)**3)
-    return np.vstack([out.z, out.y, out.x]).T + state.pad
-
-def error(state, pos):
-    preal = state.state[state.b_pos].reshape(-1,3)
-    ind = analyze.nearest(preal, pos)
-    return preal - pos[ind]
-
-def totiff(state):
-    p = state.pad
-    q = initializers.normalize(state.image[p:-p, p:-p, p:-p])
-    return (q*255).astype('uint8')
-
-def jiggle_particles(state, pos=None, sig=0.5, indices=None):
-    if pos is None:
-        pos = state.state[state.b_pos].reshape(-1,3)
-
-    if indices is None:
-        indices = xrange(state.N)
-
-    for i, p in enumerate(indices):
-        tpos = pos[i]
-
-        bl = state.explode(state.block_particle_pos(p))
-        for j, b in enumerate(bl):
-            state.update(b, tpos[j]+np.random.rand()*sig)
-
-    state.model_to_true_image()
 
 def fit_single_particle_rad(radii, samples=100, imsize=64, sigma=0.05):
     terrors = []
@@ -73,12 +24,12 @@ def fit_single_particle_rad(radii, samples=100, imsize=64, sigma=0.05):
         tmp_tp, tmp_bf = [],[]
         for i in xrange(samples):
             print i
-            jiggle_particles(s, pos=p)
-            t = trackpy(s)
-            b = bamfpy_positions(s, sweeps=30)
+            bench.jiggle_particles(s, pos=p)
+            t = bench.trackpy(s)
+            b = bench.bamfpy_positions(s, sweeps=30)
 
-            tmp_tp.append(error(s, t))
-            tmp_bf.append(error(s, b))
+            tmp_tp.append(bench.error(s, t))
+            tmp_bf.append(bench.error(s, b))
         terrors.append(tmp_tp)
         berrors.append(tmp_bf)
 
@@ -103,12 +54,12 @@ def fit_single_particle_psf(psf_scale, samples=100, imsize=64, sigma=0.05):
         tmp_tp, tmp_bf = [],[]
         for i in xrange(samples):
             print i
-            jiggle_particles(s, pos=p)
-            t = trackpy(s)
-            b = bamfpy_positions(s, sweeps=30)
+            bench.jiggle_particles(s, pos=p)
+            t = bench.trackpy(s)
+            b = bench.bamfpy_positions(s, sweeps=30)
 
-            tmp_tp.append(error(s, t))
-            tmp_bf.append(error(s, b))
+            tmp_tp.append(bench.error(s, t))
+            tmp_bf.append(bench.error(s, b))
         terrors.append(tmp_tp)
         berrors.append(tmp_bf)
 
@@ -131,12 +82,12 @@ def fit_two_particle_separation(separation, radius=5.0, samples=100, imsize=64, 
         tmp_tp, tmp_bf = [],[]
         for i in xrange(samples):
             print i
-            jiggle_particles(s, pos=p)
-            t = trackpy(s)
-            b = bamfpy_positions(s, sweeps=30)
+            bench.jiggle_particles(s, pos=p)
+            t = bench.trackpy(s)
+            b = bench.bamfpy_positions(s, sweeps=30)
 
-            tmp_tp.append(error(s, t))
-            tmp_bf.append(error(s, b))
+            tmp_tp.append(bench.error(s, t))
+            tmp_bf.append(bench.error(s, b))
         terrors.append(tmp_tp)
         berrors.append(tmp_bf)
 
