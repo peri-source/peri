@@ -537,6 +537,85 @@ class Gaussian4DLegPoly(Gaussian4DPoly):
     def _poly(self, z, coeffs):
         return legval(z, coeffs)
 
+class GaussianMomentExpansion(PSF4D):
+    def __init__(self, shape, params=(1.0,0.5,2.0), order=(1,1,1), error=1.0/255, zrange=128, *args, **kwargs):
+        """
+        3+1D PSF that is of the form  (1+a*(3x-x^3) + b*(3-6*x^2+x^4))*exp(-(x/s)^2/2) where s
+        is sigma, the scale factor.  
+        """
+        self.order = order
+        self.error = error
+        self.zrange = float(zrange)
+        params = np.hstack([np.array(params)[:3], np.zeros(np.sum(order)), np.zeros(4)])
+        super(GaussianMomentExpansion, self).__init__(params=params, shape=shape, *args, **kwargs)
+
+    def _setup_ffts(self):
+        if hasfftw:
+            self._fftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
+            self._ifftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
+            self._fftn = fft2(self._fftn_data, overwrite_input=False,
+                    planner_effort=self.fftw_planning_level, threads=self.threads)
+            self._ifftn = ifft2(self._ifftn_data, overwrite_input=False,
+                    planner_effort=self.fftw_planning_level, threads=self.threads)
+
+    def _sigma_coeffs(self, d=0):
+        s = 3 + np.sum(self.order[:d+0])
+        e = 3 + np.sum(self.order[:d+1])
+        return np.hstack([1, self.params[s:e]])
+
+    def _poly(self, z, coeffs):
+        return np.polyval(coeffs[::-1], z)
+
+    @memoize()
+    def _sigma(self, z, d=0):
+        return self.params[d]*self._poly(z/self.zrange, self._sigma_coeffs(d=d))
+
+    @memoize()
+    def _moment(self, x, d=0):
+        return (1+self._skew(x, d=d)+self._kurtosis(x, d=d))**2
+
+    @memoize()
+    def _skew(self, x, d=0):
+        """ returns the skew parameter for direction d, d=0 is rho, d=1 is z """
+        i = 3 + np.sum(self.order) + 2*d
+        return self.params[i]*(3*x-x**3)
+
+    @memoize()
+    def _kurtosis(self, x, d=0):
+        """ returns the kurtosis parameter for direction d, d=0 is rho, d=1 is z """
+        i = 3 + np.sum(self.order) + 2*d + 1
+        return self.params[i]*(3 - 6*x**2 + x**4)
+
+    @memoize()
+    def get_support_size(self, z):
+        if isinstance(z, np.ndarray) and z.shape[0] > 1:
+            z = z[0]
+        s = np.array([self._sigma(z, 0), self._sigma(z, 1), self._sigma(z, 2)])
+        self.px = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
+        self.py = np.max([np.sqrt(-2*np.log(self.error)*s[1]**2), 2.1*np.ones_like(s[1])], axis=0)
+        self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[2]**2), 2.1*np.ones_like(s[2])], axis=0)
+        size = np.array([self.pz, self.py, self.px])
+        return size
+
+    @memoize()
+    def rpsf_z(self, z, zp):
+        s = self._sigma(zp, 2)
+        size = self.get_support_size(z=zp)
+        pref = self._moment((z-zp)/s, d=1)
+        out = pref*np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
+        return out / out.sum()
+
+    def rpsf_xy(self, zp):
+        size = self.get_support_size(z=zp)
+        mask = (np.abs(self._rx) <= size[2]) * (np.abs(self._ry) <= size[1])
+
+        sx = self._sigma(zp, 0)
+        sy = self._sigma(zp, 1)
+        rho = np.sqrt((self._rx/sx)**2 + (self._ry/sy)**2)
+        gauss = self._moment(rho, d=0)*np.exp(-rho**2/2)
+
+        return gauss * mask
+
 #=============================================================================
 # Array-based specification of PSF
 #=============================================================================
