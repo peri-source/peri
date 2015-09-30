@@ -402,6 +402,16 @@ def diag_crb_particles(state):
 
 def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
         zlayer=None, xlayer=None):
+    """ 
+    To run, do:
+
+    s,h = pickle...
+    s1,h1 = pickle...
+        i.e. /media/scratch/bamf/vacancy/vacancy_zoom-1.tif_t002.tif-featured-v2.pkl
+        i.e. /media/scratch/bamf/frozen-particles/0.tif-featured-full.pkl
+    crb0 = diag_crb_particles(s); crb1 = diag_crb_particles(s1)
+    crb_compare(s,h[-25:],s1,h1[-25:], crb0, crb1)
+    """
     s0 = state0
     s1 = state1
     h0 = np.array(samples0)
@@ -526,7 +536,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
         else:
             ax_crb.set_yticks([])
 
-    f,g = 1.5, 1.95
+    f,g = 1,1#1.5, 1.95
     sim = f*sim_crb_diff(spos0[:,1], spos1[:,1][link])
     crb = g*sim_crb_diff(crb0[0][:,1][active0], crb1[0][:,1][active1][link])
     pp(0, dpos[:,1], sim, crb, 'x')

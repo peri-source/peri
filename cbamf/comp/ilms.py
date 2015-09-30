@@ -338,7 +338,7 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 
 #=============================================================================
 # a complex hidden variable representation of the ILM
-# something like (p(x,y)+m(x,y))+q(z) where m is determined by local models
+# something like (p(x,y)+m(x,y))*q(z) where m is determined by local models
 #=============================================================================
 class PiecewisePolyStreak2P1D(object):
     def __init__(self, shape, order=(1,1,1), num=30):
