@@ -10,7 +10,7 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 from matplotlib.patches import Circle, Rectangle
 
 from cbamf.test import analyze
-from cbamf import util
+from cbamf import util, const
 
 import numpy as np
 import time
@@ -507,9 +507,10 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     def pp(ind, tarr, tsim, tcrb, var='x'):
         bins = 10**np.linspace(-3, 0.0, 30)
         bin2 = 10**np.linspace(-3, 0.0, 100)
-        #bins = np.linspace(0.0, 1.0, 30)
-        #bin2 = np.linspace(0.0, 1.0, 100)
-        xlim = (1e-3, 1e0)
+        bins = np.linspace(0.0, 0.2, 30)
+        bin2 = np.linspace(0.0, 0.2, 100)
+        xlim = (0.0, 0.12)
+        #xlim = (1e-3, 1e0)
         ylim = (1e-2, 30)
 
         ticks = ticker.FuncFormatter(lambda x, pos: '{:0.0f}'.format(np.log10(x)))
@@ -522,12 +523,12 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
                 normed=True, alpha=1.0, histtype='step', ls='solid', lw=1.5, color='k')
         ax_crb.hist(scaler(np.abs(tsim).ravel()), bins=bin2,
                 normed=True, alpha=1.0, histtype='step', lw=3)
-        ax_crb.set_xlabel(r"$\Delta = |%s_{t_1} - %s_{t_0}|$" % (var,var), fontsize=24)
-        ax_crb.semilogx()
+        ax_crb.set_xlabel(r"$\Delta = |%s(t_1) - %s(t_0)|$" % (var,var), fontsize=24)
+        #ax_crb.semilogx()
         ax_crb.set_xlim(xlim)
         #ax_crb.semilogy()
         #ax_crb.set_ylim(ylim)
-        ax_crb.xaxis.set_major_formatter(ticks)
+        #ax_crb.xaxis.set_major_formatter(ticks)
         ax_crb.grid(b=False, which='both', axis='both')
 
         if ind == 0:
@@ -536,7 +537,9 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
         else:
             ax_crb.set_yticks([])
 
-    f,g = 1,1#1.5, 1.95
+        ax_crb.locator_params(axis='x', nbins=3)
+
+    f,g = 1.5, 1.95
     sim = f*sim_crb_diff(spos0[:,1], spos1[:,1][link])
     crb = g*sim_crb_diff(crb0[0][:,1][active0], crb1[0][:,1][active1][link])
     pp(0, dpos[:,1], sim, crb, 'x')
@@ -622,3 +625,162 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     ylim = ax_gofrs.get_ylim()
     ax_gofrs.set_ylim(gy.min(), ylim[1])
     #gs2.tight_layout(fig)
+
+def crb_rad(state0, samples0, state1, samples1, crb0, crb1):
+    s0 = state0
+    s1 = state1
+    h0 = np.array(samples0)
+    h1 = np.array(samples1)
+
+    mu0 = h0.mean(axis=0)
+    mu1 = h1.mean(axis=0)
+
+    std0 = h0.std(axis=0)
+    std1 = h1.std(axis=0)
+
+    mask0 = (s0.state[s0.b_typ]==1.) & (
+        trim_box(s0, mu0[s0.b_pos].reshape(-1,3)))
+    mask1 = (s1.state[s1.b_typ]==1.) & (
+        trim_box(s1, mu1[s1.b_pos].reshape(-1,3)))
+    active0 = np.arange(s0.N)[mask0]#s0.state[s0.b_typ]==1.]
+    active1 = np.arange(s1.N)[mask1]#s1.state[s1.b_typ]==1.]
+
+    pos0 = mu0[s0.b_pos].reshape(-1,3)[active0]
+    pos1 = mu1[s1.b_pos].reshape(-1,3)[active1]
+    rad0 = mu0[s0.b_rad][active0]
+    rad1 = mu1[s1.b_rad][active1]
+
+    link = analyze.nearest(pos0, pos1)
+    dpos = pos0 - pos1[link]
+    drad = rad0 - rad1[link]
+
+    spos0 = std0[s0.b_pos].reshape(-1,3)[active0]
+    spos1 = std1[s1.b_pos].reshape(-1,3)[active1]
+    srad0 = std0[s0.b_rad][active0]
+    srad1 = std1[s1.b_rad][active1]
+
+    def pp(ax, tarr, tsim, tcrb, var='x'):
+        bins = 10**np.linspace(-3, 0.0, 30)
+        bin2 = 10**np.linspace(-3, 0.0, 100)
+        bins = np.linspace(0.0, 0.1, 30)
+        bin2 = np.linspace(0.0, 0.1, 100)
+        xlim = (0, 0.1)
+        #xlim = (1e-3, 1e0)
+        ylim = (1e-2, 30)
+
+        ticks = ticker.FuncFormatter(lambda x, pos: '{:0.0f}'.format(np.log10(x)))
+        scaler = lambda x: x #np.log10(x)
+
+        ax_crb = ax
+        ax_crb.hist(scaler(np.abs(tarr)), bins=bins,
+                normed=True, alpha=0.7, histtype='stepfilled', lw=1, label='Radii differences')
+
+        y,x = np.histogram(np.abs(tcrb).ravel(), bins=bin2, normed=True)
+        x = (x[1:] + x[:-1])/2
+        ax_crb.step(x, y, lw=3, color='k', ls='solid', label='CRB')
+
+        y,x = np.histogram(np.abs(tsim).ravel(), bins=bin2, normed=True)
+        x = (x[1:] + x[:-1])/2
+        ax_crb.step(x, y, lw=3, ls='solid', label='Estimated Error')
+
+        ax_crb.set_xlabel(r"$\Delta = |%s(t_1) - %s(t_0)|$" % (var,var), fontsize=28)
+        ax_crb.set_ylabel(r"$P(\Delta)$", fontsize=28)
+        ax_crb.set_xlim(xlim)
+        ax_crb.grid(b=False, which='both', axis='both')
+        ax_crb.legend(loc='best', ncol=1)
+
+    fig = pl.figure()
+    ax = pl.gca()
+
+    f,g = 1.5, 1.85
+    sim = f*sim_crb_diff(srad0, srad1[link])
+    crb = g*sim_crb_diff(crb0[1][active0], crb1[1][active1][link])
+    pp(ax, drad, sim, crb, 'a')
+
+
+def twoslice(field, pad=const.PAD, zlayer=None, xlayer=None, size=6.0,
+        cmap='bone_r', vmin=0, vmax=1):
+    trim = (np.s_[pad:-pad],)*3
+    field = field[trim]
+
+    slicez = zlayer or field.shape[0]/2
+    slicex = xlayer or field.shape[2]/2
+    slicer1 = np.s_[slicez,:,:]
+    slicer2 = np.s_[:,:,slicex]
+
+    sh = field.shape
+    q = float(sh[1]) / (sh[0]+sh[1])
+    r = float(sh[1] + sh[0]) / sh[1]
+
+    fig = pl.figure(figsize=(size, size*r*1.05))
+    ax1 = fig.add_axes((0, 1-q, 1, q))
+    ax2 = fig.add_axes((0, 0, 1, 1-q))
+
+    def show(ax, slicer):
+        ax.imshow(field[slicer], cmap=cmap, interpolation='nearest', vmin=vmin, vmax=vmax)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.grid('off')
+
+    show(ax1, slicer1)
+    show(ax2, slicer2)
+
+def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
+        cmap='bone_r', vmin=0, vmax=1):
+    trim = (np.s_[s.pad:-s.pad],)*3
+    field = s.image[trim]
+
+    slicez = zlayer or field.shape[0]/2
+    slicex = xlayer or field.shape[2]/2
+    slicer1 = np.s_[slicez,:,:]
+    slicer2 = np.s_[:,:,slicex]
+
+    sh = field.shape
+    q = float(sh[1]) / (sh[0]+sh[1])
+    r = float(sh[1] + sh[0]) / sh[1]
+
+    fig = pl.figure(figsize=(size, size*r*1.05))
+    ax1 = fig.add_axes((0, 1-q, 1, q))
+    ax2 = fig.add_axes((0, 0, 1, 1-q))
+
+    mu = s.state.copy()
+    active = np.arange(s.N)[s.state[s.b_typ]==1.]
+
+    pos = mu[s.b_pos].reshape(-1,3)[active]
+    rad = mu[s.b_rad][active]
+
+    def show(ax, slicer):
+        ax.imshow(field[slicer], cmap=cmap, interpolation='nearest', vmin=vmin, vmax=vmax, alpha=0.0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_axis_bgcolor('black')
+        ax.grid('off')
+
+    def circles(ax, layer, axis):
+        # get the index of the particles we want to include
+        particles = np.arange(len(pos))[np.abs(pos[:,axis] - layer) < rad]
+
+        # for each of these particles display the effective radius
+        # in the proper place
+        for i in particles:
+            p = pos[i].copy()
+            r = 2*np.sqrt(rad[i]**2 - (p[axis] - layer)**2)
+            if axis==0:
+                c = Circle((p[2]-s.pad,p[1]-s.pad), radius=r/2, fc='white')
+            if axis==2:
+                c = Circle((p[1]-s.pad,p[0]-s.pad), radius=r/2, fc='white')
+            ax.add_patch(c)
+
+    show(ax1, slicer1)
+    show(ax2, slicer2)
+
+    circles(ax1, slicez+s.pad, 0) 
+    circles(ax2, slicex+s.pad, 2) 
+
+def deconstruction(s):
+    twoslice(s.image, pad=s.pad)
+    twoslice(s.get_model_image(), pad=s.pad)
+    twoslice(s.ilm.get_field() - s.offset*s.obj.get_field(), pad=s.pad, vmin=None, vmax=None)
+    twoslice(1 - s.offset*s.obj.get_field(), pad=s.pad)
+    twoslice_overlay(s)
+
