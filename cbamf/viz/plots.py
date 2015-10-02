@@ -264,9 +264,14 @@ def sample_compare(N, samples, truestate, burn=0):
 
 
 def generative_model(s,x,y,z,r):
+    """
+    Samples x,y,z,r are created by:
+    b = s.blocks_particle(#)
+    runner.sample_state(s, b, stepout=0.05, N=2000, doprint=True)
+    """
     pl.close('all')
 
-    slicez = int(z.mean())
+    slicez = int(round(z.mean()))
     slicex = s.image.shape[2]/2
     slicer1 = np.s_[slicez,s.pad:-s.pad,s.pad:-s.pad]
     slicer2 = np.s_[s.pad:-s.pad,s.pad:-s.pad,slicex]
@@ -307,7 +312,9 @@ def generative_model(s,x,y,z,r):
     ax_psf1 = fig.add_subplot(gs2[4])
     ax_psf2 = fig.add_subplot(gs2[5])
 
-    ax_plt1.imshow(1-s.obj.get_field()[slicer1], cmap=pl.cm.bone_r, vmin=0, vmax=1)
+    h = s.image.shape[2]/2 - s.image.shape[0]/2
+    slicer3 = np.s_[slicez, s.pad+h:-s.pad-h, s.pad:-s.pad]
+    ax_plt1.imshow(1-s.obj.get_field()[slicer3], cmap=pl.cm.bone_r, vmin=0, vmax=1)
     ax_plt1.set_xticks([])
     ax_plt1.set_yticks([])
     ax_plt1.set_ylabel("Platonic", fontsize=22)
@@ -317,7 +324,7 @@ def generative_model(s,x,y,z,r):
     ax_plt2.set_yticks([])
     ax_plt2.set_title("y-z", fontsize=24)
 
-    ax_ilm1.imshow(s.ilm.get_field()[slicer1], cmap=pl.cm.bone_r)
+    ax_ilm1.imshow(s.ilm.get_field()[slicer3], cmap=pl.cm.bone_r)
     ax_ilm1.set_xticks([])
     ax_ilm1.set_yticks([])
     ax_ilm1.set_ylabel("ILM", fontsize=22)
@@ -332,7 +339,7 @@ def generative_model(s,x,y,z,r):
     psf = s.psf.execute(t)
     print slicer1, slicer2, center
 
-    ax_psf1.imshow(psf[slicer1], cmap=pl.cm.bone)
+    ax_psf1.imshow(psf[slicer3], cmap=pl.cm.bone)
     ax_psf1.set_xticks([])
     ax_psf1.set_yticks([])
     ax_psf1.set_ylabel("PSF", fontsize=22)
@@ -355,7 +362,7 @@ def generative_model(s,x,y,z,r):
     ax_zoom.imshow(im, extent=extent, cmap=pl.cm.bone_r)
     ax_zoom.set_xlim(cx-12, cx+12)
     ax_zoom.set_ylim(cy-12, cy+12)
-    ax_zoom.set_title("Sampling", fontsize=24)
+    ax_zoom.set_title("Sampled positions", fontsize=24)
     ax_zoom.hexbin(x,y, gridsize=32, mincnt=5, cmap=pl.cm.hot)
 
     zoom1 = zoomed_inset_axes(ax_zoom, 30, loc=3)
@@ -766,9 +773,9 @@ def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
             p = pos[i].copy()
             r = 2*np.sqrt(rad[i]**2 - (p[axis] - layer)**2)
             if axis==0:
-                c = Circle((p[2]-s.pad,p[1]-s.pad), radius=r/2, fc='white')
+                c = Circle((p[2]-s.pad,p[1]-s.pad), radius=r/2, fc='white', ec='white')
             if axis==2:
-                c = Circle((p[1]-s.pad,p[0]-s.pad), radius=r/2, fc='white')
+                c = Circle((p[1]-s.pad,p[0]-s.pad), radius=r/2, fc='white', ec='white')
             ax.add_patch(c)
 
     show(ax1, slicer1)
@@ -778,6 +785,7 @@ def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
     circles(ax2, slicex+s.pad, 2) 
 
 def deconstruction(s):
+    s.model_to_true_image()
     twoslice(s.image, pad=s.pad)
     twoslice(s.get_model_image(), pad=s.pad)
     twoslice(s.ilm.get_field() - s.offset*s.obj.get_field(), pad=s.pad, vmin=None, vmax=None)
