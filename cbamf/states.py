@@ -175,7 +175,8 @@ def prepare_image(image, imz=(0,-1), imsize=-1, invert=False, pad=const.PAD, dop
         image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
     return image
 
-def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True):
+def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True,
+        remove_overlaps=False):
     """
     Prepares a set of positions, radii, and a test image for use
     in the ConfocalImagePython object
@@ -200,6 +201,10 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True):
     pad : integer (optional)
         The amount of padding to add to the raw image, should be at least
         2 times the PSF size.  Not recommended to set manually
+
+    remove_overlaps : boolean
+        whether to remove overlaps from the pos, rad given.  not recommended,
+        has bugs
     """
     # normalize and pad the image, add the same offset to the positions
     image = initializers.normalize(image, invert)
@@ -227,7 +232,8 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True):
     rad = rad[keeps]
 
     # change overlapping particles so that the radii do not coincide
-    initializers.remove_overlaps(pos, rad)
+    if remove_overlaps:
+        initializers.remove_overlaps(pos, rad)
     return image, pos, rad
 
 

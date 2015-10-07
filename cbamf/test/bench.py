@@ -47,12 +47,13 @@ def jiggle_particles(state, pos=None, sig=0.5, indices=None):
     if indices is None:
         indices = xrange(state.N)
 
+    noise = np.random.rand(3)*sig
     for i, p in enumerate(indices):
         tpos = pos[i]
 
         bl = state.explode(state.block_particle_pos(p))
         for j, b in enumerate(bl):
-            state.update(b, tpos[j]+np.random.rand()*sig)
+            state.update(b, tpos[j]+noise[j])#np.random.rand()*sig)
 
     state.model_to_true_image()
 
