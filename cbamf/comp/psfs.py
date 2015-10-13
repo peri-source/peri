@@ -578,13 +578,13 @@ class GaussianMomentExpansion(PSF4D):
     def _skew(self, x, d=0):
         """ returns the skew parameter for direction d, d=0 is rho, d=1 is z """
         i = 3 + np.sum(self.order) + 2*d
-        return self.params[i]*(3*x-x**3)
+        return (np.tanh(self.params[i])+1)/12.*(3*x-x**3)
 
     @memoize()
     def _kurtosis(self, x, d=0):
         """ returns the kurtosis parameter for direction d, d=0 is rho, d=1 is z """
         i = 3 + np.sum(self.order) + 2*d + 1
-        return self.params[i]*(3 - 6*x**2 + x**4)
+        return (np.tanh(self.params[i])+1)/12.*(3 - 6*x**2 + x**4)
 
     @memoize()
     def get_support_size(self, z):
