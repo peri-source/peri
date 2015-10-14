@@ -572,7 +572,7 @@ class GaussianMomentExpansion(PSF4D):
 
     @memoize()
     def _moment(self, x, d=0):
-        return (1+self._skew(x, d=d)+self._kurtosis(x, d=d))**2
+        return (1+0*self._skew(x, d=d)+self._kurtosis(x, d=d))
 
     @memoize()
     def _skew(self, x, d=0):
