@@ -18,7 +18,17 @@ def smile_comparison_plot(state0, state1):
 
     states = [state0, state1]
     orders = [stringer(s.ilm.order) for s in states]
-    colors = ['#333333', '#AAAAAA']
+    colors = ('#598FEF', '#BCE85B', '#6C0514')
+    #['#333333', '#AAAAAA']
+
+    dmin, dmax = 1e10, -1e10
+    for i,(s,o,color) in enumerate(zip(states, orders, colors)):
+        ax = ig[i]
+        sl = np.s_[s.pad:-s.pad,s.pad:-s.pad,s.pad:-s.pad]
+        diff = -(s.image - s.get_model_image())[sl]
+
+        dmin = min([dmin, diff.min()])
+        dmax = max([dmax, diff.max()])
 
     for i,(s,o,color) in enumerate(zip(states, orders, colors)):
         ax = ig[i]
@@ -31,12 +41,12 @@ def smile_comparison_plot(state0, state1):
         sl = np.s_[s.pad:-s.pad,s.pad:-s.pad,s.pad:-s.pad]
 
         mu = r.mean()
-        std = 1.0*r.std()
+        std = 0.7*r.std()
         c = pl.cm.RdBu_r(Normalize(vmin=mu-std, vmax=mu+std)(r))[:,:3]
         diff = -(s.image - s.get_model_image())[sl]
 
         ax.set_title(o)
-        ax.imshow(diff[-5])
+        ax.imshow(diff[-5], vmin=dmin, vmax=dmax)
         ax.scatter(x-s.pad,y-s.pad,s=60,c=c)
         ax.set_xlim(0,diff.shape[1])
         ax.set_ylim(0,diff.shape[2])
@@ -46,7 +56,7 @@ def smile_comparison_plot(state0, state1):
 
         sect = 255*nd.gaussian_filter(diff.mean(axis=(0,1)), 3, mode='reflect')
         ax0.plot(sect, lw=2, c=color, label='Residual %s' % o)
-        ax1.plot(x, r, 'o', mfc=color, mec='black', label='Radii %s' % o)
+        ax1.plot(x, r, 'o', mfc=color, mec='black', label='Radii %s' % o, ms=6)
 
         ax0.set_xlim(50, diff.shape[1])
         ax1.set_xlim(50, diff.shape[1])
@@ -61,3 +71,4 @@ def smile_comparison_plot(state0, state1):
         ax1.set_ylabel("Particle Radius")
         ax0.legend(bbox_to_anchor=(1.08,1.3), ncol=4)
         ax1.legend(bbox_to_anchor=(1,1.17), ncol=4, numpoints=1)
+
