@@ -7,7 +7,10 @@ from matplotlib import pyplot as pl
 from matplotlib.colors import Normalize
 from mpl_toolkits.axes_grid1 import ImageGrid
 
-def smile_comparison_plot(state0, state1):
+from cbamf.test.analyze import good_particles
+from cbamf.viz.plots import lbl
+
+def smile_comparison_plot(state0, state1, stdfrac=0.7):
     fig = pl.figure(figsize=(10,12))
 
     ig = ImageGrid(fig, rect=[0.05, 0.55, 0.90, 0.40], nrows_ncols=(1,2), axes_pad=0.2)
@@ -19,21 +22,27 @@ def smile_comparison_plot(state0, state1):
     states = [state0, state1]
     orders = [stringer(s.ilm.order) for s in states]
     colors = ('#598FEF', '#BCE85B', '#6C0514')
-    #['#333333', '#AAAAAA']
 
     dmin, dmax = 1e10, -1e10
+    rstd = -1e10
+
     for i,(s,o,color) in enumerate(zip(states, orders, colors)):
         ax = ig[i]
         sl = np.s_[s.pad:-s.pad,s.pad:-s.pad,s.pad:-s.pad]
         diff = -(s.image - s.get_model_image())[sl]
 
+        m = good_particles(s, False, False)
+        r = s.obj.rad[m]
+        std = stdfrac*r.std()
+
+        rstd = max([rstd, std])
         dmin = min([dmin, diff.min()])
         dmax = max([dmax, diff.max()])
 
     for i,(s,o,color) in enumerate(zip(states, orders, colors)):
         ax = ig[i]
 
-        m = s.obj.typ == 1.
+        m = good_particles(s, True, True)
         p = s.obj.pos[m]
         r = s.obj.rad[m]
         z,y,x = p.T
@@ -41,10 +50,13 @@ def smile_comparison_plot(state0, state1):
         sl = np.s_[s.pad:-s.pad,s.pad:-s.pad,s.pad:-s.pad]
 
         mu = r.mean()
-        std = 0.7*r.std()
-        c = pl.cm.RdBu_r(Normalize(vmin=mu-std, vmax=mu+std)(r))[:,:3]
+        c = pl.cm.RdBu_r(Normalize(vmin=mu-rstd, vmax=mu+rstd)(r))[:,:3]
         diff = -(s.image - s.get_model_image())[sl]
 
+        if i == 0:
+            lbl(ax, 'A')
+        elif i == 1:
+            lbl(ax, 'B')
         ax.set_title(o)
         ax.imshow(diff[-5], vmin=dmin, vmax=dmax)
         ax.scatter(x-s.pad,y-s.pad,s=60,c=c)
@@ -72,3 +84,6 @@ def smile_comparison_plot(state0, state1):
         ax0.legend(bbox_to_anchor=(1.08,1.3), ncol=4)
         ax1.legend(bbox_to_anchor=(1,1.17), ncol=4, numpoints=1)
 
+        if i == 1:
+            lbl(ax0, 'C')
+            lbl(ax1, 'C')
