@@ -217,6 +217,16 @@ class Polynomial2P1D(object):
         self.bkg = self._polyxy * self._polyz
         return self.bkg
 
+    def from_ilm(self, ilm):
+        orders = list(self._poly_orders())
+
+        for i,o in enumerate(ilm._poly_orders()):
+            try:
+                ind = orders.index(o)
+                self.params[ind] = ilm.params[i]
+            except ValueError as e:
+                continue
+
     def from_data(self, f, mask=None, dopriors=False, multiplier=1, maxcalls=200):
         if mask is None:
             mask = np.s_[:]
