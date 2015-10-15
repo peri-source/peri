@@ -4,10 +4,10 @@ import pylab as pl
 from cbamf.test import init
 
 radius = 5.0
-sigma = 0.1
+sigma = 0.05
 crbs = []
 
-s = init.create_single_particle_state(imsize=64, radius=radius, sigma=sigma)
+s = init.create_single_particle_state(imsize=64, radius=radius, sigma=sigma, stateargs={'sigmapad': False})
 positions = np.linspace(s.pad-1.5*radius, s.pad+2*radius, 50)
 blocks = s.blocks_particle(0)
 
