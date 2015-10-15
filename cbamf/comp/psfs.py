@@ -538,15 +538,17 @@ class Gaussian4DLegPoly(Gaussian4DPoly):
         return legval(z, coeffs)
 
 class GaussianMomentExpansion(PSF4D):
-    def __init__(self, shape, params=(1.0,0.5,2.0), order=(1,1,1), error=1.0/255, zrange=128, *args, **kwargs):
+    def __init__(self, shape, params=(1.0,0.5,2.0), order=(1,1,1),
+            moment_order=(3,3), error=1.0/255, zrange=128, *args, **kwargs):
         """
         3+1D PSF that is of the form  (1+a*(3x-x^3) + b*(3-6*x^2+x^4))*exp(-(x/s)^2/2) where s
         is sigma, the scale factor.  
         """
         self.order = order
+        self.morder = moment_order
         self.error = error
         self.zrange = float(zrange)
-        params = np.hstack([np.array(params)[:3], np.zeros(np.sum(order)), np.zeros(4)])
+        params = np.hstack([np.array(params)[:3], np.zeros(np.sum(order)), np.zeros(np.sum(moment_order))])
         super(GaussianMomentExpansion, self).__init__(params=params, shape=shape, *args, **kwargs)
 
     def _setup_ffts(self):
@@ -571,20 +573,17 @@ class GaussianMomentExpansion(PSF4D):
         return self.params[d]*self._poly(z/self.zrange, self._sigma_coeffs(d=d))
 
     @memoize()
-    def _moment(self, x, d=0):
-        return (1+0*self._skew(x, d=d)+self._kurtosis(x, d=d))
+    def _moment(self, x, z, d=0):
+        return (1+self._kurtosis(x, z, d=d))
 
     @memoize()
-    def _skew(self, x, d=0):
-        """ returns the skew parameter for direction d, d=0 is rho, d=1 is z """
-        i = 3 + np.sum(self.order) + 2*d
-        return (np.tanh(self.params[i])+1)/12.*(3*x-x**3)
-
-    @memoize()
-    def _kurtosis(self, x, d=0):
+    def _kurtosis(self, x, z, d=0):
         """ returns the kurtosis parameter for direction d, d=0 is rho, d=1 is z """
-        i = 3 + np.sum(self.order) + 2*d + 1
-        return (np.tanh(self.params[i])+1)/12.*(3 - 6*x**2 + x**4)
+        i0 = 3 + np.sum(self.order) + np.sum(self.morder[:d+0])
+        i1 = 3 + np.sum(self.order) + np.sum(self.morder[:d+1])
+        coeffs = self.params[i0:i1]
+        val = self._poly(z, coeffs)
+        return (np.tanh(val)+1)/12.*(3 - 6*x**2 + x**4)
 
     @memoize()
     def get_support_size(self, z):
@@ -601,7 +600,7 @@ class GaussianMomentExpansion(PSF4D):
     def rpsf_z(self, z, zp):
         s = self._sigma(zp, 2)
         size = self.get_support_size(z=zp)
-        pref = self._moment((z-zp)/s, d=1)
+        pref = self._moment((z-zp)/s, zp, d=1)
         out = pref*np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
         return out / out.sum()
 
@@ -612,7 +611,7 @@ class GaussianMomentExpansion(PSF4D):
         sx = self._sigma(zp, 0)
         sy = self._sigma(zp, 1)
         rho = np.sqrt((self._rx/sx)**2 + (self._ry/sy)**2)
-        gauss = self._moment(rho, d=0)*np.exp(-rho**2/2)
+        gauss = self._moment(rho, zp, d=0)*np.exp(-rho**2/2)
 
         return gauss * mask
 
