@@ -169,7 +169,7 @@ class LinearFit(State):
     def reset(self):
         self.state *= 0
 
-def prepare_image(image, imz=(0,-1), imsize=-1, invert=False, pad=const.PAD, dopad=True):
+def prepare_image(image, imz=(0,None), imsize=None, invert=False, pad=const.PAD, dopad=True):
     image = initializers.normalize(image[imz[0]:imz[1],:imsize,:imsize], invert)
     if dopad:
         image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
@@ -240,7 +240,7 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True,
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
             sigma=0.04, doprior=True, constoff=True,
-            varyn=False, allowdimers=False, nlogs=False, difference=True,
+            varyn=False, allowdimers=False, nlogs=True, difference=True,
             pad=const.PAD, sigmapad=True, *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
