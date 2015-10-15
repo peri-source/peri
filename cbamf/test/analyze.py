@@ -8,7 +8,7 @@ def pos_rad(state, mask):
     """
     Gets all positions and radii of particles by mask
     """
-    return s.obj.pos[mask], s.obj.rad[mask]
+    return state.obj.pos[mask], state.obj.rad[mask]
 
 def good_particles(state, inbox=True, inboxrad=False):
     """
@@ -60,15 +60,15 @@ def iter_pos_rad(state, samples):
         rad = sample[state.b_rad]
         yield pos, rad
 
-def gofr(pos, rad, zscale):
+def gofr_normal(pos, rad, zscale):
     N = rad.shape[0]
     z = np.array([zscale, 1, 1])
 
     seps = []
     for i in xrange(N-1):
-        o = np.arange(i+1, N)
+        o = np.arange(0, N)
         d = np.sqrt( ((z*(pos[i] - pos[o]))**2).sum(axis=-1) )
-        seps.extend(d)
+        seps.extend(d[d!=0])
     return np.array(seps)
 
 def gofr_surfaces(pos, rad, zscale):
@@ -77,20 +77,36 @@ def gofr_surfaces(pos, rad, zscale):
 
     seps = []
     for i in xrange(N-1):
-        o = np.arange(i+1, N)
+        o = np.arange(0, N)
         d = np.sqrt( ((z*(pos[i] - pos[o]))**2).sum(axis=-1) )
         r = rad[i] + rad[o]
 
-        diff = d-r
-        seps.extend(diff)
+        diff = (d-r) / r
+        seps.extend(diff[diff != 0])
     return np.array(seps)
 
-def gofr_full(pos, rad, zscale, resolution=3e-2, rmax=10, method=gofr,
+def gofr(pos, rad, zscale, resolution=3e-2, rmax=10, method='normal',
         mask_start=None):
-    d = 2*rad.mean()
+    """
+    Pair correlation function calculation from 0 to rmax particle diameters
 
-    o = method(pos, rad, zscale)
-    y,x = np.histogram(o/d, bins=np.linspace(0, rmax, d*rmax/resolution))
+    method : str ['normal', 'surface']
+        represents the gofr calculation method
+    """
+
+    d = 2*rad.mean()
+    vol_particle = 4./3*np.pi*(d)**3
+    num_density = packing_fraction(pos, rad) / vol_particle
+
+    if method == 'normal':
+        o = gofr_normal(pos, rad, zscale)
+        rmin = 0
+    if method == 'surface':
+        o = d*gofr_surfaces(pos, rad, zscale)
+        rmin = -1
+
+    bins = np.linspace(rmin, d*rmax, d*rmax/resolution, endpoint=False)
+    y,x = np.histogram(o, bins=bins)
     x = (x[1:] + x[:-1])/2
 
     if mask_start is not None:
@@ -98,12 +114,15 @@ def gofr_full(pos, rad, zscale, resolution=3e-2, rmax=10, method=gofr,
         x = x[mask]
         y = y[mask]
 
-    return x, y/(4*np.pi*x**2*resolution)
+    return x/d, y/(4*np.pi*(x+d)**2*resolution) / num_density / float(len(rad))
 
-def packing_fraction(pos, rad, bounds=None, state=None):
+def packing_fraction(pos, rad, bounds=None, state=None, full_output=False):
     if state is not None:
         bounds = Tile(left=state.pad,
                 right=np.array(state.image.shape)-state.pad)
+    else:
+        if bounds is None:
+            bounds = Tile(pos.min(axis=0), pos.max(axis=0))
 
     box_volume = np.prod(bounds.r - bounds.l)
     particle_volume = 0.0
@@ -125,7 +144,9 @@ def packing_fraction(pos, rad, bounds=None, state=None):
             particle_volume += vol
             nparticles += 1
 
-    return particle_volume / box_volume, nparticles
+    if full_output:
+        return particle_volume / box_volume, nparticles
+    return particle_volume / box_volume
 
 def average_packing_fraction(state, samples):
     phi = []
