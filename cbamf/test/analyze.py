@@ -4,7 +4,50 @@ import scipy as sp
 from cbamf.priors import overlap
 from cbamf.util import Tile
 
+def pos_rad(state, mask):
+    """
+    Gets all positions and radii of particles by mask
+    """
+    return s.obj.pos[mask], s.obj.rad[mask]
+
+def good_particles(state, inbox=True, inboxrad=False):
+    """
+    Returns a mask of `good' particles as defined by
+        * radius > 0
+        * position inside box
+        * active
+
+    Parameters:
+        inbox : whether to only count particle centers within the image
+        inboxrad : whether to only count particles that overlap the image at all
+    """
+    pos = state.obj.pos
+    rad = state.obj.rad
+
+    mask = rad > 0
+    mask &= (state.obj.typ == 1.)
+
+    if inbox:
+        if inboxrad:
+            mask &= trim_box(state, pos, rad=rad)
+        else:
+            mask &= trim_box(state, pos, rad=None)
+
+    return mask
+
+def trim_box(state, p, rad=None):
+    """
+    Returns particles within the image.  If rad is provided, then
+    particles that intersect the image at all (p-r) > edge
+    """
+    if rad is None:
+        return ((p > state.pad) & (p < np.array(state.image.shape) - state.pad)).all(axis=-1)
+    return ((p+rad[:,None] > state.pad) & (p-rad[:,None] < np.array(state.image.shape) - state.pad)).all(axis=-1)
+
 def nearest(p0, p1):
+    """
+    Correlate closest particles with eachother.  Returns p0 close to p1[ind]
+    """
     ind = []
     for i in xrange(len(p0)):
         dist = np.sqrt(((p0[i] - p1)**2).sum(axis=-1))
