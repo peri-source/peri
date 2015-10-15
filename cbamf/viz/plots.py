@@ -16,9 +16,6 @@ import numpy as np
 import time
 import pickle
 
-def trim_box(state, p):
-    return ((p > state.pad) & (p < np.array(state.image.shape) - state.pad)).all(axis=-1)
-
 def lbl(axis, label):
     """ Put a figure label in an axis """
     at = AnchoredText(label, loc=2, prop=dict(size=22), frameon=True)
@@ -187,34 +184,42 @@ def pretty_summary(state, samples, zlayer=None, xlayer=None, vertical=False):
     ax_diff.semilogy()
     ax_diff.set_ylabel(r"$P(\delta)$")
     ax_diff.set_xlabel(r"$\delta = M_i - d_i$")
+    ax_diff.locator_params(axis='x', nbins=5)
 
     pos = mu[s.b_pos].reshape(-1,3)
     rad = mu[s.b_rad]
-    mask = trim_box(s, pos)
+    mask = analyze.trim_box(s, pos)
     pos = pos[mask]
     rad = rad[mask]
 
-    gx, gy = analyze.gofr_full(pos, rad, mu[s.b_zscale][0], resolution=5e-2,mask_start=0.5)
+    gx, gy = analyze.gofr(pos, rad, mu[s.b_zscale][0], resolution=5e-2,mask_start=0.5)
     mask = gx < 5
     gx = gx[mask]
     gy = gy[mask]
-    gy /= gy[-1]
     ax_gofr = pl.subplot(gs2[1,0])
     ax_gofr.plot(gx, gy, '-', lw=1)
-    ax_gofr.set_xlabel(r"$r/a$")
-    ax_gofr.set_ylabel(r"$g(r/a)$")
-    #ax_gofr.semilogy()
+    ax_gofr.set_xlabel(r"$r/d$")
+    ax_gofr.set_ylabel(r"$g(r/d)$")
+    ax_gofr.locator_params(axis='both', nbins=5)
 
-    gx, gy = analyze.gofr_full(pos, rad, mu[s.b_zscale][0], method=analyze.gofr_surfaces)
+    gx, gy = analyze.gofr(pos, rad, mu[s.b_zscale][0], method='surface')
     mask = gx < 5
     gx = gx[mask]
     gy = gy[mask]
-    gy /= gy[-1]
+    gy[gy <= 0.] = gy[gy>0].min()
     ax_gofrs = pl.subplot(gs2[1,1])
     ax_gofrs.plot(gx, gy, '-', lw=1)
-    ax_gofrs.set_xlabel(r"$r/a$")
-    ax_gofrs.set_ylabel(r"$g_{\rm{surface}}(r/a)$")
-    ax_gofrs.semilogy()
+    ax_gofrs.set_xlabel(r"$r/d$")
+    ax_gofrs.set_ylabel(r"$g_{\rm{surface}}(r/d)$")
+    ax_gofrs.locator_params(axis='both', nbins=5)
+    ax_gofrs.grid(b=False, which='minor', axis='y')
+    #ax_gofrs.semilogy()
+
+    ylim = ax_gofrs.get_ylim()
+    ax_gofrs.set_ylim(gy.min(), ylim[1])
+
+    #gy = gy[mask] / s.state[s.b_typ].sum()/(0.64 /(1.333*np.pi*rad.mean()**3))
+    #gy /= gy[-1]
 
 def scan(im, cycles=1, sleep=0.3, vmin=0, vmax=1, cmap='bone'):
     pl.figure(1)
@@ -267,7 +272,8 @@ def generative_model(s,x,y,z,r):
     """
     Samples x,y,z,r are created by:
     b = s.blocks_particle(#)
-    runner.sample_state(s, b, stepout=0.05, N=2000, doprint=True)
+    h = runner.sample_state(s, b, stepout=0.05, N=2000, doprint=True)
+    z,y,x,r = h.get_histogram().T
     """
     pl.close('all')
 
@@ -337,7 +343,6 @@ def generative_model(s,x,y,z,r):
     t[center] = 1
     s.psf.set_tile(util.Tile(t.shape))
     psf = s.psf.execute(t)
-    print slicer1, slicer2, center
 
     ax_psf1.imshow(psf[slicer3], cmap=pl.cm.bone)
     ax_psf1.set_xticks([])
@@ -351,6 +356,7 @@ def generative_model(s,x,y,z,r):
     #=========================================================================
     ax_zoom = fig.add_axes([0.48, 0.018, 0.45, 0.52])
 
+    #s.model_to_true_image()
     im = s.image[slicer1]
     sh = np.array(im.shape)
     cx = x.mean()
@@ -363,7 +369,7 @@ def generative_model(s,x,y,z,r):
     ax_zoom.set_xlim(cx-12, cx+12)
     ax_zoom.set_ylim(cy-12, cy+12)
     ax_zoom.set_title("Sampled positions", fontsize=24)
-    ax_zoom.hexbin(x,y, gridsize=32, mincnt=5, cmap=pl.cm.hot)
+    ax_zoom.hexbin(x,y, gridsize=32, mincnt=0, cmap=pl.cm.hot)
 
     zoom1 = zoomed_inset_axes(ax_zoom, 30, loc=3)
     zoom1.imshow(im, extent=extent, cmap=pl.cm.bone_r)
@@ -437,9 +443,9 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     std1 = h1.std(axis=0)
 
     mask0 = (s0.state[s0.b_typ]==1.) & (
-        trim_box(s0, mu0[s0.b_pos].reshape(-1,3)))
+        analyze.trim_box(s0, mu0[s0.b_pos].reshape(-1,3)))
     mask1 = (s1.state[s1.b_typ]==1.) & (
-        trim_box(s1, mu1[s1.b_pos].reshape(-1,3)))
+        analyze.trim_box(s1, mu1[s1.b_pos].reshape(-1,3)))
     active0 = np.arange(s0.N)[mask0]#s0.state[s0.b_typ]==1.]
     active1 = np.arange(s1.N)[mask1]#s1.state[s1.b_typ]==1.]
 
@@ -597,15 +603,14 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
 
     pos = mu0[s0.b_pos].reshape(-1,3)
     rad = mu0[s0.b_rad]
-    mask = trim_box(s0, pos)
+    mask = analyze.trim_box(s0, pos)
     pos = pos[mask]
     rad = rad[mask]
 
-    gx, gy = analyze.gofr_full(pos, rad, mu0[s0.b_zscale][0], resolution=5e-2,mask_start=0.5)
+    gx, gy = analyze.gofr(pos, rad, mu0[s0.b_zscale][0], resolution=5e-2,mask_start=0.5)
     mask = gx < 5
     gx = gx[mask]
     gy = gy[mask]
-    gy /= gy[-1]
     ax_gofr = pl.subplot(gs2[1,0])
     ax_gofr.plot(gx, gy, '-', lw=1)
     ax_gofr.set_xlabel(r"$r/a$")
@@ -614,11 +619,10 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     #ax_gofr.semilogy()
     lbl(ax_gofr, 'E')
 
-    gx, gy = analyze.gofr_full(pos, rad, mu0[s0.b_zscale][0], method=analyze.gofr_surfaces)
+    gx, gy = analyze.gofr(pos, rad, mu0[s0.b_zscale][0], method='surface')
     mask = gx < 5
     gx = gx[mask]
     gy = gy[mask]
-    gy /= gy[-1]
     gy[gy <= 0.] = gy[gy>0].min()
     ax_gofrs = pl.subplot(gs2[1,1])
     ax_gofrs.plot(gx, gy, '-', lw=1)
@@ -626,7 +630,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     ax_gofrs.set_ylabel(r"$g_{\rm{surface}}(r/a)$")
     ax_gofrs.locator_params(axis='both', nbins=5)
     ax_gofrs.grid(b=False, which='minor', axis='y')
-    ax_gofrs.semilogy()
+    #ax_gofrs.semilogy()
     lbl(ax_gofrs, 'F')
 
     ylim = ax_gofrs.get_ylim()
@@ -646,9 +650,9 @@ def crb_rad(state0, samples0, state1, samples1, crb0, crb1):
     std1 = h1.std(axis=0)
 
     mask0 = (s0.state[s0.b_typ]==1.) & (
-        trim_box(s0, mu0[s0.b_pos].reshape(-1,3)))
+        analyze.trim_box(s0, mu0[s0.b_pos].reshape(-1,3)))
     mask1 = (s1.state[s1.b_typ]==1.) & (
-        trim_box(s1, mu1[s1.b_pos].reshape(-1,3)))
+        analyze.trim_box(s1, mu1[s1.b_pos].reshape(-1,3)))
     active0 = np.arange(s0.N)[mask0]#s0.state[s0.b_typ]==1.]
     active1 = np.arange(s1.N)[mask1]#s1.state[s1.b_typ]==1.]
 
@@ -733,7 +737,7 @@ def twoslice(field, pad=const.PAD, zlayer=None, xlayer=None, size=6.0,
     show(ax2, slicer2)
 
 def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
-        cmap='bone_r', vmin=0, vmax=1):
+        cmap='bone_r', vmin=0, vmax=1, showimage=False):
     trim = (np.s_[s.pad:-s.pad],)*3
     field = s.image[trim]
 
@@ -757,7 +761,8 @@ def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
     rad = mu[s.b_rad][active]
 
     def show(ax, slicer):
-        ax.imshow(field[slicer], cmap=cmap, interpolation='nearest', vmin=vmin, vmax=vmax, alpha=0.0)
+        talpha = 0.0 if not showimage else 1.0
+        ax.imshow(field[slicer], cmap=cmap, interpolation='nearest', vmin=vmin, vmax=vmax, alpha=talpha)
         ax.set_xticks([])
         ax.set_yticks([])
         ax.set_axis_bgcolor('black')
@@ -765,6 +770,8 @@ def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
 
     def circles(ax, layer, axis):
         # get the index of the particles we want to include
+        talpha = 1.0 if not showimage else 0.8
+        cedge = 'white' if not showimage else 'black'
         particles = np.arange(len(pos))[np.abs(pos[:,axis] - layer) < rad]
 
         # for each of these particles display the effective radius
@@ -773,9 +780,9 @@ def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
             p = pos[i].copy()
             r = 2*np.sqrt(rad[i]**2 - (p[axis] - layer)**2)
             if axis==0:
-                c = Circle((p[2]-s.pad,p[1]-s.pad), radius=r/2, fc='white', ec='white')
+                c = Circle((p[2]-s.pad,p[1]-s.pad), radius=r/2, fc='none', ec=cedge, alpha=talpha)
             if axis==2:
-                c = Circle((p[1]-s.pad,p[0]-s.pad), radius=r/2, fc='white', ec='white')
+                c = Circle((p[1]-s.pad,p[0]-s.pad), radius=r/2, fc='none', ec=cedge, alpha=talpha)
             ax.add_patch(c)
 
     show(ax1, slicer1)
