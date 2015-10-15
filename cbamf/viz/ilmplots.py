@@ -31,7 +31,7 @@ def smile_comparison_plot(state0, state1, stdfrac=0.7):
         sl = np.s_[s.pad:-s.pad,s.pad:-s.pad,s.pad:-s.pad]
         diff = -(s.image - s.get_model_image())[sl]
 
-        m = good_particles(s, False, False)
+        m = good_particles(s, False)
         r = s.obj.rad[m]
         std = stdfrac*r.std()
 
@@ -42,7 +42,7 @@ def smile_comparison_plot(state0, state1, stdfrac=0.7):
     for i,(s,o,color) in enumerate(zip(states, orders, colors)):
         ax = ig[i]
 
-        m = good_particles(s, True, True)
+        m = good_particles(s, False)
         p = s.obj.pos[m]
         r = s.obj.rad[m]
         z,y,x = p.T
