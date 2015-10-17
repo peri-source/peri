@@ -78,13 +78,16 @@ def sample_particles(state, stepout=1, start=0):
 
     return state.state.copy()
 
-def sample_particle_pos(state, stepout=1, start=0):
-    print '{:-^39}'.format(' POS ')
+def sample_particle_pos(state, stepout=1, start=0, quiet=False):
+    if not quiet:
+        print '{:-^39}'.format(' POS ')
+
     for particle in xrange(start, state.obj.N):
         if not state.isactive(particle):
             continue
 
-        print particle
+        if not quiet:
+            print particle
         sys.stdout.flush()
 
         blocks = state.blocks_particle(particle)[:-1]
@@ -92,13 +95,17 @@ def sample_particle_pos(state, stepout=1, start=0):
 
     return state.state.copy()
 
-def sample_particle_rad(state, stepout=1, start=0):
-    print '{:-^39}'.format(' RAD ')
+def sample_particle_rad(state, stepout=1, start=0, quiet=False):
+    if not quiet:
+        print '{:-^39}'.format(' RAD ')
+
     for particle in xrange(start, state.obj.N):
         if not state.isactive(particle):
             continue
 
-        print particle
+        if not quiet:
+            print particle
+
         sys.stdout.flush()
 
         blocks = [state.blocks_particle(particle)[-1]]
@@ -106,8 +113,10 @@ def sample_particle_rad(state, stepout=1, start=0):
 
     return state.state.copy()
 
-def sample_block(state, blockname, explode=True, stepout=0.1):
-    print '{:-^39}'.format(' '+blockname.upper()+' ')
+def sample_block(state, blockname, explode=True, stepout=0.1, quiet=False):
+    if not quiet:
+        print '{:-^39}'.format(' '+blockname.upper()+' ')
+
     blocks = [state.create_block(blockname)]
 
     if explode:
@@ -121,7 +130,7 @@ def sample_block_list(state, blocklist, stepout=0.1):
     return state.state.copy(), state.loglikelihood()
 
 def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
-        prefix='cbamf', save_name=None, sigma=True, pos=True):
+        prefix='cbamf', save_name=None, sigma=True, pos=True, quiet=False):
     h = []
     ll = []
     if not save_name:
@@ -133,19 +142,20 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
             with open(save_name, 'w') as tfile:
                 pickle.dump([s,h,ll], tfile)
 
-        print '{:=^79}'.format(' Sweep '+str(i)+' ')
+        if not quiet:
+            print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
         #sample_particles(s, stepout=stepout)
         if pos:
-            sample_particle_pos(s, stepout=stepout)
-        sample_particle_rad(s, stepout=stepout)
-        sample_block(s, 'psf', stepout=stepout)
-        sample_block(s, 'ilm', stepout=stepout)
-        sample_block(s, 'off', stepout=stepout)
-        sample_block(s, 'zscale', stepout=stepout)
+            sample_particle_pos(s, stepout=stepout, quiet=quiet)
+        sample_particle_rad(s, stepout=stepout, quiet=quiet)
+        sample_block(s, 'psf', stepout=stepout, quiet=quiet)
+        sample_block(s, 'ilm', stepout=stepout, quiet=quiet)
+        sample_block(s, 'off', stepout=stepout, quiet=quiet)
+        sample_block(s, 'zscale', stepout=stepout, quiet=quiet)
 
         if sigma:
-            sample_block(s, 'sigma', stepout=0.005)
+            sample_block(s, 'sigma', stepout=0.005, quiet=quiet)
 
         if i >= burn:
             h.append(s.state.copy())
