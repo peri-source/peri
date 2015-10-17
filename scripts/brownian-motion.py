@@ -20,7 +20,7 @@ def set_image(state, cg, sigma):
     state.sigma = sigma
     state.reset()
 
-def diffusion(diffusion_constant, exposure_time, samples=100):
+def diffusion(diffusion_constant, exposure_time, samples=200):
     """
     diffusion_constant is in terms of seconds and pixel sizes
     exposure_time is in seconds
@@ -39,6 +39,7 @@ def diffusion(diffusion_constant, exposure_time, samples=100):
 
     # add up a bunch of trajectories
     finalimage = 0*s0.get_model_image()[sl]
+    position = 0*s0.obj.pos[0]
 
     for i in xrange(samples):
         offset = np.sqrt(6*diffusion_constant*exposure_time)*np.random.randn(3)
@@ -46,8 +47,10 @@ def diffusion(diffusion_constant, exposure_time, samples=100):
         s0.reset()
 
         finalimage += s0.get_model_image()[sl]
+        position += s0.obj.pos[0]
 
     finalimage /= float(samples)
+    position /= float(samples)
 
     # place that into a new image at the expected parameters
     s = init.create_single_particle_state(imsize=4*radius, sigma=0.05,
@@ -55,7 +58,7 @@ def diffusion(diffusion_constant, exposure_time, samples=100):
     s.reset()
 
     # measure the true inferred parameters
-    return s, finalimage
+    return s, finalimage, position
 
 def crb(state):
     crb = []
@@ -67,67 +70,75 @@ def crb(state):
 
     return np.squeeze(np.array(crb))
 
-def sample(state, im, noise, N=10):
+def sample(state, im, noise, N=10, burn=10, sweeps=20):
     values, errors = [], []
 
     for i in xrange(N):
-        print '{:=^79}'.format(' %i ' % i)
+        print i, ' ',
         set_image(state, im, noise)
-        h,l = runner.do_samples(state, 20, 10)
+        h,l = runner.do_samples(state, sweeps, burn, quiet=True)
 
         h = np.array(h)
         values.append(h.mean(axis=0))
         errors.append(h.std(axis=0))
 
+    print ''
     return np.array(values), np.array(errors)
 
-def dorun():
+def dorun(SNR=20, ntimes=20, samples=10, noise_samples=10, sweeps=20, burn=10):
     """
     we want to display the errors introduced by pixelation so we plot:
         * CRB, sampled error vs exposure time
     """
-    times = np.logspace(-6, 1, 20)
-    crbs0, vals0, errs0 = [], [], []
-    crbs1, vals1, errs1 = [], [], []
+    times = np.logspace(-4, 0, ntimes)
+    crbs, vals, errs, poss = [], [], [], []
 
     for i,t in enumerate(times):
         print '###### time', i, t
-        s,im = diffusion(diffusion_constant=1, exposure_time=t)
-        goodstate = s.state.copy()
 
-        # essentially noise-less
-        set_image(s, im, 1e-6)
-        crbs0.append(crb(s))
+        for j in xrange(samples):
+            print 'image', j, '|', 
+            s,im,pos = diffusion(diffusion_constant=1, exposure_time=t)
 
-        val, err = sample(s, im, 1e-6)
-        vals0.append(val)
-        errs0.append(err)
+            # typical image
+            set_image(s, im, 1.0/SNR)
+            crbs.append(crb(s))
 
-        # typical image
-        set_image(s, im, 5e-2)
-        crbs1.append(crb(s))
+            val, err = sample(s, im, 1.0/SNR, N=noise_samples, sweeps=sweeps, burn=burn)
+            poss.append(pos)
+            vals.append(val)
+            errs.append(err)
 
-        val, err = sample(s, im, 5e-2)
-        vals1.append(val)
-        errs1.append(err)
 
-    return [np.array(crbs0), np.array(vals0), np.array(errs0),
-            np.array(crbs1), np.array(vals1), np.array(errs1)]
+    shape0 = (ntimes, samples, -1)
+    shape1 = (ntimes, samples, noise_samples, -1)
 
-def doplot(filename='/media/scratch/peri/pixel-integration.pkl'):
-    crb0,val0,err0,crb1,val1,err1,goodstate = pickle.load(open(filename))
+    crbs = np.array(crbs).reshape(shape0)
+    vals = np.array(vals).reshape(shape1)
+    errs = np.array(errs).reshape(shape1)
+    poss = np.array(poss).reshape(shape0)
+
+    return  [crbs, vals, errs, poss, times]
+
+def dist(a):
+    return np.sqrt((a[:,:3]**2).sum(axis=-1))
+
+def errs(g,t):
+    return np.sqrt(((g[:,:,:3] - t[None,None,:])**2).sum(axis=-1)).mean(axis=-1)
+
+def doplot(filename='/media/scratch/peri/brownian-motion.pkl'):
+    crb0,val0,err0,crb1,val1,err1,times = pickle.load(open(filename))
 
     fig = pl.figure()
 
-    pl.plot(crb0, '-', c=COLORS[0], lw=2, label=r"$\rm{SNR} = 10^6$ CRB")
-    pl.plot(err0.mean(axis=0), 'o', c=COLORS[0], label=r"$\rm{SNR} = 10^6$ Error", ms=12)
-    pl.plot(crb1, '-', c=COLORS[1], lw=2, label=r"$\rm{SNR} = 20$ CRB")
-    pl.plot(err1.mean(axis=0), 'o', c=COLORS[1], label=r"$\rm{SNR} = 20$ Error", ms=12)
-    pl.semilogy()
-    pl.ylim(1e-9, 1e0)
-    pl.xlim(0, len(labels)-3)
-    pl.xticks(xrange(len(labels)-1), labels[:-1], rotation='vertical')
-    pl.legend(bbox_to_anchor=(1.07,1.0), prop={'size': 18}, numpoints=1)
+    pl.plot(times, dist(crb1), '-', c=COLORS[1], lw=2, label=r"$\rm{SNR} = 20$ CRB")
+    pl.plot(times, errs(val1), 'o', c=COLORS[1], label=r"$\rm{SNR} = 20$ Error", ms=12)
+
+    pl.loglog()
+    pl.ylim(1e-4, 1e0)
+    pl.xlim(0, times[-1])
+    pl.legend(loc='best',  prop={'size': 18}, numpoints=1)
+    pl.xlabel(r"Exposure time (sec)")
     pl.ylabel(r"CRB, $\bar{\sigma}$")
     pl.grid(False, which='minor', axis='both')
-    pl.title("Pixel integration")
+    pl.title("Brownian motion")
