@@ -143,6 +143,6 @@ def doplot(prefix='/media/scratch/peri/brownian-motion', snrs=[20,200]):
     pl.xlim(0, time[-1])
     pl.legend(loc='best',  prop={'size': 18}, numpoints=1)
     pl.xlabel(r"Exposure time (sec)")
-    pl.ylabel(r"CRB, $\bar{\sigma}$")
+    pl.ylabel(r"Position CRB, Error")
     pl.grid(False, which='minor', axis='both')
     pl.title("Brownian motion")
