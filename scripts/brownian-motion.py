@@ -121,22 +121,26 @@ def dorun(SNR=20, ntimes=20, samples=10, noise_samples=10, sweeps=20, burn=10):
     return  [crbs, vals, errs, poss, times]
 
 def dist(a):
-    return np.sqrt((a[:,:3]**2).sum(axis=-1))
+    return np.sqrt((a[...,:3]**2).sum(axis=-1)).mean(axis=-1)
 
-def errs(g,t):
-    return np.sqrt(((g[:,:,:3] - t[None,None,:])**2).sum(axis=-1)).mean(axis=-1)
+def errs(val, pos):
+    v,p = val, pos
+    return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
 
-def doplot(filename='/media/scratch/peri/brownian-motion.pkl'):
-    crb0,val0,err0,crb1,val1,err1,times = pickle.load(open(filename))
-
+def doplot(prefix='/media/scratch/peri/brownian-motion', snrs=[20,200]):
     fig = pl.figure()
 
-    pl.plot(times, dist(crb1), '-', c=COLORS[1], lw=2, label=r"$\rm{SNR} = 20$ CRB")
-    pl.plot(times, errs(val1), 'o', c=COLORS[1], label=r"$\rm{SNR} = 20$ Error", ms=12)
+    for i, snr in enumerate(snrs):
+        c = COLORS[i]
+        fn = prefix+'-snr'+str(snr)+'.pkl'
+        crb, val, err, pos, time = pickle.load(open(fn))
+
+        pl.plot(time, dist(crb), '-', c=c, lw=2, label=r"$\rm{SNR} = %i$ CRB" % snr)
+        pl.plot(time, errs(val, pos), 'o', c=c, label=r"$\rm{SNR} = %i$ Error" % snr, ms=12)
 
     pl.loglog()
     pl.ylim(1e-4, 1e0)
-    pl.xlim(0, times[-1])
+    pl.xlim(0, time[-1])
     pl.legend(loc='best',  prop={'size': 18}, numpoints=1)
     pl.xlabel(r"Exposure time (sec)")
     pl.ylabel(r"CRB, $\bar{\sigma}$")
