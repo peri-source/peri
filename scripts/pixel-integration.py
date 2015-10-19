@@ -90,6 +90,8 @@ def dorun(SNR=20, sweeps=20, burn=8, noise_samples=10):
         * zero noise, cg image, fit
         * SNR 20, cg image, fit
         * CRB for both
+
+    a = dorun(noise_samples=30, sweeps=24, burn=12, SNR=20)
     """
     radii = np.linspace(2,10,8, endpoint=False)
     crbs, vals, errs = [], [], []
@@ -108,7 +110,7 @@ def dorun(SNR=20, sweeps=20, burn=8, noise_samples=10):
 
     return np.array(crbs), np.array(vals), np.array(errs), radii
 
-def doplot(prefix='/media/scratch/peri/pixel-integration', snrs=[20,200,2000]):
+def doplot(prefix='/media/scratch/peri/pixint', snrs=[20,200,2000]):
     fig = pl.figure()
 
     def interp(t, c):
@@ -118,11 +120,9 @@ def doplot(prefix='/media/scratch/peri/pixel-integration', snrs=[20,200,2000]):
 
     for i,(c,snr) in enumerate(zip(COLORS, snrs)):
         fn = prefix+'-snr'+str(snr)+'.pkl'
+        crb, val, err, radii = pickle.load(open(fn))
 
-        crb, val, err = pickle.load(open(fn))
-        radii = np.linspace(2,10,len(crb))
-
-        d = lambda x: x.mean(axis=1)[:,1]
+        d = lambda x: x.mean(axis=1)[:,0]
 
         pl.plot(*interp(radii, crb[:,1]), ls='-', c=c, lw=2,
                 label=r"$\rm{SNR} = %i$ CRB" % snr)
@@ -131,7 +131,7 @@ def doplot(prefix='/media/scratch/peri/pixel-integration', snrs=[20,200,2000]):
 
         pl.semilogy()
  
-    pl.xlim(2, 10)
+    pl.xlim(radii[0], radii[-1])
     pl.ylim(1e-5, 1e0)
     pl.xlabel(r"Radius (px)")
     pl.ylabel(r"CRB, $\bar{\sigma}$ (px)")

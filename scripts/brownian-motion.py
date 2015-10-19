@@ -89,6 +89,8 @@ def dorun(SNR=20, ntimes=20, samples=10, noise_samples=10, sweeps=20, burn=10):
     """
     we want to display the errors introduced by pixelation so we plot:
         * CRB, sampled error vs exposure time
+
+    a = dorun(ntimes=10, samples=5, noise_samples=5, sweeps=20, burn=8)
     """
     times = np.logspace(-4, 0, ntimes)
     crbs, vals, errs, poss = [], [], [], []
@@ -127,22 +129,32 @@ def errs(val, pos):
     v,p = val, pos
     return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
 
-def doplot(prefix='/media/scratch/peri/brownian-motion', snrs=[20,200]):
+def doplot(prefix='/media/scratch/peri/brownian-motion', snrs=[20,50,200,2000]):
     fig = pl.figure()
 
+    symbols = ['o', '^', 'D', '>']
     for i, snr in enumerate(snrs):
         c = COLORS[i]
         fn = prefix+'-snr'+str(snr)+'.pkl'
         crb, val, err, pos, time = pickle.load(open(fn))
 
+        time /= 25.0 # a^2/D, where D=1, and a=5 (see first function)
         pl.plot(time, dist(crb), '-', c=c, lw=2, label=r"$\rm{SNR} = %i$ CRB" % snr)
-        pl.plot(time, errs(val, pos), 'o', c=c, label=r"$\rm{SNR} = %i$ Error" % snr, ms=12)
+        pl.plot(time, errs(val, pos), symbols[i], c=c, label=r"$\rm{SNR} = %i$ Error" % snr, ms=12)
+
+    # 80% glycerol value
+    pl.vlines(0.016/25, 1e-6, 10, linestyle='--')
+    pl.text(0.016*1.25/25, 0.25, '80% glycerol')
+
+    # 100% water value
+    #pl.vlines(0.016*75/25, 1e-6, 10)
+    #pl.text(0.016*75*2/25, 0.5, '100% water')
 
     pl.loglog()
-    pl.ylim(1e-4, 1e0)
+    pl.ylim(5e-5, 1e0)
     pl.xlim(0, time[-1])
     pl.legend(loc='best',  prop={'size': 18}, numpoints=1)
-    pl.xlabel(r"Exposure time (sec)")
+    pl.xlabel(r"$\tau_{\rm{camera}} / (a^2/D)$")
     pl.ylabel(r"Position CRB, Error")
     pl.grid(False, which='minor', axis='both')
     pl.title("Brownian motion")

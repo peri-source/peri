@@ -6,6 +6,7 @@ import itertools
 from cbamf import initializers, runner
 from cbamf import runner, const
 from cbamf.test import init, bench
+
 def fit_edge_z(separation, radius=5.0, samples=100, imsize=64, sigma=0.05):
     terrors = []
     berrors = []
