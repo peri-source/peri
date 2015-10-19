@@ -15,7 +15,7 @@ def bamfpy_positions(state, sweeps=20, burn=5):
     blocks = list(itertools.chain.from_iterable([state.explode(state.block_particle_pos(i)) for i in xrange(state.N)]))
     vals = [state.state[bl] for bl in blocks]
     h = runner.sample_state(state, blocks, stepout=0.10, N=burn)
-    h = runner.sample_state(state, blocks, stepout=0.10, N=sweeps, doprint=True)
+    h = runner.sample_state(state, blocks, stepout=0.10, N=sweeps, doprint=False)
     h = h.get_histogram()
 
     for bl, val in zip(blocks, vals):
@@ -40,14 +40,14 @@ def totiff(state):
     q = initializers.normalize(state.image[p:-p, p:-p, p:-p])
     return (q*255).astype('uint8')
 
-def jiggle_particles(state, pos=None, sig=0.5, indices=None):
+def jiggle_particles(state, pos=None, sig=0.5, indices=None, mask=np.ones(3)):
     if pos is None:
         pos = state.state[state.b_pos].reshape(-1,3)
 
     if indices is None:
         indices = xrange(state.N)
 
-    noise = np.random.rand(3)*sig
+    noise = np.random.rand(3)*sig*mask
     for i, p in enumerate(indices):
         tpos = pos[i]
 
