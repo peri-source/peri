@@ -5,6 +5,7 @@ import itertools
 
 from cbamf import initializers, runner
 from cbamf.test import init, analyze, bench
+from cbamf.viz.util import COLORS
 from trackpy import locate
 
 def fit_single_particle_rad(radii, samples=100, imsize=64, sigma=0.05):
@@ -96,8 +97,8 @@ def fit_two_particle_separation(separation, radius=5.0, samples=100, imsize=64, 
 def plot_errors_single(rad, crb, errors, labels=['trackpy', 'cbamf']):
     fig = pl.figure()
     comps = ['z', 'y', 'x']
-    colors = ['r', 'g', 'b']
     markers = ['o', '^', '*']
+    colors = COLORS
 
     for i in reversed(xrange(3)):
         pl.plot(rad, crb[:,0,i], lw=2.5, label='CRB-'+comps[i], color=colors[i])
