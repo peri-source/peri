@@ -124,18 +124,27 @@ def doplot(prefix='/media/scratch/peri/pixint', snrs=[20,200,2000]):
 
         d = lambda x: x.mean(axis=1)[:,0]
 
-        pl.plot(*interp(radii, crb[:,1]), ls='-', c=c, lw=2,
-                label=r"$\rm{SNR} = %i$ CRB" % snr)
-        pl.plot(radii, d(err), 'o', c=c, ms=12, 
-                label=r"$\rm{SNR} = %i$ Error" % snr)
+        if i == 0:
+            label0 = r"$\rm{SNR} = %i$ CRB" % snr
+            label1 = r"$\rm{SNR} = %i$ Error" % snr
+        else:
+            label0 = r"$%i$, CRB" % snr
+            label1 = r"$%i$, Error" % snr
 
-        pl.semilogy()
+        pl.plot(*interp(radii, crb[:,1]), ls='-', c=c, lw=3, label=label0)
+        pl.plot(radii, d(err), 'o', ls='--', lw=0, c=c, ms=12, label=label1)
+
+        #if i == 1:
+        #    x,y = interp(radii, crb[:,1])
+        #    pl.fill_between(x, y/2-y/2/7, y/2+y/2/7, color='k', alpha=0.2)
+
+    pl.semilogy()
  
     pl.xlim(radii[0], radii[-1])
     pl.ylim(1e-5, 1e0)
     pl.xlabel(r"Radius (px)")
-    pl.ylabel(r"CRB, $\bar{\sigma}$ (px)")
+    pl.ylabel(r"Position CRB, Error (px)")
 
-    pl.legend(loc='best', prop={'size': 18}, numpoints=1)
+    pl.legend(loc='best', prop={'size': 18}, numpoints=1, ncol=3)
     pl.grid(False, which='minor', axis='both')
     pl.title("Pixel integration")
