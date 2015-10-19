@@ -239,7 +239,7 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True,
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
-            sigma=0.04, doprior=True, constoff=True,
+            sigma=0.04, doprior=False, constoff=True,
             varyn=False, allowdimers=False, nlogs=True, difference=True,
             pad=const.PAD, sigmapad=True, *args, **kwargs):
         """
