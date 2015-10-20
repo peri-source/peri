@@ -153,7 +153,7 @@ def doplot(prefix='/media/scratch/peri/brownian-motion', snrs=[20,50,200,2000]):
 
     # 80% glycerol value
     pl.vlines(0.016/25, 1e-6, 10, linestyle='-', lw=40, alpha=0.2)
-    pl.text(0.016*1.45/25, 3e-4, '80% glycerol')
+    #pl.text(0.016*1.45/25, 3e-4, '20/80 waterglycerol')
 
     # 100% water value
     #pl.vlines(0.016*75/25, 1e-6, 10)
