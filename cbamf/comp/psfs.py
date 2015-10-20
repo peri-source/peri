@@ -548,7 +548,7 @@ class GaussianMomentExpansion(PSF4D):
         self.morder = moment_order
         self.error = error
         self.zrange = float(zrange)
-        params = np.hstack([np.array(params)[:3], np.zeros(np.sum(order)), np.zeros(np.sum(moment_order))])
+        params = np.hstack([np.array(params)[:3], np.zeros(np.sum(order)), np.zeros(2*np.sum(moment_order))])
         super(GaussianMomentExpansion, self).__init__(params=params, shape=shape, *args, **kwargs)
 
     def _setup_ffts(self):
@@ -574,15 +574,41 @@ class GaussianMomentExpansion(PSF4D):
 
     @memoize()
     def _moment(self, x, z, d=0):
-        return (1+self._kurtosis(x, z, d=d))
+        return (1+self._skew(x,z,d=d)+self._kurtosis(x, z, d=d))
+
+    @memoize()
+    def _kurtosis_coeffs(self, d):
+        i0 = 3 + np.sum(self.order) + np.sum(self.morder[:d+0])
+        i1 = 3 + np.sum(self.order) + np.sum(self.morder[:d+1])
+        coeffs = self.params[i0:i1]
+        return coeffs
+
+    @memoize()
+    def _skew_coeffs(self, d):
+        o = np.sum(self.morder[:d+1])
+        i0 = 3 + np.sum(self.order) + o + np.sum(self.morder[:d+0])
+        i1 = 3 + np.sum(self.order) + o + np.sum(self.morder[:d+1])
+        coeffs = self.params[i0:i1]
+        return coeffs
+
+    @memoize()
+    def _skew(self, x, z, d=0):
+        """ returns the kurtosis parameter for direction d, d=0 is rho, d=1 is z """
+        # get the top bound determined by the kurtosis
+        kval = (np.tanh(self._poly(z, self._kurtosis_coeffs(d)))+1)/12.
+        bdpoly = np.array([-1.142468e+04, 3.0939485e+03, -2.0283568e+02, -2.1047846e+01, 3.79808487e+00, 1.19679781e-02])
+        top = np.polyval(bdpoly, kval)
+
+        # limit the skewval to be 0 -> top val
+        skew = self._poly(z, self._skew_coeffs(d))
+        skewval = np.tanh(skew + 1)/(2*top)
+
+        return skewval*(3 - 6*x**2 + x**4)
 
     @memoize()
     def _kurtosis(self, x, z, d=0):
         """ returns the kurtosis parameter for direction d, d=0 is rho, d=1 is z """
-        i0 = 3 + np.sum(self.order) + np.sum(self.morder[:d+0])
-        i1 = 3 + np.sum(self.order) + np.sum(self.morder[:d+1])
-        coeffs = self.params[i0:i1]
-        val = self._poly(z, coeffs)
+        val = self._poly(z, self._kurtosis_coeffs(d))
         return (np.tanh(val)+1)/12.*(3 - 6*x**2 + x**4)
 
     @memoize()
