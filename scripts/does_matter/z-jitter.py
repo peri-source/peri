@@ -116,7 +116,7 @@ def dorun(SNR=20, njitters=20, samples=10, noise_samples=10, sweeps=20, burn=10)
     errs = np.array(errs).reshape(shape1)
     poss = np.array(poss).reshape(shape0)
 
-    return  [crbs, vals, errs, poss, times]
+    return  [crbs, vals, errs, poss, jitters]
 
 def dist(a):
     return np.sqrt((a[...,:3]**2).sum(axis=-1)).mean(axis=-1)
@@ -125,13 +125,13 @@ def errs(val, pos):
     v,p = val, pos
     return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
 
-def doplot(prefix='/media/scratch/peri/z-jitter', snrs=[20,50,100]):
+def doplot(prefix='/media/scratch/peri/zjitter', snrs=[20,50,200,500]):
     fig = pl.figure()
 
     symbols = ['o', '^', 'D', '>']
     for i, snr in enumerate(snrs):
         c = COLORS[i]
-        fn = prefix+'-snr'+str(snr)+'.pkl'
+        fn = prefix+'-snr-'+str(snr)+'.pkl'
         crb, val, err, pos, time = pickle.load(open(fn))
 
         if i == 0:
@@ -141,23 +141,14 @@ def doplot(prefix='/media/scratch/peri/z-jitter', snrs=[20,50,100]):
             label0 = r"$%i$, CRB" % snr
             label1 = r"$%i$, Error" % snr
 
-        time /= 25.0 # a^2/D, where D=1, and a=5 (see first function)
         pl.plot(time, dist(crb), '-', c=c, lw=3, label=label0)
         pl.plot(time, errs(val, pos), symbols[i], ls='--', lw=2, c=c, label=label1, ms=12)
-
-    # 80% glycerol value
-    pl.vlines(0.016/25, 1e-6, 10, linestyle='-', lw=40, alpha=0.2)
-    #pl.text(0.016*1.45/25, 3e-4, '20/80 waterglycerol')
-
-    # 100% water value
-    #pl.vlines(0.016*75/25, 1e-6, 10)
-    #pl.text(0.016*75*2/25, 0.5, '100% water')
 
     pl.loglog()
     pl.ylim(5e-5, 1e0)
     pl.xlim(0, time[-1])
     pl.legend(loc='best', ncol=2, prop={'size': 18}, numpoints=1)
-    pl.xlabel(r"$\tau_{\rm{exposure}} / (a^2/D)$")
+    pl.xlabel(r"$z$-scan NSR")
     pl.ylabel(r"Position CRB, Error")
     pl.grid(False, which='minor', axis='both')
     pl.title("Brownian motion")
