@@ -32,7 +32,6 @@ def diffusion(diffusion_constant, exposure_time, samples=200):
     """
     radius = 5
     psfsize = np.array([2.0, 1.0, 3.0])
-    psfsize = np.array([2.0, 1.0, 3.0])/10.
 
     # create a base image of one particle
     s0 = init.create_single_particle_state(imsize=4*radius, 
