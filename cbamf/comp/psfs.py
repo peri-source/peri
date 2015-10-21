@@ -653,7 +653,7 @@ class FromArray(PSF):
         (z', z, y, x)
 
         so if there are 50 layers in the image and the psf is at most 16 wide
-        then it must be shaped (50,50,16,16). The values of the psf must
+        then it must be shaped (50,16,16,16). The values of the psf must
         be centered in this array. Hint: np.fft.fftfreq provides the correct
         ordering of values for both even and odd lattices.
         """
