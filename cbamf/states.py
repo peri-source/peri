@@ -356,6 +356,7 @@ class ConfocalImagePython(State):
         self.image_mask = (image > const.PADVAL).astype('float')
         self.image *= self.image_mask
 
+        self.inner = (np.s_[self.pad:-self.pad],)*3
         self._build_internal_variables()
         self._initialize()
 
