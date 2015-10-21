@@ -601,7 +601,7 @@ class GaussianMomentExpansion(PSF4D):
 
         # limit the skewval to be 0 -> top val
         skew = self._poly(z, self._skew_coeffs(d))
-        skewval = np.tanh(skew + 1)/(2*top)
+        skewval = top*(np.tanh(skew) + 1) - top
 
         return skewval*(3 - 6*x**2 + x**4)
 
