@@ -25,16 +25,15 @@ def set_image(state, cg, sigma):
     state.sigma = sigma
     state.reset()
 
-def missing_particle(separation=0.0, radius=RADIUS):
+def missing_particle(separation=0.0, radius=RADIUS, SNR=20):
     """ create a two particle state and compare it to featuring using a single particle guess """
     # create a base image of one particle
-    s = init.create_two_particle_state(imsize=6*radius+2*separation, axis='x',
+    s = init.create_two_particle_state(imsize=6*radius+4, axis='x', sigma=1.0/SNR,
             delta=separation, radius=radius, stateargs={'varyn': True}, psfargs={'error': 1e-6})
-    im = s.get_model_image()[s.inner]
     s.obj.typ[1] = 0.
     s.reset()
 
-    return s, im, s.obj.pos.copy()
+    return s, s.obj.pos.copy()
 
 def crb(state):
     crb = []
@@ -46,47 +45,35 @@ def crb(state):
 
     return np.squeeze(np.array(crb))
 
-def sample(state, im, noise, N=15, burn=15, sweeps=20):
-    values, errors = [], []
+def sample(state, N=15, burn=15, sweeps=20):
+    bl = state.blocks_particle(0)
+    h = runner.sample_state(state, bl, stepout=0.1, N=sweeps)
+    h = h.get_histogram()[burn:]
 
-    for i in xrange(N):
-        print i, ' ',
-        set_image(state, im, noise)
-        bl = state.blocks_particle(0)
-        h = runner.sample_state(state, bl, stepout=0.1, N=sweeps)
-
-        h = h.get_histogram()[burn:]
-        values.append(h.mean(axis=0))
-        errors.append(h.std(axis=0))
-        sys.stdout.flush()
-
-    print ''
-    return np.array(values), np.array(errors)
+    return h.mean(axis=0), h.std(axis=0)
 
 def dorun(SNR=20, separations=20, noise_samples=12, sweeps=30, burn=15):
-    """
-    we want to display the errors introduced by pixelation so we plot:
-        * CRB, sampled error vs particle separation
-
-    for various SNR values
-    """
-    seps = np.logspace(-3, np.log10(RADIUS), separations)
+    seps = np.logspace(-2, np.log10(2*RADIUS), separations)
     crbs, vals, errs, poss = [], [], [], []
 
+    np.random.seed(10)
     for i,t in enumerate(seps):
         print 'sep', i, t, '|', 
 
-        s,im,pos = missing_particle(separation=t)
-
-        set_image(s, im, 1.0/SNR)
+        s,pos = missing_particle(separation=t, SNR=SNR)
         crbs.append(crb(s))
-
-        val, err = sample(s, im, 1.0/SNR, N=noise_samples, sweeps=sweeps, burn=burn)
         poss.append(pos)
-        vals.append(val)
-        errs.append(err)
 
+        for j in xrange(noise_samples):
+            print j,
+            sys.stdout.flush()
 
+            s,pos = missing_particle(separation=t, SNR=SNR)
+            val, err = sample(s, N=noise_samples, sweeps=sweeps, burn=burn)
+            vals.append(val)
+            errs.append(err)
+
+        print ''
     shape0 = (separations,  -1)
     shape1 = (separations, noise_samples, -1)
 
@@ -102,9 +89,9 @@ def dist(a):
 
 def errs(val, pos):
     v,p = val, pos
-    return np.sqrt(((v[...,:3] - p[:,None,:3])**2).sum(axis=-1)).mean(axis=-1)
+    return np.sqrt(((v[:,:,:3] - p[:,None,:3])**2).sum(axis=-1)).mean(axis=1)
 
-def doplot(prefix='/media/scratch/peri/z-jitter', snrs=[20,50,200,500]):
+def doplot(prefix='/media/scratch/peri/missing-particle', snrs=[20,50,200]):
     fig = pl.figure()
 
     symbols = ['o', '^', 'D', '>']
@@ -124,10 +111,10 @@ def doplot(prefix='/media/scratch/peri/z-jitter', snrs=[20,50,200,500]):
         pl.plot(time, errs(val, pos), symbols[i], ls='--', lw=2, c=c, label=label1, ms=12)
 
     pl.loglog()
-    pl.ylim(5e-5, 1e0)
+    pl.ylim(5e-3, 1e0)
     pl.xlim(0, time[-1])
     pl.legend(loc='best', ncol=2, prop={'size': 18}, numpoints=1)
-    pl.xlabel(r"$z$-scan NSR")
+    pl.xlabel(r"Particle $x$-separation")
     pl.ylabel(r"Position CRB, Error")
     pl.grid(False, which='minor', axis='both')
-    pl.title(r"$z$-scan jitter")
+    pl.title(r"Missing particle effects")
