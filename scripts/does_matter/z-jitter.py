@@ -125,7 +125,7 @@ def errs(val, pos):
     v,p = val, pos
     return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
 
-def doplot(prefix='/media/scratch/peri/zjitter', snrs=[20,50,200,500]):
+def doplot(prefix='/media/scratch/peri/z-jitter', snrs=[20,50,200,500]):
     fig = pl.figure()
 
     symbols = ['o', '^', 'D', '>']
@@ -151,4 +151,4 @@ def doplot(prefix='/media/scratch/peri/zjitter', snrs=[20,50,200,500]):
     pl.xlabel(r"$z$-scan NSR")
     pl.ylabel(r"Position CRB, Error")
     pl.grid(False, which='minor', axis='both')
-    pl.title("Brownian motion")
+    pl.title(r"$z$-scan jitter")
