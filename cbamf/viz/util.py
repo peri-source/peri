@@ -6,7 +6,7 @@ rcparams = {
     'interactive': True,
     'toolbar': 'toolbar2',
     'timezone': 'UTC',
-    'lines.linewidth': 3.0,
+    'lines.linewidth': 2.3,
     # 'lines.linestyle':'-',
     # 'lines.color':'purple',
     # 'lines.marker':'None',
@@ -132,7 +132,10 @@ rcparams = {
     'keymap.grid':['g'],
     'keymap.yscale':['l'],
     'keymap.xscale':['L,k'],
-    'keymap.all_axes':['a']
+    'keymap.all_axes':['a'],
+    'savefig.dpi': 200,
+    'savefig.facecolor': 'white',
+    'savefig.edgecolor': 'white'
 }
 
 import matplotlib.pylab as pl
