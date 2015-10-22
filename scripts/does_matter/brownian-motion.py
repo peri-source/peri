@@ -9,11 +9,13 @@ from IPython.core.debugger import Tracer
 #Tracer()() / %debug after stacktrace
 
 import matplotlib.pyplot as pl
+from mpl_toolkits.axes_grid1 import ImageGrid
 
 from cbamf import const, runner, initializers
 from cbamf.test import init
 from cbamf.states import prepare_image
 from cbamf.viz.util import COLORS
+from cbamf.viz.plots import lbl
 
 def set_image(state, cg, sigma):
     image = cg + np.random.randn(*cg.shape)*sigma
@@ -130,8 +132,32 @@ def errs(val, pos):
     v,p = val, pos
     return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
 
-def doplot(prefix='/media/scratch/peri/brownian-motion', snrs=[20,50,200,500]):
-    fig = pl.figure()
+def doplot(prefix='/media/scratch/peri/does_matter/brownian-motion', snrs=[20,50,200,500]):
+    fig = pl.figure(figsize=(14,7))
+
+    ax = fig.add_axes([0.43, 0.15, 0.52, 0.75])
+    gs = ImageGrid(fig, rect=[0.05, 0.05, 0.25, 0.90], nrows_ncols=(2,1), axes_pad=0.25,
+            cbar_location='right', cbar_mode='each', cbar_size='10%', cbar_pad=0.04)
+
+    s,im,pos = diffusion(1.0, 0.1)
+    h,l = runner.do_samples(s, 30,0, quiet=True)
+    nn = np.s_[:,:,im.shape[2]/2]
+
+    figlbl, labels = ['A', 'B'], ['Reference', 'Difference']
+    diff = (im - s.get_model_image()[s.inner])[nn]
+    diffm = 0.1#np.abs(diff).max()
+    im0 = gs[0].imshow(im[nn], vmin=0, vmax=1, cmap='bone_r')
+    im1 = gs[1].imshow(diff, vmin=-diffm, vmax=diffm, cmap='RdBu')
+    cb0 = pl.colorbar(im0, cax=gs[0].cax, ticks=[0,1])
+    cb1 = pl.colorbar(im1, cax=gs[1].cax, ticks=[-diffm,diffm]) 
+    cb0.ax.set_yticklabels(['0', '1'])
+    cb1.ax.set_yticklabels(['-%0.1f' % diffm, '%0.1f' % diffm])
+
+    for i in xrange(2):
+        gs[i].set_xticks([])
+        gs[i].set_yticks([])
+        gs[i].set_ylabel(labels[i])
+        #lbl(gs[i], figlbl[i])
 
     symbols = ['o', '^', 'D', '>']
     for i, snr in enumerate(snrs):
@@ -147,22 +173,22 @@ def doplot(prefix='/media/scratch/peri/brownian-motion', snrs=[20,50,200,500]):
             label1 = r"$%i$, Error" % snr
 
         time /= 25.0 # a^2/D, where D=1, and a=5 (see first function)
-        pl.plot(time, dist(crb), '-', c=c, lw=3, label=label0)
-        pl.plot(time, errs(val, pos), symbols[i], ls='--', lw=2, c=c, label=label1, ms=12)
+        ax.plot(time, dist(crb), '-', c=c, lw=3, label=label0)
+        ax.plot(time, errs(val, pos), symbols[i], ls='--', lw=2, c=c, label=label1, ms=12)
 
     # 80% glycerol value
-    pl.vlines(0.016/25, 1e-6, 10, linestyle='-', lw=40, alpha=0.2)
+    ax.vlines(0.016/25, 1e-6, 10, linestyle='-', lw=40, alpha=0.2)
     #pl.text(0.016*1.45/25, 3e-4, '20/80 waterglycerol')
 
     # 100% water value
     #pl.vlines(0.016*75/25, 1e-6, 10)
     #pl.text(0.016*75*2/25, 0.5, '100% water')
 
-    pl.loglog()
-    pl.ylim(5e-5, 1e0)
-    pl.xlim(0, time[-1])
-    pl.legend(loc='best', ncol=2, prop={'size': 18}, numpoints=1)
-    pl.xlabel(r"$\tau_{\rm{exposure}} / (a^2/D)$")
-    pl.ylabel(r"Position CRB, Error")
-    pl.grid(False, which='minor', axis='both')
-    pl.title("Brownian motion")
+    ax.loglog()
+    ax.set_ylim(1e-4, 1e0)
+    ax.set_xlim(0, time[-1])
+    ax.legend(loc='best', ncol=2, prop={'size': 18}, numpoints=1)
+    ax.set_xlabel(r"$\tau_{\rm{exposure}} / (a^2/D)$")
+    ax.set_ylabel(r"Position CRB, Error")
+    ax.grid(False, which='both', axis='both')
+    ax.set_title("Brownian motion")

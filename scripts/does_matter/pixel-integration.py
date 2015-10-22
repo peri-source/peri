@@ -5,11 +5,13 @@ import scipy.ndimage as nd
 import scipy.interpolate as intr
 
 import matplotlib.pyplot as pl
+from mpl_toolkits.axes_grid1 import ImageGrid
 
 from cbamf import const, runner
 from cbamf.test import init
 from cbamf.states import prepare_image
 from cbamf.viz.util import COLORS
+from cbamf.viz.plots import lbl
 
 def set_image(state, cg, sigma):
     image = cg + np.random.randn(*cg.shape)*sigma
@@ -110,8 +112,31 @@ def dorun(SNR=20, sweeps=20, burn=8, noise_samples=10):
 
     return np.array(crbs), np.array(vals), np.array(errs), radii
 
-def doplot(prefix='/media/scratch/peri/pixint', snrs=[20,200,2000]):
-    fig = pl.figure()
+def doplot(prefix='/media/scratch/peri/does_matter/pixint', snrs=[20,200,2000]):
+    fig = pl.figure(figsize=(14,7))
+
+    ax = fig.add_axes([0.43, 0.15, 0.52, 0.75])
+    gs = ImageGrid(fig, rect=[0.05, 0.05, 0.25, 0.90], nrows_ncols=(2,1), axes_pad=0.25,
+            cbar_location='right', cbar_mode='each', cbar_size='10%', cbar_pad=0.04)
+
+    s,im = pxint(radius=8, factor=8, dx=np.array([0,0,0]))
+    nn = np.s_[:,:,im.shape[2]/2]
+
+    figlbl, labels = ['A', 'B'], ['Reference', 'Difference']
+    diff = (im - s.get_model_image()[s.inner])[nn]
+    diffm = 0.1#np.abs(diff).max()
+    im0 = gs[0].imshow(im[nn], vmin=0, vmax=1, cmap='bone_r')
+    im1 = gs[1].imshow(diff, vmin=-diffm, vmax=diffm, cmap='RdBu')
+    cb0 = pl.colorbar(im0, cax=gs[0].cax, ticks=[0,1])
+    cb1 = pl.colorbar(im1, cax=gs[1].cax, ticks=[-diffm,diffm]) 
+    cb0.ax.set_yticklabels(['0', '1'])
+    cb1.ax.set_yticklabels(['-%0.1f' % diffm, '%0.1f' % diffm])
+
+    for i in xrange(2):
+        gs[i].set_xticks([])
+        gs[i].set_yticks([])
+        gs[i].set_ylabel(labels[i])
+        #lbl(gs[i], figlbl[i])
 
     def interp(t, c):
         x = np.linspace(t[0], t[-1], 1000)
@@ -131,20 +156,20 @@ def doplot(prefix='/media/scratch/peri/pixint', snrs=[20,200,2000]):
             label0 = r"$%i$, CRB" % snr
             label1 = r"$%i$, Error" % snr
 
-        pl.plot(*interp(radii, crb[:,1]), ls='-', c=c, lw=3, label=label0)
-        pl.plot(radii, d(err), 'o', ls='--', lw=0, c=c, ms=12, label=label1)
+        ax.plot(*interp(radii, crb[:,1]), ls='-', c=c, lw=3, label=label0)
+        ax.plot(radii, d(err), 'o', ls='--', lw=0, c=c, ms=12, label=label1)
 
         #if i == 1:
         #    x,y = interp(radii, crb[:,1])
         #    pl.fill_between(x, y/2-y/2/7, y/2+y/2/7, color='k', alpha=0.2)
 
-    pl.semilogy()
+    ax.semilogy()
  
-    pl.xlim(radii[0], radii[-1])
-    pl.ylim(1e-5, 1e0)
-    pl.xlabel(r"Radius (px)")
-    pl.ylabel(r"Position CRB, Error (px)")
+    ax.set_xlim(radii[0], radii[-1])
+    ax.set_ylim(1e-5, 1e0)
+    ax.set_xlabel(r"Particle radius (px)")
+    ax.set_ylabel(r"Position CRB, Error (px)")
 
-    pl.legend(loc='best', prop={'size': 18}, numpoints=1, ncol=3)
-    pl.grid(False, which='minor', axis='both')
-    pl.title("Pixel integration")
+    ax.legend(loc='best', numpoints=1, ncol=3, prop={'size': 16})
+    ax.grid(False, which='both', axis='both')
+    ax.set_title("Pixel integration")

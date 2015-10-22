@@ -128,25 +128,30 @@ def errs(val, pos):
     return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
 
 def doplot(prefix='/media/scratch/peri/does_matter/z-jitter', snrs=[20,50,200,500]):
-    fig = pl.figure(figsize=(10,10))
+    fig = pl.figure(figsize=(14,7))
 
-    ax = fig.add_axes([0.15, 0.10, 0.80, 0.48])
-    gs = ImageGrid(fig, rect=[0.05, 0.63, 0.90, 0.35], nrows_ncols=(1,3), axes_pad=0.05)
+    ax = fig.add_axes([0.43, 0.15, 0.52, 0.75])
+    gs = ImageGrid(fig, rect=[0.05, 0.05, 0.25, 0.90], nrows_ncols=(2,1), axes_pad=0.25,
+            cbar_location='right', cbar_mode='each', cbar_size='10%', cbar_pad=0.04)
 
-    s,im,pos = zjitter(jitter=0.3, radius=5)
+    s,im,pos = zjitter(jitter=0.1, radius=5)
     nn = np.s_[:,:,im.shape[2]/2]
-    args = {'cmap': 'bone_r', 'vmin': 0, 'vmax': 1}
-    figlbl = ['A', 'B', 'C']
-    labels = ['Reference', 'Model', 'Difference']
-    gs[0].imshow(im[nn], **args)
-    gs[1].imshow(s.get_model_image()[s.inner][nn], **args)
-    gs[2].imshow((im-s.get_model_image()[s.inner])[nn], **args)
 
-    for i in xrange(3):
+    figlbl, labels = ['A', 'B'], ['Reference', 'Difference']
+    diff = (im - s.get_model_image()[s.inner])[nn]
+    diffm = 0.1#np.abs(diff).max()
+    im0 = gs[0].imshow(im[nn], vmin=0, vmax=1, cmap='bone_r')
+    im1 = gs[1].imshow(diff, vmin=-diffm, vmax=diffm, cmap='RdBu')
+    cb0 = pl.colorbar(im0, cax=gs[0].cax, ticks=[0,1])
+    cb1 = pl.colorbar(im1, cax=gs[1].cax, ticks=[-diffm,diffm]) 
+    cb0.ax.set_yticklabels(['0', '1'])
+    cb1.ax.set_yticklabels(['-%0.1f' % diffm, '%0.1f' % diffm])
+
+    for i in xrange(2):
         gs[i].set_xticks([])
         gs[i].set_yticks([])
-        gs[i].set_xlabel(labels[i])
-        lbl(gs[i], figlbl[i])
+        gs[i].set_ylabel(labels[i])
+        #lbl(gs[i], figlbl[i])
 
     symbols = ['o', '^', 'D', '>']
     for i, snr in enumerate(snrs):
@@ -172,4 +177,4 @@ def doplot(prefix='/media/scratch/peri/does_matter/z-jitter', snrs=[20,50,200,50
     ax.set_xlabel(r"$z$-scan NSR")
     ax.set_ylabel(r"Position CRB, Error")
     ax.grid(False, which='both', axis='both')
-    gs[1].set_title(r"$z$-scan jitter")
+    ax.set_title(r"$z$-scan jitter")
