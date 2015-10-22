@@ -9,11 +9,13 @@ from IPython.core.debugger import Tracer
 #Tracer()() / %debug after stacktrace
 
 import matplotlib.pyplot as pl
+from mpl_toolkits.axes_grid1 import ImageGrid
 
 from cbamf import const, runner, initializers
 from cbamf.test import init
 from cbamf.states import prepare_image
 from cbamf.viz.util import COLORS
+from cbamf.viz.plots import lbl
 
 def set_image(state, cg, sigma):
     image = cg + np.random.randn(*cg.shape)*sigma
@@ -125,8 +127,26 @@ def errs(val, pos):
     v,p = val, pos
     return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
 
-def doplot(prefix='/media/scratch/peri/z-jitter', snrs=[20,50,200,500]):
-    fig = pl.figure()
+def doplot(prefix='/media/scratch/peri/does_matter/z-jitter', snrs=[20,50,200,500]):
+    fig = pl.figure(figsize=(10,10))
+
+    ax = fig.add_axes([0.15, 0.10, 0.80, 0.48])
+    gs = ImageGrid(fig, rect=[0.05, 0.63, 0.90, 0.35], nrows_ncols=(1,3), axes_pad=0.05)
+
+    s,im,pos = zjitter(jitter=0.3, radius=5)
+    nn = np.s_[:,:,im.shape[2]/2]
+    args = {'cmap': 'bone_r', 'vmin': 0, 'vmax': 1}
+    figlbl = ['A', 'B', 'C']
+    labels = ['Reference', 'Model', 'Difference']
+    gs[0].imshow(im[nn], **args)
+    gs[1].imshow(s.get_model_image()[s.inner][nn], **args)
+    gs[2].imshow((im-s.get_model_image()[s.inner])[nn], **args)
+
+    for i in xrange(3):
+        gs[i].set_xticks([])
+        gs[i].set_yticks([])
+        gs[i].set_xlabel(labels[i])
+        lbl(gs[i], figlbl[i])
 
     symbols = ['o', '^', 'D', '>']
     for i, snr in enumerate(snrs):
@@ -141,14 +161,15 @@ def doplot(prefix='/media/scratch/peri/z-jitter', snrs=[20,50,200,500]):
             label0 = r"$%i$, CRB" % snr
             label1 = r"$%i$, Error" % snr
 
-        pl.plot(time, dist(crb), '-', c=c, lw=3, label=label0)
-        pl.plot(time, errs(val, pos), symbols[i], ls='--', lw=2, c=c, label=label1, ms=12)
+        ax.plot(time, dist(crb), '-', c=c, lw=3, label=label0)
+        ax.plot(time, errs(val, pos), symbols[i], ls='--', lw=2, c=c, label=label1, ms=12)
 
-    pl.loglog()
-    pl.ylim(5e-5, 1e0)
-    pl.xlim(0, time[-1])
-    pl.legend(loc='best', ncol=2, prop={'size': 18}, numpoints=1)
-    pl.xlabel(r"$z$-scan NSR")
-    pl.ylabel(r"Position CRB, Error")
-    pl.grid(False, which='minor', axis='both')
-    pl.title(r"$z$-scan jitter")
+    lbl(ax, 'D')
+    ax.loglog()
+    ax.set_ylim(1e-4, 1e0)
+    ax.set_xlim(0, time[-1])
+    ax.legend(loc='best', ncol=2, prop={'size': 18}, numpoints=1)
+    ax.set_xlabel(r"$z$-scan NSR")
+    ax.set_ylabel(r"Position CRB, Error")
+    ax.grid(False, which='both', axis='both')
+    gs[1].set_title(r"$z$-scan jitter")
