@@ -5,25 +5,39 @@ import scipy.ndimage as nd
 from scipy.special import j1, erf
 from scipy.optimize import leastsq
 
-def score(param, r0, fsphere):
+discs = [0]*10
+discs[0] = lambda k,R: 2*R*np.sin(k)/k
+discs[1] = lambda k,R: 2*np.pi*R**2 * j1(k)/k
+discs[2] = lambda k,R: 4*np.pi*R**3 * (np.sin(k)/k - np.cos(k))/k**2
+
+methods = [0]*10
+methods[0] = lambda r, r0, alpha: 1.0 / (1.0 + np.exp(alpha*(r - r0)))
+methods[1] = lambda r, r0, alpha: (np.arctan(alpha*(r0-r))/(np.pi/2) + 1)/2
+methods[2] = lambda r, r0, alpha: (alpha*(r0-r) / np.sqrt(1 + (alpha*(r-r0))**2) + 1)/2
+methods[3] = lambda r, r0, alpha: (erf(alpha*(r0-r))+1)/2
+methods[4] = lambda r, r0, alpha: 1-np.clip((r-(r0-alpha)) / (2*alpha), 0, 1)
+methods[5] = lambda r, r0, alpha: 1-np.clip((r-r0+alpha)**2/(2*alpha**2)*(r0 > r)*(r>r0-alpha) + 1*(r>r0)-(r0+alpha-r)**2/(2*alpha**2)*(r0<r)*(r<r0+alpha), 0,1)
+
+def score(param, r0, fsphere, method, sigma):
     alpha = param[0]
     N = fsphere.shape[0]
 
-    sph = rspace_sphere(N, r0, alpha=alpha)
+    sph = rspace_sphere(N, r0, alpha=alpha, method=method, sigma=sigma)
     return (sph - fsphere).ravel()
 
-def fit(N=32, radius=5.0, fourier_space=False):
+def fit(N=32, radius=5.0, fourier_space=False, method=0, sigma=2.0):
 
     if fourier_space:
-        fsphere = kspace_sphere(N, radius)
+        fsphere = kspace_sphere(N, radius, sigma=sigma)
     else:
-        fsphere = rspace_cut(N, radius)
+        fsphere = rspace_cut(N, radius, sigma=sigma)
 
-    out, call = leastsq(score, x0=np.array([2]), args=(radius, fsphere), xtol=1e-6, ftol=1e-9)
+    out, call = leastsq(score, x0=np.array([2]), xtol=1e-14, ftol=1e-14,
+                        args=(radius, fsphere, method, sigma))
     
-    sc = score(out, radius, fsphere)
+    sc = score(out, radius, fsphere, method, sigma)
     print (sc**2).mean(), sc.ptp()
-    return out[0]#, fsphere, rspace_sphere(N, radius, 6.8)
+    return out[0], (sc**2).mean()#, fsphere, rspace_sphere(N, radius, 6.8)
 
 def psf(field, sigma=2.0):
     return nd.gaussian_filter(field, sigma)
@@ -50,35 +64,68 @@ def rspace_cut(N, r0, factor=8, sigma=2.0):
     cg = nd.mean(im, labels=ind, index=np.unique(ind)).reshape(N/f, N/f, N/f)
     return cg
 
-def rspace_sphere(N, r0, alpha=5., sigma=2.0, method=0):
+def rspace_sphere(N, r0, alpha=5., sigma=2.0, method=0, dx=None):
     l = np.linspace(-N/2,N/2,N,endpoint=False)
     x,y,z = np.meshgrid(*(l,)*3, indexing='ij')
+
+    if dx is not None:
+        x += dx[0]
+        y += dx[1]
+        z += dx[2]
+
     r = np.sqrt(x**2 + y**2 + z**2)
-
-    methods = [0]*10
-    methods[0] = lambda r, r0, alpha: 1.0 / (1.0 + np.exp(alpha*(r - r0)))
-    methods[1] = lambda r, r0, alpha: (np.arctan(alpha*(r0-r))/(np.pi/2) + 1)/2
-    methods[2] = lambda r, r0, alpha: (np.tanh(alpha*(r0-r))+1)/2
-    methods[3] = lambda r, r0, alpha: (r0-r) / np.sqrt(1 + (r-r0)**2)
-    methods[4] = lambda r, r0, alpha: (erf(alpha*(r0-r))+1)/2
-
     sph = methods[method](r, r0, alpha)
     return psf(sph, sigma)
 
-def kspace_sphere(N, r0, sigma=2.0):
+def kspace_sphere(N, r0, sigma=2.0, dx=None):
     M = N/2
     p0 = np.array([M,M,M])
+
+    if dx is not None:
+        p0 += dx
 
     f = 2*np.pi*np.fft.fftfreq(N)
     kx,ky,kz = np.meshgrid(*(f,)*3, indexing='ij')
     kv = np.array(np.broadcast_arrays(kx,ky,kz)).T
     k = np.sqrt(kx**2 + ky**2 + kz**2)
 
-    disc1 = lambda k,R: 2*R*np.sin(k)/k
-    disc2 = lambda k,R: 2*np.pi*R**2 * j1(k)/k
-    disc3 = lambda k,R: 4*np.pi*R**3 * (np.sin(k)/k - np.cos(k))/k**2
-
-    q = disc3(r0*k+1e-5, r0)*np.exp(-1.j*(kv*p0).sum(axis=-1)).T
+    q = discs[2](r0*k+1e-5, r0)*np.exp(-1.j*(kv*p0).sum(axis=-1)).T
     sph = np.real(np.fft.ifftn(q))
     return psf(sph, sigma)
 
+def gogogo():
+    fits, errs = [], []
+    for method in xrange(6):
+        print method
+        do, de = [], []
+        for rad in np.linspace(2.0, 10.0, 40):
+            o,e = fit(N=32, radius=rad, fourier_space=True, method=method, sigma=0.0)
+            do.append(o)
+            de.append(e)
+        fits.append(do)
+        errs.append(de)
+
+    fits, errs = [np.array(i) for i in [fits, errs]]
+
+    pl.figure()
+    pl.title("Fit value")
+    for i,q in enumerate(fits):
+        pl.plot(q, 'o-', label=str(i))
+    pl.semilogy()
+    pl.legend()
+
+    pl.figure()
+    pl.title("MSE")
+    for i,q in enumerate(errs):
+        pl.plot(q, 'o-', label=str(i))
+    pl.semilogy()
+    pl.legend()
+
+    pl.figure()
+    pl.title("MSE normed")
+    for i,q in enumerate(errs):
+        pl.plot(q/errs[-1], 'o-', label=str(i))
+    pl.semilogy()
+    pl.legend()
+
+    return fits, errs
