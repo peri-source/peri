@@ -1,7 +1,7 @@
 import numpy as np
 
 from cbamf.comp.psfs import FromArray
-N = 16
+N = 17
 
 # get the proper r-vector from fftshift
 r = N*np.fft.fftfreq(N)
@@ -11,7 +11,7 @@ f = (rr==0.).astype('float')
 
 # create the centered PSF using FromArray
 ff = np.fft.fftshift(f)
-psf = np.array([ff for i in xrange(16)])
+psf = np.array([ff for i in xrange(N)])
 a = FromArray(psf, shape=(N,)*3)
 
 # create a blank array to test shift on
