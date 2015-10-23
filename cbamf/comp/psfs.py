@@ -678,7 +678,7 @@ class FromArray(PSF):
 
         pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
         rpsf = np.pad(field, pad, mode='constant', constant_values=0)
-        rpsf = np.fft.fftshift(rpsf)
+        rpsf = np.fft.ifftshift(rpsf)
         kpsf = np.fft.fftn(rpsf)
         kpsf /= (np.real(kpsf[0,0,0]) + 1e-15)
         return kpsf
