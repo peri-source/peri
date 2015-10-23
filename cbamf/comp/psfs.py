@@ -603,7 +603,7 @@ class GaussianMomentExpansion(PSF4D):
         skew = self._poly(z, self._skew_coeffs(d))
         skewval = top*(np.tanh(skew) + 1) - top
 
-        return skewval*(3 - 6*x**2 + x**4)
+        return skewval*(3*x - x**3)
 
     @memoize()
     def _kurtosis(self, x, z, d=0):
