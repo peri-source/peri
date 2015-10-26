@@ -2,7 +2,8 @@ import numpy as np
 from cbamf.util import Tile, cdd, amin, amax
 
 class SphereCollectionRealSpace(object):
-    def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None, method='lerp'):
+    def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None,
+                 method='lerp', alpha=None):
         """
         method can be one of ['lerp', 'logistic', 'triangle']
         """
@@ -10,7 +11,11 @@ class SphereCollectionRealSpace(object):
         self.pos = pos.astype('float')
         self.rad = rad.astype('float')
         self.N = rad.shape[0]
+
+        # set the aliasing method and coefficient
+        self.alpha_defaults = {'lerp': 0.4539, 'logistic': 6.5, 'triangle': 0.6618}
         self.method = method
+        self.alpha = alpha if alpha is not None else alpha_defaults[self.method]
 
         if typ is None:
             self.typ = np.ones(self.N)
@@ -41,26 +46,29 @@ class SphereCollectionRealSpace(object):
         rdist = np.sqrt((rvec**2).sum(axis=-1))
 
         # keep backwards compatibility for save files with older logistic coefficient
+        # FIXME -- this is a nasty hack which should be fazed out when older save
+        # files are deleted
         if not hasattr(self, 'method'):
             self.method = 'logistic'
-            lalpha = 5.0
-        else:
-            lalpha = 6.5
+            self.alpha = 5.0
+        if not hasattr(self, 'alpha'):
+            self.alpha_defaults = {'lerp': 0.4539, 'logistic': 6.5, 'triangle': 0.6618}
+            self.alpha = self.alpha_defaults[self.method]
 
+        # calculate the anti-aliasing according to the interpolation type
         if self.method == 'lerp':
             # lerp the pixel values over a range very close to one pixel.  from
             # fits to the fourier-space sphere, we find slightly less than a pixel
             # as given by the value alpha
-            alpha = 0.4539
-            t = sign*(1-np.clip((rdist-(rad-alpha)) / (2*alpha), 0, 1))
+            t = sign*(1-np.clip((rdist-(rad-self.alpha)) / (2*self.alpha), 0, 1))
 
         if self.method == 'logistic':
             # logistic interpolation of pixel edges, with a fix parameter of 6.5 (see above)
-            t = sign/(1.0 + np.exp(lalpha*(rdist - rad)))
+            t = sign/(1.0 + np.exp(self.alpha*(rdist - rad)))
 
         if self.method == 'triangle':
             # triangle CDF interpolation of pixel edges
-            alpha = 0.6618
+            alpha = self.alpha
             p0 = (rdist-rad+alpha)**2/(2*alpha**2)*(rad > rdist)*(rdist>rad-alpha) 
             p1 = 1*(rdist>rad)-(rad+alpha-rdist)**2/(2*alpha**2)*(rad<rdist)*(rdist<rad+alpha)
             t = sign*(1-np.clip(p0+p1, 0, 1))
