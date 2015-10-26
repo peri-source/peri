@@ -15,7 +15,7 @@ class SphereCollectionRealSpace(object):
         # set the aliasing method and coefficient
         self.alpha_defaults = {'lerp': 0.4539, 'logistic': 6.5, 'triangle': 0.6618}
         self.method = method
-        self.alpha = alpha if alpha is not None else alpha_defaults[self.method]
+        self.alpha = alpha if alpha is not None else self.alpha_defaults[self.method]
 
         if typ is None:
             self.typ = np.ones(self.N)
