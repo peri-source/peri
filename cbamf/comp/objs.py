@@ -2,11 +2,15 @@ import numpy as np
 from cbamf.util import Tile, cdd, amin, amax
 
 class SphereCollectionRealSpace(object):
-    def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None):
+    def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None, method='lerp'):
+        """
+        method can be one of ['lerp', 'logistic', 'triangle']
+        """
         self.support_size = support_size
         self.pos = pos.astype('float')
         self.rad = rad.astype('float')
         self.N = rad.shape[0]
+        self.method = method
 
         if typ is None:
             self.typ = np.ones(self.N)
@@ -33,13 +37,34 @@ class SphereCollectionRealSpace(object):
         rvec = (subr - pos)
 
         # apply the zscale and find the distances to make a ellipsoid
-        # note: the appearance of PI in the last line is because of leastsq
-        # fits to the correct Fourier version of the sphere, j_{3/2} / r^{3/2}
-        # happened to fit right at pi -- what?!
         rvec[...,0] *= zscale
         rdist = np.sqrt((rvec**2).sum(axis=-1))
 
-        t = sign/(1.0 + np.exp(5.0*(rdist - rad)))
+        # keep backwards compatibility for save files with older logistic coefficient
+        if not hasattr(self, 'method'):
+            self.method = 'logistic'
+            lalpha = 5.0
+        else:
+            lalpha = 6.5
+
+        if self.method == 'lerp':
+            # lerp the pixel values over a range very close to one pixel.  from
+            # fits to the fourier-space sphere, we find slightly less than a pixel
+            # as given by the value alpha
+            alpha = 0.4539
+            t = sign*(1-np.clip((rdist-(rad-alpha)) / (2*alpha), 0, 1))
+
+        if self.method == 'logistic':
+            # logistic interpolation of pixel edges, with a fix parameter of 6.5 (see above)
+            t = sign/(1.0 + np.exp(lalpha*(rdist - rad)))
+
+        if self.method == 'triangle':
+            # triangle CDF interpolation of pixel edges
+            alpha = 0.6618
+            p0 = (rdist-rad+alpha)**2/(2*alpha**2)*(rad > rdist)*(rdist>rad-alpha) 
+            p1 = 1*(rdist>rad)-(rad+alpha-rdist)**2/(2*alpha**2)*(rad<rdist)*(rdist<rad+alpha)
+            t = sign*(1-np.clip(p0+p1, 0, 1))
+
         self.particles[tile.slicer] += t
 
         if dodiff:
