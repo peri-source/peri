@@ -13,15 +13,16 @@ discs[0] = lambda k,R: 2*R*np.sin(k)/k
 discs[1] = lambda k,R: 2*np.pi*R**2 * j1(k)/k
 discs[2] = lambda k,R: 4*np.pi*R**3 * (np.sin(k)/k - np.cos(k))/k**2
 
-methods = [0]*6
+methods = [0]*7
 methods[0] = lambda r, r0, alpha: 1.0 / (1.0 + np.exp(alpha*(r - r0)))
 methods[1] = lambda r, r0, alpha: (np.arctan(alpha*(r0-r))/(np.pi/2) + 1)/2
 methods[2] = lambda r, r0, alpha: (alpha*(r0-r) / np.sqrt(1 + (alpha*(r-r0))**2) + 1)/2
 methods[3] = lambda r, r0, alpha: (erf(alpha*(r0-r))+1)/2
 methods[4] = lambda r, r0, alpha: 1-np.clip((r-(r0-alpha)) / (2*alpha), 0, 1)
 methods[5] = lambda r, r0, alpha: 1-np.clip((r-r0+alpha)**2/(2*alpha**2)*(r0 > r)*(r>r0-alpha) + 1*(r>r0)-(r0+alpha-r)**2/(2*alpha**2)*(r0<r)*(r<r0+alpha), 0,1)
+methods[6] = lambda r, r0, alpha: alpha*methods[4](r,r0,0.453) + (1-alpha)*methods[5](r,r0,0.6618)
 
-mlabels = ['logistic', 'arctan', 'poly', 'erf', 'linear', 'triangle']
+mlabels = ['logistic', 'arctan', 'poly', 'erf', 'linear', 'triangle', 'combo']
 
 def score(param, r0, fsphere, method, sigma, dx=None):
     alpha = param[0]
@@ -111,12 +112,12 @@ def gogogo():
     fits, errs = [], []
     rads = np.linspace(2.0, 10.0, 20)
 
-    for method in xrange(6):
+    for i,method in enumerate(mlabels):
         print method
         do, de = [], []
         for rad in rads:
             print 'rad', rad
-            o,e = fit(N=32, radius=rad, fourier_space=True, method=method,
+            o,e = fit(N=32, radius=rad, fourier_space=True, method=i,
                       sigma=0.0, samples=30)
             do.append(o)
             de.append(e)
