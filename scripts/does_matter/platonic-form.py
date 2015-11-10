@@ -108,29 +108,33 @@ def translate_fourier(image, dx):
     return np.real(np.fft.ifftn(q))
 
 def create_many_platonics(radius=5.0, scale=101, N=50):
-    N = int(4*radius)
+    size = int(4*radius)
 
     platonics = []
     for i in xrange(N):
-        goal = np.array([(N-1.0)/2]*3) + 2*np.random.rand(3)-1
-        im, pos = perfect_platonic_per_pixel(N=N, R=radius, scale=scale, pos=goal)
+        goal = np.array([(size-1.0)/2]*3) + 2*np.random.rand(3)-1
+        im, pos = perfect_platonic_per_pixel(N=size, R=radius, scale=scale, pos=goal)
 
         print i, goal, '=>', pos
         platonics.append((im, pos))
         pickle.dump(platonics, open('/tmp/platonics.pkl', 'w'))
     return platonics
 
-def create_comparison_state(image, position, radius=5.0, snr=20):
+def create_comparison_state(image, position, radius=5.0, snr=20, method='constrained-cubic'):
     """
     Take a platonic image and position and create a state which we can
-    use to sample the error for peri
+    use to sample the error for peri. Also return the blurred platonic
+    image so we can vary the noise on it later
     """
     # place that into a new image at the expected parameters
-    s = init.create_single_particle_state(imsize=image.shape, sigma=1.0/snr,
-            radius=radius, psfargs={'params': np.array([2.0, 1.0, 3.0]), 'error': 1e-6})
-    s.obj.pos[0] = position
-    s.set_image(s.psf.execute(image))
-    return s
+    s = init.create_single_particle_state(imsize=np.array(image.shape), sigma=1.0/snr,
+            radius=radius, psfargs={'params': np.array([2.0, 1.0, 3.0]), 'error': 1e-6},
+            objargs={'method': method})
+    s.obj.pos[0] = position + s.pad
+
+    timage = 1-np.pad(image, const.PAD, mode='constant', constant_values=0)
+    timage = s.psf.execute(timage)
+    return s, timage[s.inner]
 
 def crb(state):
     crb = []
@@ -157,42 +161,40 @@ def sample(state, im, noise, N=10, burn=10, sweeps=20):
     print ''
     return np.array(values), np.array(errors)
 
-def dorun(SNR=20, njitters=20, samples=10, noise_samples=10, sweeps=20, burn=10):
+def dorun(method, platonics=None, nsnrs=20, noise_samples=30, sweeps=20, burn=10):
     """
-    we want to display the errors introduced by pixelation so we plot:
-        * CRB, sampled error vs exposure time
-
-    a = dorun(ntimes=10, samples=5, noise_samples=5, sweeps=20, burn=8)
+    platonics = create_many_platonics(N=50)
+    dorun(platonics)
     """
-    jitters = np.logspace(-6, np.log10(0.5), njitters)
+    sigmas = np.logspace(np.log10(1.0/2048), 0, nsnrs)
     crbs, vals, errs, poss = [], [], [], []
 
-    for i,t in enumerate(jitters):
-        print '###### jitter', i, t
+    for sigma in sigmas:
+        print "#### sigma:", sigma
 
-        for j in xrange(samples):
-            print 'image', j, '|', 
-            s,im,pos = zjitter(jitter=t)
+        for i, (image, pos) in enumerate(platonics):
+            print 'image', i, '|', 
+            s,im = create_comparison_state(image, pos, method=method)
 
             # typical image
-            set_image(s, im, 1.0/SNR)
+            set_image(s, im, sigma)
             crbs.append(crb(s))
 
-            val, err = sample(s, im, 1.0/SNR, N=noise_samples, sweeps=sweeps, burn=burn)
+            val, err = sample(s, im, sigma, N=noise_samples, sweeps=sweeps, burn=burn)
             poss.append(pos)
             vals.append(val)
             errs.append(err)
 
 
-    shape0 = (njitters, samples, -1)
-    shape1 = (njitters, samples, noise_samples, -1)
+    shape0 = (nsnrs, len(platonics), -1)
+    shape1 = (nsnrs, len(platonics), noise_samples, -1)
 
     crbs = np.array(crbs).reshape(shape0)
     vals = np.array(vals).reshape(shape1)
     errs = np.array(errs).reshape(shape1)
     poss = np.array(poss).reshape(shape0)
 
-    return  [crbs, vals, errs, poss, jitters]
+    return  [crbs, vals, errs, poss, sigmas]
 
 def dist(a):
     return np.sqrt((a[...,:3]**2).sum(axis=-1)).mean(axis=-1)
