@@ -139,5 +139,8 @@ rcparams = {
     'savefig.edgecolor': 'white'
 }
 
-import matplotlib.pylab as pl
-pl.rcParams.update(rcparams)
+try:
+    import matplotlib.pylab as pl
+    pl.rcParams.update(rcparams)
+except ImportError as e:
+    pass
