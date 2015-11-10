@@ -53,26 +53,32 @@ def perfect_platonic_per_pixel(N, R, scale=11, pos=None):
     let's only allow those types of shifts for now, but return the actual position
     used for the placement.
     """
-    if pos is None:
-        # enforce the position to be on the pixel
-        pos = np.array([int(N/2)*2]*3)/2.0
-
+    # enforce odd scale size
     if scale % 2 != 1:
         scale += 1
 
-    pos_pix = pos.astype('int')
-    pos_ext = pos - pos_pix
+    if pos is None:
+        # place the default position in the center of the grid
+        pos = np.array([(N-1)/2.0]*3)
 
-    pos_pix += 1e-6
+    # limit positions to those that are exact on the size 1./scale
+    # positions have the form (d = divisions):
+    #   p = N + m/d
+    s = 1.0/scale
+
+    i = pos.astype('int')
+    p = i + s*((pos - i)/s).astype('int')
+    pos = p + 1e-10 # unfortunately needed to break ties
+
+    # make the output arrays
     image = np.zeros((N,)*3)
     x,y,z = np.meshgrid(*(xrange(N),)*3, indexing='ij')
-    s = 1.0/(scale+1)
 
     # for each real pixel in the image, integrate a bunch of superres pixels
     for x0,y0,z0 in zip(x.flatten(),y.flatten(),z.flatten()):
 
         # short-circuit things that are just too far away!
-        ddd = np.sqrt((x0-pos_pix[0])**2 + (y0-pos_pix[1])**2 + (z0-pos_pix[2])**2)
+        ddd = np.sqrt((x0-pos[0])**2 + (y0-pos[1])**2 + (z0-pos[2])**2)
         if ddd > R + 2:
             image[x0,y0,z0] = 0.0
             continue
@@ -82,14 +88,14 @@ def perfect_platonic_per_pixel(N, R, scale=11, pos=None):
             *(np.linspace(i-0.5+s/2, i+0.5-s/2, scale, endpoint=True) for i in (x0,y0,z0)),
             indexing='ij'
         )
-        ddd = np.sqrt((xp-pos_pix[0])**2 + (yp-pos_pix[1])**2 + (zp-pos_pix[2])**2)
+        ddd = np.sqrt((xp-pos[0])**2 + (yp-pos[1])**2 + (zp-pos[2])**2)
         vol = (1.0*(ddd < R) + 0.0*(ddd == R)).sum()
         image[x0,y0,z0] = vol / float(scale**3)
 
     vol_true = 4./3*np.pi*R**3
     vol_real = image.sum()
     print vol_true, vol_real, (vol_true - vol_real)/vol_true
-    return image
+    return image, pos
 
 def translate_fourier(image, dx):
     """ Translate an image in fourier-space with plane waves """
