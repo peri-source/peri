@@ -5,8 +5,6 @@ import pickle
 import numpy as np
 import scipy as sp
 import scipy.ndimage as nd
-from IPython.core.debugger import Tracer
-#Tracer()() / %debug after stacktrace
 
 import matplotlib.pyplot as pl
 from mpl_toolkits.axes_grid1 import ImageGrid
@@ -92,9 +90,10 @@ def perfect_platonic_per_pixel(N, R, scale=11, pos=None):
         vol = (1.0*(ddd < R) + 0.0*(ddd == R)).sum()
         image[x0,y0,z0] = vol / float(scale**3)
 
-    vol_true = 4./3*np.pi*R**3
-    vol_real = image.sum()
-    print vol_true, vol_real, (vol_true - vol_real)/vol_true
+    #vol_true = 4./3*np.pi*R**3
+    #vol_real = image.sum()
+    #print vol_true, vol_real, (vol_true - vol_real)/vol_true
+
     return image, pos
 
 def translate_fourier(image, dx):
@@ -107,6 +106,31 @@ def translate_fourier(image, dx):
 
     q = np.fft.fftn(image)*np.exp(-1.j*(kv*dx).sum(axis=-1)).T
     return np.real(np.fft.ifftn(q))
+
+def create_many_platonics(radius=5.0, scale=101, N=50):
+    N = int(4*radius)
+
+    platonics = []
+    for i in xrange(N):
+        goal = np.array([(N-1.0)/2]*3) + 2*np.random.rand(3)-1
+        im, pos = perfect_platonic_per_pixel(N=N, R=radius, scale=scale, pos=goal)
+
+        print i, goal, '=>', pos
+        platonics.append((im, pos))
+        pickle.dump(platonics, open('/tmp/platonics.pkl', 'w'))
+    return platonics
+
+def create_comparison_state(image, position, radius=5.0, snr=20):
+    """
+    Take a platonic image and position and create a state which we can
+    use to sample the error for peri
+    """
+    # place that into a new image at the expected parameters
+    s = init.create_single_particle_state(imsize=image.shape, sigma=1.0/snr,
+            radius=radius, psfargs={'params': np.array([2.0, 1.0, 3.0]), 'error': 1e-6})
+    s.obj.pos[0] = position
+    s.set_image(s.psf.execute(image))
+    return s
 
 def crb(state):
     crb = []
