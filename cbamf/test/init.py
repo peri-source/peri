@@ -20,7 +20,7 @@ def _toarr(i):
 # Generating fake data
 #=======================================================================
 def create_state(image, pos, rad, sigma=0.05, psftype='gauss3d',
-        ilmtype='poly3d', psfargs={}, ilmargs={}, stateargs={}):
+        ilmtype='poly3d', psfargs={}, ilmargs={}, objargs={}, stateargs={}):
     """
     Create a state from a blank image, set of pos and radii
 
@@ -38,16 +38,20 @@ def create_state(image, pos, rad, sigma=0.05, psftype='gauss3d',
         which type of illumination field
 
     psfargs : arguments to the psf object
-    ilmargs: the order of the polynomial for illumination field
+    ilmargs: arguments to the ilm object
+    objargs: arguments to the sphere collection object
     stateargs : dictionary of arguments to pass to state
     """
     tpsfs = ['gauss3d', 'gauss4d']
     tilms = ['poly3d', 'leg3d', 'cheb3d', 'poly2p1d', 'leg2p1d']
 
-    obj = objs.SphereCollectionRealSpace(pos=pos, rad=rad, shape=image.shape)
 
+    def_obj = {'pos': pos, 'rad': rad, 'shape': image.shape}
     def_psf = {'shape': image.shape}
     def_ilm = {'order': (1,1,1), 'shape': image.shape}
+
+    def_obj.update(objargs)
+    obj = objs.SphereCollectionRealSpace(**def_obj)
 
     if ilmtype == 'poly3d':
         def_ilm.update(ilmargs)
