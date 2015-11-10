@@ -1,4 +1,6 @@
 import numpy as np
+from scipy.special import erf
+
 from cbamf.util import Tile, cdd, amin, amax
 
 #=============================================================================
@@ -52,7 +54,7 @@ def sphere_constrained_cubic(r, r0, alpha):
 #=============================================================================
 class SphereCollectionRealSpace(object):
     def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None,
-                 method='lerp', alpha=None):
+                 method='constrained-cubic', alpha=None):
         """
         method can be one of:
             ['lerp', 'logistic', 'triangle', 'exact-gaussian', 'constrained-cubic']
