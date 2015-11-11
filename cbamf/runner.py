@@ -154,6 +154,9 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
         sample_block(s, 'off', stepout=stepout, quiet=quiet)
         sample_block(s, 'zscale', stepout=stepout, quiet=quiet)
 
+        if s.slab:
+            sample_block(s, 'slab', stepout=stepout, quiet=quiet)
+
         if sigma:
             sample_block(s, 'sigma', stepout=0.005, quiet=quiet)
 
