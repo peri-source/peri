@@ -267,7 +267,7 @@ def zero_particles(n):
 
 def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, imzstop=-1, invert=False,
         pad_for_extra=True, threads=-1, phi=0.5, sigma=0.05, zscale=1.0,
-        PSF=(2.0, 4.0), ORDER=(3,3,2)):
+        PSF=(2.0, 4.0), ORDER=(3,3,2), slab=None):
     from cbamf import states, initializers
     from cbamf.comp import objs, psfs, ilms
 
@@ -289,6 +289,9 @@ def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, imzstop=-1, i
     ilm = ilms.LegendrePoly3D(order=ORDER, shape=imsize)
     ilm.from_data(image, mask=image > const.PADVAL)
 
+    if slab is not None:
+        slab = objs.Slab(zpos=slab, shape=imsize)
+
     diff = (ilm.get_field() - image)
     ptp = diff[image > const.PADVAL].ptp()
 
@@ -298,7 +301,7 @@ def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, imzstop=-1, i
 
     s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm,
             zscale=zscale, sigma=sigma, offset=ptp, doprior=(not pad_for_extra),
-            nlogs=(not pad_for_extra), varyn=pad_for_extra)
+            nlogs=(not pad_for_extra), varyn=pad_for_extra, slab=slab)
 
     return s
 

@@ -241,7 +241,7 @@ class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
             sigma=0.04, doprior=False, constoff=True,
             varyn=False, allowdimers=False, nlogs=True, difference=True,
-            pad=const.PAD, sigmapad=True, *args, **kwargs):
+            pad=const.PAD, sigmapad=True, slab=None, *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -304,6 +304,10 @@ class ConfocalImagePython(State):
         sigmapad : boolean [default: True]
             If True, varies the sigma values at the edge of the image, changing them
             slowly to zero over the size of the psf support
+
+        slab : `cbamf.comp.objs.Slab` [default: None]
+            If not None, include a slab in the model image and associated analysis.
+            This object should be from the platonic components module.
         """
         self.pad = pad
         self.index = None
@@ -319,6 +323,7 @@ class ConfocalImagePython(State):
         self.psf = psf
         self.ilm = ilm
         self.obj = obj
+        self.slab = slab
         self.zscale = zscale
         self.rscale = 1.0
         self.offset = offset
@@ -384,6 +389,7 @@ class ConfocalImagePython(State):
             'typ': self.obj.N*self.varyn,
             'psf': len(self.psf.get_params()),
             'ilm': len(self.ilm.get_params()),
+            'slab': len(self.slab.get_params()) if self.slab else 0,
             'off': 1,
             'rscale': 1,
             'zscale': 1,
@@ -391,23 +397,28 @@ class ConfocalImagePython(State):
         }
 
         self.param_order = [
-            'pos', 'rad', 'typ', 'psf', 'ilm', 'off',
+            'pos', 'rad', 'typ', 'psf', 'ilm', 'off', 'slab',
             'rscale', 'zscale', 'sigma'
         ]
         self.param_lengths = [self.param_dict[k] for k in self.param_order]
 
         out = []
         for param in self.param_order:
+            if self.param_dict[param] == 0:
+                continue
+
             if param == 'pos':
                 out.append(self.obj.get_params_pos())
             if param == 'rad':
                 out.append(self.obj.get_params_rad())
-            if param == 'typ' and self.varyn:
+            if param == 'typ':
                 out.append(self.obj.get_params_typ())
             if param == 'psf':
                 out.append(self.psf.get_params())
             if param == 'ilm':
                 out.append(self.ilm.get_params())
+            if param == 'slab':
+                out.append(self.slab.get_params())
             if param == 'off':
                 out.append(self.offset)
             if param == 'rscale':
@@ -428,6 +439,7 @@ class ConfocalImagePython(State):
         self.b_psf = self.create_block('psf')
         self.b_ilm = self.create_block('ilm')
         self.b_off = self.create_block('off')
+        self.b_slab = self.create_block('slab')
         self.b_rscale = self.create_block('rscale')
         self.b_zscale = self.create_block('zscale')
         self.b_sigma = self.create_block('sigma')
@@ -475,6 +487,9 @@ class ConfocalImagePython(State):
         self.psf.update(self.state[self.b_psf])
         self.obj.initialize(self.zscale)
         self.ilm.initialize()
+
+        if self.slab:
+            self.slab.initialize()
 
         self._update_global()
 
@@ -550,6 +565,9 @@ class ConfocalImagePython(State):
         self.ilm.set_tile(otile)
         self.psf.set_tile(otile)
 
+        if self.slab:
+            self.slab.set_tile(otile)
+
         islice = itile.slicer
 
         if difference:
@@ -562,6 +580,9 @@ class ConfocalImagePython(State):
 
         else:
             platonic = self.obj.get_field()
+
+            if self.slab:
+                platonic += self.slab.get_field()
 
             if self.allowdimers:
                 platonic = np.clip(platonic, -1, 1)
@@ -643,6 +664,10 @@ class ConfocalImagePython(State):
             self._update_tile(*tiles, difference=self.difference)
         else:
             docalc = False
+
+            if self.slab and block[self.b_slab].any():
+                self.slab.update(self.state[self.b_slab])
+                docalc = True
 
             # if the psf was changed, update globally
             if block[self.b_psf].any():
@@ -839,4 +864,4 @@ class ConfocalImagePython(State):
             self.obj, self.psf, self.ilm, self.zscale, self.offset,
             self.sigma, self.doprior, self.constoff,
             self.varyn, self.allowdimers, self.nlogs, self.difference,
-            self.pad)
+            self.pad, self.sigmapad, self.slab)
