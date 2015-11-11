@@ -14,7 +14,7 @@ def _seed_or_not(seed=None):
 def _toarr(i):
     if not hasattr(i, '__iter__'):
         i = np.array((i,)*3)
-    return i
+    return np.array(i)
 
 #=======================================================================
 # Generating fake data
