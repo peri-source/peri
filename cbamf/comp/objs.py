@@ -218,10 +218,8 @@ class SphereCollectionRealSpace(object):
 
 
 class Slab(object):
-    def __init__(self, pos, shape, normal=(1,0,0), support_size=4, typ=None, pad=None):
-        self.support_size = support_size
-
-        self.pos = np.array(pos).astype('float')
+    def __init__(self, zpos, shape, normal=(1,0,0)):
+        self.zpos = float(zpos)
         self.normal = np.array(normal).astype('float')
         self.normal /= np.sqrt(self.normal.dot(self.normal))
 
@@ -233,32 +231,40 @@ class Slab(object):
         self.rvecs = np.rollaxis(np.array(np.broadcast_arrays(z,y,x)), 0, 4)
         self.image = np.zeros(self.shape)
 
-    def _slab(self, pos, norm, sign=1):
+    def _slab(self, zpos, norm, sign=1):
+        # for the position at zpos, and the center in the x-y plane
+        pos = np.array([zpos, self.shape[1]/2, self.shape[2]/2])
+
         p = (self.rvecs - pos).dot(norm)
-        t = sign/(1.0 + np.exp(np.pi*p))
+        t = sign/(1.0 + np.exp(7*p))
         self.image += t
 
     def initialize(self):
         self.image = np.zeros(self.shape)
-        self._slab(self.pos, self.normal)
+        self._slab(self.zpos, self.normal)
 
     def set_tile(self, tile):
         self.tile = tile
 
-    def update(self, pos, norm):
-        self._slab(self.pos, self.normal, -1)
-        self.pos = pos
-        self.normal = norm / np.sqrt(norm.dot(norm))
-        self._slab(self.pos, self.normal, +1)
+    def update(self, params):
+        zpos, norm = params[0], params[1:]
+        norm = norm / np.sqrt(norm.dot(norm))
+
+        self._slab(self.zpos, self.normal, -1)
+
+        self.zpos = zpos
+        self.normal = norm
+
+        self._slab(self.zpos, self.normal, +1)
 
     def get_field(self):
         return self.image[self.tile.slicer]
 
     def get_support_size(self, p=None):
-        return pl, pr
+        return np.zeros(3), np.array(self.shape)
 
     def get_params(self):
-        return np.hstack([self.pos.ravel(), self.normal.ravel()])
+        return np.hstack([self.zpos, self.normal.ravel()])
 
     def __getstate__(self):
         odict = self.__dict__.copy()
