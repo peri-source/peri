@@ -577,12 +577,13 @@ class ConfocalImagePython(State):
                 replacement = self.offset*platonic
             else:
                 replacement = self.ilm.get_field() * self.offset*platonic
-
         else:
             platonic = self.obj.get_field()
 
             if self.slab:
-                platonic += self.slab.get_field()
+                # cannot be += since platonic is linked to self.obj.field
+                # FIXME -- should be copy operator above?
+                platonic = platonic + self.slab.get_field()
 
             if self.allowdimers:
                 platonic = np.clip(platonic, -1, 1)

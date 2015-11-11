@@ -54,7 +54,7 @@ def sphere_constrained_cubic(r, r0, alpha):
 #=============================================================================
 class SphereCollectionRealSpace(object):
     def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None,
-                 method='constrained-cubic', alpha=None):
+                 method='constrained-cubic', alpha=None, method_function=None):
         """
         method can be one of:
             ['lerp', 'logistic', 'triangle', 'exact-gaussian', 'constrained-cubic']
@@ -65,6 +65,8 @@ class SphereCollectionRealSpace(object):
         self.N = rad.shape[0]
 
         # set the aliasing method and coefficient
+        # FIXME -- check if function for method and set to that instead
+        # method='user-defined' and pass method_function
         self._setup_sphere_functions(method=method, alpha=alpha)
 
         if typ is None:
@@ -236,8 +238,7 @@ class Slab(object):
         pos = np.array([zpos, self.shape[1]/2, self.shape[2]/2])
 
         p = (self.rvecs - pos).dot(norm)
-        t = sign/(1.0 + np.exp(7*p))
-        self.image += t
+        self.image = 1.0/(1.0 + np.exp(7*p))
 
     def initialize(self):
         self.image = np.zeros(self.shape)
@@ -249,8 +250,6 @@ class Slab(object):
     def update(self, params):
         zpos, norm = params[0], params[1:]
         norm = norm / np.sqrt(norm.dot(norm))
-
-        self._slab(self.zpos, self.normal, -1)
 
         self.zpos = zpos
         self.normal = norm
@@ -274,3 +273,9 @@ class Slab(object):
     def __setstate__(self, idict):
         self.__dict__.update(idict)
         self._setup()
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        return "{} <{}, {}>".format(str(self.__class__.__name__), self.zpos, list(self.normal))
