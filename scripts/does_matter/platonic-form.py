@@ -203,17 +203,27 @@ def errs(val, pos):
     v,p = val, pos
     return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
 
-def doplot(prefix='/media/scratch/peri/does_matter/z-jitter', snrs=[20,50,200,500]):
+def doplot(prefix='/media/scratch/peri/does_matter/platonic-form',
+        images='/media/scratch/peri/does_matter/platonic-form-images.pkl',
+        forms=['exact-gaussian', 'constrained-cubic', 'lerp', 'logistic']):
+
+    images = pickle.load(open(images))
+
     fig = pl.figure(figsize=(14,7))
 
     ax = fig.add_axes([0.43, 0.15, 0.52, 0.75])
     gs = ImageGrid(fig, rect=[0.05, 0.05, 0.25, 0.90], nrows_ncols=(2,1), axes_pad=0.25,
             cbar_location='right', cbar_mode='each', cbar_size='10%', cbar_pad=0.04)
 
-    s,im,pos = zjitter(jitter=0.1, radius=5)
-    nn = np.s_[:,:,im.shape[2]/2]
+    print "Generating a image comparison"
+    im,pos = images[0]
+    s,im = create_comparison_state(im, pos)
+    set_image(s, im, 0.05)
+    runner.do_samples(s, 20, 0, stepout=0.1, quiet=True)
 
+    print "Plotting"
     figlbl, labels = ['A', 'B'], ['Reference', 'Difference']
+    nn = np.s_[:,:,im.shape[2]/2]
     diff = (im - s.get_model_image()[s.inner])[nn]
     diffm = 0.1#np.abs(diff).max()
     im0 = gs[0].imshow(im[nn], vmin=0, vmax=1, cmap='bone_r')
@@ -230,27 +240,28 @@ def doplot(prefix='/media/scratch/peri/does_matter/z-jitter', snrs=[20,50,200,50
         #lbl(gs[i], figlbl[i])
 
     symbols = ['o', '^', 'D', '>']
-    for i, snr in enumerate(snrs):
+    for i, form in enumerate(forms):
         c = COLORS[i]
-        fn = prefix+'-snr-'+str(snr)+'.pkl'
+        fn = prefix+'-'+form+'.pkl'
         crb, val, err, pos, time = pickle.load(open(fn))
+        pos += 16
 
         if i == 0:
-            label0 = r"$\rm{SNR} = %i$ CRB" % snr
-            label1 = r"$\rm{SNR} = %i$ Error" % snr
+            label0 = r"%s CRB" % form
+            label1 = r"%s Error" % form
         else:
-            label0 = r"$%i$, CRB" % snr
-            label1 = r"$%i$, Error" % snr
+            label0 = r"%s CRB" % form
+            label1 = r"%s Error" % form
 
         ax.plot(time, dist(crb), '-', c=c, lw=3, label=label0)
         ax.plot(time, errs(val, pos), symbols[i], ls='--', lw=2, c=c, label=label1, ms=12)
 
     lbl(ax, 'D')
     ax.loglog()
-    ax.set_ylim(1e-4, 1e0)
-    ax.set_xlim(0, time[-1])
+    #ax.set_ylim(1e-4, 1e0)
+    #ax.set_xlim(0, time[-1])
     ax.legend(loc='best', ncol=2, prop={'size': 18}, numpoints=1)
-    ax.set_xlabel(r"$z$-scan NSR")
+    ax.set_xlabel(r"NSR")
     ax.set_ylabel(r"Position CRB, Error")
     ax.grid(False, which='both', axis='both')
-    ax.set_title(r"$z$-scan jitter")
+    ax.set_title(r"Platonic form")
