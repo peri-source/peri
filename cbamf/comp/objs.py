@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.special import erf
+from scipy.weave import inline
 
 from cbamf.util import Tile, cdd, amin, amax
 
@@ -20,21 +21,112 @@ def sphere_triangle_cdf(r, r0, alpha):
     p1 = 1*(r>r0)-(r0+alpha-r)**2/(2*alpha**2)*(r0<r)*(r<r0+alpha)
     return (1-np.clip(p0+p1, 0, 1))
 
-def sphere_analytical_gaussian(r, r0, alpha):
+def sphere_analytical_gaussian_exact(r, r0, alpha=0.2765):
     """
     Analytically calculate the sphere's functional form by convolving the
-    Heavyside function with first order approximation to the sinc, a Gaussian
-
-    Alpha should be 1.0; corresponds to std for gaussian approx of the sinc's
-    that form the truncation -- i.e. alpha = 1 pixel
+    Heavyside function with first order approximation to the sinc, a Gaussian.
+    The alpha parameters controls the width of the approximation -- should be
+    1, but is fit to be roughly 0.2765
     """
-    # doing 2 terms, since the second one gives float overflows and 0/0 errors:
     term1 = 0.5*(erf((r0+r)/(alpha*np.sqrt(2))) + erf((r0-r)/(alpha*np.sqrt(2))))
-    term2 = np.sqrt(0.5/np.pi)*(alpha/r) * (
+    term2 = np.sqrt(0.5/np.pi)*(alpha/(r+1e-10)) * (
                 np.exp(-0.5*(r-r0)**2/alpha**2) - np.exp(-0.5*(r+r0)**2/alpha**2)
             )
-    term2[r==0] = np.sqrt(2.0/np.pi)*r0/alpha*np.exp(-r0**2*0.5/alpha**2)
     return term1 - term2
+
+def sphere_analytical_gaussian_trim(r, r0, alpha=0.2765, cut=1.6):
+    """
+    See sphere_analytical_gaussian_exact.
+
+    I trimmed to terms from the functional form that are essentially zero (1e-8)
+    for r0 > cut (~1.5), a fine approximation for these platonic anyway.
+    """
+    dr = r-r0
+    m = np.abs(dr) <= cut
+
+    # only compute on the relevant scales
+    rr = r[m]
+    t = (r0-rr)/(alpha*np.sqrt(2))
+    q = 0.5*(1 + erf(t)) - np.sqrt(0.5/np.pi)*(alpha/(rr+1e-10)) * np.exp(-t*t)
+
+    # fill in the grid, inside the interpolation and outside where values are constant
+    ans = 0*r
+    ans[m] = q
+    ans[dr >  cut] = 0
+    ans[dr < -cut] = 1
+    return ans
+
+def sphere_analytical_gaussian_fast(r, r0, alpha=0.2765, cut=1.20):
+    """
+    See sphere_analytical_gaussian_trim, but implemented in C with
+    fast erf and exp approximations found at
+        Abramowitz and Stegun: Handbook of Mathematical Functions
+        A Fast, Compact Approximation of the Exponential Function
+
+    The default cut 1.25 was chosen based on the accuracy of fast_erf
+    """
+
+    functions = """
+    double fast_erf(double x){
+        double sgn = 1.0;
+
+        if (x < 0){
+            sgn = -1.0;
+            x = -x;
+        }
+
+        double p = 0.47047;
+        double a1 =  0.3480242;
+        double a2 = -0.0958798;
+        double a3 =  0.7478556;
+        double t1 = 1.0/(1 + p*x);
+        double t2 = t1*t1;
+        double t3 = t1*t2;
+        return sgn*(1 - (a1*t1 + a2*t2 + a3*t3)*exp(-x*x));
+    }
+
+    static union
+    {
+        double d;
+        struct
+        {
+            #ifdef LITTLE_ENDIAN
+                int j, i;
+            #else
+                int i, j;
+            #endif
+        } n;
+    } _eco;
+
+    #define EXP_A (1048576 /M_LN2)
+    #define EXP_C 60801
+    #define fast_exp(y) (_eco.n.i = EXP_A*(y) + (1072693248 - EXP_C), _eco.d)
+    """
+
+    code = """
+    double coeff1 = 1.0/(alpha*sqrt(2.0));
+    double coeff2 = sqrt(0.5/pi)*alpha;
+
+    for (int i=0; i<N; i++){
+        double dr = r[i]-r0;
+        if (dr < cut && dr > -cut){
+            double t = (r0 - r[i])*coeff1;
+            ans[i] = 0.5*(1+fast_erf(t)) - coeff2/(r[i]+1e-10) * fast_exp(-t*t);
+        } else {
+            ans[i] = 0.0*(dr > cut) + 1.0*(dr < -cut);
+        }
+    }
+    """
+
+    shape = r.shape
+    r = r.flatten()
+    N = r.shape[0]
+    ans = r*0
+    pi = np.pi
+
+    inline(code, arg_names=['r', 'r0', 'alpha', 'cut', 'ans', 'pi', 'N'],
+            support_code=functions, verbose=0)
+    return ans.reshape(shape)
 
 def sphere_constrained_cubic(r, r0, alpha):
     """
@@ -49,15 +141,23 @@ def sphere_constrained_cubic(r, r0, alpha):
     a, d = rscl + 0.5*sqrt3, rscl - 0.5*sqrt3
     return alpha*d*a*rscl + b_coeff*d*a - d/sqrt3
 
+try:
+    sphere_analytical_gaussian_fast(np.linspace(0,10,10), 5.0)
+except Exception as e:
+    sphere_analytical_gaussian_fast = sphere_analytical_gaussian_trim
+
 #=============================================================================
 # Actual sphere collection (and slab)
 #=============================================================================
 class SphereCollectionRealSpace(object):
     def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None,
-                 method='constrained-cubic', alpha=None, method_function=None):
+                 method='exact-gaussian-fast', alpha=None, method_function=None):
         """
         method can be one of:
-            ['lerp', 'logistic', 'triangle', 'exact-gaussian', 'constrained-cubic']
+            [
+                'lerp', 'logistic', 'triangle', 'constrained-cubic',
+                'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast'
+            ]
         """
         self.support_size = support_size
         self.pos = pos.astype('float')
@@ -80,13 +180,18 @@ class SphereCollectionRealSpace(object):
         self._setup()
 
     def _setup_sphere_functions(self, method, alpha=None):
-        self.methods = ['lerp', 'logistic', 'triangle', 'exact-gaussian', 'constrained-cubic']
+        self.methods = [
+            'lerp', 'logistic', 'triangle', 'constrained-cubic',
+            'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast'
+        ]
 
         self.sphere_functions = {
             'lerp': sphere_lerp,
             'logistic': sphere_logistic,
             'triangle': sphere_triangle_cdf,
-            'exact-gaussian': sphere_analytical_gaussian,
+            'exact-gaussian': sphere_analytical_gaussian_exact,
+            'exact-gaussian-trim': sphere_analytical_gaussian_trim,
+            'exact-gaussian-fast': sphere_analytical_gaussian_fast,
             'constrained-cubic': sphere_constrained_cubic
         }
 
@@ -95,6 +200,8 @@ class SphereCollectionRealSpace(object):
             'logistic': 6.5,
             'triangle': 0.6618,
             'exact-gaussian': 0.27595,
+            'exact-gaussian-trim': 0.27595,
+            'exact-gaussian-fast': 0.27595,
             'constrained-cubic': 0.84990,
         }
 
