@@ -21,7 +21,7 @@ def sphere_triangle_cdf(r, r0, alpha):
     p1 = 1*(r>r0)-(r0+alpha-r)**2/(2*alpha**2)*(r0<r)*(r<r0+alpha)
     return (1-np.clip(p0+p1, 0, 1))
 
-def sphere_analytical_gaussian_exact(r, r0, alpha=0.2765):
+def sphere_analytical_gaussian(r, r0, alpha=0.2765):
     """
     Analytically calculate the sphere's functional form by convolving the
     Heavyside function with first order approximation to the sinc, a Gaussian.
@@ -189,7 +189,7 @@ class SphereCollectionRealSpace(object):
             'lerp': sphere_lerp,
             'logistic': sphere_logistic,
             'triangle': sphere_triangle_cdf,
-            'exact-gaussian': sphere_analytical_gaussian_exact,
+            'exact-gaussian': sphere_analytical_gaussian,
             'exact-gaussian-trim': sphere_analytical_gaussian_trim,
             'exact-gaussian-fast': sphere_analytical_gaussian_fast,
             'constrained-cubic': sphere_constrained_cubic
