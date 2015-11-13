@@ -4,6 +4,9 @@ from scipy.weave import inline
 
 from cbamf.util import Tile, cdd, amin, amax
 
+# maximum number of iterations to get an exact volume
+MAX_VOLUME_ITERATIONS = 10
+
 #=============================================================================
 # Forms of the platonic sphere interpolation function
 #=============================================================================
@@ -152,7 +155,7 @@ except Exception as e:
 class SphereCollectionRealSpace(object):
     def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None,
                  method='exact-gaussian-fast', alpha=None, method_function=None,
-                 exact_volume=True):
+                 exact_volume=True, volume_error=1e-5):
         """
         method can be one of:
             [
@@ -165,6 +168,7 @@ class SphereCollectionRealSpace(object):
         self.rad = rad.astype('float')
         self.N = rad.shape[0]
         self.exact_volume = exact_volume
+        self.volume_error = volume_error
 
         # set the aliasing method and coefficient
         # FIXME -- check if function for method and set to that instead
@@ -233,6 +237,7 @@ class SphereCollectionRealSpace(object):
         # files are deleted
         if not hasattr(self, 'exact_volume'):
             self.exact_volume = False
+            self.volume_error = 1e-6
         if not hasattr(self, 'method'):
             self._setup_sphere_functions('logistic', 5.0)
         if not hasattr(self, 'alpha'):
@@ -244,10 +249,16 @@ class SphereCollectionRealSpace(object):
         # if required, do an iteration to find the best radius to produce
         # the goal volume as given by the particular goal radius
         if self.exact_volume:
-            vol_curr = np.abs(t.sum())
             vol_goal = 4./3*np.pi*rad**3 / zscale
-            rprime = rad + (vol_goal - vol_curr) / (4*np.pi*rad**2)
-            t = sign*self.sphere_functions[self.method](rdist, rprime, self.alpha)
+            rprime = rad
+
+            for i in xrange(MAX_VOLUME_ITERATIONS):
+                vol_curr = np.abs(t.sum())
+                rprime = rprime + 1.0*(vol_goal - vol_curr) / (4*np.pi*rprime**2)
+                t = sign*self.sphere_functions[self.method](rdist, rprime, self.alpha)
+
+                if np.abs(vol_goal - vol_curr)/vol_goal < self.volume_error:
+                    break
 
         self.particles[tile.slicer] += t
 
