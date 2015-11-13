@@ -498,7 +498,8 @@ class Gaussian4D(PSF4D):
     def rpsf_z(self, z, zp):
         s = self._sigma(zp, 2)
         size = self.get_support_size(z=zp)
-        return 1.0/np.sqrt(2*np.pi*s**2) * np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
+        out = 1.0/np.sqrt(2*np.pi*s**2) * np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
+        return out / out.sum()
 
     def rpsf_xy(self, zp):
         size = self.get_support_size(z=zp)
