@@ -3,11 +3,11 @@ import scipy as sp
 
 class SoftSphereSimulation(object):
     def __init__(self, N=500, phi=0.65, radius=5.0, polydispersity=0.0, beta=1,
-            epsilon=120, T=1, dt=1e-2, dim=3):
+            epsilon=120, T=1, dt=1e-2, dim=3, box_side_ratio=1.0):
         """
         Creates a simulation of soft sphere particles. By default, creates
         particles in a random uniform (perhaps overlapping) distribution of
-        particles inside a 2D box given a packing fraction
+        particles inside a box dimension `dim` given a packing fraction
 
         Parameters:
         -----------
@@ -37,6 +37,12 @@ class SoftSphereSimulation(object):
 
         dim : integer [default: 3]
             number of dimensions for the simulation
+
+        box_side_ratio : float [default: 1]
+            ratio of the box's z height to original z height before scaling.
+            therefore, you can squish the box by half (while elongating the
+            sides) by setting box_side_ratio=0.5
+
         """
         self.N = N
         self.phi = phi
@@ -46,14 +52,18 @@ class SoftSphereSimulation(object):
         self.dt = dt
         self.radius = radius
         self.polydispersity = polydispersity
+        self.box_side_ratio = box_side_ratio
         self.dim = int(dim)
 
         # find the box size based on the number of particles and packing fraction
         if self.dim == 2:
             self.box_side = (self.N*np.pi*self.radius**2 / self.phi)**(1./2)
+            self.box = np.array([self.box_side]*self.dim)
         if self.dim == 3:
             self.box_side = (self.N*4./3*np.pi*self.radius**3 / self.phi)**(1./3)
-        self.box = np.array([self.box_side]*self.dim)
+            sxy = self.box_side/np.sqrt(self.box_side_ratio)
+            sz  = self.box_side*self.box_side_ratio
+            self.box = np.array([sz, sxy, sxy])
 
         self.init_random()
 
@@ -78,7 +88,7 @@ class SoftSphereSimulation(object):
     
     def boundary_condition(self):
         """ Apply hard reflective boundary conditions to particles """
-        for i in xrange(2):
+        for i in xrange(self.dim):
             mask = (self.pos[:,i] < 0)
             self.pos[mask,i] = 2*0-self.pos[mask,i]
             self.vel[mask,i] *= -1
