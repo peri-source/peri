@@ -151,7 +151,8 @@ except Exception as e:
 #=============================================================================
 class SphereCollectionRealSpace(object):
     def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None,
-                 method='exact-gaussian-fast', alpha=None, method_function=None):
+                 method='exact-gaussian-fast', alpha=None, method_function=None,
+                 exact_volume=True):
         """
         method can be one of:
             [
@@ -163,6 +164,7 @@ class SphereCollectionRealSpace(object):
         self.pos = pos.astype('float')
         self.rad = rad.astype('float')
         self.N = rad.shape[0]
+        self.exact_volume = exact_volume
 
         # set the aliasing method and coefficient
         # FIXME -- check if function for method and set to that instead
@@ -229,6 +231,8 @@ class SphereCollectionRealSpace(object):
         # keep backwards compatibility for save files with older logistic coefficient
         # FIXME -- this is a nasty hack which should be fazed out when older save
         # files are deleted
+        if not hasattr(self, 'exact_volume'):
+            self.exact_volume = False
         if not hasattr(self, 'method'):
             self._setup_sphere_functions('logistic', 5.0)
         if not hasattr(self, 'alpha'):
@@ -236,6 +240,15 @@ class SphereCollectionRealSpace(object):
 
         # calculate the anti-aliasing according to the interpolation type
         t = sign*self.sphere_functions[self.method](rdist, rad, self.alpha)
+
+        # if required, do an iteration to find the best radius to produce
+        # the goal volume as given by the particular goal radius
+        if self.exact_volume:
+            vol_curr = np.abs(t.sum())
+            vol_goal = 4./3*np.pi*rad**3 / zscale
+            rprime = rad + (vol_goal - vol_curr) / (4*np.pi*rad**2)
+            t = sign*self.sphere_functions[self.method](rdist, rprime, self.alpha)
+
         self.particles[tile.slicer] += t
 
         if dodiff:
