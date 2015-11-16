@@ -129,7 +129,7 @@ def create_comparison_state(image, position, radius=5.0, snr=20, method='constra
     # place that into a new image at the expected parameters
     s = init.create_single_particle_state(imsize=np.array(image.shape), sigma=1.0/snr,
             radius=radius, psfargs={'params': np.array([2.0, 1.0, 3.0]), 'error': 1e-6},
-            objargs={'method': method})
+            objargs={'method': method}, stateargs={'sigmapad': False})
     s.obj.pos[0] = position + s.pad
 
     timage = 1-np.pad(image, const.PAD, mode='constant', constant_values=0)
@@ -161,7 +161,7 @@ def sample(state, im, noise, N=10, burn=10, sweeps=20):
     print ''
     return np.array(values), np.array(errors)
 
-def dorun(method, platonics=None, nsnrs=20, noise_samples=30, sweeps=20, burn=10):
+def dorun(method, platonics=None, nsnrs=20, noise_samples=30, sweeps=30, burn=15):
     """
     platonics = create_many_platonics(N=50)
     dorun(platonics)
@@ -218,14 +218,18 @@ def doplot(prefix='/media/scratch/peri/does_matter/platonic-form',
     print "Generating a image comparison"
     im,pos = images[0]
     s,im = create_comparison_state(im, pos)
-    set_image(s, im, 0.05)
-    runner.do_samples(s, 20, 0, stepout=0.1, quiet=True)
+    set_image(s, im, 0.0001)
+    h,l = runner.do_samples(s, 20, 0, stepout=0.1, quiet=True)
+    h = h.mean(axis=0)
+    s.obj.pos = np.array([h[:3]])
+    s.obj.rad = np.array([h[3]])
+    s.reset()
 
     print "Plotting"
     figlbl, labels = ['A', 'B'], ['Reference', 'Difference']
     nn = np.s_[:,:,im.shape[2]/2]
     diff = (im - s.get_model_image()[s.inner])[nn]
-    diffm = 0.1#np.abs(diff).max()
+    diffm = 0.02#np.abs(diff).max()
     im0 = gs[0].imshow(im[nn], vmin=0, vmax=1, cmap='bone_r')
     im1 = gs[1].imshow(diff, vmin=-diffm, vmax=diffm, cmap='RdBu')
     cb0 = pl.colorbar(im0, cax=gs[0].cax, ticks=[0,1])
@@ -260,7 +264,7 @@ def doplot(prefix='/media/scratch/peri/does_matter/platonic-form',
     ax.loglog()
     #ax.set_ylim(1e-4, 1e0)
     #ax.set_xlim(0, time[-1])
-    ax.legend(loc='best', ncol=2, prop={'size': 18}, numpoints=1)
+    ax.legend(loc='upper left', ncol=2, prop={'size': 18}, numpoints=1)
     ax.set_xlabel(r"NSR")
     ax.set_ylabel(r"Position CRB, Error")
     ax.grid(False, which='both', axis='both')
