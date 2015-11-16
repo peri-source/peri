@@ -158,7 +158,7 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
             sample_block(s, 'slab', stepout=stepout, quiet=quiet)
 
         if sigma:
-            sample_block(s, 'sigma', stepout=0.005, quiet=quiet)
+            sample_block(s, 'sigma', stepout=stepout/10, quiet=quiet)
 
         if i >= burn:
             h.append(s.state.copy())

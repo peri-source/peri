@@ -471,7 +471,7 @@ class ConfocalImagePython(State):
         self._sigma_field_log = np.log(self._sigma_field)#*(self._sigma_field > 0) + 1e-16)
 
     def set_state(self, state):
-        self.obj.pos = state[self.b_pos]
+        self.obj.pos = state[self.b_pos].reshape(-1,3)
         self.obj.rad = state[self.b_rad]
         self.ilm.params = state[self.b_ilm]
         self.psf.params = state[self.b_psf]
@@ -688,6 +688,12 @@ class ConfocalImagePython(State):
 
             if block[self.b_sigma].any():
                 self.sigma = self.state[self.b_sigma]
+
+                if self.sigma <= 0:
+                    self.state[block] = prev[block]
+                    self.sigma = self.state[self.b_sigma]
+                    return False
+
                 self._build_sigma_field()
                 self._update_ll_field()
 
