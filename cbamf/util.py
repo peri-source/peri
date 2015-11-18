@@ -55,6 +55,11 @@ class Tile(object):
             return np.meshgrid(z, y, x, indexing='ij')
         return z[:,None,None], y[None,:,None], x[None,None,:]
 
+    def coord_vector(self, *args, **kwargs):
+        """ Creates a coordinate vector from self.coords """
+        z,y,x = self.coords()
+        return np.rollaxis(np.array(np.broadcast_arrays(z,y,x)),0,4)
+
     def __str__(self):
         return self.__repr__()
 
