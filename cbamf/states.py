@@ -759,6 +759,11 @@ class ConfocalImagePython(State):
             return self.state[self.block_particle_typ(particle)] == 1
         return True
 
+    def active_particles(self):
+        if self.varyn:
+            return np.arange(self.N)[self.state[self.b_typ]==1.]
+        return np.arange(self.N)
+
     def blocks_particle(self, index):
         p_ind, r_ind = 3*index, 3*self.obj.N + index
 
