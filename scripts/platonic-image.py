@@ -29,13 +29,12 @@ def exact_volume(rvec, radius, function=sphere_analytical_gaussian):
 
     return im
 
-def calc():
-    N = 28
+def calc(N=28, scale=41):
     pos = np.array([(N-1)/2.0]*3)
     radius = 5.0
     corner = list((pos-np.array([0] + [radius / np.sqrt(2)]*2) + 0.5).astype("int"))
     
-    im,pos,pix = common.perfect_platonic_per_pixel(N, 5, scale=41, returnpix=corner)
+    im,pos,pix = common.perfect_platonic_per_pixel(N, 5, scale=scale, returnpix=corner)
 
     tile = Tile(im.shape)
     rvec = np.sqrt(((tile.coord_vector() - pos)**2).sum(axis=-1))
@@ -44,7 +43,11 @@ def calc():
     return im, pix, approx, corner
 
 def go():
-    doplot(*calc())
+    doplot3(*calc())
+
+def go2():
+    data = calc(scale=81)
+    doplot1(data[0], data[1], data[3])
 
 def showpic(im, ax, title='', cmap='bone', c=0.5, d=0.5):
     size = [0, im.shape[0], 0, im.shape[1]]
@@ -55,7 +58,21 @@ def showpic(im, ax, title='', cmap='bone', c=0.5, d=0.5):
     ax.set_ylim(0, im.shape[1])
     ax.set_title(title, fontsize=28)
 
-def doplot(im, pix, approx, corner):
+def doplot1(im, pix, corner):
+    fig = pl.figure(figsize=(8,8))
+    ax = fig.add_axes([0,0,1,1])
+    im_s = im[corner[0]]
+    im_p = pix[pix.shape[0]/2]
+    showpic(im_s, ax)
+
+    extent2 = [corner[1], corner[1]+1, corner[2], corner[2]+1]
+    zoom = zoomed_inset_axes(ax, 8, loc=3)
+    zoom.imshow(im_p, extent=extent2, cmap='bone')
+    zoom.set_xticks([])
+    zoom.set_yticks([])
+    mark_inset(ax, zoom, loc1=2, loc2=4, fc="none", ec="1.0")
+
+def doplot3(im, pix, approx, corner):
     fig = pl.figure(figsize=(12,5))
     gs = ImageGrid(fig, rect=[0.025, 0.025, 0.95, 0.95], nrows_ncols=(1,3),
             axes_pad=0.1)
