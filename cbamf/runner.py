@@ -64,13 +64,12 @@ def scan_noise(image, state, element, size=0.01, N=1000):
 
     return xs, ys
 
-def sample_particles(state, stepout=1, start=0):
-    print '{:-^39}'.format(' POS / RAD ')
-    for particle in xrange(start, state.obj.N):
-        if not state.isactive(particle):
-            continue
-
-        print particle
+def sample_particles(state, stepout=1, start=0, quiet=False):
+    if not quiet:
+        print '{:-^39}'.format(' POS / RAD ')
+    for particle in state.active_particles():
+        if not quiet:
+            print particle
         sys.stdout.flush()
 
         blocks = state.blocks_particle(particle)
@@ -82,10 +81,7 @@ def sample_particle_pos(state, stepout=1, start=0, quiet=False):
     if not quiet:
         print '{:-^39}'.format(' POS ')
 
-    for particle in xrange(start, state.obj.N):
-        if not state.isactive(particle):
-            continue
-
+    for particle in state.active_particles():
         if not quiet:
             print particle
         sys.stdout.flush()
@@ -99,10 +95,7 @@ def sample_particle_rad(state, stepout=1, start=0, quiet=False):
     if not quiet:
         print '{:-^39}'.format(' RAD ')
 
-    for particle in xrange(start, state.obj.N):
-        if not state.isactive(particle):
-            continue
-
+    for particle in state.active_particles():
         if not quiet:
             print particle
 
@@ -124,9 +117,9 @@ def sample_block(state, blockname, explode=True, stepout=0.1, quiet=False):
 
     return sample_state(state, blocks, stepout)
 
-def sample_block_list(state, blocklist, stepout=0.1):
+def sample_block_list(state, blocklist, stepout=0.1, quiet=False):
     for bl in blocklist:
-        sample_block(state, bl, stepout=stepout)
+        sample_block(state, bl, stepout=stepout, quiet=quiet)
     return state.state.copy(), state.loglikelihood()
 
 def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
@@ -174,36 +167,49 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
 #=============================================================================
 # Optimization methods like gradient descent
 #=============================================================================
-def diag_grad(state, blocks):
-    out = np.zeros(len(blocks))
-    for i in xrange(len(blocks)):
-        print i
-        out[i] = state.gradloglikelihood(blocks=[blocks[i]])
-    return out
+def optimize_particle(state, index, method='gn', doradius=True):
+    """
+    Methods available are 
+        gn : Gauss-Newton with JTJ (recommended)
+        nr : Newton-Rhaphson with hessian
 
-def diag_hess(state, blocks):
-    out = np.zeros(len(blocks))
-    for i in xrange(len(blocks)):
-        print i
-        out[i] = state.hessloglikelihood(blocks=[blocks[i]])
-    return out
+    if doradius, also optimize the radius.
+    """
+    blocks = state.blocks_particle(index)
 
-def optimize_particle_pos(state, index):
-    blocks = state.blocks_particle(index)[:-1]
+    if not doradius:
+        blocks = blocks[:-1]
+
     g = state.gradloglikelihood(blocks=blocks)
+    if method == 'gn':
+        h = state.jtj(blocks=blocks)
+    if method == 'nr':
+        h = state.hessloglikelihood(blocks=blocks)
+    step = np.linalg.solve(h, g)
+
     h = np.zeros_like(g)
     for i in xrange(len(g)):
-        h[i] = state.hessloglikelihood(blocks=[blocks[i]])
-        state.update(blocks[i], state.state[blocks[i]] - g[i]/h[i])
+        state.update(blocks[i], state.state[blocks[i]] - step[i])
     return g,h
+
+def optimize_particles(state, *args, **kwargs):
+    for i in state.active_particles():
+        optimize_particle(state, i, *args, **kwargs)
 
 def modify(state, blocks, vec):
     for bl, val in zip(blocks, vec):
         state.update(bl, np.array([val]))
 
-def residual(vec, state, blocks):
-    print 'res', state.loglikelihood()
+import time
+
+def residual(vec, state, blocks, relax_particles=True):
+    print time.time(), 'res', state.loglikelihood()
     modify(state, blocks, vec)
+
+    for i in xrange(3):
+        #sample_particles(state, quiet=True)
+        optimize_particles(state)
+
     return state.residuals().flatten()
 
 def jac(vec, state, blocks):
