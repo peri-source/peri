@@ -865,6 +865,47 @@ class ConfocalImagePython(State):
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
 
+    def todict(self, samples=None):
+        """
+        Transform ourselves (state) or a state vector into a dictionary for
+        better storage options.  In the form {block_name: parameters}.
+
+        Essentially the output of this function is of the form
+        {b:samples[...,self.create_block(b)] for b in self.param_order}
+        but we need to special handle some cases, so `for` loop
+        """
+        local = False
+        if samples is None:
+            samples = self.state.copy()
+            local = True
+
+        active = tuple(self.active_particles())
+        nactive = len(active)
+
+        out = {}
+        for b in self.param_order:
+            d = samples[...,self.create_block(b)]
+
+            # reshape positions properly
+            if b == 'pos':
+                if not local:
+                    d = d.reshape(-1,self.N,3)
+                else:
+                    d = d.reshape(self.N, 3)
+                d = d[...,active,:]
+
+            if b == 'rad':
+                d = d[...,active]
+
+            # transform scalars to lists
+            if b in ['off', 'rscale', 'zscale', 'sigma']:
+                if local:
+                    d = np.array([d])
+                d = np.squeeze(d)
+
+            out[b] = d
+        return out
+
     def __getstate__(self):
         return {}
 
