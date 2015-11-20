@@ -4,6 +4,7 @@ import scipy as sp
 from cbamf.comp import psfs, ilms, objs
 from cbamf.test import poissondisks
 from cbamf import states
+from cbamf import const
 
 def _seed_or_not(seed=None):
     if seed is None:
@@ -19,7 +20,7 @@ def _toarr(i):
 #=======================================================================
 # Generating fake data
 #=======================================================================
-def create_state(image, pos, rad, sigma=0.05, psftype='gauss3d',
+def create_state(image, pos, rad, sigma=0.05, ignoreimage=True, psftype='gauss3d',
         ilmtype='poly3d', psfargs={}, ilmargs={}, objargs={}, stateargs={}):
     """
     Create a state from a blank image, set of pos and radii
@@ -59,6 +60,9 @@ def create_state(image, pos, rad, sigma=0.05, psftype='gauss3d',
     if ilmtype == 'leg3d':
         def_ilm.update(ilmargs)
         ilm = ilms.LegendrePoly3D(**def_ilm)
+    if ilmtype == 'leg2p1d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.LegendrePoly2P1D(**def_ilm)
 
     if psftype == 'gauss2d':
         def_psf.update({'params': (2.0, 4.0)})
@@ -75,7 +79,9 @@ def create_state(image, pos, rad, sigma=0.05, psftype='gauss3d',
 
     s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm,
             sigma=sigma, **stateargs)
-    s.model_to_true_image()
+
+    if ignoreimage:
+        s.model_to_true_image()
     return s 
 
 def create_state_random_packing(imsize, radius=5.0, phi=0.5, seed=None, *args, **kwargs):
@@ -125,8 +131,9 @@ def create_single_particle_state(imsize, radius=5.0, seed=None, *args, **kwargs)
     _seed_or_not(seed)
     imsize = _toarr(imsize)
 
+    pad = padfromargs(kwargs)
     image, pos, rad = states.prepare_for_state(np.zeros(imsize),
-            imsize.reshape(-1,3)/2.0, radius)
+            imsize.reshape(-1,3)/2.0, radius, pad=pad)
 
     return create_state(image, pos, rad, *args, **kwargs)
 
@@ -161,5 +168,15 @@ def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, axis='x'
     pos = np.array([imsize/2 - d, imsize/2 + d]).reshape(-1,3)
     rad = np.array([radius, radius])
 
-    image, pos, rad = states.prepare_for_state(np.zeros(imsize), pos, rad)
+    pad = padfromargs(kwargs)
+    image, pos, rad = states.prepare_for_state(np.zeros(imsize), pos, rad, pad=pad)
     return create_state(image, pos, rad, *args, **kwargs)
+
+def padfromargs(kwargs):
+    stateargs = kwargs.get('stateargs')
+    if stateargs:
+        pad = stateargs.get('pad', const.PAD)
+    else:
+        pad = const.PAD
+    return pad
+
