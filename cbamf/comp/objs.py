@@ -10,6 +10,15 @@ MAX_VOLUME_ITERATIONS = 10
 #=============================================================================
 # Forms of the platonic sphere interpolation function
 #=============================================================================
+def norm(a):
+    return np.sqrt((a**2).sum(axis=-1))
+
+def inner(r, p, a, zscale=1.0):
+    s = np.array([zscale, 1.0, 1.0])
+    q = norm((r-p)*s) - a
+    out = norm(q[...,None]/s) * np.sign(q)
+    return out
+
 def sphere_lerp(r, r0, alpha):
     """ Linearly interpolate the pixels for the platonic object """
     return (1-np.clip((r-(r0-alpha)) / (2*alpha), 0, 1))
@@ -149,6 +158,26 @@ try:
 except Exception as e:
     sphere_analytical_gaussian_fast = sphere_analytical_gaussian_trim
 
+def exact_volume_sphere(rvec, radius, zscale=1.0, volume_error=1e-5,
+        function=sphere_analytical_gaussian, **kwargs):
+    """
+    Perform an iterative method to calculate the effective sphere that perfectly
+    (up to the volume_error) conserves volume.  Return the resulting image
+    """
+    vol_goal = 4./3*np.pi*radius**3 / zscale
+    rprime = radius
+
+    t = function(rvec, rprime, **kwargs)
+    for i in xrange(MAX_VOLUME_ITERATIONS):
+        vol_curr = np.abs(t.sum())
+        if np.abs(vol_goal - vol_curr)/vol_goal < volume_error:
+            break
+
+        rprime = rprime + 1.0*(vol_goal - vol_curr) / (4*np.pi*rprime**2)
+        t = function(rvec, rprime, **kwargs)
+
+    return t
+
 #=============================================================================
 # Actual sphere collection (and slab)
 #=============================================================================
@@ -243,22 +272,16 @@ class SphereCollectionRealSpace(object):
         if not hasattr(self, 'alpha'):
             self._setup_sphere_functions(self.method)
 
-        # calculate the anti-aliasing according to the interpolation type
-        t = sign*self.sphere_functions[self.method](rdist, rad, self.alpha)
-
         # if required, do an iteration to find the best radius to produce
         # the goal volume as given by the particular goal radius
         if self.exact_volume:
-            vol_goal = 4./3*np.pi*rad**3 / zscale
-            rprime = rad
-
-            for i in xrange(MAX_VOLUME_ITERATIONS):
-                vol_curr = np.abs(t.sum())
-                rprime = rprime + 1.0*(vol_goal - vol_curr) / (4*np.pi*rprime**2)
-                t = sign*self.sphere_functions[self.method](rdist, rprime, self.alpha)
-
-                if np.abs(vol_goal - vol_curr)/vol_goal < self.volume_error:
-                    break
+            t = sign*exact_volume_sphere(
+                    rdist, rad, zscale=zscale, volume_error=self.volume_error,
+                    function=self.sphere_functions[self.method], alpha=self.alpha
+                )
+        else:
+            # calculate the anti-aliasing according to the interpolation type
+            t = sign*self.sphere_functions[self.method](rdist, rad, self.alpha)
 
         self.particles[tile.slicer] += t
 
