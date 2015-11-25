@@ -6,7 +6,10 @@ import tempfile
 import pickle
 
 from cbamf import const
+from cbamf import states, initializers
+from cbamf.util import RawImage
 from cbamf.mc import samplers, engines, observers
+from cbamf.comp import objs, psfs, ilms
 
 # Linear fit function, because I can
 def linear_fit(x, y, sigma=1, N=100, burn=1000):
@@ -266,19 +269,121 @@ def gd(state, N=1, ratio=1e-1):
 #=============================================================================
 # Initialization methods to go full circle
 #=============================================================================
+def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=False,
+        ignoreimage=False, psftype='gauss4d', ilmtype='poly3d',
+        psfargs={}, ilmargs={}, objargs={}, stateargs={}):
+    """
+    Create a state from a blank image, set of pos and radii
+
+    Parameters:
+    -----------
+    image : ndarray or `cbamf.util.RawImage`
+        raw confocal image with which to compare. 
+
+    pos : initial conditions for positions (in raw image coordinates)
+    rad : initial conditions for radii array (can be scalar)
+    sigma : float, noise level
+
+    slab : float
+        z-position of the microscope slide in the image (pixel units)
+
+    pad_for_extra : boolean
+        whether to include extra blank particles for sampling over
+
+    ignoreimage : boolean
+        whether to refer to `image` just for shape. really use the model
+        image as the true raw image
+
+    psftype : ['gauss2d', 'gauss3d', 'gauss4d', 'gaussian_pca']
+        which type of psf to use in the state
+
+    ilmtype : ['poly3d', 'leg3d', 'cheb3d', 'poly2p1d', 'leg2p1d']
+        which type of illumination field
+
+    psfargs : arguments to the psf object
+    ilmargs: arguments to the ilm object
+    objargs: arguments to the sphere collection object
+    stateargs : dictionary of arguments to pass to state
+    """
+    tpsfs = ['gauss3d', 'gauss4d']
+    tilms = ['poly3d', 'leg3d', 'cheb3d', 'poly2p1d', 'leg2p1d']
+
+    # first, decide if we got a RawImage or just an image array
+    rawimage = None
+    if isinstance(image, RawImage):
+        rawimage = image
+        image = rawimage.get_image()
+
+    # we accept radius as a scalar, so check if we need to expand it
+    if not hasattr(rad, '__iter__'):
+        rad = rad*np.ones(pos.shape[0])
+
+    # let's create the padded image required of the state
+    pad = stateargs.get('pad', const.PAD)
+    image, pos, rad = states.prepare_for_state(image, pos, rad, pad=pad)
+
+    # create some default arguments for the image components
+    def_obj = {'pos': pos, 'rad': rad, 'shape': image.shape}
+    def_psf = {'shape': image.shape}
+    def_ilm = {'order': (1,1,1), 'shape': image.shape}
+
+    # create the SphereCollectionRealSpace object
+    def_obj.update(objargs)
+
+    nfake = None
+    if pad_extra_particles:
+        nfake = pos.shape[0]
+        pos, rad = pad_fake_particles(pos, rad, nfake)
+
+    def_obj.update({'pad': nfake})
+    obj = objs.SphereCollectionRealSpace(**def_obj)
+
+    # setup the ilm based on the choice and arguments
+    if ilmtype == 'poly3d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.Polynomial3D(**def_ilm)
+    if ilmtype == 'leg3d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.LegendrePoly3D(**def_ilm)
+    if ilmtype == 'leg2p1d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.LegendrePoly2P1D(**def_ilm)
+
+    # setup the psf based on the choice and arguments
+    if psftype == 'gauss2d':
+        def_psf.update({'params': (2.0, 4.0)})
+        def_psf.update(psfargs)
+        psf = psfs.AnisotropicGaussian(**def_psf)
+    if psftype == 'gauss3d':
+        def_psf.update({'params': (2.0, 1.0, 4.0)})
+        def_psf.update(psfargs)
+        psf = psfs.AnisotropicGaussianXYZ(**def_psf)
+    if psftype == 'gauss4d':
+        def_psf.update({'params': (2.0, 1.0, 4.0)})
+        def_psf.update(psfargs)
+        psf = psfs.Gaussian4DPoly(**def_psf)
+
+    if slab is not None:
+        slab = objs.Slab(zpos=slab, shape=imsize)
+    if rawimage is not None:
+        image = rawimage
+
+    stateargs.update({'sigma': sigma})
+    stateargs.update({'slab': slab})
+    s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm, **stateargs)
+
+    if ignoreimage:
+        s.model_to_true_image()
+    return s 
+
 def pad_fake_particles(pos, rad, nfake):
     opos = np.vstack([pos, np.zeros((nfake, 3))])
     orad = np.hstack([rad, rad[0]*np.ones(nfake)])
     return opos, orad
 
-def zero_particles(n):
-    return np.zeros((n,3)), np.ones(n), np.zeros(n)
-
 def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, imzstop=-1, invert=False,
         pad_for_extra=True, threads=-1, phi=0.5, sigma=0.05, zscale=1.0,
         PSF=(2.0, 4.0), ORDER=(3,3,2), slab=None):
-    from cbamf import states, initializers
-    from cbamf.comp import objs, psfs, ilms
 
     itrue = initializers.normalize(rawimage[imzstart:imzstop,:imsize,:imsize], invert)
     feat = initializers.remove_background(itrue.copy(), order=ORDER)
@@ -314,18 +419,6 @@ def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, imzstop=-1, i
 
     return s
 
-def feature_addsubtract(s, sweeps=3, rad=5):
-    from cbamf import states, initializers
-    addsubtract(s, rad=rad, sweeps=sweeps, particle_group_size=s.N/(sweeps+1))
-
-    """
-    initializers.remove_overlaps(s.obj.pos, s.obj.rad, zscale=s.zscale)
-    s = states.ConfocalImagePython(s.image, obj=s.obj, psf=s.psf, ilm=s.ilm,
-            zscale=s.zscale, sigma=s.sigma, offset=s.offset, doprior=True,
-            nlogs=True, varyn=False)
-    """
-    return s
-
 def feature(rawimage, sweeps=20, samples=15, rad=7.3, frad=9,
         imsize=-1, imzstart=0, imzstop=-1, zscale=1.06, sigma=0.02, invert=False,
         PSF=(2.0, 4.1), ORDER=(3,3,2), threads=-1, addsubtract=True, phi=0.5):
@@ -339,14 +432,9 @@ def feature(rawimage, sweeps=20, samples=15, rad=7.3, frad=9,
 
     if addsubtract:
         print "Adding, removing particles"
-        s = feature_addsubtract(s, rad=rad)
+        addsubtract(s, rad=rad, sweeps=sweeps, particle_group_size=s.N/(sweeps+1))
 
     return do_samples(s, sweeps, burn, stepout=0.10)
-
-def trim_extra_particles(s):
-    # TODO -- take out particles that are already
-    # not able to be sampled (according to the sampler methods)
-    raise AttributeError("STUB")
 
 #=======================================================================
 # More involved featuring functions using MC

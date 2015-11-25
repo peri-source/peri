@@ -1,9 +1,10 @@
 import os
 import numpy as np
+import cPickle as pickle
 
 from cbamf import const
 from cbamf import initializers
-from cbamf.util import Tile, amin, amax, ProgressBar
+from cbamf.util import Tile, amin, amax, ProgressBar, RawImage
 from cbamf.priors import overlap
 
 class State:
@@ -252,10 +253,12 @@ class ConfocalImagePython(State):
 
         Parameters:
         -----------
-        image : (Nz, Ny, Nx) ndarray
+        image : (Nz, Ny, Nx) ndarray OR `cbamf.util.RawImage` object
             The raw image with which to compare the model image from this class.
             This image should have been prepared through prepare_for_state, which
-            does things such as padding necessary for this class.
+            does things such as padding necessary for this class. In the case of the
+            RawImage, paths are used to keep track of the image object to save
+            on pickle size.
 
         obj : component
             A component object which handles the platonic image creation, e.g., 
@@ -330,6 +333,14 @@ class ConfocalImagePython(State):
         self.N = self.obj.N
 
         self._build_state()
+
+        # FIXME -- unify the interface using only RawImage?
+        if isinstance(image, RawImage):
+            self.rawimage = image
+            image = image.get_padded_image(self.pad)
+        else:
+            self.rawimage = None
+
         self.set_image(image)
 
     def reset(self):
@@ -913,8 +924,51 @@ class ConfocalImagePython(State):
         pass
 
     def __getinitargs__(self):
-        return ((self.image + const.PADVAL*(1-self.image_mask)),
+        # FIXME -- unify interface for RawImage
+        if self.rawimage is not None:
+            im = self.rawimage
+        else:
+            im = (self.image + const.PADVAL*(1-self.image_mask))
+
+        return (im,
             self.obj, self.psf, self.ilm, self.zscale, self.offset,
             self.sigma, self.doprior, self.constoff,
             self.varyn, self.allowdimers, self.nlogs, self.difference,
             self.pad, self.sigmapad, self.slab)
+
+def save(state, filename=None, desc='', extra=None):
+    """
+    Save the current state with extra information (for example samples and LL
+    from the optimization procedure).
+
+    state : cbamf.states.ConfocalImagePython
+        the state object which to save
+
+    filename : string
+        if provided, will override the default that is constructed based on
+        the state's raw image file.  If there is no filename and the state has
+        a RawImage, the it is saved to RawImage.filename + "-peri-save.pkl"
+
+    desc : string
+        if provided, will augment the default filename to be 
+        RawImage.filename + '-peri-' + desc + '.pkl'
+
+    extra : list of pickleable objects
+        if provided, will be saved with the state
+    """
+    if state.rawimage is not None:
+        desc = desc or 'save'
+        filename = filename or state.rawimage.filename + '-peri-' + desc + '.pkl'
+    else:
+        if not filename:
+            raise AttributeError, "Must provide filename since RawImage is not used"
+
+    if extra is None:
+        save = state
+    else:
+        save = [state] + extra
+
+    pickle.dump(save, open(filename, 'wb'))
+
+def load(filename):
+    return pickle.load(open(filename, 'rb'))
