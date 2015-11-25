@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 
-from cbamf.comp import psfs, ilms, objs
+from cbamf.runner import create_state
 from cbamf.test import poissondisks
 from cbamf import states
 from cbamf import const
@@ -20,71 +20,7 @@ def _toarr(i):
 #=======================================================================
 # Generating fake data
 #=======================================================================
-def create_state(image, pos, rad, sigma=0.05, ignoreimage=True, psftype='gauss3d',
-        ilmtype='poly3d', psfargs={}, ilmargs={}, objargs={}, stateargs={}):
-    """
-    Create a state from a blank image, set of pos and radii
-
-    Parameters:
-    -----------
-    image : blank image of already padded
-    pos : padded positions
-    rad : radii array
-    sigma : float, noise level
-
-    psftype : ['gauss2d', 'gauss3d', 'gauss4d', 'gaussian_pca']
-        which type of psf to use in the state
-
-    ilmtype : ['poly3d', 'leg3d', 'cheb3d', 'poly2p1d', 'leg2p1d']
-        which type of illumination field
-
-    psfargs : arguments to the psf object
-    ilmargs: arguments to the ilm object
-    objargs: arguments to the sphere collection object
-    stateargs : dictionary of arguments to pass to state
-    """
-    tpsfs = ['gauss3d', 'gauss4d']
-    tilms = ['poly3d', 'leg3d', 'cheb3d', 'poly2p1d', 'leg2p1d']
-
-
-    def_obj = {'pos': pos, 'rad': rad, 'shape': image.shape}
-    def_psf = {'shape': image.shape}
-    def_ilm = {'order': (1,1,1), 'shape': image.shape}
-
-    def_obj.update(objargs)
-    obj = objs.SphereCollectionRealSpace(**def_obj)
-
-    if ilmtype == 'poly3d':
-        def_ilm.update(ilmargs)
-        ilm = ilms.Polynomial3D(**def_ilm)
-    if ilmtype == 'leg3d':
-        def_ilm.update(ilmargs)
-        ilm = ilms.LegendrePoly3D(**def_ilm)
-    if ilmtype == 'leg2p1d':
-        def_ilm.update(ilmargs)
-        ilm = ilms.LegendrePoly2P1D(**def_ilm)
-
-    if psftype == 'gauss2d':
-        def_psf.update({'params': (2.0, 4.0)})
-        def_psf.update(psfargs)
-        psf = psfs.AnisotropicGaussian(**def_psf)
-    if psftype == 'gauss3d':
-        def_psf.update({'params': (2.0, 1.0, 4.0)})
-        def_psf.update(psfargs)
-        psf = psfs.AnisotropicGaussianXYZ(**def_psf)
-    if psftype == 'gauss4d':
-        def_psf.update({'params': (2.0, 1.0, 4.0)})
-        def_psf.update(psfargs)
-        psf = psfs.Gaussian4DPoly(**def_psf)
-
-    s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm,
-            sigma=sigma, **stateargs)
-
-    if ignoreimage:
-        s.model_to_true_image()
-    return s 
-
-def create_state_random_packing(imsize, radius=5.0, phi=0.5, seed=None, *args, **kwargs):
+def create_state_random_packing(imsize, radius=5.0, phi=0.5, seed=None, **kwargs):
     """
     Creates a random packing of spheres and generates the state
 
@@ -104,14 +40,12 @@ def create_state_random_packing(imsize, radius=5.0, phi=0.5, seed=None, *args, *
     _seed_or_not(seed)
     imsize = _toarr(imsize)
 
-    blank = np.zeros(imsize, dtype='float')
     disks = poissondisks.DiskCollection(imsize-radius, 2*radius)
-    xstart = disks.get_positions() + radius/4
-    image, pos, rad = states.prepare_for_state(blank, xstart, radius)
+    pos = disks.get_positions() + radius/4
     
-    return create_state(image, pos, rad, *args, **kwargs)
+    return create_state(np.zeros(imsize), pos, rad, ignoreimage=True, **kwargs)
 
-def create_single_particle_state(imsize, radius=5.0, seed=None, *args, **kwargs):
+def create_single_particle_state(imsize, radius=5.0, seed=None, **kwargs):
     """
     Creates a single particle state
 
@@ -131,13 +65,12 @@ def create_single_particle_state(imsize, radius=5.0, seed=None, *args, **kwargs)
     _seed_or_not(seed)
     imsize = _toarr(imsize)
 
-    pad = padfromargs(kwargs)
-    image, pos, rad = states.prepare_for_state(np.zeros(imsize),
-            imsize.reshape(-1,3)/2.0, radius, pad=pad)
+    pos = imsize.reshape(-1,3)/2.0
+    rad = radius
 
-    return create_state(image, pos, rad, *args, **kwargs)
+    return create_state(np.zeros(imsize), pos, rad, ignoreimage=True, **kwargs)
 
-def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, axis='x', *args, **kwargs):
+def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, axis='x', **kwargs):
     """
     Creates a two particle state
 
@@ -168,15 +101,5 @@ def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, axis='x'
     pos = np.array([imsize/2 - d, imsize/2 + d]).reshape(-1,3)
     rad = np.array([radius, radius])
 
-    pad = padfromargs(kwargs)
-    image, pos, rad = states.prepare_for_state(np.zeros(imsize), pos, rad, pad=pad)
-    return create_state(image, pos, rad, *args, **kwargs)
-
-def padfromargs(kwargs):
-    stateargs = kwargs.get('stateargs')
-    if stateargs:
-        pad = stateargs.get('pad', const.PAD)
-    else:
-        pad = const.PAD
-    return pad
+    return create_state(np.zeros(imsize), pos, rad, ignoreimage=True, **kwargs)
 
