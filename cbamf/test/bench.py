@@ -22,12 +22,12 @@ def bamfpy_positions(state, sweeps=20, burn=5):
         state.update(bl, val)
     return h.mean(axis=0).reshape(-1,3)
 
-def trackpy(state):
+def trackpy(state, magic=145):
     image = totiff(state)
     diameter = int(2*state.state[state.b_rad].mean())
     diameter -= 1 - diameter % 2
-    out = locate(image, diameter=diameter, invert=True,
-            minmass=145*(diameter/2)**3)
+    minmass = None if magic is None else magic*(diameter/2)**3
+    out = locate(image, diameter=diameter, invert=True, minmass=minmass)
     return np.vstack([out.z, out.y, out.x]).T + state.pad
 
 def error(state, pos):
