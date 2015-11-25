@@ -67,17 +67,43 @@ class Tile(object):
         return str(self.__class__.__name__)+" {} -> {} ({})".format(
                 list(self.l), list(self.r), list(self.shape))
 
-class ConfocalImage(object):
-    def __init__(self, filename, tile=None, zstart=None, zstop=None, xysize=None,
-            xyunits=1):
+class RawImage(object):
+    def __init__(self, filename, tile=None, zstart=None, zstop=None,
+            xysize=None, invert=False):
+        """
+        An image object which stores information about desired region and padding,
+        etc.  There are number of ways to create an image object:
+
+        filename : str
+            path of the image file.  recommended that you supply a relative path
+            so that transfer between computers is possible
+
+        tile : `cbamf.util.Tile`
+
+        """
         self.filename = filename
-        self.image = initializers.load_tiff(self.filename)
+        self.invert = invert
+
+        try:
+            self.image = initializers.load_tiff(self.filename)
+            self.image = initializers.normalize(self.image, invert=self.invert)
+        except IOError as e:
+            print "Could not find image '%s'" % self.filename
+            raise e
 
         if tile is not None:
             self.tile = tile
+        else:
+            zstart = zstart or 0
+            left = (zstart, 0, 0)
+            right = (zstop, xysize, xysize)
+            self.tile = Tile(left=left, right=right)
 
     def get_image(self):
         return self.image[self.tile.slicer]
+
+    def get_padded_image(self, pad=const.PAD, padval=const.PADVAL):
+        return np.pad(self.get_image(), pad, mode='constant', constant_values=padval)
 
     def __getstate__(self):
         return {}
@@ -86,8 +112,7 @@ class ConfocalImage(object):
         pass
 
     def __initargs__(self):
-        return (self.filename, self.slicer, self.zstart, self.zstop,
-                self.xysize, self.xyunits)
+        return (self.filename, self.tile, None, None, None, self.invert)
 
 def cdd(d, k):
     """ Conditionally delete key (or list of keys) 'k' from dict 'd' """
