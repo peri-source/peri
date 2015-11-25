@@ -11,23 +11,7 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 import common
 from cbamf.viz import util
 from cbamf.util import Tile
-from cbamf.comp.objs import sphere_analytical_gaussian 
-
-def exact_volume(rvec, radius, function=sphere_analytical_gaussian):
-    im = function(rvec, radius)
-
-    vol_goal = 4./3*np.pi*radius**3
-    rprime = radius
-
-    for i in xrange(10):
-        vol_curr = np.abs(im.sum())
-        rprime = rprime + 1.0*(vol_goal - vol_curr) / (4*np.pi*rprime**2)
-        im = function(rvec, rprime)
-
-        if np.abs(vol_goal - vol_curr)/vol_goal < 1e-10:
-            break
-
-    return im
+from cbamf.comp.objs import exact_volume_sphere, sphere_analytical_gaussian 
 
 def calc(N=28, scale=41):
     pos = np.array([(N-1)/2.0]*3)
@@ -38,7 +22,7 @@ def calc(N=28, scale=41):
 
     tile = Tile(im.shape)
     rvec = np.sqrt(((tile.coord_vector() - pos)**2).sum(axis=-1))
-    approx = exact_volume(rvec, radius)
+    approx = exact_volume_sphere(rvec, radius, function=sphere_analytical_gaussian, volume_error=1e-10)
 
     return im, pix, approx, corner
 

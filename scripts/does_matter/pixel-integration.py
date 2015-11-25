@@ -4,21 +4,9 @@ import scipy as sp
 import scipy.ndimage as nd
 import scipy.interpolate as intr
 
-import matplotlib.pyplot as pl
-from mpl_toolkits.axes_grid1 import ImageGrid
-
+import common
 from cbamf import const, runner
 from cbamf.test import init
-from cbamf.states import prepare_image
-from cbamf.viz.util import COLORS
-from cbamf.viz.plots import lbl
-
-def set_image(state, cg, sigma):
-    image = cg + np.random.randn(*cg.shape)*sigma
-    image = np.pad(image, const.PAD, mode='constant', constant_values=const.PADVAL)
-    state.set_image(image)
-    state.sigma = sigma
-    state.reset()
 
 def pxint(radius=8, factor=8, dx=np.array([0,0,0])):
     # the factor of coarse-graining, goal particle size, and larger size
@@ -61,31 +49,6 @@ def pxint(radius=8, factor=8, dx=np.array([0,0,0])):
     # measure the true inferred parameters
     return s, cg
 
-def crb(state):
-    crb = []
-
-    blocks = state.explode(state.block_all())
-    for block in blocks:
-        tc = np.sqrt(1.0/np.abs(state.fisher_information(blocks=[block])))
-        crb.append(tc)
-
-    return np.squeeze(np.array(crb))
-
-def sample(state, im, noise, N=20, sweeps=20, burn=10):
-    values, errors = [], []
-
-    for i in xrange(N):
-        print i, 
-        set_image(state, im, noise)
-        h,l = runner.do_samples(state, sweeps, burn, quiet=True)
-
-        h = np.array(h)
-        values.append(h.mean(axis=0))
-        errors.append(h.std(axis=0))
-
-    print ''
-    return np.array(values), np.array(errors)
-
 def dorun(SNR=20, sweeps=20, burn=8, noise_samples=10):
     """
     we want to display the errors introduced by pixelation so we plot:
@@ -103,7 +66,7 @@ def dorun(SNR=20, sweeps=20, burn=8, noise_samples=10):
         s,im = pxint(radius=radius, factor=4)
         goodstate = s.state.copy()
 
-        set_image(s, im, 1.0/SNR)
+        common.set_image(s, im, 1.0/SNR)
         tcrb = crb(s)
         tval, terr = sample(s, im, 1.0/SNR, N=noise_samples, sweeps=sweeps, burn=burn)
         crbs.append(tcrb)
@@ -113,30 +76,10 @@ def dorun(SNR=20, sweeps=20, burn=8, noise_samples=10):
     return np.array(crbs), np.array(vals), np.array(errs), radii
 
 def doplot(prefix='/media/scratch/peri/does_matter/pixint', snrs=[20,200,2000]):
-    fig = pl.figure(figsize=(14,7))
-
-    ax = fig.add_axes([0.43, 0.15, 0.52, 0.75])
-    gs = ImageGrid(fig, rect=[0.05, 0.05, 0.25, 0.90], nrows_ncols=(2,1), axes_pad=0.25,
-            cbar_location='right', cbar_mode='each', cbar_size='10%', cbar_pad=0.04)
-
     s,im = pxint(radius=8, factor=8, dx=np.array([0,0,0]))
     nn = np.s_[:,:,im.shape[2]/2]
-
-    figlbl, labels = ['A', 'B'], ['Reference', 'Difference']
-    diff = (im - s.get_model_image()[s.inner])[nn]
-    diffm = 0.1#np.abs(diff).max()
-    im0 = gs[0].imshow(im[nn], vmin=0, vmax=1, cmap='bone_r')
-    im1 = gs[1].imshow(diff, vmin=-diffm, vmax=diffm, cmap='RdBu')
-    cb0 = pl.colorbar(im0, cax=gs[0].cax, ticks=[0,1])
-    cb1 = pl.colorbar(im1, cax=gs[1].cax, ticks=[-diffm,diffm]) 
-    cb0.ax.set_yticklabels(['0', '1'])
-    cb1.ax.set_yticklabels(['-%0.1f' % diffm, '%0.1f' % diffm])
-
-    for i in xrange(2):
-        gs[i].set_xticks([])
-        gs[i].set_yticks([])
-        gs[i].set_ylabel(labels[i])
-        #lbl(gs[i], figlbl[i])
+    diff = (im - s.get_model_image()[s.inner])
+    image0, image1 = im[nn], diff[nn]
 
     def interp(t, c):
         x = np.linspace(t[0], t[-1], 1000)

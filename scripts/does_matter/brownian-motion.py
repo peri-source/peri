@@ -1,28 +1,10 @@
-"""
-Plot the average positional / radius error vs fraction of self-diffusion time
-"""
 import pickle
 import numpy as np
 import scipy as sp
-import scipy.ndimage as nd
-from IPython.core.debugger import Tracer
-#Tracer()() / %debug after stacktrace
 
-import matplotlib.pyplot as pl
-from mpl_toolkits.axes_grid1 import ImageGrid
-
+import common
 from cbamf import const, runner, initializers
 from cbamf.test import init
-from cbamf.states import prepare_image
-from cbamf.viz.util import COLORS
-from cbamf.viz.plots import lbl
-
-def set_image(state, cg, sigma):
-    image = cg + np.random.randn(*cg.shape)*sigma
-    image = np.pad(image, const.PAD, mode='constant', constant_values=const.PADVAL)
-    state.set_image(image)
-    state.sigma = sigma
-    state.reset()
 
 def diffusion(diffusion_constant, exposure_time, samples=200):
     """
@@ -63,31 +45,6 @@ def diffusion(diffusion_constant, exposure_time, samples=200):
     # measure the true inferred parameters
     return s, finalimage, position
 
-def crb(state):
-    crb = []
-
-    blocks = state.explode(state.block_all())
-    for block in blocks:
-        tc = np.sqrt(1.0/np.abs(state.fisher_information(blocks=[block])))
-        crb.append(tc)
-
-    return np.squeeze(np.array(crb))
-
-def sample(state, im, noise, N=10, burn=10, sweeps=20):
-    values, errors = [], []
-
-    for i in xrange(N):
-        print i, ' ',
-        set_image(state, im, noise)
-        h,l = runner.do_samples(state, sweeps, burn, quiet=True)
-
-        h = np.array(h)
-        values.append(h.mean(axis=0))
-        errors.append(h.std(axis=0))
-
-    print ''
-    return np.array(values), np.array(errors)
-
 def dorun(SNR=20, ntimes=20, samples=10, noise_samples=10, sweeps=20, burn=10):
     """
     we want to display the errors introduced by pixelation so we plot:
@@ -124,13 +81,6 @@ def dorun(SNR=20, ntimes=20, samples=10, noise_samples=10, sweeps=20, burn=10):
     poss = np.array(poss).reshape(shape0)
 
     return  [crbs, vals, errs, poss, times]
-
-def dist(a):
-    return np.sqrt((a[...,:3]**2).sum(axis=-1)).mean(axis=-1)
-
-def errs(val, pos):
-    v,p = val, pos
-    return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
 
 def doplot(prefix='/media/scratch/peri/does_matter/brownian-motion', snrs=[20,50,200,500]):
     fig = pl.figure(figsize=(14,7))
