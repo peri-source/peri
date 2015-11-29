@@ -67,7 +67,7 @@ class Tile(object):
         return str(self.__class__.__name__)+" {} -> {} ({})".format(
                 list(self.l), list(self.r), list(self.shape))
 
-class RawImage(object):
+class RawImage():
     def __init__(self, filename, tile=None, zstart=None, zstop=None,
             xysize=None, invert=False):
         """
@@ -95,6 +95,8 @@ class RawImage(object):
             self.tile = tile
         else:
             zstart = zstart or 0
+            zstop = zstop or self.image.shape[0]
+
             left = (zstart, 0, 0)
             right = (zstop, xysize, xysize)
             self.tile = Tile(left=left, right=right)
@@ -108,10 +110,10 @@ class RawImage(object):
     def __getstate__(self):
         return {}
 
-    def __setstate__(self):
+    def __setstate__(self, idct):
         pass
 
-    def __initargs__(self):
+    def __getinitargs__(self):
         return (self.filename, self.tile, None, None, None, self.invert)
 
 def cdd(d, k):
