@@ -333,14 +333,6 @@ class ConfocalImagePython(State):
         self.N = self.obj.N
 
         self._build_state()
-
-        # FIXME -- unify the interface using only RawImage?
-        if isinstance(image, RawImage):
-            self.rawimage = image
-            image = image.get_padded_image(self.pad)
-        else:
-            self.rawimage = None
-
         self.set_image(image)
 
     def reset(self):
@@ -368,6 +360,12 @@ class ConfocalImagePython(State):
         """
         Update the current comparison (real) image
         """
+        if isinstance(image, RawImage):
+            self.rawimage = image
+            image = image.get_padded_image(self.pad)
+        else:
+            self.rawimage = None
+
         self.image = image.copy()
         self.image_mask = (image > const.PADVAL).astype('float')
         self.image *= self.image_mask
