@@ -211,7 +211,7 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True,
     image = initializers.normalize(image, invert)
     if dopad:
         image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
-        pos += pad
+        pos = pos.copy() + pad
 
     if not isinstance(rad, np.ndarray):
         rad = rad*np.ones(pos.shape[0])
