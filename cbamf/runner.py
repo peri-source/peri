@@ -126,7 +126,7 @@ def sample_block_list(state, blocklist, stepout=0.1, quiet=False):
     return state.state.copy(), state.loglikelihood()
 
 def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
-        prefix='cbamf', save_name=None, sigma=True, pos=True, quiet=False):
+        prefix='cbamf', save_name=None, sigma=True, pos=True, quiet=False, postfix=None):
     h = []
     ll = []
     if not save_name:
@@ -137,6 +137,9 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
         if save_period > 0 and i % save_period == 0:
             with open(save_name, 'w') as tfile:
                 pickle.dump([s,h,ll], tfile)
+
+        if postfix is not None:
+            states.save(s, desc=postfix, extra=[np.array(h),np.array(ll)])
 
         if not quiet:
             print '{:=^79}'.format(' Sweep '+str(i)+' ')
@@ -172,7 +175,7 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
 #=============================================================================
 def optimize_particle(state, index, method='gn', doradius=True):
     """
-    Methods available are 
+    Methods available are
         gn : Gauss-Newton with JTJ (recommended)
         nr : Newton-Rhaphson with hessian
 
@@ -278,7 +281,7 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
     Parameters:
     -----------
     image : ndarray or `cbamf.util.RawImage`
-        raw confocal image with which to compare. 
+        raw confocal image with which to compare.
 
     pos : initial conditions for positions (in raw image coordinates)
     rad : initial conditions for radii array (can be scalar)
@@ -364,7 +367,7 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         psf = psfs.Gaussian4DPoly(**def_psf)
 
     if slab is not None:
-        slab = objs.Slab(zpos=slab, shape=imsize)
+        slab = objs.Slab(zpos=slab+pad, shape=image.shape)
     if rawimage is not None:
         image = rawimage
 
@@ -374,7 +377,7 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
 
     if ignoreimage:
         s.model_to_true_image()
-    return s 
+    return s
 
 def pad_fake_particles(pos, rad, nfake):
     opos = np.vstack([pos, np.zeros((nfake, 3))])
