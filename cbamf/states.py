@@ -337,7 +337,10 @@ class ConfocalImagePython(State):
 
     def reset(self):
         self._build_state()
-        self.set_image(self.padded_image())
+        if self.rawimage is not None:
+            self.set_image(self.rawimage)
+        else:
+            self.set_image(self.padded_image())
 
     def set_obj(self, obj):
         self.obj = obj
@@ -349,6 +352,10 @@ class ConfocalImagePython(State):
 
     def set_ilm(self, ilm):
         self.ilm = ilm
+        self.reset()
+
+    def set_pos_rad(self, pos, rad):
+        self.obj.set_pos_rad(pos, rad)
         self.reset()
 
     def padded_image(self):
@@ -926,7 +933,7 @@ class ConfocalImagePython(State):
         if self.rawimage is not None:
             im = self.rawimage
         else:
-            im = (self.image + const.PADVAL*(1-self.image_mask))
+            im = self.padded_image()
 
         return (im,
             self.obj, self.psf, self.ilm, self.zscale, self.offset,

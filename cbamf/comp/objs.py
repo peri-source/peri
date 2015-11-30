@@ -214,6 +214,12 @@ class SphereCollectionRealSpace(object):
         self.shape = shape
         self._setup()
 
+    def set_pos_rad(self, pos, rad):
+        self.pos = pos.astype('float')
+        self.rad = rad.astype('float')
+        self.typ = 1.*np.ones_like(rad)
+        self.N = rad.shape[0]
+
     def _setup_sphere_functions(self, method, alpha=None):
         self.methods = [
             'lerp', 'logistic', 'triangle', 'constrained-cubic',
