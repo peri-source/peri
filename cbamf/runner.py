@@ -156,7 +156,7 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
         if s.slab:
             sample_block(s, 'slab', stepout=stepout, quiet=quiet)
 
-        if sigma:
+        if sigma and s.nlogs:
             sample_block(s, 'sigma', stepout=stepout/10, quiet=quiet)
 
         if i >= burn:
