@@ -398,6 +398,12 @@ class ConfocalImagePython(State):
     def get_true_image(self):
         return self.image * self.image_mask
 
+    def get_difference_image(self, doslice=True):
+        o = self.get_true_image() - self.get_model_image()
+        if doslice:
+            return o[self.inner]
+        return o
+
     def _build_state(self):
         self.param_dict = {
             'pos': 3*self.obj.N,
