@@ -350,6 +350,57 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 # a complex hidden variable representation of the ILM
 # something like (p(x,y)+m(x,y))*q(z) where m is determined by local models
 #=============================================================================
+class BarnesInterpolation(object):
+    def __init__(self, *args, **kwargs):
+        """
+        A class for Barnes interpolation of a n-dimensional unstructured data
+        points using a strictly local approximation.
+
+        Parameters:
+        -----------
+        *args : ndarrays
+            x, y, ..., d arrays where x, y, ... are the coordinates of data in
+            N dimensions and d if the data value at those points.  These arrays
+            must have the shape [M] where M in the number of data points.
+
+        neighbors : integer, optional
+            How many average neighbors are included in calculating the value of
+            a particular interpolation point. Default is set 
+
+        iterations : integer, optional
+
+        #neighbors=None, iterations=1):
+        """
+        pass
+
+    def update(self):
+        pass
+
+def barnes2d(im, x, y):
+    rr = 3
+    ix = int(x)
+    iy = int(y)
+    indx, indy = np.mgrid[-rr:rr+1,-rr:rr+1]
+    sub = im[ix-rr:ix+rr+1,iy-rr:iy+rr+1]
+    f0 = (np.exp(-((x-ix-indx)**2+(y-iy-indy)**2)/2)*sub)/(np.sqrt(2*np.pi)**2)
+    f0k = (np.exp(-(indx**2+indy**2)/2)*sub)/(np.sqrt(2*np.pi)**2)
+    f1 = f0 + f0*(sub-f0k)
+    return f1.sum()
+
+def test_barnes(im):
+    NN = 400
+    x,y = np.mgrid[40:70:1j*NN,40:70:1j*NN]
+    print x.shape
+    t = np.array([barnes2d(im, tx, ty) for tx,ty in zip(x.flatten(),y.flatten())]).reshape(x.shape)
+    print t.mean()
+
+    import pylab as pl
+    pl.figure()
+    pl.imshow(im, interpolation='nearest', vmin=im.min(), vmax=im.max())
+    pl.figure()
+    pl.imshow(t, interpolation='nearest', vmin=im.min(), vmax=im.max())
+
+
 class PiecewisePolyStreak2P1D(object):
     def __init__(self, shape, order=(1,1,1), num=30):
         self.shape = shape
