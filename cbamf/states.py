@@ -405,6 +405,8 @@ class ConfocalImagePython(State):
         return o
 
     def _build_state(self):
+        self.N = self.obj.N
+
         self.param_dict = {
             'pos': 3*self.obj.N,
             'rad': self.obj.N,
@@ -753,6 +755,9 @@ class ConfocalImagePython(State):
         return True
 
     def add_particle(self, p, r):
+        if not self.varyn:
+            raise AttributeError("Add/remove particles not supported by state, varyn=False")
+
         n = self.obj.typ.argmin()
 
         bp = self.block_particle_pos(n)
@@ -766,6 +771,9 @@ class ConfocalImagePython(State):
         return n
 
     def remove_particle(self, n):
+        if not self.varyn:
+            raise AttributeError("Add/remove particles not supported by state, varyn=False")
+
         bt = self.block_particle_typ(n)
         self.update(bt, np.array([0]))
         return self.obj.pos[n], self.obj.rad[n]
@@ -978,6 +986,14 @@ def save(state, filename=None, desc='', extra=None):
         save = state
     else:
         save = [state] + extra
+
+    if os.path.exists(filename):
+        ff = "{}-tmp-for-copy".format(filename)
+
+        if os.path.exists(ff):
+            os.remove(ff)
+
+        os.rename(filename, ff)
 
     pickle.dump(save, open(filename, 'wb'))
 
