@@ -379,6 +379,26 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         s.model_to_true_image()
     return s
 
+def set_varyn(state, varyn, nfake=None):
+    if not state.varyn and varyn:
+        state.varyn = True
+        nfake = nfake or state.N
+
+        opos, orad = pad_fake_particles(state.obj.pos, state.obj.rad, nfake)
+        state.obj = objs.SphereCollectionRealSpace(pos=opos, rad=orad,
+                shape=state.image.shape, pad=nfake)
+        state.reset()
+
+    if state.varyn and not varyn:
+        n = state.active_particles()
+        opos = state.obj.pos[n]
+        orad = state.obj.rad[n]
+
+        state.varyn = False
+        state.obj = objs.SphereCollectionRealSpace(pos=opos, rad=orad,
+                shape=state.image.shape)
+        state.reset()
+
 def pad_fake_particles(pos, rad, nfake):
     opos = np.vstack([pos, np.zeros((nfake, 3))])
     orad = np.hstack([rad, rad[0]*np.ones(nfake)])
@@ -442,7 +462,7 @@ def feature(rawimage, sweeps=20, samples=15, rad=7.3, frad=9,
 #=======================================================================
 # More involved featuring functions using MC
 #=======================================================================
-def sample_n_add(s, rad, tries=5):
+def sample_n_add(s, rad, tries=5, steps=8):
     diff = (s.get_model_image() - s.get_true_image()).copy()
 
     smoothdiff = nd.gaussian_filter(diff, rad/2.0)
@@ -464,12 +484,13 @@ def sample_n_add(s, rad, tries=5):
 
         n = s.add_particle(p, rad)
         bl = s.blocks_particle(n)[:-1]
-        sample_state(s, bl, stepout=1, N=1)
+        sample_state(s, bl, stepout=1, N=steps)
 
         ll1 = s.loglikelihood()
 
         print p, ll0, ll1
-        if (ll0**2).sum() < (ll1**2).sum():
+        if ((not s.nlogs and (ll0**2).sum() < (ll1**2).sum()) or 
+            (s.nlogs and (ll0**2).sum() > (ll1**2).sum())):
             bt = s.block_particle_typ(n)
             s.update(bt, np.array([0]))
         else:
