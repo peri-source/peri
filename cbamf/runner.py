@@ -300,7 +300,7 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
     psftype : ['gauss2d', 'gauss3d', 'gauss4d', 'gaussian_pca']
         which type of psf to use in the state
 
-    ilmtype : ['poly3d', 'leg3d', 'cheb3d', 'poly2p1d', 'leg2p1d']
+    ilmtype : ['poly3d', 'leg3d', 'cheb2p1d', 'poly2p1d', 'leg2p1d']
         which type of illumination field
 
     psfargs : arguments to the psf object
@@ -309,7 +309,7 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
     stateargs : dictionary of arguments to pass to state
     """
     tpsfs = ['gauss3d', 'gauss4d']
-    tilms = ['poly3d', 'leg3d', 'cheb3d', 'poly2p1d', 'leg2p1d']
+    tilms = ['poly3d', 'leg3d', 'cheb2p1d', 'poly2p1d', 'leg2p1d']
 
     # first, decide if we got a RawImage or just an image array
     rawimage = None
@@ -348,6 +348,12 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
     if ilmtype == 'leg3d':
         def_ilm.update(ilmargs)
         ilm = ilms.LegendrePoly3D(**def_ilm)
+    if ilmtype == 'cheb2p1d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.ChebyshevPoly2P1D(**def_ilm)
+    if ilmtype == 'poly2p1d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.Polynomial2P1D(**def_ilm)
     if ilmtype == 'leg2p1d':
         def_ilm.update(ilmargs)
         ilm = ilms.LegendrePoly2P1D(**def_ilm)
