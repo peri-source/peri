@@ -376,30 +376,67 @@ class BarnesInterpolation(object):
     def update(self):
         pass
 
-def barnes2d(im, x, y):
-    rr = 3
-    ix = int(x)
-    iy = int(y)
-    indx, indy = np.mgrid[-rr:rr+1,-rr:rr+1]
-    sub = im[ix-rr:ix+rr+1,iy-rr:iy+rr+1]
-    f0 = (np.exp(-((x-ix-indx)**2+(y-iy-indy)**2)/2)*sub)/(np.sqrt(2*np.pi)**2)
-    f0k = (np.exp(-(indx**2+indy**2)/2)*sub)/(np.sqrt(2*np.pi)**2)
-    f1 = f0 + f0*(sub-f0k)
-    return f1.sum()
+class BarnesInterpolation1D(object):
+    def __init__(self, x, d, filter_size=None, iterations=2, clip=False, damp=0.75):
+        """
+        A class for 1-d barnes interpolation. Give data points d at locations x.
 
-def test_barnes(im):
-    NN = 400
-    x,y = np.mgrid[40:70:1j*NN,40:70:1j*NN]
-    print x.shape
-    t = np.array([barnes2d(im, tx, ty) for tx,ty in zip(x.flatten(),y.flatten())]).reshape(x.shape)
-    print t.mean()
+        Parameters:
+        -----------
+        (x, d) : ndarrays, 1-dimensional
+            input positions and values
 
-    import pylab as pl
-    pl.figure()
-    pl.imshow(im, interpolation='nearest', vmin=im.min(), vmax=im.max())
-    pl.figure()
-    pl.imshow(t, interpolation='nearest', vmin=im.min(), vmax=im.max())
+        filter_size : float
+            control parameter for weight function (sigma), should be the average
+            data spacing
 
+        iterations : integer
+            how many iterations to perform. only two needed with a high damping
+
+        clip : boolean
+            whether to clip the number of data points used by the filtersize
+
+        damp : float
+            the damping parameter used in Koch 1983 J. Climate Appl. Meteor. 22 1487-1503
+        """
+        self.x = x
+        self.d = d
+        self.damp = damp
+        self.clip = clip
+        self.iterations = iterations
+
+        if filter_size is None:
+            self.filter_size = (x[1:] - x[:-1]).mean()/2
+        else:
+            self.filter_size = filter_size
+
+    def _weight(self, rsq, size=None):
+        size = size or self.filter_size
+
+        o = np.exp(-rsq / (2*size**2))
+        o = o * (not self.clip or (self.clip and (rsq < 6*size**2)))
+        return o
+
+    def _outer(self, a, b):
+        return (a[:,None] - b[None,:])**2
+
+    def __call__(self, rvecs):
+        """
+        Get the values interpolated at positions rvecs
+        """
+        g = self.filter_size
+
+        dist0 = self._outer(self.x, self.x)
+        dist1 = self._outer(rvecs, self.x)
+
+        tmp = self._weight(dist0, g).dot(self.d)
+        out = self._weight(dist1, g).dot(self.d)
+
+        for i in xrange(self.iterations):
+            out = out + self._weight(dist1, g).dot(self.d - tmp)
+            tmp = tmp + self._weight(dist0, g).dot(self.d - tmp)
+            g *= self.damp
+        return out
 
 class PiecewisePolyStreak2P1D(object):
     def __init__(self, shape, order=(1,1,1), num=30):
