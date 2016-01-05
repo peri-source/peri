@@ -350,34 +350,8 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 # a complex hidden variable representation of the ILM
 # something like (p(x,y)+m(x,y))*q(z) where m is determined by local models
 #=============================================================================
-class BarnesInterpolation(object):
-    def __init__(self, *args, **kwargs):
-        """
-        A class for Barnes interpolation of a n-dimensional unstructured data
-        points using a strictly local approximation.
-
-        Parameters:
-        -----------
-        *args : ndarrays
-            x, y, ..., d arrays where x, y, ... are the coordinates of data in
-            N dimensions and d if the data value at those points.  These arrays
-            must have the shape [M] where M in the number of data points.
-
-        neighbors : integer, optional
-            How many average neighbors are included in calculating the value of
-            a particular interpolation point. Default is set 
-
-        iterations : integer, optional
-
-        #neighbors=None, iterations=1):
-        """
-        pass
-
-    def update(self):
-        pass
-
 class BarnesInterpolation1D(object):
-    def __init__(self, x, d, filter_size=None, iterations=2, clip=False, damp=0.75):
+    def __init__(self, x, d, filter_size=None, iterations=4, clip=False, damp=0.95):
         """
         A class for 1-d barnes interpolation. Give data points d at locations x.
 
@@ -438,14 +412,34 @@ class BarnesInterpolation1D(object):
             g *= self.damp
         return out
 
-class PiecewisePolyStreak2P1D(object):
-    def __init__(self, shape, order=(1,1,1), num=30):
+class BarnesStreakLegPoly2P1D(object):
+    def __init__(self, shape, order=(1,1,1), nstreakpoints=40):
+        """
+        An illumination field of the form (b(e) + p(x,y))*q(z) where
+        e is the axis of the 1d streak, be in x or y.
+
+        Parameters:
+        -----------
+        shape : iterable
+            size of the field in pixels, needs to be padded shape
+
+        order : list, tuple
+            number of orders for each polynomial, (order[0], order[1])
+            correspond to size of p(x,y) and order[2] is the q(z) poly
+
+        nstreakpoints : int
+            number of points to include in the approximation of the barnes streak
+        """
         self.shape = shape
         self.xyorder = order[:2]
         self.zorder = order[-1]
 
         self.order = order
-        self.nparams = len(list(self._poly_orders()))
+        self.nparams = len(list(self._poly_orders())) + nstreakpoints
+
+        # set some parameters for the streak
+        self.nstreakpoints = nstreakpoints
+        self.streak_slicer = np.s_[self.nparams - self.nstreakpoints:]
 
         self.params = np.zeros(self.nparams, dtype='float')
         self.params[0] = 1
@@ -467,15 +461,29 @@ class PiecewisePolyStreak2P1D(object):
     def _poly_orders(self):
         return chain(self._poly_orders_xy(), self._poly_orders_z())
 
-    def _setup(self):
-        # normalize all sizes to a strict upper bound on image size
-        # so we can transfer ILM between different images
-        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024., meshed=False)
+    def _setup_rvecs(self):
+        o = self.shape
+        self.rz, self.ry, self.rx = [np.linspace(-1, 1, i) for i in o]
+        self.rz = self.rz[:,None,None]
+        self.ry = self.ry[None,:,None]
+        self.rx = self.rx[None,None,:]
 
+        self.b_out = np.squeeze(self.rx)
+        self.b_in = np.linspace(self.b_out.min(), self.b_out.max(), self.nstreakpoints)
+
+    def _setup(self):
+        self._setup_rvecs()
         self._last_index = None
         self._indices = list(self._poly_orders())
         self._indices_xy = list(self._poly_orders_xy())
         self._indices_z = list(self._poly_orders_z())
+
+    def _barnes(self):
+        b = BarnesInterpolation1D(
+                self.b_in, self.params[self.streak_slicer],
+                filter_size=(self.b_in[1]-self.b_in[0])*1.0/2, damp=0.9, iterations=3
+        )
+        return b(self.b_out)[None,None,:]
 
     def _bkg(self):
         self.bkg = np.zeros(self.shape)
@@ -490,13 +498,23 @@ class PiecewisePolyStreak2P1D(object):
             ind = self._indices.index(order)
             self._polyz += self.params[ind] * self._term(order)
 
-        self.bkg = self._polyxy * self._polyz
+        self.bkg = (self._barnes() + self._polyxy) * self._polyz
         return self.bkg
 
-    def from_data(self, f, mask=None, dopriors=False, multiplier=1):
+    def from_ilm(self, ilm):
+        orders = list(self._poly_orders())
+
+        for i,o in enumerate(ilm._poly_orders()):
+            try:
+                ind = orders.index(o)
+                self.params[ind] = ilm.params[i]
+            except ValueError as e:
+                continue
+
+    def from_data(self, f, mask=None, dopriors=False, multiplier=1, maxcalls=200):
         if mask is None:
             mask = np.s_[:]
-        res = opt.leastsq(self._score, x0=self.params, args=(f, mask))
+        res = opt.leastsq(self._score, x0=self.params, args=(f, mask), maxfev=maxcalls*(self.nparams+1))
         self.update(self.block, res[0])
 
     def _score(self, coeffs, f, mask):
@@ -508,11 +526,16 @@ class PiecewisePolyStreak2P1D(object):
 
     def _term_xy(self, index):
         i,j = index
-        return self.rx**i * self.ry**j
+        ci = np.zeros(i+1)
+        cj = np.zeros(j+1)
+        ci[-1], cj[-1] = 1, 1
+        return legval(self.rx, ci) * legval(self.ry, cj)
 
     def _term_z(self, index):
         k = index[0]
-        return self.rz**k
+        ck = np.zeros(k+1)
+        ck[-1] = 1
+        return legval(self.rz, ck)
 
     def _term(self, index):
         # per index cache, so if called multiple times in a row, keep the answer
@@ -536,17 +559,21 @@ class PiecewisePolyStreak2P1D(object):
     def update(self, blocks, params):
         if blocks.sum() < self.block.sum()/2:
             for b in np.arange(len(blocks))[blocks]:
-                order = self._indices[b]
+                if b < len(self._indices):
+                    order = self._indices[b]
 
-                if order in self._indices_xy:
-                    _term = self._polyxy
-                else:
-                    _term = self._polyz
+                    if order in self._indices:
+                        if order in self._indices_xy:
+                            _term = self._polyxy
+                        else:
+                            _term = self._polyz
 
-                _term -= self.params[b] * self._term(order)
+                        _term -= self.params[b] * self._term(order)
+                        self.params[b] = params[b]
+                        _term += self.params[b] * self._term(order)
+
                 self.params[b] = params[b]
-                _term += self.params[b] * self._term(order)
-                self.bkg = self._polyxy * self._polyz
+                self.bkg = (self._barnes() + self._polyxy) * self._polyz
         else:
             self.params = params
             self._bkg()
@@ -559,7 +586,7 @@ class PiecewisePolyStreak2P1D(object):
 
     def __getstate__(self):
         odict = self.__dict__.copy()
-        cdd(odict, ['_poly', 'rx', 'ry', 'rz', 'bkg', '_last_term', '_last_index'])
+        cdd(odict, ['_poly', 'b_in', 'b_out', 'rx', 'ry', 'rz', 'bkg', '_last_term', '_last_index'])
         cdd(odict, ['_polyxy', '_polyz'])
         return odict
 
@@ -569,3 +596,4 @@ class PiecewisePolyStreak2P1D(object):
         self.tile = Tile(self.shape)
         self.set_tile(Tile(self.shape))
         self.initialize()
+
