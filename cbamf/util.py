@@ -47,18 +47,38 @@ class Tile(object):
     def center(self, norm=1.0):
         return (self.r + self.l)/2.0 / norm
 
-    def coords(self, norm=1.0, meshed=True):
-        z = np.arange(self.l[0], self.r[0]) / norm
-        y = np.arange(self.l[1], self.r[1]) / norm
-        x = np.arange(self.l[2], self.r[2]) / norm
+    def coords(self, norm=False, meshed=True, vector=False):
+        """
+        Returns the coordinate vectors associated with the tile. 
+
+        Norm can rescale the coordinates for you. False is no rescaling, True
+        is rescaling so that all coordinates are from 0 -> 1.  If a scalar, the
+        same norm is applied uniformally while if an iterable, each scale is
+        applied to each dimension.
+
+        If meshed, the arrays are broadcasted so that they form 3, 3D arrays.
+
+        If vector, the arrays are broadcasted and formed into one [Nz, Ny, Nx, 3]
+        dimensional array
+        """
+        if not norm:
+            norm = np.ones(3)
+        if norm is True:
+            norm = self.shape
+        if not hasattr(norm, '__iter__'):
+            norm = [norm]*3
+
+        z = np.arange(self.l[0], self.r[0]) / norm[0]
+        y = np.arange(self.l[1], self.r[1]) / norm[1]
+        x = np.arange(self.l[2], self.r[2]) / norm[2]
+
         if meshed:
             return np.meshgrid(z, y, x, indexing='ij')
-        return z[:,None,None], y[None,:,None], x[None,None,:]
+        if vector:
+            z,y,x = np.meshgrid(z, y, x, indexing='ij')
+            return np.rollaxis(np.array(np.broadcast_arrays(z,y,x)),0,4)
 
-    def coord_vector(self, *args, **kwargs):
-        """ Creates a coordinate vector from self.coords """
-        z,y,x = self.coords()
-        return np.rollaxis(np.array(np.broadcast_arrays(z,y,x)),0,4)
+        return z[:,None,None], y[None,:,None], x[None,None,:]
 
     def __str__(self):
         return self.__repr__()
