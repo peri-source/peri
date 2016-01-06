@@ -412,6 +412,10 @@ class BarnesInterpolation1D(object):
             g *= self.damp
         return out
 
+class StreakInterpolator(object):
+    def __init__(self, type='gaussian'):
+        pass
+
 class BarnesStreakLegPoly2P1D(object):
     def __init__(self, shape, order=(1,1,1), nstreakpoints=40):
         """
@@ -596,4 +600,48 @@ class BarnesStreakLegPoly2P1D(object):
         self.tile = Tile(self.shape)
         self.set_tile(Tile(self.shape))
         self.initialize()
+
+
+class BarnesStreakLegPoly2P1DX(BarnesStreakLegPoly2P1D):
+    def __init__(self, *args, **kwargs):
+        super(BarnesStreakLegPoly2P1DX, self).__init__(*args, **kwargs)
+
+    def _bkg(self):
+        self.bkg = np.zeros(self.shape)
+        self._polyxy = 0*self.bkg
+        self._polyz = 0*self.bkg
+
+        for order in self._poly_orders_xy():
+            ind = self._indices.index(order)
+            self._polyxy += self.params[ind] * self._term(order)
+
+        for order in self._poly_orders_z():
+            ind = self._indices.index(order)
+            self._polyz += self.params[ind] * self._term(order)
+
+        self.bkg = (self._barnes() * self._polyxy) * self._polyz
+        return self.bkg
+
+    def update(self, blocks, params):
+        if blocks.sum() < self.block.sum()/2:
+            for b in np.arange(len(blocks))[blocks]:
+                if b < len(self._indices):
+                    order = self._indices[b]
+
+                    if order in self._indices:
+                        if order in self._indices_xy:
+                            _term = self._polyxy
+                        else:
+                            _term = self._polyz
+
+                        _term -= self.params[b] * self._term(order)
+                        self.params[b] = params[b]
+                        _term += self.params[b] * self._term(order)
+
+                self.params[b] = params[b]
+                self.bkg = (self._barnes() * self._polyxy) * self._polyz
+        else:
+            self.params = params
+            self._bkg()
+
 
