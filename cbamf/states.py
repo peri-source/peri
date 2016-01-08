@@ -237,12 +237,15 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True,
         initializers.remove_overlaps(pos, rad)
     return image, pos, rad
 
+# NOTE -- for adding new parameters, add to the end until full rewrite so older states
+# can still be loaded.  this is because of the __getinitargs__ of pickle
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
             sigma=0.04, doprior=False, constoff=True,
             varyn=False, allowdimers=False, nlogs=True, difference=True,
-            pad=const.PAD, sigmapad=True, slab=None, *args, **kwargs):
+            pad=const.PAD, sigmapad=True, slab=None, newconst=False, bkg=None,
+            *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -311,6 +314,16 @@ class ConfocalImagePython(State):
         slab : `cbamf.comp.objs.Slab` [default: None]
             If not None, include a slab in the model image and associated analysis.
             This object should be from the platonic components module.
+
+        newconst : boolean [default: False]
+            If True, overrides constoff to implement a image formation of the form:
+
+                Image = \int PSF(x-x') (ILM(x)*(1-SPH(X)) + OFF*SPH(x)) dx'
+                      = \int PSF(x-x') (ILM(x) + (OFF-ILM(x))*SPH(x)) dx'
+
+        bkg : `cbamf.comp.ilms.*`
+            a polynomial that represents the background field in dark parts of
+            the image
         """
         self.pad = pad
         self.index = None
@@ -322,9 +335,11 @@ class ConfocalImagePython(State):
         self.varyn = varyn
         self.difference = difference
         self.sigmapad = sigmapad
+        self.newconst = newconst
 
         self.psf = psf
         self.ilm = ilm
+        self.bkg = bkg
         self.obj = obj
         self.slab = slab
         self.zscale = zscale
@@ -352,6 +367,10 @@ class ConfocalImagePython(State):
 
     def set_ilm(self, ilm):
         self.ilm = ilm
+        self.reset()
+
+    def set_bkg(self, bkg):
+        self.bkg = bkg
         self.reset()
 
     def set_pos_rad(self, pos, rad):
@@ -413,6 +432,7 @@ class ConfocalImagePython(State):
             'typ': self.obj.N*self.varyn,
             'psf': len(self.psf.get_params()),
             'ilm': len(self.ilm.get_params()),
+            'bkg': len(self.bkg.get_params()) if self.bkg else 0,
             'slab': len(self.slab.get_params()) if self.slab else 0,
             'off': 1,
             'rscale': 1,
@@ -421,7 +441,7 @@ class ConfocalImagePython(State):
         }
 
         self.param_order = [
-            'pos', 'rad', 'typ', 'psf', 'ilm', 'off', 'slab',
+            'pos', 'rad', 'typ', 'psf', 'ilm', 'bkg', 'off', 'slab',
             'rscale', 'zscale', 'sigma'
         ]
         self.param_lengths = [self.param_dict[k] for k in self.param_order]
@@ -441,6 +461,8 @@ class ConfocalImagePython(State):
                 out.append(self.psf.get_params())
             if param == 'ilm':
                 out.append(self.ilm.get_params())
+            if param == 'bkg':
+                out.append(self.bkg.get_params())
             if param == 'slab':
                 out.append(self.slab.get_params())
             if param == 'off':
@@ -462,6 +484,7 @@ class ConfocalImagePython(State):
         self.b_typ = self.create_block('typ')
         self.b_psf = self.create_block('psf')
         self.b_ilm = self.create_block('ilm')
+        self.b_bkg = self.create_block('bkg')
         self.b_off = self.create_block('off')
         self.b_slab = self.create_block('slab')
         self.b_rscale = self.create_block('rscale')
@@ -499,6 +522,10 @@ class ConfocalImagePython(State):
         self.obj.rad = state[self.b_rad]
         self.ilm.params = state[self.b_ilm]
         self.psf.params = state[self.b_psf]
+
+        if self.bkg:
+            self.bkg.params = state[self.b_bkg]
+
         self._initialize()
 
     def _initialize(self):
@@ -511,6 +538,9 @@ class ConfocalImagePython(State):
         self.psf.update(self.state[self.b_psf])
         self.obj.initialize(self.zscale)
         self.ilm.initialize()
+
+        if self.bkg:
+            self.bkg.initialize()
 
         if self.slab:
             self.slab.initialize()
@@ -589,6 +619,9 @@ class ConfocalImagePython(State):
         self.ilm.set_tile(otile)
         self.psf.set_tile(otile)
 
+        if self.bkg:
+            self.bkg.set_tile(otile)
+
         if self.slab:
             self.slab.set_tile(otile)
 
@@ -597,7 +630,11 @@ class ConfocalImagePython(State):
         if difference:
             platonic = self.obj.get_diff_field()
 
-            if self.constoff:
+            if self.newconst:
+                replacement = -(self.offset - self.ilm.get_field())*platonic
+            elif self.bkg:
+                replacement = self.ilm.get_field() * self.offset*platonic
+            elif self.constoff:
                 replacement = self.offset*platonic
             else:
                 replacement = self.ilm.get_field() * self.offset*platonic
@@ -612,7 +649,11 @@ class ConfocalImagePython(State):
             if self.allowdimers:
                 platonic = np.clip(platonic, -1, 1)
 
-            if self.constoff:
+            if self.newconst:
+                replacement = self.ilm.get_field() + (self.offset-self.ilm.get_field())*platonic
+            elif self.bkg:
+                replacement = self.ilm.get_field()*(1-self.offset*platonic) + self.bkg.get_field()
+            elif self.constoff:
                 replacement = self.ilm.get_field() - self.offset*platonic
             else:
                 replacement = self.ilm.get_field() * (1 - self.offset*platonic)
@@ -703,6 +744,11 @@ class ConfocalImagePython(State):
             # update the background if it has been changed
             if block[self.b_ilm].any():
                 self.ilm.update(block[self.b_ilm], self.state[self.b_ilm])
+                docalc = True
+
+            # update the background if it has been changed
+            if block[self.b_bkg].any():
+                self.bkg.update(block[self.b_bkg], self.state[self.b_bkg])
                 docalc = True
 
             # we actually don't have to do anything if the offset is changed
@@ -953,7 +999,7 @@ class ConfocalImagePython(State):
             self.obj, self.psf, self.ilm, self.zscale, self.offset,
             self.sigma, self.doprior, self.constoff,
             self.varyn, self.allowdimers, self.nlogs, self.difference,
-            self.pad, self.sigmapad, self.slab)
+            self.pad, self.sigmapad, self.slab, self.newconst, self.bkg)
 
 def save(state, filename=None, desc='', extra=None):
     """
