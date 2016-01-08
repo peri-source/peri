@@ -633,7 +633,7 @@ class ConfocalImagePython(State):
             if self.newconst:
                 replacement = -(self.offset - self.ilm.get_field())*platonic
             elif self.bkg:
-                replacement = self.ilm.get_field() * self.offset*platonic
+                replacement = self.ilm.get_field()*self.offset*platonic - self.bkg.get_field()*platonic
             elif self.constoff:
                 replacement = self.offset*platonic
             else:
@@ -652,7 +652,7 @@ class ConfocalImagePython(State):
             if self.newconst:
                 replacement = self.ilm.get_field() + (self.offset-self.ilm.get_field())*platonic
             elif self.bkg:
-                replacement = self.ilm.get_field()*(1-self.offset*platonic) + self.bkg.get_field()
+                replacement = self.ilm.get_field()*(1-self.offset*platonic) + self.bkg.get_field()*platonic
             elif self.constoff:
                 replacement = self.ilm.get_field() - self.offset*platonic
             else:
