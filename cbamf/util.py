@@ -103,13 +103,9 @@ class RawImage():
         """
         self.filename = filename
         self.invert = invert
+        self.filters = None
 
-        try:
-            self.image = initializers.load_tiff(self.filename)
-            self.image = initializers.normalize(self.image, invert=self.invert)
-        except IOError as e:
-            print "Could not find image '%s'" % self.filename
-            raise e
+        self.load_image()
 
         if tile is not None:
             self.tile = tile
@@ -121,20 +117,44 @@ class RawImage():
             right = (zstop, xysize, xysize)
             self.tile = Tile(left=left, right=right)
 
+    def load_image(self):
+        try:
+            self.image = initializers.load_tiff(self.filename)
+            self.image = initializers.normalize(self.image, invert=self.invert)
+        except IOError as e:
+            print "Could not find image '%s'" % self.filename
+            raise e
+
     def get_image(self):
-        return self.image[self.tile.slicer]
+        im = self.image[self.tile.slicer]
+
+        if not self.filters:
+            return im
+        return self.filtered_image(im)
 
     def get_padded_image(self, pad=const.PAD, padval=const.PADVAL):
         return np.pad(self.get_image(), pad, mode='constant', constant_values=padval)
 
+    def filtered_image(self, im):
+        q = np.fft.fftn(im)
+        for k,v in self.filters:
+            q[k] -= v
+        return np.real(np.fft.ifftn(q))
+
+    def set_filter(self, slices, values):
+        self.filters = [[sl,values[sl]] for sl in slices]
+
     def __getstate__(self):
-        return {}
+        d = self.__dict__.copy()
+        cdd(d, ['image'])
+        return d
 
     def __setstate__(self, idct):
-        pass
+        self.__dict__.update(idct)
+        self.load_image()
 
-    def __getinitargs__(self):
-        return (self.filename, self.tile, None, None, None, self.invert)
+    #def __getinitargs__(self):
+    #    return (self.filename, self.tile, None, None, None, self.invert, self.filters)
 
 def cdd(d, k):
     """ Conditionally delete key (or list of keys) 'k' from dict 'd' """
