@@ -1,13 +1,7 @@
-"""
-Calculates PSFs with better coding practice, using gauss-legendre quadrature
-instead of `quad' for speed.
-Also using array calculation of things to reduce overhead for trapz
-Written from previous iteration (and checked output) on 10-28-2015, B. Leahy
-"""
-
 import numpy as np
-from scipy.special import j0,j1 #,jv
-from scipy.integrate import quad
+from scipy.special import j0,j1
+
+from cbamf.comp.psfs import PSF
 
 def j2(x):
     """ A fast j2 defined in terms of other special functions """
@@ -16,21 +10,17 @@ def j2(x):
     return to_return
 
 """
-Now, global magic #'s for a good number of points for gauss-legendre
-quadrature.  20 gives double precision (no difference between 20 and 30 and
-doing all the integrals with scipy.quad).
-
-The integrals are only over the acceptance angle of the lens, so they shouldn't
-be too rapidly varying, but you might need more points for large z,zint (large
-compared to 100).
+Global magic #'s for a good number of points for gauss-legendre quadrature. 20
+gives double precision (no difference between 20 and 30 and doing all the
+integrals with scipy.quad). The integrals are only over the acceptance angle of
+the lens, so they shouldn't be too rapidly varying, but you might need more
+points for large z,zint (large compared to 100).
 """
-NPTS=20
-PTS,WTS=np.polynomial.legendre.leggauss(NPTS)
-
-# Only need a 1-sided hermgauss, so...
+NPTS = 20
+PTS,WTS = np.polynomial.legendre.leggauss(NPTS)
 PTS_HG,WTS_HG = np.polynomial.hermite.hermgauss(NPTS*2)
-PTS_HG = PTS_HG[NPTS:]; WTS_HG = WTS_HG[NPTS:]*np.exp(PTS_HG*PTS_HG)
-
+PTS_HG = PTS_HG[NPTS:]
+WTS_HG = WTS_HG[NPTS:]*np.exp(PTS_HG*PTS_HG)
 
 def f_theta(cos_theta, zint, z, n2n1 = 0.95):
     """
@@ -74,12 +64,12 @@ def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False):
     that is independent of which integral is being called.
     """
 
-    phase=f_theta(cos_theta,zint,z,n2n1=n2n1)
+    phase = f_theta(cos_theta,zint,z,n2n1=n2n1)
     if get_hdet:
         to_return_rl = np.cos(phase)
         to_return_im = np.sin(phase)
     else:
-        sqrt_costheta=np.outer(np.ones_like(z),np.sqrt(cos_theta))
+        sqrt_costheta = np.outer(np.ones_like(z),np.sqrt(cos_theta))
         to_return_rl = np.cos(phase)*sqrt_costheta
         to_return_im = np.sin(phase)*sqrt_costheta
     return to_return_rl, to_return_im
@@ -110,19 +100,20 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1):
         This is the only function that relies on rho,z being numpy.arrays,
         and it's just in a flag that I've added.... move to psf?
     """
-    if type(rho)!=np.ndarray or type(z)!=np.ndarray or (rho.shape!=z.shape):
+    if type(rho) != np.ndarray or type(z) != np.ndarray or (rho.shape != z.shape):
         raise ValueError('rho and z must be np.arrays of same shape.')
 
     n1n2 = 1.0/n2n1
 
-    rr = np.ravel(rho); zr=np.ravel(z)
+    rr = np.ravel(rho)
+    zr = np.ravel(z)
 
     #Getting the array of points to quad at
-    cos_theta=0.5*(1-np.cos(alpha))*PTS+0.5*(1+np.cos(alpha))
+    cos_theta = 0.5*(1-np.cos(alpha))*PTS+0.5*(1+np.cos(alpha))
     #[cosTheta,rho,z]
 
     Kprefactor_rl, Kprefactor_im = get_Kprefactor(z, cos_theta, zint=zint,
-        n2n1=n2n1,get_hdet=get_hdet)
+        n2n1=n2n1, get_hdet=get_hdet)
 
     if K==1:
         part_1 = j0(np.outer(rr,np.sqrt(1-cos_theta**2)))*\
@@ -151,7 +142,7 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1):
     else:
         raise RuntimeError('K=1,2,3 only...')
 
-    big_wts = np.outer(np.ones_like(rr),WTS)
+    big_wts = np.outer(np.ones_like(rr), WTS)
     kint_rl = (big_wts*integrand_rl).sum(axis=1) * 0.5*(1-np.cos(alpha))
     kint_im = (big_wts*integrand_im).sum(axis=1) * 0.5*(1-np.cos(alpha))
 
@@ -187,10 +178,9 @@ def get_hsym_asym(rho, z, get_hdet=False, **kwargs):
     hsym = K1[0]**2+K1[1]**2 + K2[0]**2+K2[1]**2 + 0.5*(K3[0]**2+K3[1]**2)
     hasym= 2*(K1[0]*K2[0] + K1[1]*K2[1]) + 0.5*(K3[0]**2+K3[1]**2)
 
-    return hsym,hasym
+    return hsym, hasym
 
-
-def get_psf(x, y, z, kfki = 0.89, zint = 100.0, normalize=False, **kwargs):
+def get_psf(x, y, z, kfki=0.89, zint=100.0, normalize=False, **kwargs):
     """
     Gets the PSF as calculated, for one set of points (x,y,z).
     Inputs:
@@ -237,7 +227,7 @@ def get_psf(x, y, z, kfki = 0.89, zint = 100.0, normalize=False, **kwargs):
 
     return (hsym + np.cos(2*phi)*hasym)*hdet
 
-def get_psf_scalar(x, y, z, kfki = 1., zint = 100.0, normalize=False, **kwargs):
+def get_psf_scalar(x, y, z, kfki=1., zint=100.0, normalize=False, **kwargs):
     """
     Gets an exact, wide-angle PSF for scalar (non-vectorial) light, i.e.
     ignoring the effects of polarization, for one set of points (x,y,z).
@@ -279,7 +269,6 @@ def get_psf_scalar(x, y, z, kfki = 1., zint = 100.0, normalize=False, **kwargs):
     K1 = get_K(rho, z, K=1,zint=zint,get_hdet=True, **kwargs)
     hilm = K1[0]*K1[0] + K1[1]*K1[1]
 
-
     if np.abs(kfki - 1.0) > 1e-13:
         Kdet = get_K(rho*kfki, z*kfki, K=1, zint=zint*kfki, get_hdet=True, **kwargs)
         hdet = Kdet[0]*Kdet[0] + Kdet[1]*Kdet[1]
@@ -296,7 +285,7 @@ def get_psf_scalar(x, y, z, kfki = 1., zint = 100.0, normalize=False, **kwargs):
 
     return psf
 
-def calculate_linescan_ilm_psf( y,z, pol_ang = 0., scl=1.0, **kwargs ):
+def calculate_linescan_ilm_psf(y, z, pol_ang=0., scl=1.0, **kwargs):
     """
     I don't care what the psf is along the line direction since it's constant.
     So I can just return it along the orthogonal plane.
@@ -373,3 +362,10 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100., **kw
         hdet[a,...] *= hilm
 
     return hdet if normalize else hdet / hdet.sum()
+
+
+class FromArray(PSF):
+    def __init__(self, array, *args, **kwargs):
+        """
+
+        """
