@@ -482,12 +482,15 @@ class BarnesStreakLegPoly2P1D(object):
         self._indices_xy = list(self._poly_orders_xy())
         self._indices_z = list(self._poly_orders_z())
 
-    def _barnes(self):
+    def _barnes(self, y):
         b = BarnesInterpolation1D(
                 self.b_in, self.params[self.streak_slicer],
                 filter_size=(self.b_in[1]-self.b_in[0])*1.0/2, damp=0.9, iterations=3
         )
-        return b(self.b_out)[None,None,:]
+        return b(y)
+
+    def _barnes_val(self):
+        return self._barnes(self.b_out)[None,None,:]
 
     def _bkg(self):
         self.bkg = np.zeros(self.shape)
@@ -502,7 +505,7 @@ class BarnesStreakLegPoly2P1D(object):
             ind = self._indices.index(order)
             self._polyz += self.params[ind] * self._term(order)
 
-        self.bkg = (self._barnes() + self._polyxy) * self._polyz
+        self.bkg = (self._barnes_val() + self._polyxy) * self._polyz
         return self.bkg
 
     def from_ilm(self, ilm):
@@ -577,7 +580,7 @@ class BarnesStreakLegPoly2P1D(object):
                         _term += self.params[b] * self._term(order)
 
                 self.params[b] = params[b]
-                self.bkg = (self._barnes() + self._polyxy) * self._polyz
+                self.bkg = (self._barnes_val() + self._polyxy) * self._polyz
         else:
             self.params = params
             self._bkg()
@@ -619,7 +622,7 @@ class BarnesStreakLegPoly2P1DX(BarnesStreakLegPoly2P1D):
             ind = self._indices.index(order)
             self._polyz += self.params[ind] * self._term(order)
 
-        self.bkg = (self._barnes() * self._polyxy) * self._polyz
+        self.bkg = (self._barnes_val() * self._polyxy) * self._polyz
         return self.bkg
 
     def update(self, blocks, params):
@@ -639,7 +642,7 @@ class BarnesStreakLegPoly2P1DX(BarnesStreakLegPoly2P1D):
                         _term += self.params[b] * self._term(order)
 
                 self.params[b] = params[b]
-                self.bkg = (self._barnes() * self._polyxy) * self._polyz
+                self.bkg = (self._barnes_val() * self._polyxy) * self._polyz
         else:
             self.params = params
             self._bkg()
