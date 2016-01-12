@@ -364,8 +364,44 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100., **kw
     return hdet if normalize else hdet / hdet.sum()
 
 
-class FromArray(PSF):
-    def __init__(self, array, *args, **kwargs):
+class ExactLineScanConfocalPSF(PSF):
+    def __init__(self, shape, kfki=0.889, zint=0., zscale=1.0, alpha=1.173,
+            n2n1=1.4/1.518, polar_angle=0., *args, **kwargs):
         """
 
+        PSF for line-scanning confocal microscopes that can be used with the
+        cbamf framework.  Calculates the spatially varying point spread
+        function for confocal microscopes and allows them to be applied to
+        images as a convolution.
+
+        Parameters:
+        -----------
+        shape : tuple
+            Shape of the image in (z,y,x) pixel numbers (to be deprecated)
+
+        kfki : float
+            Ratio of outgoing to incoming light wavevectors, 2\pi/\lambda
+
+        zint : float
+            Pixel position of the optical interface where 0 is the edge of the
+            image in the z direction
+
+        zscale : float
+            Scaling of the z pixel size, so that each pixel is located at
+            zscale*(z - zint), such that the interface does not move with zscale
+
+        alpha : float
+            Aperture of the lens in radians, set by arcsin(n2n1)?
+
+        n2n1 : float
+            Ratio of the index mismatch across the optical interface. For typical
+            glass with glycerol/water 80/20 mixture this is 1.4/1.518
+
+        polar_angle : float
+            the angle of the light polarization with respect to the scanning axis
         """
+        params = np.array([kfki, zint, zscale, alpha, n2n1, polar_angle])
+        super(ExactLineScanConfocalPSF, self).__init__(*args, params=params, shape=shape, **kwargs)
+
+    def calculate_psf(self):
+        pass
