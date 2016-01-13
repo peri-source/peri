@@ -11,7 +11,7 @@ from cbamf.conf import get_wisdom
 
 try:
     import pyfftw
-    from pyfftw.builders import fftn, ifftn, fft2, ifft2, rfft2, irfft2
+    from pyfftw.builders import fftn, ifftn, fft2, ifft2, rfftn, irfftn
     hasfftw = True
 except ImportError as e:
     print "*WARNING* pyfftw not found, switching to numpy.fft (20x slower)"
