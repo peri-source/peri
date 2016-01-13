@@ -448,8 +448,10 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         z,y,x = tile.coords(meshed=False, flat=True)
 
         # calculate the current pixel value in 1/k, making sure we are above the slab
-        zint = max(self.p2k(self.tz(zint)), 0)
-        x,y,z = [self.p2k(i) for i in [x,y,z+zoffset]]
+        zint = max(self._p2k(self._tz(zint)), 0)
+        zoffset *= zint > 0
+
+        x,y,z = [self._p2k(i) for i in [x,y,z+zoffset]]
         psf = calculate_linescan_psf(x, y, z, zint=zint, **self.args()).T
         return psf, tile.coords(meshed=True)
 
@@ -468,11 +470,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         d.pop('zscale')
         return d
 
-    def p2k(self, v):
+    def _p2k(self, v):
         """ Convert from pixel to 1/k_incoming (laser_wavelength/(2\pi)) units """
         return 2*np.pi*self.pxsize*v/self.param_dict['laser_wavelength']
 
-    def tz(self, z):
+    def _tz(self, z):
         """ Transform z to real-space coordinates from tile coordinates """
         return (z-self.param_dict['zslab'])*self.param_dict['zscale']
 
@@ -487,14 +489,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         size = [moment(psf, i, order=2) for i in (z,y,x)]
         return np.array(size), drift
 
-    def get_support_size(z):
-        pass
-
     def get_params():
         return self.params
 
-    def set_tile(tile):
-        pass
+    def get_support_size(self, z=None):
+        return self.support
 
     def update(self, params):
         self.params[:] = params[:]
@@ -505,11 +504,16 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         size_l, drift_l = self.measure_size_drift(l, size=31)
         size_u, drift_u = self.measure_size_drift(u, size=31)
 
-        self.support = size_u
+        self.support = 4*size_u.astype('int')+1
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
 
-    def execute(infield):
-        pass
+        self.slices = []
+        for i in xrange(self.zrange[0], self.zrange[1]+1):
+            zdrift = self.drift(i)
+            psf, vec = self.psf_slice(i, size=self.support, zoffset=zdrift)
+            self.slices.append(psf)
+
+        self.slices = np.array(self.slices)
 
     def set_tile(self, tile):
         if (self.tile.shape != tile.shape).any():
@@ -550,9 +554,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             outfield[i] = np.real(self.ifftn(infield * kpsf))[i]
 
         return outfield
-
-    def get_support_size(self, z=None):
-        return self.support
 
     def _setup_ffts(self):
         if psfs.hasfftw:
