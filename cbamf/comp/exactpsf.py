@@ -375,7 +375,7 @@ def moment(p, v, order=1):
 
 class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
-            zscale=1.0, kfki=0.889, n2n1=1.4/1.518, alpha=1.173, polar_angle=0.,
+            zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
             pxsize=0.125, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
@@ -559,7 +559,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             if z < self.zrange[0] or z > self.zrange[1]:
                 continue
 
-            if i < self.support[0]/2 or i > self.tile.shape[0]-self.support[0]/2:
+            if i < self.support[0]/2 or i > self.tile.shape[0]-self.support[0]/2-1:
                 continue
 
             # pad the psf slice for the convolution
