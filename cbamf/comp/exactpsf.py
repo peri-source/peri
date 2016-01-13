@@ -581,13 +581,13 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             shape = self.tile.shape.copy()
             shape[0] = self.support[0]
 
-            self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
-            self._fftn = psfs.fftn(self._fftn_data, threads=self.threads,
+            self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
+            self._fftn = psfs.rfftn(self._fftn_data, threads=self.threads,
                     planner_effort=self.fftw_planning_level)
 
             t = np.zeros(shape)
             o = self.fftn(t)
             self._ifftn_data = psfs.pyfftw.n_byte_align_empty(o.shape, 16, dtype='complex')
-            self._ifftn = psfs.ifftn(self._ifftn_data, threads=self.threads,
+            self._ifftn = psfs.irfftn(self._ifftn_data, threads=self.threads,
                     planner_effort=self.fftw_planning_level)
 
