@@ -489,7 +489,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         size = [moment(psf, i, order=2) for i in (z,y,x)]
         return np.array(size), drift
 
-    def get_params():
+    def get_params(self):
         return self.params
 
     def get_support_size(self, z=None):
@@ -504,6 +504,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         size_l, drift_l = self.measure_size_drift(l, size=31)
         size_u, drift_u = self.measure_size_drift(u, size=31)
 
+        # FIXME -- must be odd for now or have a better system for getting the center
         self.support = 4*size_u.astype('int')+1
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
 
@@ -520,47 +521,71 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self.tile = tile
             self._setup_ffts()
 
-    def _pad(self, field):
-        if any(self.tile.shape < self.get_support_size()):
+    def _pad(self, field, finalshape):
+        """ fftshift and pad the field with zeros until it has size finalshape """
+        currshape = np.array(field.shape)
+
+        if any(finalshape < currshape):
             raise IndexError("PSF tile size is less than minimum support size")
 
-        d = self.tile.shape - self.get_support_size()
+        d = finalshape - currshape
 
         # fix off-by-one issues when going odd to even tile sizes
         o = d % 2
         d /= 2
+        o[0] = 0
 
-        pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
+        pad = tuple((d[i]+o[i],d[i]) for i in [0,1,2])
         rpsf = np.pad(field, pad, mode='constant', constant_values=0)
         rpsf = np.fft.ifftshift(rpsf)
         kpsf = self.fftn(rpsf)
-        kpsf /= (np.real(kpsf[0,0,0]) + 1e-15)
-        return kpsf
+
+        # FIXME -- need to normalize here?
+        #kpsf /= (np.real(kpsf[0,0,0]) + 1e-15)
+        return rpsf, kpsf
 
     def execute(self, field):
         if any(field.shape != self.tile.shape):
             raise AttributeError("Field passed to PSF incorrect shape")
 
-        if not np.iscomplex(field.ravel()[0]):
-            infield = self.fftn(field)
-        else:
-            infield = field
+        outfield = np.zeros_like(field, dtype='float')
+        zc,yc,xc = self.tile.coords(meshed=False, flat=True)
 
-        outfield = np.zeros_like(infield, dtype='float')
+        for i,z in enumerate(zc):
+            # in this loop, z in the index for self.slices and i is the field index
+            # don't calculate this slice if we are outside the acceptable zrange
+            if z < self.zrange[0] or z >= self.zrange[1]:
+                continue
 
-        for i in xrange(field.shape[0]):
-            z = int(self.tile.l[0] + i)
-            kpsf = self._pad(self.params.reshape(self.param_shape)[z])
-            outfield[i] = np.real(self.ifftn(infield * kpsf))[i]
+            if i < self.support[0]/2 or i > self.tile.shape[0]-self.support[0]/2-1:# or z >= self.slices.shape[0]:
+                continue
+
+            # pad the psf slice for the convolution
+            fs = np.array(self.tile.shape)
+            fs[0] = self.support[0]
+            rpsf, kpsf = self._pad(self.slices[z], fs)
+
+            # need to grab the right slice of the field to convolve with PSF
+            zslice = np.s_[max(i-fs[0]/2,0):min(i+fs[0]/2+1,self.tile.shape[0])]
+
+            kfield = self.fftn(field[zslice])
+            outfield[i] = np.real(self.ifftn(kfield * kpsf))[self.support[0]/2]
 
         return outfield
 
     def _setup_ffts(self):
         if psfs.hasfftw:
-            self._fftn_data = psfs.pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
-            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
-            self._fftn = psfs.rfft2(self._fftn_data, threads=self.threads,
+            # adjust the shape for the transforms we are really doing
+            shape = self.tile.shape.copy()
+            shape[0] = self.support[0]
+
+            self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
+            self._fftn = psfs.fftn(self._fftn_data, threads=self.threads,
                     planner_effort=self.fftw_planning_level)
-            self._ifftn = psfs.irfft2(self._ifftn_data, threads=self.threads,
+
+            t = np.zeros(shape)
+            o = self.fftn(t)
+            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(o.shape, 16, dtype='complex')
+            self._ifftn = psfs.ifftn(self._ifftn_data, threads=self.threads,
                     planner_effort=self.fftw_planning_level)
 
