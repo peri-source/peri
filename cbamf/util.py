@@ -15,27 +15,55 @@ def amin(a, b):
 def amax(a, b):
     return np.vstack([a, b]).max(axis=0)
 
+def a3(a):
+    """ Convert an integer or iterable list to numpy 3 array """
+    if not hasattr(a, '__iter__'):
+        return np.array([a]*3, dtype='int')
+    return np.array(a).astype('int')
+
 class Tile(object):
-    def __init__(self, left, right=None, mins=None, maxs=None):
+    def __init__(self, left, right=None, mins=None, maxs=None,
+            size=None, centered=False):
+        """
+        Creates a tile element using many different combinations (where []
+        indicates an array created from either a single number or any
+        iterable):
+
+            left : [0,0,0] -> [left]
+            left, right : [left] -> [right]
+            left, size : [left] -> [left] + [size]              (if not centered)
+            left, size : [left] - [size]/2 -> [left] + ([size]+1)/2 (if centered)
+
+        The addition +1 on the last variety is to ensure that odd sized arrays
+        are treated correctly i.e. left=0, size=3 -> [-1,0,1]. Each of these
+        can be limited by using (mins, maxs) which are applied after
+        calculating left, right for each element:
+
+            left = max(left, [mins])
+            right = min(right, [maxs])
+
+        Since tiles are used for array slicing, they only allow integer values,
+        which can truncated without warning from float.
+        """
         if right is None:
-            right = left
-            left = np.zeros(len(left), dtype='int')
+            if size is None:
+                right = left
+                left = 0
+            else:
+                if not centered:
+                    right = a3(left) + a3(size)
+                else:
+                    l, s = a3(left), a3(size)
+                    left, right = l - s/2, l + (s+1)/2
 
-        if not hasattr(left, '__iter__'):
-            left = np.array([left]*3, dtype='int')
-
-        if not hasattr(right, '__iter__'):
-            right = np.array([right]*3, dtype='int')
+        left = a3(left)
+        right = a3(right)
 
         if mins is not None:
-            if not hasattr(mins, '__iter__'):
-                mins = np.array([mins]*3)
-            left = amax(left, mins)
+            left = amax(left, a3(mins))
 
         if maxs is not None:
-            if not hasattr(maxs, '__iter__'):
-                maxs = np.array([maxs]*3)
-            right = amin(right, maxs)
+            right = amin(right, a3(maxs))
 
         l, r = left, right
         self.l = np.array(l)
@@ -45,9 +73,11 @@ class Tile(object):
         self.slicer = np.s_[l[0]:r[0], l[1]:r[1], l[2]:r[2]]
 
     def center(self, norm=1.0):
+        """ Return the center of the tile """
         return (self.r + self.l)/2.0 / norm
 
-    def coords(self, norm=False, meshed=True, vector=False):
+    # FIXME -- switch meshed to False, or make a type list [meshed, vector, flat]
+    def coords(self, norm=False, meshed=True, vector=False, flat=False):
         """
         Returns the coordinate vectors associated with the tile. 
 
@@ -77,7 +107,8 @@ class Tile(object):
         if vector:
             z,y,x = np.meshgrid(z, y, x, indexing='ij')
             return np.rollaxis(np.array(np.broadcast_arrays(z,y,x)),0,4)
-
+        if flat:
+            return z,y,x
         return z[:,None,None], y[None,:,None], x[None,None,:]
 
     def __str__(self):
