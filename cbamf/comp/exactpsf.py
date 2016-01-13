@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.special import j0,j1
 
-from cbamf.comp.psfs import PSF
+from cbamf import const, util
+from cbamf.comp import psfs
 
 def j2(x):
     """ A fast j2 defined in terms of other special functions """
@@ -22,13 +23,13 @@ PTS_HG,WTS_HG = np.polynomial.hermite.hermgauss(NPTS*2)
 PTS_HG = PTS_HG[NPTS:]
 WTS_HG = WTS_HG[NPTS:]*np.exp(PTS_HG*PTS_HG)
 
-def f_theta(cos_theta, zint, z, n2n1 = 0.95):
+def f_theta(cos_theta, zint, z, n2n1=0.95):
     """
     """
     # return zint * cos_theta - (zint-z)*np.sqrt( n2n1**2-1 +cos_theta**2)
     #try this:
     return (np.outer(np.ones_like(z)*zint, cos_theta) -
-            np.outer(zint-z, np.sqrt(n2n1**2-1+cos_theta**2)))
+            np.outer(zint+z, np.sqrt(n2n1**2-1+cos_theta**2)))
 
 def get_taus(cos_theta, n2n1=1./1.05):
     """
@@ -285,7 +286,7 @@ def get_psf_scalar(x, y, z, kfki=1., zint=100.0, normalize=False, **kwargs):
 
     return psf
 
-def calculate_linescan_ilm_psf(y, z, pol_ang=0., scl=1.0, **kwargs):
+def calculate_linescan_ilm_psf(y, z, polar_angle=0., scl=1.0, **kwargs):
     """
     I don't care what the psf is along the line direction since it's constant.
     So I can just return it along the orthogonal plane.
@@ -309,14 +310,15 @@ def calculate_linescan_ilm_psf(y, z, pol_ang=0., scl=1.0, **kwargs):
 
     hsym, hasym = get_hsym_asym(rho, zg, get_hdet=False, **kwargs)
 
-    hilm = hsym + np.cos(2*(phi-pol_ang))*hasym
+    hilm = hsym + np.cos(2*(phi-polar_angle))*hasym
     #multiply by weights... there is a better way to do this
     for a in xrange(x_vals.size):
         hilm[...,a] *= WTS_HG[a]
 
     return hilm.sum(axis=-1)*scl*2.
 
-def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100., **kwargs):
+def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
+        polar_angle=0., **kwargs):
     """
     Make x,y,z  __1D__ numpy.arrays, with x the direction along the
     scan line. (to make the calculation faster since I dont' need the line
@@ -332,13 +334,14 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100., **kw
             Default is 0.889
         - zint: The position of the optical interface, in units of 1/k_incoming
     Other **kwargs
-        - pol_ang: Float scalar of the polarization angle of the light with
+        - polar_angle: Float scalar of the polarization angle of the light with
             respect to the line direction (x). From calculate_linescan_ilm_psf;
             default is 0.
         - alpha: The aperture angle of the lens; default 1. From get_K().
             (in radians, 1.173 for our confocal / arcsin(n2n1))
         - n2n1: The index mismatch of the sample; default 0.95. From get_K().
             for our confocal, 1.4/1.518
+        -zscale: dummy variable to work better within the ExactLineScanConfocalPSF
     Outputs:
         - psf: 3D- numpy.array of the point-spread function. Indexing is
             psf[x,y,z].
@@ -351,7 +354,7 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100., **kw
     rho3 = np.sqrt(x3*x3 + y3*y3)
     #~~~~
 
-    hilm = calculate_linescan_ilm_psf(y2, z2, zint=zint, **kwargs)
+    hilm = calculate_linescan_ilm_psf(y2, z2, zint=zint, polar_angle=polar_angle, **kwargs)
     hdet, toss = get_hsym_asym(rho3*kfki, z3*kfki, zint=kfki*zint, get_hdet=True, **kwargs)
 
     if normalize:
@@ -363,26 +366,35 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100., **kw
 
     return hdet if normalize else hdet / hdet.sum()
 
+def moment(p, v, order=1):
+    """ Calculates the moments of the probability distribution p with vector v """
+    if order == 1:
+        return (v*p).sum()
+    elif order == 2:
+        return np.sqrt( ((v**2)*p).sum() - (v*p).sum()**2 )
 
-class ExactLineScanConfocalPSF(PSF):
-    def __init__(self, shape, kfki=0.889, zint=0., zscale=1.0, alpha=1.173,
-            n2n1=1.4/1.518, polar_angle=0., *args, **kwargs):
+class ExactLineScanConfocalPSF(psfs.PSF):
+    def __init__(self, shape, laser_wavelength=0.488, zslab=0.,
+            zscale=1.0, kfki=0.889, n2n1=1.4/1.518, alpha=1.173, polar_angle=0.,
+            pxsize=0.125, zrange=None, *args, **kwargs):
         """
-
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
         function for confocal microscopes and allows them to be applied to
         images as a convolution.
+
+        This PSF assumes that the z extent is large compared to the image size
+        and so calculates the local PSF for every z layer in the image.
 
         Parameters:
         -----------
         shape : tuple
             Shape of the image in (z,y,x) pixel numbers (to be deprecated)
 
-        kfki : float
-            Ratio of outgoing to incoming light wavevectors, 2\pi/\lambda
+        laser_wavelength : float
+            wavelength of light in um of the incoming laser light
 
-        zint : float
+        zslab : float
             Pixel position of the optical interface where 0 is the edge of the
             image in the z direction
 
@@ -390,18 +402,164 @@ class ExactLineScanConfocalPSF(PSF):
             Scaling of the z pixel size, so that each pixel is located at
             zscale*(z - zint), such that the interface does not move with zscale
 
-        alpha : float
-            Aperture of the lens in radians, set by arcsin(n2n1)?
+        kfki : float
+            Ratio of outgoing to incoming light wavevectors, 2\pi/\lambda
 
         n2n1 : float
             Ratio of the index mismatch across the optical interface. For typical
             glass with glycerol/water 80/20 mixture this is 1.4/1.518
 
+        alpha : float
+            Aperture of the lens in radians, set by arcsin(n2n1)?
+
         polar_angle : float
             the angle of the light polarization with respect to the scanning axis
-        """
-        params = np.array([kfki, zint, zscale, alpha, n2n1, polar_angle])
-        super(ExactLineScanConfocalPSF, self).__init__(*args, params=params, shape=shape, **kwargs)
 
-    def calculate_psf(self):
+        pxsize : float
+            the size of a xy pixel in um, defaults to cohen group size 0.125 um
+
+        zrange : tuple
+            range of z pixels over which we should calculate the psf, good pixels
+            being zrange[0] <= z <= zrange[1]
+
+        Notes:
+            a = ExactLineScanConfocalPSF((64,)*3)
+            psf, (z,y,x) = a.psf_slice(1., size=51)
+            imshow((psf*r**4)[:,:,25], cmap='bone')
+        """
+        self.pxsize = pxsize
+        self.polar_angle = polar_angle
+
+        if zrange is None:
+            zrange = (0, shape[0])
+        self.zrange = zrange
+
+        # text location of parameters for ease of extraction
+        self.param_order = ['kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser_wavelength']
+        params = np.array( [ kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength ])
+        self.param_dict = {k:params[i] for i,k in enumerate(self.param_order)}
+
+        super(ExactLineScanConfocalPSF, self).__init__(*args, params=params,
+                                                        shape=shape, **kwargs)
+
+    def psf_slice(self, zint, size=11, zoffset=0.):
+        """ Calculates the 3D psf at a particular z pixel height """
+        tile = util.Tile(left=0, size=size, centered=True)
+        z,y,x = tile.coords(meshed=False, flat=True)
+
+        # calculate the current pixel value in 1/k, making sure we are above the slab
+        zint = max(self.p2k(self.tz(zint)), 0)
+        x,y,z = [self.p2k(i) for i in [x,y,z+zoffset]]
+        psf = calculate_linescan_psf(x, y, z, zint=zint, **self.args()).T
+        return psf, tile.coords(meshed=True)
+
+    def todict(self):
+        return {k:self.params[i] for i,k in enumerate(self.param_order)}
+
+    def args(self):
+        """
+        Pack the parameters into the form necessary for the integration
+        routines above.  For example, packs for calculate_linescan_psf
+        """
+        d = self.todict()
+        d.update({'polar_angle': self.polar_angle})
+        d.pop('laser_wavelength')
+        d.pop('zslab')
+        d.pop('zscale')
+        return d
+
+    def p2k(self, v):
+        """ Convert from pixel to 1/k_incoming (laser_wavelength/(2\pi)) units """
+        return 2*np.pi*self.pxsize*v/self.param_dict['laser_wavelength']
+
+    def tz(self, z):
+        """ Transform z to real-space coordinates from tile coordinates """
+        return (z-self.param_dict['zslab'])*self.param_dict['zscale']
+
+    def drift(self, z):
+        """ Give the pixel offset at a given z value for the current parameters """
+        return np.polyval(self.drift_poly, z)
+
+    def measure_size_drift(self, z, size=21, zoffset=0.):
+        """ Returns the 'size' of the psf in each direction a particular z (px) """
+        psf, (z,y,x) = self.psf_slice(z, size=size, zoffset=zoffset)
+        drift = moment(psf, z, order=1)
+        size = [moment(psf, i, order=2) for i in (z,y,x)]
+        return np.array(size), drift
+
+    def get_support_size(z):
         pass
+
+    def get_params():
+        return self.params
+
+    def set_tile(tile):
+        pass
+
+    def update(self, params):
+        self.params[:] = params[:]
+        self.param_dict = self.todict()
+
+        l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1] 
+
+        size_l, drift_l = self.measure_size_drift(l, size=31)
+        size_u, drift_u = self.measure_size_drift(u, size=31)
+
+        self.support = size_u
+        self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
+
+    def execute(infield):
+        pass
+
+    def set_tile(self, tile):
+        if (self.tile.shape != tile.shape).any():
+            self.tile = tile
+            self._setup_ffts()
+
+    def _pad(self, field):
+        if any(self.tile.shape < self.get_support_size()):
+            raise IndexError("PSF tile size is less than minimum support size")
+
+        d = self.tile.shape - self.get_support_size()
+
+        # fix off-by-one issues when going odd to even tile sizes
+        o = d % 2
+        d /= 2
+
+        pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
+        rpsf = np.pad(field, pad, mode='constant', constant_values=0)
+        rpsf = np.fft.ifftshift(rpsf)
+        kpsf = self.fftn(rpsf)
+        kpsf /= (np.real(kpsf[0,0,0]) + 1e-15)
+        return kpsf
+
+    def execute(self, field):
+        if any(field.shape != self.tile.shape):
+            raise AttributeError("Field passed to PSF incorrect shape")
+
+        if not np.iscomplex(field.ravel()[0]):
+            infield = self.fftn(field)
+        else:
+            infield = field
+
+        outfield = np.zeros_like(infield, dtype='float')
+
+        for i in xrange(field.shape[0]):
+            z = int(self.tile.l[0] + i)
+            kpsf = self._pad(self.params.reshape(self.param_shape)[z])
+            outfield[i] = np.real(self.ifftn(infield * kpsf))[i]
+
+        return outfield
+
+    def get_support_size(self, z=None):
+        return self.support
+
+    def _setup_ffts(self):
+        if psfs.hasfftw:
+            self._fftn_data = psfs.pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
+            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
+            self._fftn = psfs.rfft2(self._fftn_data, threads=self.threads,
+                    planner_effort=self.fftw_planning_level)
+            self._ifftn = psfs.irfft2(self._ifftn_data, threads=self.threads,
+                    planner_effort=self.fftw_planning_level)
+
