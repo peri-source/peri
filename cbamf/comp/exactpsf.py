@@ -6,7 +6,7 @@ from cbamf.comp import psfs
 
 def j2(x):
     """ A fast j2 defined in terms of other special functions """
-    to_return = 2./x*j1(x) - j0(x)
+    to_return = 2./(x+1e-15)*j1(x) - j0(x)
     to_return[x==0] = 0
     return to_return
 
@@ -376,7 +376,7 @@ def moment(p, v, order=1):
 class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
-            pxsize=0.125, *args, **kwargs):
+            pxsize=0.125, method='fftn', *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -423,6 +423,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         pxsize : float
             the size of a xy pixel in um, defaults to cohen group size 0.125 um
 
+        method : str
+            Either ['fftn', 'fft2'] which represent the way the convolution is
+            performed.  Currently 'fftn' is recommended - while slower is more
+            accurate
+
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
             psf, (z,y,x) = a.psf_slice(1., size=51)
@@ -430,6 +435,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         """
         self.pxsize = pxsize
         self.polar_angle = polar_angle
+        self.method = method
 
         # FIXME -- zrange can't be none right now -- need to fix boundary calculations
         if zrange is None:
@@ -537,9 +543,10 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         d /= 2
         o[0] = 0
 
+        axes = None if self.method == 'fftn' else (1,2)
         pad = tuple((d[i]+o[i],d[i]) for i in [0,1,2])
         rpsf = np.pad(field, pad, mode='constant', constant_values=0)
-        rpsf = np.fft.ifftshift(rpsf)
+        rpsf = np.fft.ifftshift(rpsf, axes=axes)
         kpsf = self.fftn(rpsf)
 
         # FIXME -- need to normalize here?
@@ -571,12 +578,16 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             zslice = np.s_[max(i-fs[0]/2,0):min(i+fs[0]/2+1,self.tile.shape[0])]
 
             kfield = self.fftn(field[zslice])
-            outfield[i] = np.real(self.ifftn(kfield * kpsf))[self.support[0]/2]
+
+            if self.method == 'fftn':
+                outfield[i] = np.real(self.ifftn(kfield * kpsf))[self.support[0]/2]
+            else:
+                outfield[i] = np.real(self.ifftn(kfield * kpsf)).sum(axis=0)
 
         return outfield
 
     def _setup_ffts(self):
-        if psfs.hasfftw:
+        if psfs.hasfftw and self.method == 'fftn':
             # adjust the shape for the transforms we are really doing
             shape = self.tile.shape.copy()
             shape[0] = self.support[0]
@@ -590,4 +601,19 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self._ifftn_data = psfs.pyfftw.n_byte_align_empty(o.shape, 16, dtype='complex')
             self._ifftn = psfs.irfftn(self._ifftn_data, threads=self.threads,
                     planner_effort=self.fftw_planning_level)
+
+        elif psfs.hasfftw and self.method == 'fft2':
+            shape = self.tile.shape.copy()
+            shape[0] = self.support[0]
+
+            self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
+            self._fftn = psfs.rfft2(self._fftn_data, threads=self.threads,
+                    planner_effort=self.fftw_planning_level)
+
+            t = np.zeros(shape)
+            o = self.fftn(t)
+            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(o.shape, 16, dtype='complex')
+            self._ifftn = psfs.irfft2(self._ifftn_data, threads=self.threads,
+                    planner_effort=self.fftw_planning_level)
+
 
