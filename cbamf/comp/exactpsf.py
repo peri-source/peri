@@ -554,16 +554,16 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         for i,z in enumerate(zc):
             # in this loop, z in the index for self.slices and i is the field index
             # don't calculate this slice if we are outside the acceptable zrange
-            if z < self.zrange[0] or z >= self.zrange[1]:
+            if z < self.zrange[0] or z > self.zrange[1]:
                 continue
 
-            if i < self.support[0]/2 or i > self.tile.shape[0]-self.support[0]/2-1:# or z >= self.slices.shape[0]:
+            if i < self.support[0]/2 or i > self.tile.shape[0]-self.support[0]/2:
                 continue
 
             # pad the psf slice for the convolution
             fs = np.array(self.tile.shape)
             fs[0] = self.support[0]
-            rpsf, kpsf = self._pad(self.slices[z], fs)
+            rpsf, kpsf = self._pad(self.slices[i-self.zrange[0]], fs)
 
             # need to grab the right slice of the field to convolve with PSF
             zslice = np.s_[max(i-fs[0]/2,0):min(i+fs[0]/2+1,self.tile.shape[0])]
