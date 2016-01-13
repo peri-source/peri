@@ -374,9 +374,9 @@ def moment(p, v, order=1):
         return np.sqrt( ((v**2)*p).sum() - (v*p).sum()**2 )
 
 class ExactLineScanConfocalPSF(psfs.PSF):
-    def __init__(self, shape, laser_wavelength=0.488, zslab=0.,
+    def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.4/1.518, alpha=1.173, polar_angle=0.,
-            pxsize=0.125, zrange=None, *args, **kwargs):
+            pxsize=0.125, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -390,6 +390,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         -----------
         shape : tuple
             Shape of the image in (z,y,x) pixel numbers (to be deprecated)
+
+        zrange : tuple
+            range of z pixels over which we should calculate the psf, good pixels
+            being zrange[0] <= z <= zrange[1]. currently must be set to the interior
+            of the image, so [state.pad, state.image.shape[0] - state.pad]
 
         laser_wavelength : float
             wavelength of light in um of the incoming laser light
@@ -418,10 +423,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         pxsize : float
             the size of a xy pixel in um, defaults to cohen group size 0.125 um
 
-        zrange : tuple
-            range of z pixels over which we should calculate the psf, good pixels
-            being zrange[0] <= z <= zrange[1]
-
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
             psf, (z,y,x) = a.psf_slice(1., size=51)
@@ -430,6 +431,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.pxsize = pxsize
         self.polar_angle = polar_angle
 
+        # FIXME -- zrange can't be none right now -- need to fix boundary calculations
         if zrange is None:
             zrange = (0, shape[0])
         self.zrange = zrange
