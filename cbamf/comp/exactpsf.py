@@ -3,6 +3,7 @@ from scipy.special import j0,j1
 
 from cbamf import const, util
 from cbamf.comp import psfs
+from cbamf.interpolation import ChebyshevInterpolation1D
 
 def j2(x):
     """ A fast j2 defined in terms of other special functions """
@@ -373,6 +374,9 @@ def moment(p, v, order=1):
     elif order == 2:
         return np.sqrt( ((v**2)*p).sum() - (v*p).sum()**2 )
 
+#=============================================================================
+# The actual interfaces that can be used in the cbamf system
+#=============================================================================
 class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
@@ -497,6 +501,17 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         size = [moment(psf, i, order=2) for i in (z,y,x)]
         return np.array(size), drift
 
+    def characterize_psf(self):
+        """ Get support size and drift polynomial for current set of params """
+        l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1] 
+
+        size_l, drift_l = self.measure_size_drift(l, size=31)
+        size_u, drift_u = self.measure_size_drift(u, size=31)
+
+        # FIXME -- must be odd for now or have a better system for getting the center
+        self.support = 4*size_u.astype('int')+1
+        self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
+
     def get_params(self):
         return self.params
 
@@ -506,15 +521,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
     def update(self, params):
         self.params[:] = params[:]
         self.param_dict = self.todict()
-
-        l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1] 
-
-        size_l, drift_l = self.measure_size_drift(l, size=31)
-        size_u, drift_u = self.measure_size_drift(u, size=31)
-
-        # FIXME -- must be odd for now or have a better system for getting the center
-        self.support = 4*size_u.astype('int')+1
-        self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
+        self.characterize_psf()
 
         self.slices = []
         for i in xrange(self.zrange[0], self.zrange[1]+1):
@@ -529,8 +536,12 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self.tile = tile
             self._setup_ffts()
 
-    def _pad(self, field, finalshape):
-        """ fftshift and pad the field with zeros until it has size finalshape """
+    def _kpad(self, field, finalshape, method='fftn', zpad=False):
+        """
+        fftshift and pad the field with zeros until it has size finalshape.
+        if zpad is off, then no padding is put on the z direction. returns
+        the fourier transform of the field
+        """
         currshape = np.array(field.shape)
 
         if any(finalshape < currshape):
@@ -541,9 +552,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         # fix off-by-one issues when going odd to even tile sizes
         o = d % 2
         d /= 2
-        o[0] = 0
 
-        axes = None if self.method == 'fftn' else (1,2)
+        if not zpad:
+            o[0] = 0
+
+        axes = None if method == 'fftn' else (1,2)
         pad = tuple((d[i]+o[i],d[i]) for i in [0,1,2])
         rpsf = np.pad(field, pad, mode='constant', constant_values=0)
         rpsf = np.fft.ifftshift(rpsf, axes=axes)
@@ -551,7 +564,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
         # FIXME -- need to normalize here?
         #kpsf /= (np.real(kpsf[0,0,0]) + 1e-15)
-        return rpsf, kpsf
+        return kpsf
 
     def execute(self, field):
         if any(field.shape != self.tile.shape):
@@ -572,7 +585,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             # pad the psf slice for the convolution
             fs = np.array(self.tile.shape)
             fs[0] = self.support[0]
-            rpsf, kpsf = self._pad(self.slices[i-self.zrange[0]], fs)
+            kpsf = self._kpad(self.slices[i-self.zrange[0]], fs, method=self.method)
 
             # need to grab the right slice of the field to convolve with PSF
             zslice = np.s_[max(i-fs[0]/2,0):min(i+fs[0]/2+1,self.tile.shape[0])]
@@ -616,4 +629,69 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self._ifftn = psfs.irfft2(self._ifftn_data, threads=self.threads,
                     planner_effort=self.fftw_planning_level)
 
+class FastExactLineScanConfocalPSF(ExactLineScanConfocalPSF):
+    def __init__(self, cheb_degree=3, cheb_evals=4, *args, **kwargs):
+        """
 
+        Same as ExactLineScanConfocalPSF except that integration is performed
+        in the 4th dimension by employing fast Chebyshev approximates to how
+        the PSF varies with depth into the sample. For help, see
+        ExactLineScanConfocalPSF.
+
+        Additional parameters:
+        ----------------------
+        cheb_degree : integer
+            degree of the Chebyshev approximant
+
+        cheb_evals : integer
+            number of interpolation points used to create the coefficient matrix
+        """
+        self.cheb_degree = cheb_degree
+        self.cheb_evals = cheb_evals
+
+        # make sure that we are use the parent class 'fftn' method
+        kwargs.setdefault('method', 'fftn')
+        super(FastExactLineScanConfocalPSF, self).__init__(*args, **kwargs)
+
+    def update(self, params):
+        self.params[:] = params[:]
+        self.param_dict = self.todict()
+        self.characterize_psf()
+
+        self.cheb = ChebyshevInterpolation1D(self.psf, window=self.zrange,
+                        degree=self.cheb_degree, evalpts=self.cheb_evals)
+
+    def psf(self, z):
+        psf = []
+        for i in z:
+            p, _ = self.psf_slice(i, size=self.support, zoffset=self.drift(i))
+            psf.append(p)
+        return np.rollaxis(np.array(psf), 0, 4)
+
+    def execute(self, field):
+        if any(field.shape != self.tile.shape):
+            raise AttributeError("Field passed to PSF incorrect shape")
+
+        outfield = np.zeros_like(field, dtype='float')
+        zc,yc,xc = self.tile.coords(meshed=False, flat=True)
+
+        kfield = self.fftn(field)
+        for k,c in enumerate(self.cheb.coefficients):
+            pad = self._kpad(c, finalshape=self.tile.shape, zpad=True)
+            cov = np.real(self.ifftn(kfield * pad))
+
+            outfield += self.cheb.tk(k, zc) * cov
+
+        return outfield
+
+    def _setup_ffts(self):
+        if psfs.hasfftw:
+            shape = self.tile.shape.copy()
+            self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
+            self._fftn = psfs.rfftn(self._fftn_data, threads=self.threads,
+                    planner_effort=self.fftw_planning_level)
+
+            oshape = self.fftn(np.zeros(shape)).shape
+            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
+            self._ifftn = psfs.irfftn(self._ifftn_data, threads=self.threads,
+                    planner_effort=self.fftw_planning_level)
