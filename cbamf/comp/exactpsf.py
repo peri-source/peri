@@ -680,7 +680,7 @@ class FastExactLineScanConfocalPSF(ExactLineScanConfocalPSF):
             pad = self._kpad(c, finalshape=self.tile.shape, zpad=True)
             cov = np.real(self.ifftn(kfield * pad))
 
-            outfield += self.cheb.tk(k, zc) * cov
+            outfield += self.cheb.tk(k, zc)[:,None,None] * cov
 
         return outfield
 
