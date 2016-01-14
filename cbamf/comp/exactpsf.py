@@ -629,7 +629,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self._ifftn = psfs.irfft2(self._ifftn_data, threads=self.threads,
                     planner_effort=self.fftw_planning_level)
 
-class ChebExactLineScanConfocalPSF(ExactLineScanConfocalPSF):
+class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
     def __init__(self, cheb_degree=3, cheb_evals=4, *args, **kwargs):
         """
 
@@ -651,7 +651,7 @@ class ChebExactLineScanConfocalPSF(ExactLineScanConfocalPSF):
 
         # make sure that we are use the parent class 'fftn' method
         kwargs.setdefault('method', 'fftn')
-        super(FastExactLineScanConfocalPSF, self).__init__(*args, **kwargs)
+        super(ChebyshevLineScanConfocalPSF, self).__init__(*args, **kwargs)
 
     def update(self, params):
         self.params[:] = params[:]
