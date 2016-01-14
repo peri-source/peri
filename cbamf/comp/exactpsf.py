@@ -2,8 +2,8 @@ import numpy as np
 from scipy.special import j0,j1
 
 from cbamf import const, util
+from cbamf import interpolation
 from cbamf.comp import psfs
-from cbamf.interpolation import ChebyshevInterpolation1D
 
 def j2(x):
     """ A fast j2 defined in terms of other special functions """
@@ -633,6 +633,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self._ifftn = psfs.irfft2(self._ifftn_data, threads=self.threads,
                     planner_effort=self.fftw_planning_level)
 
+    def __getstate__(self):
+        odict = super(ChebyshevLineScanConfocalPSF, self).__getstate__()
+        util.cdd(odict, ['slices'])
+        return odict
+
 class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
     def __init__(self, cheb_degree=3, cheb_evals=4, *args, **kwargs):
         """
@@ -662,7 +667,7 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
         self.param_dict = self.todict()
         self.characterize_psf()
 
-        self.cheb = ChebyshevInterpolation1D(self.psf, window=self.zrange,
+        self.cheb = interpolation.ChebyshevInterpolation1D(self.psf, window=self.zrange,
                         degree=self.cheb_degree, evalpts=self.cheb_evals)
 
     def psf(self, z):
@@ -699,3 +704,8 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
             self._ifftn_data = psfs.pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
             self._ifftn = psfs.irfftn(self._ifftn_data, threads=self.threads,
                     planner_effort=self.fftw_planning_level)
+
+    def __getstate__(self):
+        odict = super(ChebyshevLineScanConfocalPSF, self).__getstate__()
+        util.cdd(odict, ['cheb'])
+        return odict
