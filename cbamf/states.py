@@ -6,6 +6,7 @@ from cbamf import const
 from cbamf import initializers
 from cbamf.util import Tile, amin, amax, ProgressBar, RawImage
 from cbamf.priors import overlap
+from cbamf.comp.exactpsf import ChebyshevLineScanConfocalPSF
 
 class State:
     def __init__(self, nparams, state=None, logpriors=None):
@@ -535,6 +536,10 @@ class ConfocalImagePython(State):
                     zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
             self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
 
+        if isinstance(self.psf, ChebyshevLineScanConfocalPSF):
+            b = self.explode(self.b_psf)[2]
+            self.state[b] = self.zscale
+
         self.psf.update(self.state[self.b_psf])
         self.obj.initialize(self.zscale)
         self.ilm.initialize()
@@ -733,6 +738,12 @@ class ConfocalImagePython(State):
 
             if self.slab and block[self.b_slab].any():
                 self.slab.update(self.state[self.b_slab])
+
+                if isinstance(self.psf, ChebyshevLineScanConfocalPSF):
+                    b = self.explode(self.b_psf)[1]
+                    self.state[b] = self.slab.zpos
+                    self.psf.update(self.state[self.b_psf])
+
                 docalc = True
 
             # if the psf was changed, update globally
@@ -769,6 +780,11 @@ class ConfocalImagePython(State):
 
             if block[self.b_zscale].any():
                 self.zscale = self.state[self.b_zscale][0]
+
+                if isinstance(self.psf, ChebyshevLineScanConfocalPSF):
+                    b = self.explode(self.b_psf)[2]
+                    self.state[b] = self.zscale
+                    self.psf.update(self.state[self.b_psf])
 
                 if self.doprior:
                     bounds = (np.array([0,0,0]), np.array(self.image.shape))

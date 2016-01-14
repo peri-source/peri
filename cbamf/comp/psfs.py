@@ -11,7 +11,7 @@ from cbamf.conf import get_wisdom
 
 try:
     import pyfftw
-    from pyfftw.builders import fftn, ifftn, fft2, ifft2
+    from pyfftw.builders import fftn, ifftn, fft2, ifft2, rfftn, irfftn, rfft2, irfft2
     hasfftw = True
 except ImportError as e:
     print "*WARNING* pyfftw not found, switching to numpy.fft (20x slower)"
@@ -45,6 +45,16 @@ FFTW_PLAN_SLOW = 'FFTW_PATIENT'
 #=============================================================================
 class PSF(object):
     def __init__(self, params, shape, fftw_planning_level=FFTW_PLAN_NORMAL, threads=-1):
+        """
+        Point spread function classes must contain the following classes in order
+        to interface with the states class:
+
+            get_support_size(z) : get the psf size at certain z position
+            get_params : return the parameters of the psf
+            set_tile : set the current update tile size
+            update : update the psf based on new parameters
+            execute : apply the psf to an image
+        """
         self.shape = shape
         self.params = np.array(params).astype('float')
 
@@ -680,7 +690,7 @@ class FromArray(PSF):
         pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
         rpsf = np.pad(field, pad, mode='constant', constant_values=0)
         rpsf = np.fft.ifftshift(rpsf)
-        kpsf = np.fft.fftn(rpsf)
+        kpsf = self.fftn(rpsf)
         kpsf /= (np.real(kpsf[0,0,0]) + 1e-15)
         return kpsf
 
