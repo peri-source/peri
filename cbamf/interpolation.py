@@ -135,11 +135,20 @@ class ChebyshevInterpolation1D(object):
         self.evalpts = evalpts
         self.degree = degree
         
-        self.construct_coefficients()
+        self._construct_coefficients()
 
     @property
     def coefficients(self):
         return self._coeffs.copy()
+
+    def tk(self, k, x):
+        """
+        Evaluates an individual Chebyshev polynomial `k` in coordinate space
+        with proper transformation given the window
+        """
+        weights = np.zeros(k+1)
+        weights[k] = 1.
+        return np.polynomial.chebyshev.chebval(self._x2c(x), weights)
 
     def __call__(self, x):
         """
