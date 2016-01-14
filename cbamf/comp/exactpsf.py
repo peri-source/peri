@@ -380,7 +380,7 @@ def moment(p, v, order=1):
 class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
-            pxsize=0.125, method='fftn', *args, **kwargs):
+            pxsize=0.125, method='fftn', support_factor=2, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -432,14 +432,18 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             performed.  Currently 'fftn' is recommended - while slower is more
             accurate
 
+        support_factor : integer
+            size of the support
+
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
             psf, (z,y,x) = a.psf_slice(1., size=51)
             imshow((psf*r**4)[:,:,25], cmap='bone')
         """
         self.pxsize = pxsize
-        self.polar_angle = polar_angle
         self.method = method
+        self.polar_angle = polar_angle
+        self.support_factor = support_factor
 
         # FIXME -- zrange can't be none right now -- need to fix boundary calculations
         if zrange is None:
@@ -509,7 +513,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         size_u, drift_u = self.measure_size_drift(u, size=31)
 
         # FIXME -- must be odd for now or have a better system for getting the center
-        self.support = 4*size_u.astype('int')+1
+        self.support = 2*self.support_factor*size_u.astype('int')+1
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
 
     def get_params(self):
