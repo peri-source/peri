@@ -6,6 +6,7 @@ import scipy.optimize as opt
 from itertools import product, chain
 
 from cbamf.util import Tile, cdd
+from cbamf.interpolation import BarnesInterpolation1D
 
 #=============================================================================
 # Pure 3d functional representations of ILMs
@@ -350,68 +351,6 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 # a complex hidden variable representation of the ILM
 # something like (p(x,y)+m(x,y))*q(z) where m is determined by local models
 #=============================================================================
-class BarnesInterpolation1D(object):
-    def __init__(self, x, d, filter_size=None, iterations=4, clip=False, damp=0.95):
-        """
-        A class for 1-d barnes interpolation. Give data points d at locations x.
-
-        Parameters:
-        -----------
-        (x, d) : ndarrays, 1-dimensional
-            input positions and values
-
-        filter_size : float
-            control parameter for weight function (sigma), should be the average
-            data spacing
-
-        iterations : integer
-            how many iterations to perform. only two needed with a high damping
-
-        clip : boolean
-            whether to clip the number of data points used by the filtersize
-
-        damp : float
-            the damping parameter used in Koch 1983 J. Climate Appl. Meteor. 22 1487-1503
-        """
-        self.x = x
-        self.d = d
-        self.damp = damp
-        self.clip = clip
-        self.iterations = iterations
-
-        if filter_size is None:
-            self.filter_size = (x[1:] - x[:-1]).mean()/2
-        else:
-            self.filter_size = filter_size
-
-    def _weight(self, rsq, size=None):
-        size = size or self.filter_size
-
-        o = np.exp(-rsq / (2*size**2))
-        o = o * (not self.clip or (self.clip and (rsq < 6*size**2)))
-        return o
-
-    def _outer(self, a, b):
-        return (a[:,None] - b[None,:])**2
-
-    def __call__(self, rvecs):
-        """
-        Get the values interpolated at positions rvecs
-        """
-        g = self.filter_size
-
-        dist0 = self._outer(self.x, self.x)
-        dist1 = self._outer(rvecs, self.x)
-
-        tmp = self._weight(dist0, g).dot(self.d)
-        out = self._weight(dist1, g).dot(self.d)
-
-        for i in xrange(self.iterations):
-            out = out + self._weight(dist1, g).dot(self.d - tmp)
-            tmp = tmp + self._weight(dist0, g).dot(self.d - tmp)
-            g *= self.damp
-        return out
-
 class StreakInterpolator(object):
     def __init__(self, type='gaussian'):
         pass
