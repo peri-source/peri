@@ -706,6 +706,11 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
                     planner_effort=self.fftw_planning_level)
 
     def __getstate__(self):
-        odict = super(ChebyshevLineScanConfocalPSF, self).__getstate__()
+        odict = self.__dict__.copy()
+        util.cdd(odict, ['_rx', '_ry', '_rz', '_rvecs', '_rlen'])
+        util.cdd(odict, ['_kx', '_ky', '_kz', '_kvecs', '_klen'])
+        util.cdd(odict, ['_fftn', '_ifftn', '_fftn_data', '_ifftn_data'])
+        util.cdd(odict, ['_memoize_clear', '_memoize_caches'])
+        util.cdd(odict, ['rpsf', 'kpsf'])
         util.cdd(odict, ['cheb'])
         return odict
