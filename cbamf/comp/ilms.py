@@ -378,11 +378,13 @@ class BarnesStreakLegPoly2P1D(object):
         self.zorder = order[-1]
 
         self.order = order
-        self.nparams = len(list(self._poly_orders())) + nstreakpoints
+
+        npoly = len(list(self._poly_orders()))
+        self.nparams = npoly + nstreakpoints
 
         # set some parameters for the streak
         self.nstreakpoints = nstreakpoints
-        self.streak_slicer = np.s_[self.nparams - self.nstreakpoints:]
+        self.streak_slicer = np.s_[npoly:npoly+self.nstreakpoints]
 
         self.params = np.zeros(self.nparams, dtype='float')
         self.params[0] = 1
@@ -582,6 +584,77 @@ class BarnesStreakLegPoly2P1DX(BarnesStreakLegPoly2P1D):
 
                 self.params[b] = params[b]
                 self.bkg = ((1.0+self._barnes_val()) * self._polyxy) * self._polyz
+        else:
+            self.params = params
+            self._bkg()
+
+class BarnesStreakLegPoly2P1DX2(BarnesStreakLegPoly2P1D):
+    def __init__(self, shape, order=(1,1,1), nstreakpoints=40, bpoly=4):
+        self.shape = shape
+        self.xyorder = order[:2]
+        self.zorder = order[-1]
+
+        self.order = order
+
+        npoly = len(list(self._poly_orders()))
+        self.nparams = npoly + nstreakpoints + bpoly
+
+        # set some parameters for the streak
+        self.bpoly = bpoly
+        self.nstreakpoints = nstreakpoints
+        self.streak_slicer = np.s_[npoly:npoly+nstreakpoints]
+        self.bpoly_slicer = np.s_[npoly+nstreakpoints:npoly+nstreakpoints+bpoly]
+
+        self.params = np.zeros(self.nparams, dtype='float')
+        self.params[0] = 1
+        self.params[len(list(self._poly_orders_xy()))] = 1
+        self.params[npoly+nstreakpoints] = 1
+
+        self._setup()
+        self.tile = Tile(self.shape)
+        self.set_tile(Tile(self.shape))
+
+        self.block = np.ones(self.nparams).astype('bool')
+        self.initialize()
+
+    def _barnes_poly(self):
+        p = self.params[self.bpoly_slicer]
+        return legval(self.ry, p)
+
+    def _bkg(self):
+        self.bkg = np.zeros(self.shape)
+        self._polyxy = 0*self.bkg
+        self._polyz = 0*self.bkg
+
+        for order in self._poly_orders_xy():
+            ind = self._indices.index(order)
+            self._polyxy += self.params[ind] * self._term(order)
+
+        for order in self._poly_orders_z():
+            ind = self._indices.index(order)
+            self._polyz += self.params[ind] * self._term(order)
+
+        self.bkg = ((self._barnes_val()*self._barnes_poly()) + self._polyxy) * self._polyz
+        return self.bkg
+
+    def update(self, blocks, params):
+        if blocks.sum() < self.block.sum()/2:
+            for b in np.arange(len(blocks))[blocks]:
+                if b < len(self._indices):
+                    order = self._indices[b]
+
+                    if order in self._indices:
+                        if order in self._indices_xy:
+                            _term = self._polyxy
+                        else:
+                            _term = self._polyz
+
+                        _term -= self.params[b] * self._term(order)
+                        self.params[b] = params[b]
+                        _term += self.params[b] * self._term(order)
+
+                self.params[b] = params[b]
+                self.bkg = ((self._barnes_val()*self._barnes_poly()) + self._polyxy) * self._polyz
         else:
             self.params = params
             self._bkg()
