@@ -146,8 +146,7 @@ class ChebyshevInterpolation1D(object):
         Evaluates an individual Chebyshev polynomial `k` in coordinate space
         with proper transformation given the window
         """
-        weights = np.zeros(k+1)
-        weights[k] = 1.
+        weights = np.diag(np.ones(k+1))[k]
         return np.polynomial.chebyshev.chebval(self._x2c(x), weights)
 
     def __call__(self, x):
