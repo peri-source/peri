@@ -745,6 +745,14 @@ class ConfocalImagePython(State):
             # if the psf was changed, update globally
             if block[self.b_psf].any():
                 self.psf.update(self.state[self.b_psf])
+
+                if s.slab and isinstance(self.psf, ChebyshevLineScanConfocalPSF):
+                    b0 = self.explode(self.b_psf)[1]
+                    b1 = self.explode(self.b_slab)[0]
+
+                    self.state[b1] = self.state[b0]
+                    self.slab.update(self.state[self.b_slab])
+
                 self._build_sigma_field()
                 docalc = True
 
