@@ -173,6 +173,26 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
     ll = np.array(ll)
     return h, ll
 
+def do_blocks(s, blocks, sweeps, burn, stepout=0.1, postfix=None, quiet=False):
+    h, ll = [], []
+
+    for i in xrange(sweeps):
+        if postfix is not None:
+            states.save(s, desc=postfix, extra=[np.array(h),np.array(ll)])
+
+        if not quiet:
+            print '{:=^79}'.format(' Sweep '+str(i)+' ')
+
+        sample_state(s, blocks, stepout=stepout, N=1, doprint=~quiet)
+
+        if i >= burn:
+            h.append(s.state.copy())
+            ll.append(s.loglikelihood())
+
+    h = np.array(h)
+    ll = np.array(ll)
+    return h, ll
+
 #=============================================================================
 # Optimization methods like gradient descent
 #=============================================================================
