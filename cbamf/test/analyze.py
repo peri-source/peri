@@ -4,6 +4,12 @@ import scipy as sp
 from cbamf.priors import overlap
 from cbamf.util import Tile
 
+def pr(state, samples, depth=-10):
+    d = state.todict(samples)
+    p = d['pos'][depth:].mean(axis=0)
+    r = d['rad'][depth:].mean(axis=0)
+    return p,r
+
 def pos_rad(state, mask):
     """
     Gets all positions and radii of particles by mask
