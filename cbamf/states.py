@@ -746,7 +746,7 @@ class ConfocalImagePython(State):
             if block[self.b_psf].any():
                 self.psf.update(self.state[self.b_psf])
 
-                if s.slab and isinstance(self.psf, ChebyshevLineScanConfocalPSF):
+                if self.slab and isinstance(self.psf, ChebyshevLineScanConfocalPSF):
                     b0 = self.explode(self.b_psf)[1]
                     b1 = self.explode(self.b_slab)[0]
 
