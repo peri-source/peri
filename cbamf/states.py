@@ -6,7 +6,6 @@ from cbamf import const
 from cbamf import initializers
 from cbamf.util import Tile, amin, amax, ProgressBar, RawImage
 from cbamf.priors import overlap
-from cbamf.comp.exactpsf import ChebyshevLineScanConfocalPSF
 
 class State:
     def __init__(self, nparams, state=None, logpriors=None):
@@ -243,9 +242,9 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True,
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
-            sigma=0.04, doprior=False, constoff=True,
+            sigma=0.04, doprior=False, constoff=False,
             varyn=False, allowdimers=False, nlogs=True, difference=True,
-            pad=const.PAD, sigmapad=True, slab=None, newconst=False, bkg=None,
+            pad=const.PAD, sigmapad=False, slab=None, newconst=True, bkg=None,
             *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
@@ -281,10 +280,10 @@ class ConfocalImagePython(State):
         offset : float, typically (0, 1) [default: 1]
             The level that particles inset into the illumination field
 
-        doprior: boolean [default: True]
+        doprior: boolean [default: False]
             Whether or not to turn on overlap priors using neighborlists
 
-        constoff: boolean [default: True]
+        constoff: boolean [default: False]
             Changes the model so to:
 
                 Image = \int PSF(x-x') (ILM(x)*-OFF*SPH(x)) dx'
@@ -308,7 +307,7 @@ class ConfocalImagePython(State):
             No recommended to set by hand.  The padding level of the raw image needed
             by the PSF support.
 
-        sigmapad : boolean [default: True]
+        sigmapad : boolean [default: False]
             If True, varies the sigma values at the edge of the image, changing them
             slowly to zero over the size of the psf support
 
@@ -316,7 +315,7 @@ class ConfocalImagePython(State):
             If not None, include a slab in the model image and associated analysis.
             This object should be from the platonic components module.
 
-        newconst : boolean [default: False]
+        newconst : boolean [default: True]
             If True, overrides constoff to implement a image formation of the form:
 
                 Image = \int PSF(x-x') (ILM(x)*(1-SPH(X)) + OFF*SPH(x)) dx'
@@ -610,77 +609,136 @@ class ConfocalImagePython(State):
         newll = self._loglikelihood_field[s].sum()
         self._loglikelihood += newll - oldll
 
+    def _platonic_image(self):
+        """
+        Since platonic is a combination of several different components, return
+        the complete combination for the platonic.
+        """
+        platonic = self.obj.get_field().copy()
+
+        if self.slab:
+            platonic += self.slab.get_field()
+
+        if self.allowdimers:
+            platonic = np.clip(platonic, -1, 1)
+
+        return platonic
+
+    def _set_tiles(self, tile):
+        self.obj.set_tile(tile)
+        self.ilm.set_tile(tile)
+        self.psf.set_tile(tile)
+
+        if self.bkg:
+            self.bkg.set_tile(tile)
+
+        if self.slab:
+            self.slab.set_tile(tile)
+
     def _update_global(self):
         self._update_tile(*self._tile_global(), difference=False)
 
     def _update_tile(self, otile, itile, ioslice, difference=False):
+        """
+        Actually calculates the model in a section of image given by the slice.
+        If using difference images, then that is usually for platonic update
+        so calculate replacement differences
+        """
         self._last_slices = (otile, itile, ioslice)
-
-        self.obj.set_tile(otile)
-        self.ilm.set_tile(otile)
-        self.psf.set_tile(otile)
-
-        if self.bkg:
-            self.bkg.set_tile(otile)
-
-        if self.slab:
-            self.slab.set_tile(otile)
-
+        self._set_tiles(otile)
         islice = itile.slicer
 
-        if difference:
-            platonic = self.obj.get_diff_field()
+        # unpack a few variables to that this is easier to read, nice compact
+        # formulas coming up, B = bkg, I = ilm, C = off
+        B = self.bkg.get_field() if self.bkg else None
+        I = self.ilm.get_field()
+        C = self.offset
 
-            if self.newconst:
-                replacement = -(self.offset - self.ilm.get_field())*platonic
-            elif self.bkg:
-                replacement = self.ilm.get_field()*self.offset*platonic - self.bkg.get_field()*platonic
+        if not difference:
+            # unpack one more variable, the platonic image (with slab)
+            P = self._platonic_image()
+
+            # Section QUX -- notes on this section:
+            #   * for a formula to be correct it must have a term I(1-P)
+            #   * sometimes C and B are both used to improve compatibility
+            #   * terms B*P are to improve convergence times since it makes them
+            #       independent of I(1-P) terms
+            if self.newconst and self.bkg is None:
+                # 3. the first correct formula, but which sets the illumation to
+                # zero where there are particles and adds a constant there
+                replacement = I*(1-P) + C*P
+            elif self.bkg and self.newconst:
+                # 5. the correct formula with a background field. C, while degenerate,
+                # is kept around so that other rewrites are unnecessary.
+                replacement = I*(1-P) + (C+B)*P
+
+            # TODO -- these last three are incorrect, remove them
+            elif self.bkg and not self.newconst:
+                # 4. the first bkg formula, but based on 1,2 so incorrect
+                replacement = I*(1-C*P) + B*P
             elif self.constoff:
-                replacement = self.offset*platonic
+                # 2. the second formula, but still has P dependent on I
+                replacement = I - C*P
             else:
-                replacement = self.ilm.get_field() * self.offset*platonic
+                # 1. the original formula, but has P dependent on I since it takes out
+                # a fraction of the original illumination, not all of it.
+                replacement = I*(1-C*P)
         else:
-            platonic = self.obj.get_field()
+            # unpack one more variable, the change in the platonic image
+            dP = self.obj.get_diff_field()
 
-            if self.slab:
-                # cannot be += since platonic is linked to self.obj.field
-                # FIXME -- should be copy operator above?
-                platonic = platonic + self.slab.get_field()
-
-            if self.allowdimers:
-                platonic = np.clip(platonic, -1, 1)
-
-            if self.newconst:
-                replacement = self.ilm.get_field() + (self.offset-self.ilm.get_field())*platonic
-            elif self.bkg:
-                replacement = self.ilm.get_field()*(1-self.offset*platonic) + self.bkg.get_field()*platonic
+            # each of the following formulas are derived from the section marked
+            # QUX (search for it), taking the variation with respect to P, for
+            # example:
+            #       M = I*(1-P) + C*P
+            #      dM = (C-I)dP
+            if self.newconst and self.bkg is None:
+                replacement = (C-I)*dP
+            elif self.bkg and self.newconst:
+                replacement = (C+B-I)*dP
+            elif self.bkg and not self.newconst:
+                replacement = (B-C*I)*dP
             elif self.constoff:
-                replacement = self.ilm.get_field() - self.offset*platonic
+                replacement = C*dP
             else:
-                replacement = self.ilm.get_field() * (1 - self.offset*platonic)
+                replacement = -C*I*dP
 
         replacement = self.psf.execute(replacement)
 
         if difference:
-            self.model_image[islice] -= replacement[ioslice]
+            self.model_image[islice] += replacement[ioslice]
         else:
             self.model_image[islice] = replacement[ioslice]
 
         self._update_ll_field(self.model_image[islice], islice)
 
+    def _block_to_particles(self, block):
+        """ Get the particles affected by block `block` by index """
+        pmask = block[self.b_pos].reshape(-1, 3).any(axis=-1)
+        rmask = block[self.b_rad]
+        tmask = block[self.b_typ] if self.varyn else (0*rmask).astype('bool')
+        particles = np.arange(self.obj.N)[pmask | rmask | tmask]
+        return particles
+
+    def update_many(self, block, data):
+        """
+        Update many blocks at once.  Unlike `update` this function does not
+        perform incremental update but rather calculates which objects are
+        affected, updates the parameters, and asks them to reinitialize
+        """
+        pass
+
     def update(self, block, data):
+        if block.sum() > 1:
+            raise AttributeError("Currently we only support 1 variable updates now")
+
         prev = self.state.copy()
 
         # TODO, instead, push the change in case we need to pop it
         self._update_state(block, data)
-
-        pmask = block[self.b_pos].reshape(-1, 3).any(axis=-1)
-        rmask = block[self.b_rad]
-        tmask = block[self.b_typ] if self.varyn else (0*rmask).astype('bool')
-
-        particles = np.arange(self.obj.N)[pmask | rmask | tmask]
-
         self._logprior = 0
+
+        particles = self._block_to_particles(block)
 
         # FIXME -- obj.create_diff_field not guaranteed to work for multiple particles
         # if the particle was changed, update locally
@@ -734,25 +792,11 @@ class ConfocalImagePython(State):
 
             if self.slab and block[self.b_slab].any():
                 self.slab.update(self.state[self.b_slab])
-
-                if isinstance(self.psf, ChebyshevLineScanConfocalPSF):
-                    b = self.explode(self.b_psf)[1]
-                    self.state[b] = self.slab.zpos
-                    self.psf.update(self.state[self.b_psf])
-
                 docalc = True
 
             # if the psf was changed, update globally
             if block[self.b_psf].any():
                 self.psf.update(self.state[self.b_psf])
-
-                if self.slab and isinstance(self.psf, ChebyshevLineScanConfocalPSF):
-                    b0 = self.explode(self.b_psf)[1]
-                    b1 = self.explode(self.b_slab)[0]
-
-                    self.state[b1] = self.state[b0]
-                    self.slab.update(self.state[self.b_slab])
-
                 self._build_sigma_field()
                 docalc = True
 
