@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.lib.scimath import sqrt as csqrt
 from scipy.special import j0,j1
 
 from cbamf import const, util
@@ -27,10 +28,8 @@ WTS_HG = WTS_HG[NPTS:]*np.exp(PTS_HG*PTS_HG)
 def f_theta(cos_theta, zint, z, n2n1=0.95):
     """
     """
-    # return zint * cos_theta - (zint-z)*np.sqrt( n2n1**2-1 +cos_theta**2)
-    #try this:
     return (np.outer(np.ones_like(z)*zint, cos_theta) -
-            np.outer(zint+z, np.sqrt(n2n1**2-1+cos_theta**2)))
+            np.outer(zint+z, csqrt(n2n1**2-1+cos_theta**2)))
 
 def get_taus(cos_theta, n2n1=1./1.05):
     """
@@ -44,7 +43,7 @@ def get_taus(cos_theta, n2n1=1./1.05):
     Returns:
         Float, same type (array or scalar) as cos_theta.
     """
-    return 2./(1+np.sqrt(1+(n2n1**2-1)*cos_theta**-2))
+    return 2./(1+csqrt(1+(n2n1**2-1)*cos_theta**-2))
 
 def get_taup(cos_theta, n2n1=1./1.05):
     """
@@ -58,7 +57,7 @@ def get_taup(cos_theta, n2n1=1./1.05):
     Returns:
         Float, same type (array or scalar) as cos_theta.
     """
-    return 2*n2n1/(n2n1**2+np.sqrt(1-(1-n2n1**2)*cos_theta**-2))
+    return 2*n2n1/(n2n1**2+csqrt(1-(1-n2n1**2)*cos_theta**-2))
 
 def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False):
     """
@@ -67,14 +66,11 @@ def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False):
     """
 
     phase = f_theta(cos_theta,zint,z,n2n1=n2n1)
-    if get_hdet:
-        to_return_rl = np.cos(phase)
-        to_return_im = np.sin(phase)
-    else:
-        sqrt_costheta = np.outer(np.ones_like(z),np.sqrt(cos_theta))
-        to_return_rl = np.cos(phase)*sqrt_costheta
-        to_return_im = np.sin(phase)*sqrt_costheta
-    return to_return_rl, to_return_im
+    to_return = np.exp(-1j*phase)
+    if not get_hdet:
+        to_return *= np.outer(np.ones_like(z),np.sqrt(cos_theta))
+
+    return to_return
 
 def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1):
     """
@@ -114,41 +110,37 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1):
     cos_theta = 0.5*(1-np.cos(alpha))*PTS+0.5*(1+np.cos(alpha))
     #[cosTheta,rho,z]
 
-    Kprefactor_rl, Kprefactor_im = get_Kprefactor(z, cos_theta, zint=zint,
-        n2n1=n2n1, get_hdet=get_hdet)
+    Kprefactor = get_Kprefactor(z, cos_theta, zint=zint, \
+        n2n1=n2n1,get_hdet=get_hdet)
 
     if K==1:
         part_1 = j0(np.outer(rr,np.sqrt(1-cos_theta**2)))*\
             np.outer(np.ones_like(rr), 0.5*(get_taus(cos_theta,n2n1=n2n1)+\
-            get_taup(cos_theta,n2n1=n2n1)*np.sqrt(1-n1n2**2*(1-cos_theta**2))))
+            get_taup(cos_theta,n2n1=n2n1)*csqrt(1-n1n2**2*(1-cos_theta**2))))
 
-        integrand_rl = Kprefactor_rl * part_1
-        integrand_im = Kprefactor_im * part_1
+        integrand = Kprefactor * part_1
 
     elif K==2:
         part_2=j2(np.outer(rr,np.sqrt(1-cos_theta**2)))*\
             np.outer(np.ones_like(rr),0.5*(get_taus(cos_theta,n2n1=n2n1)-\
-            get_taup(cos_theta,n2n1=n2n1)*np.sqrt(1-n1n2**2*(1-cos_theta**2))))
+            get_taup(cos_theta,n2n1=n2n1)*csqrt(1-n1n2**2*(1-cos_theta**2))))
 
-        integrand_rl = Kprefactor_rl * part_2
-        integrand_im = Kprefactor_im * part_2
+        integrand = Kprefactor * part_2
 
     elif K==3:
         part_3=j1(np.outer(rho,np.sqrt(1-cos_theta**2)))*\
             np.outer(np.ones_like(rr), n1n2*get_taup(cos_theta,n2n1=n2n1)*\
             np.sqrt(1-cos_theta**2))
 
-        integrand_rl = Kprefactor_rl * part_3
-        integrand_im = Kprefactor_im * part_3
+        integrand = Kprefactor * part_3
 
     else:
-        raise RuntimeError('K=1,2,3 only...')
+        raise ValueError('K=1,2,3 only...')
 
-    big_wts = np.outer(np.ones_like(rr), WTS)
-    kint_rl = (big_wts*integrand_rl).sum(axis=1) * 0.5*(1-np.cos(alpha))
-    kint_im = (big_wts*integrand_im).sum(axis=1) * 0.5*(1-np.cos(alpha))
+    big_wts=np.outer(np.ones_like(rr),WTS)
+    kint = (big_wts*integrand).sum(axis=1) * 0.5*(1-np.cos(alpha))
 
-    return kint_rl.reshape(rho.shape), kint_im.reshape(rho.shape)
+    return kint.reshape(rho.shape)
 
 def get_hsym_asym(rho, z, get_hdet=False, **kwargs):
     """
@@ -177,10 +169,10 @@ def get_hsym_asym(rho, z, get_hdet=False, **kwargs):
     K2 = get_K(rho, z, K=2, get_hdet=get_hdet, **kwargs)
     K3 = get_K(rho, z, K=3, get_hdet=get_hdet, **kwargs)
 
-    hsym = K1[0]**2+K1[1]**2 + K2[0]**2+K2[1]**2 + 0.5*(K3[0]**2+K3[1]**2)
-    hasym= 2*(K1[0]*K2[0] + K1[1]*K2[1]) + 0.5*(K3[0]**2+K3[1]**2)
+    hsym = K1*K1.conj() + K2*K2.conj() + 0.5*(K3*K3.conj())
+    hasym= K1*K2.conj() + K2*K1.conj() + 0.5*(K3*K3.conj())
 
-    return hsym, hasym
+    return hsym.real, hasym.real #imaginary part should be 0
 
 def get_psf(x, y, z, kfki=0.89, zint=100.0, normalize=False, **kwargs):
     """
@@ -269,11 +261,11 @@ def get_psf_scalar(x, y, z, kfki=1., zint=100.0, normalize=False, **kwargs):
     phi = np.arctan2(y, x)
 
     K1 = get_K(rho, z, K=1,zint=zint,get_hdet=True, **kwargs)
-    hilm = K1[0]*K1[0] + K1[1]*K1[1]
+    hilm = np.real( K1*K1.conj() )
 
     if np.abs(kfki - 1.0) > 1e-13:
         Kdet = get_K(rho*kfki, z*kfki, K=1, zint=zint*kfki, get_hdet=True, **kwargs)
-        hdet = Kdet[0]*Kdet[0] + Kdet[1]*Kdet[1]
+        hdet = np.real( Kdet*Kdet.conj() )
     else:
         hdet = hilm.copy()
 
@@ -507,7 +499,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
     def characterize_psf(self):
         """ Get support size and drift polynomial for current set of params """
-        l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1] 
+        l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1]
 
         size_l, drift_l = self.measure_size_drift(l, size=31)
         size_u, drift_u = self.measure_size_drift(u, size=31)
