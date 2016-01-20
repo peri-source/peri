@@ -659,4 +659,111 @@ class BarnesStreakLegPoly2P1DX2(BarnesStreakLegPoly2P1D):
             self.params = params
             self._bkg()
 
+class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
+    def __init__(self, shape, order=(1,1,1), npts=(40,20)):
+        """
+        Yet another Barnes interpolant. This one is of the form
+
+            I = ((\sum b_k(x) * L_k(y)) + p(x,y))*q(z)
+
+        where b_k are independent barnes interpolants and L_k are legendre
+        polynomials. p and q are the same as previous ILMs.
+        """
+        self.shape = shape
+        self.xyorder = order[:2]
+        self.zorder = order[-1]
+
+        self.order = order
+
+        npoly = len(list(self._poly_orders()))
+        self.nparams = npoly + sum(npts)
+
+        # set some parameters for the streak
+        self.npts = npts
+        self.slicers = []
+        for i in xrange(len(npts)):
+            self.slicers.append(np.s_[npoly+sum(npts[:i]):npoly+sum(npts[:i+1])])
+
+        self.params = np.zeros(self.nparams, dtype='float')
+        self.params[0] = 1
+        self.params[len(list(self._poly_orders_xy()))] = 1
+
+        self._setup()
+        self.tile = Tile(self.shape)
+        self.set_tile(Tile(self.shape))
+
+        self.block = np.ones(self.nparams).astype('bool')
+        self.initialize()
+
+    def _barnes_poly(self, n=0):
+        weights = np.diag(np.ones(n+1))[n]
+        return legval(np.squeeze(self.ry), weights)[:,None]
+
+    def _barnes(self, y, n=0):
+        b_in = self.b_in[n]
+        b = BarnesInterpolation1D(
+                b_in, self.params[self.slicers[n]],
+                filter_size=(b_in[1]-b_in[0])*1.0/2, damp=0.9, iterations=3
+        )
+        return b(y)
+
+    def _barnes_val(self, n=0):
+        return self._barnes(self.b_out, n=n)[None,:]
+
+    def _barnes_full(self):
+        barnes = np.array([
+            self._barnes_val(i)*self._barnes_poly(i) for i in xrange(len(self.npts))
+        ])
+        return barnes.sum(axis=0)[None,:,:]
+
+    def _bkg(self):
+        self.bkg = np.zeros(self.shape)
+        self._polyxy = 0*self.bkg
+        self._polyz = 0*self.bkg
+
+        for order in self._poly_orders_xy():
+            ind = self._indices.index(order)
+            self._polyxy += self.params[ind] * self._term(order)
+
+        for order in self._poly_orders_z():
+            ind = self._indices.index(order)
+            self._polyz += self.params[ind] * self._term(order)
+
+        self.bkg = (self._barnes_full() + self._polyxy) * self._polyz
+        return self.bkg
+
+    def update(self, blocks, params):
+        if blocks.sum() < self.block.sum()/2:
+            for b in np.arange(len(blocks))[blocks]:
+                if b < len(self._indices):
+                    order = self._indices[b]
+
+                    if order in self._indices:
+                        if order in self._indices_xy:
+                            _term = self._polyxy
+                        else:
+                            _term = self._polyz
+
+                        _term -= self.params[b] * self._term(order)
+                        self.params[b] = params[b]
+                        _term += self.params[b] * self._term(order)
+
+                self.params[b] = params[b]
+                self.bkg = (self._barnes_full() + self._polyxy) * self._polyz
+        else:
+            self.params = params
+            self._bkg()
+
+    def _setup_rvecs(self):
+        o = self.shape
+        self.rz, self.ry, self.rx = [np.linspace(-1, 1, i) for i in o]
+        self.rz = self.rz[:,None,None]
+        self.ry = self.ry[None,:,None]
+        self.rx = self.rx[None,None,:]
+
+        self.b_out = np.squeeze(self.rx)
+        self.b_in = [
+            np.linspace(self.b_out.min(), self.b_out.max(), q)
+            for q in self.npts
+        ]
 
