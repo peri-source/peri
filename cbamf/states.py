@@ -245,7 +245,7 @@ class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
             sigma=0.04, doprior=False, constoff=False,
             varyn=False, allowdimers=False, nlogs=True, difference=True,
-            pad=const.PAD, sigmapad=True, slab=None, newconst=True, bkg=None,
+            pad=const.PAD, sigmapad=False, slab=None, newconst=True, bkg=None,
             *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
@@ -308,7 +308,7 @@ class ConfocalImagePython(State):
             No recommended to set by hand.  The padding level of the raw image needed
             by the PSF support.
 
-        sigmapad : boolean [default: True]
+        sigmapad : boolean [default: False]
             If True, varies the sigma values at the edge of the image, changing them
             slowly to zero over the size of the psf support
 
@@ -664,14 +664,18 @@ class ConfocalImagePython(State):
             # unpack one more variable, the platonic image (with slab)
             P = self._platonic_image()
 
-            # Section QUX
+            # Section QUX -- notes on this section:
+            #   * for a formula to be correct it must have a term I(1-P)
+            #   * sometimes C and B are both used to improve compatibility
+            #   * terms B*P are to improve convergence times since it makes them
+            #       independent of I(1-P) terms
             if self.newconst and self.bkg is None:
                 # 3. the first correct formula, but which sets the illumation to
                 # zero where there are particles and adds a constant there
                 replacement = I*(1-P) + C*P
             elif self.bkg and self.newconst:
-                # 5. the correct formula with a background field. C, while degenerate
-                # is kept around so that other rewrites are unnecessary
+                # 5. the correct formula with a background field. C, while degenerate,
+                # is kept around so that other rewrites are unnecessary.
                 replacement = I*(1-P) + (C+B)*P
 
             # TODO -- these last three are incorrect, remove them
