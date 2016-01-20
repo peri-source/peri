@@ -6,7 +6,6 @@ from cbamf import const
 from cbamf import initializers
 from cbamf.util import Tile, amin, amax, ProgressBar, RawImage
 from cbamf.priors import overlap
-from cbamf.comp.exactpsf import ChebyshevLineScanConfocalPSF
 
 class State:
     def __init__(self, nparams, state=None, logpriors=None):
@@ -281,7 +280,7 @@ class ConfocalImagePython(State):
         offset : float, typically (0, 1) [default: 1]
             The level that particles inset into the illumination field
 
-        doprior: boolean [default: True]
+        doprior: boolean [default: False]
             Whether or not to turn on overlap priors using neighborlists
 
         constoff: boolean [default: False]
@@ -546,11 +545,6 @@ class ConfocalImagePython(State):
         if self.slab:
             self.slab.initialize()
 
-            #if isinstance(self.psf, ChebyshevLineScanConfocalPSF):
-            #    b = self.explode(self.b_psf)[1]
-            #    self.state[b] = self.slab.zpos
-            #    self.psf.update(self.state[self.b_psf])
-
         self._update_global()
 
     def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
@@ -798,24 +792,11 @@ class ConfocalImagePython(State):
 
             if self.slab and block[self.b_slab].any():
                 self.slab.update(self.state[self.b_slab])
-
-                #if isinstance(self.psf, ChebyshevLineScanConfocalPSF):
-                #    b = self.explode(self.b_psf)[1]
-                #    self.state[b] = self.slab.zpos
-                #    self.psf.update(self.state[self.b_psf])
-
                 docalc = True
 
             # if the psf was changed, update globally
             if block[self.b_psf].any():
                 self.psf.update(self.state[self.b_psf])
-
-                #if self.slab and isinstance(self.psf, ChebyshevLineScanConfocalPSF):
-                #    b0 = self.explode(self.b_psf)[1]
-                #    b1 = self.explode(self.b_slab)[0]
-                #    self.state[b1] = self.state[b0]
-                #    self.slab.update(self.state[self.b_slab])
-
                 self._build_sigma_field()
                 docalc = True
 
