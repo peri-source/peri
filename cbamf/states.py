@@ -245,7 +245,7 @@ class ConfocalImagePython(State):
             sigma=0.04, doprior=False, constoff=False,
             varyn=False, allowdimers=False, nlogs=True, difference=True,
             pad=const.PAD, sigmapad=False, slab=None, newconst=True, bkg=None,
-            *args, **kwargs):
+            method=None, *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -324,6 +324,21 @@ class ConfocalImagePython(State):
         bkg : `cbamf.comp.ilms.*`
             a polynomial that represents the background field in dark parts of
             the image
+
+        method : int
+
+            a int that describes the model that we wish to employ (how to
+            combine the components into a model image). Given the following
+            symbols
+
+                I=ILM, B=BKG, c=OFFSET, P=platonic, p=particles, s=slab, H=PSF
+
+            then the following ints correspond to the listed equations (x is
+            convolution)
+
+                1 : [I(1-P)]xH + B
+                2 : [I(1-p)]xH + sxH + B
+                3 : I[(1-p)xH - sxH] + B
         """
         self.pad = pad
         self.index = None
@@ -336,6 +351,7 @@ class ConfocalImagePython(State):
         self.difference = difference
         self.sigmapad = sigmapad
         self.newconst = newconst
+        self.method = method
 
         self.psf = psf
         self.ilm = ilm
@@ -663,7 +679,17 @@ class ConfocalImagePython(State):
             #   * sometimes C and B are both used to improve compatibility
             #   * terms B*P are to improve convergence times since it makes them
             #       independent of I(1-P) terms
-            if self.newconst and self.bkg is None:
+            if self.method == 1:
+                # [I(1-P)]xH + B
+                replacement = I*(1-P) + C*P
+                pass
+            elif self.method == 2:
+                # [I(1-p)]xH + sxH + B
+                pass
+            elif self.method == 3:
+                # I[(1-p)xH - sxH] + B
+                pass
+            elif self.newconst and self.bkg is None:
                 # 3. the first correct formula, but which sets the illumation to
                 # zero where there are particles and adds a constant there
                 replacement = I*(1-P) + C*P
@@ -683,7 +709,15 @@ class ConfocalImagePython(State):
                 # 1. the original formula, but has P dependent on I since it takes out
                 # a fraction of the original illumination, not all of it.
                 replacement = I*(1-C*P)
+
+            replacement = self.psf.execute(replacement)
+
+            if self.method == 1:
+                self.model_image[islice] = replacement[ioslice] + B[ioslice]
+            else:
+                self.model_image[islice] = replacement[ioslice]
         else:
+            # this section is currently only run for particles
             # unpack one more variable, the change in the platonic image
             dP = self.obj.get_diff_field()
 
@@ -692,7 +726,9 @@ class ConfocalImagePython(State):
             # example:
             #       M = I*(1-P) + C*P
             #      dM = (C-I)dP
-            if self.newconst and self.bkg is None:
+            if self.method == 1:
+                replacement = (C-I)*dP
+            elif self.newconst and self.bkg is None:
                 replacement = (C-I)*dP
             elif self.bkg and self.newconst:
                 replacement = (C+B-I)*dP
@@ -703,12 +739,11 @@ class ConfocalImagePython(State):
             else:
                 replacement = -C*I*dP
 
-        replacement = self.psf.execute(replacement)
-
-        if difference:
+            # FIXME -- if we move to other local updates, need to fix the last
+            # section here with self.method switches, also with dP changing so
+            # lolz at that
+            replacement = self.psf.execute(replacement)
             self.model_image[islice] += replacement[ioslice]
-        else:
-            self.model_image[islice] = replacement[ioslice]
 
         self._update_ll_field(self.model_image[islice], islice)
 
@@ -1058,7 +1093,8 @@ class ConfocalImagePython(State):
             self.obj, self.psf, self.ilm, self.zscale, self.offset,
             self.sigma, self.doprior, self.constoff,
             self.varyn, self.allowdimers, self.nlogs, self.difference,
-            self.pad, self.sigmapad, self.slab, self.newconst, self.bkg)
+            self.pad, self.sigmapad, self.slab, self.newconst, self.bkg,
+            self.method)
 
 def save(state, filename=None, desc='', extra=None):
     """
