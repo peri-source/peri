@@ -372,7 +372,7 @@ def moment(p, v, order=1):
 class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
-            pxsize=0.125, method='fftn', support_factor=2, *args, **kwargs):
+            pxsize=0.125, method='fftn', support_factor=2, normalize=False, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -436,6 +436,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.method = method
         self.polar_angle = polar_angle
         self.support_factor = support_factor
+        self.normalize = normalize
 
         # FIXME -- zrange can't be none right now -- need to fix boundary calculations
         if zrange is None:
@@ -471,8 +472,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         Pack the parameters into the form necessary for the integration
         routines above.  For example, packs for calculate_linescan_psf
         """
+        # FIXME -- why the __dict__.get? backwards compatibility.
+        norm = self.__dict__.get('normalize', False)
+
         d = self.todict()
-        d.update({'polar_angle': self.polar_angle})
+        d.update({'polar_angle': self.polar_angle, 'normalize': norm})
         d.pop('laser_wavelength')
         d.pop('zslab')
         d.pop('zscale')
@@ -493,6 +497,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
     def measure_size_drift(self, z, size=21, zoffset=0.):
         """ Returns the 'size' of the psf in each direction a particular z (px) """
         psf, (z,y,x) = self.psf_slice(z, size=size, zoffset=zoffset)
+        psf = psf / psf.sum()
         drift = moment(psf, z, order=1)
         size = [moment(psf, i, order=2) for i in (z,y,x)]
         return np.array(size), drift
@@ -633,7 +638,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
     def __init__(self, cheb_degree=3, cheb_evals=4, *args, **kwargs):
         """
-
         Same as ExactLineScanConfocalPSF except that integration is performed
         in the 4th dimension by employing fast Chebyshev approximates to how
         the PSF varies with depth into the sample. For help, see
