@@ -118,6 +118,12 @@ class Tile(object):
         return str(self.__class__.__name__)+" {} -> {} ({})".format(
                 list(self.l), list(self.r), list(self.shape))
 
+    def contains(self, items, pad=0):
+        o = ((items > self.l-pad) & (items < self.r+pad))
+        if len(o.shape) == 2:
+            o = o.all(axis=-1)
+        return o
+
 class RawImage():
     def __init__(self, filename, tile=None, zstart=None, zstop=None,
             xysize=None, invert=False):
