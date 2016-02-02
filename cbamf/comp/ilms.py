@@ -465,6 +465,23 @@ class BarnesStreakLegPoly2P1D(object):
         res = opt.leastsq(self._score, x0=self.params, args=(f, mask), maxfev=maxcalls*(self.nparams+1))
         self.update(self.block, res[0])
 
+    def from_ilm_tile(self, ilm, tile):
+        """
+        Be able to interpolate a second ILM into a new one of a different
+        shape exactly due to Legendre orthogonality and the Barnes interps
+        """
+        fieldxy = ilm._polyxy[tile.slicer]
+        fieldz = ilm._polyz[tile.slicer]
+
+        for i,ind in enumerate(self._indices):
+            if ind in self._indices_xy:
+                self.params[i] = (fieldxy[0]*self._term_xy(ind)).sum()
+            else:
+                self.params[i] = (fieldz[:,0,0]*self._term_z(ind)).sum()
+
+        self.params[self.streak_slicer] = ilm._barnes(self.b_in)
+        self.initialize()
+
     def _score(self, coeffs, f, mask):
         self.params = coeffs
         test = self._bkg()
