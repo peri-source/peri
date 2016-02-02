@@ -279,36 +279,57 @@ def get_psf_scalar(x, y, z, kfki=1., zint=100.0, normalize=False, **kwargs):
 
     return psf
 
-def calculate_linescan_ilm_psf(y, z, polar_angle=0., scl=1.0, **kwargs):
+def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
+        pinhole_width=1, **kwargs):
     """
-    I don't care what the psf is along the line direction since it's constant.
-    So I can just return it along the orthogonal plane.
-    But I need to maybe care if the polarization direction, line direction
-    aren't the same.
-    So we assume the polarization is in the
+    Calculates the illumination PSF for a line-scanning confocal with the
+    confocal line oriented along the x direction.
+    Inputs:
+        - y, z: Float numpy.arrays of the y- and z- points to evaluate
+            the illumination PSF at, in units of 1/k. Arbitrary shape.
+        - polar_angle: The angle of the illuminating light's polarization with
+            respect to the x-axis (the line's orientation).
+        - pinhole_width: The width of the geometric image of the line projected
+            onto the sample, in units of 1/k. Default is 1. Set to 0 by setting
+            nlpts = 1. The perfect line image is assumed to be a Gaussian.
+        - nlpts: The number of points to use for Hermite-gauss quadrature over
+            the line's width. Default is 1, corresponding to an infinitesmally
+            thin line.
+        - **kwargs: Paramters such as alpha, n2n1 that are passed to
+            get_hsym_hasym
+    Outputs:
+        - hilm: Float numpy.array of the line illumination, of the same shape
+            as y and z.
     """
 
-    x_vals = PTS_HG*scl
+    x_vals = PTS_HG
 
     #I'm assuming that y,z are already some sort of meshgrid
     xg, yg, zg = [np.zeros( list(y.shape) + [x_vals.size] ) for a in xrange(3)]
+    hilm = np.zeros(xg.shape)
 
-    for a in xrange( x_vals.size ):
+    for a in xrange(x_vals.size):
         xg[...,a] = x_vals[a]
         yg[...,a] = y.copy()
         zg[...,a] = z.copy()
 
-    rho = np.sqrt(xg*xg + yg*yg)
-    phi = np.arctan2(yg, xg)
+    y_pinhole, wts_pinhole = np.polynomial.hermite.hermgauss(nlpts)
+    y_pinhole *= np.sqrt(2)*pinhole_width
+    wts_pinhole /= np.sqrt(np.pi)
 
-    hsym, hasym = get_hsym_asym(rho, zg, get_hdet=False, **kwargs)
+    #Pinhole hermgauss first:
+    for yp, wp in zip(y_pinhole, wts_pinhole):
+        rho = np.sqrt(xg*xg + (yg-yp)*(yg-yp))
+        phi = np.arctan2(yg,xg)
 
-    hilm = hsym + np.cos(2*(phi-polar_angle))*hasym
-    #multiply by weights... there is a better way to do this
+        hsym, hasym = get_hsym_asym(rho,zg,get_hdet = False, **kwargs)
+        hilm += wp*(hsym + np.cos(2*(phi-polar_angle))*hasym)
+
+    #Now line hermgauss
     for a in xrange(x_vals.size):
         hilm[...,a] *= WTS_HG[a]
 
-    return hilm.sum(axis=-1)*scl*2.
+    return hilm.sum(axis=-1)*2.
 
 def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
         polar_angle=0., **kwargs):
@@ -334,7 +355,6 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
             (in radians, 1.173 for our confocal / arcsin(n2n1))
         - n2n1: The index mismatch of the sample; default 0.95. From get_K().
             for our confocal, 1.4/1.518
-        -zscale: dummy variable to work better within the ExactLineScanConfocalPSF
     Outputs:
         - psf: 3D- numpy.array of the point-spread function. Indexing is
             psf[x,y,z].
@@ -349,6 +369,65 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
 
     hilm = calculate_linescan_ilm_psf(y2, z2, zint=zint, polar_angle=polar_angle, **kwargs)
     hdet, toss = get_hsym_asym(rho3*kfki, z3*kfki, zint=kfki*zint, get_hdet=True, **kwargs)
+
+    if normalize:
+        hilm /= hilm.sum()
+        hdet /= hdet.sum()
+
+    for a in xrange(x.size):
+        hdet[a,...] *= hilm
+
+    return hdet if normalize else hdet / hdet.sum()
+
+def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
+        sigkf=0.1, zint=100., nkpts=3, **kwargs):
+    """
+    Calculates the full PSF for a line-scanning confocal with a polydisperse
+    emission spectrum of the dye. The dye's emission spectrum is assumed to be
+    Gaussian.
+    Inputs:
+        - x, y, z: 1D numpy.arrays of the grid points to evaluate the PSF at.
+            Floats, in units of 1/k_incoming.
+    Optional Inputs:
+        - normalize: Boolean. Set to True to include the effects of PSF
+            normalization on the image intensity.
+        - kfki: The mean ratio of the final light's wavevector to the incoming.
+            Default is 0.889
+        - sigkf: Float scalar; sigma of kfki -- kfki values are kfki +- sigkf.
+        - zint: The position of the optical interface, in units of 1/k_incoming
+    Other **kwargs
+        - polar_angle: Float scalar of the polarization angle of the light with
+            respect to the line direction (x). From calculate_linescan_ilm_psf;
+            default is 0.
+        - alpha: The aperture angle of the lens; default 1. From get_K().
+        - n2n1: The index mismatch of the sample; default 0.95. From get_K().
+    Outputs:
+        - psf: 3D- numpy.array of the point-spread function. Indexing is
+            psf[x,y,z].
+    """
+
+    pts, wts = np.polynomial.hermite.hermgauss(nkpts)
+
+    kfkipts = kfki + sigkf*np.sqrt(2)*pts
+    wts /= np.sqrt(np.pi) #normalizing integral
+
+    #~~~Things I'd rather not have in this code.
+    x3,y3,z3 = np.meshgrid(x,y,z,indexing='ij')
+    y2,z2 = np.meshgrid(y,z,indexing='ij')
+
+    rho3 = np.sqrt(x3*x3+y3*y3)
+    #~~~~
+
+    hilm = calculate_linescan_ilm_psf(y2, z2, zint=zint, **kwargs)
+
+    inner = [
+        wts[a] * get_hsym_asym(
+            rho3*kfkipts[a], z3*kfkipts[a], zint=kfkipts[a]*zint,
+            get_hdet=True, **kwargs
+        )[0]
+        for a in xrange(nkpts)
+    ]
+    hdet = np.sum(inner, axis=0)
 
     if normalize:
         hilm /= hilm.sum()
