@@ -142,7 +142,7 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1):
 
     return kint.reshape(rho.shape)
 
-def get_hsym_asym(rho, z, get_hdet=False, **kwargs):
+def get_hsym_asym(rho, z, get_hdet=False, include_K3_det=True, **kwargs):
     """
     Gets the symmetric and asymmetric portions of the PSF. All distances
     (rho,z,zint) are in units of the 1/light wavevector.
@@ -159,6 +159,9 @@ def get_hsym_asym(rho, z, get_hdet=False, **kwargs):
             optical train (index n1).
         -get_hdet: Boolean. Set to True to get the detection portion of the
             psf; False to get the illumination portion of the psf.
+        -include_K3_det: Boolean. Flag to not calculate the `K3' component
+            for the detection PSF, corresponding to (I think) a low-aperature
+            focusing lens and no z-polarization of the focused light.
 
     Outputs:
         -hsym:  rho.shape numpy.array of the symmetric portion of the PSF
@@ -167,7 +170,11 @@ def get_hsym_asym(rho, z, get_hdet=False, **kwargs):
 
     K1 = get_K(rho, z, K=1, get_hdet=get_hdet, **kwargs)
     K2 = get_K(rho, z, K=2, get_hdet=get_hdet, **kwargs)
-    K3 = get_K(rho, z, K=3, get_hdet=get_hdet, **kwargs)
+
+    if get_hdet and not include_K3_det:
+        K3 = 0*K1
+    else:
+        K3 = get_K(rho, z, K=3, get_hdet=get_hdet, **kwargs)
 
     hsym = K1*K1.conj() + K2*K2.conj() + 0.5*(K3*K3.conj())
     hasym= K1*K2.conj() + K2*K1.conj() + 0.5*(K3*K3.conj())
@@ -437,3 +444,78 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
         hdet[a,...] *= hilm
 
     return hdet if normalize else hdet / hdet.sum()
+
+def calculate_monochrome_brightfield_psf(x, y, z, normalize=False, **kwargs):
+    """
+    Calculate the PSF for brightfield, assuming illumination with unpolarized
+    but vectorial light.
+    Inputs:
+        - x, y, z: numpy.arrays of the same shape at which to evaluate the psf
+    Optional (**kwargs) arguments:
+        - alpha
+        - n2n1
+        - zint
+
+    Outputs:
+        - psf: numpy.array of the psf, shape x.shape == y.shape == z.shape
+    """
+
+    rho = np.sqrt(x**2 + y**2)
+    psf, toss = get_hsym_asym(rho, z, get_hdet=True, **kwargs)
+
+    if normalize:
+        norm = psf.sum(axis=(0,1)) #should be independent of z
+        psf /= norm.max()
+
+    return psf
+
+def calculate_polychrome_brightfield_psf(x, y, z, k0=1., sigk=0.1, npts=3, **kwargs):
+    pts,wts = np.polynomial.hermite.hermgauss(npts)
+
+    kpts = k0 + sigk*np.sqrt(2)*pts
+    wts /= np.sqrt(np.pi) #normalizing the integral
+
+    inner = [
+        wts[a] * calculate_monochrome_brightfield_psf(
+            x*kpts[a], y*kpts[a],z*kpts[a], **kwargs
+        ) for a in xrange(npts)
+    ]
+    psf = np.sum(inner, axis=0)
+
+    return psf
+
+def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
+    """
+    Since all the PSFs have a cos2phi symmetry, which is also (loosely)
+    the symmetry of a pixelated grid, ....
+    Speeds up psf calculations by a factor of 4 for free / some broadcasting.
+    Doesn't work for linescan psf because of the hdet bit...
+    Inputs:
+        - xpts: 1D N-element numpy.array of the x-points to
+        - ypts:
+        - zpts:
+    """
+
+    #1. Checking that everything is hunky-dory:
+    for t in [xpts,ypts,zpts]:
+        if len(t.shape) != 1:
+            raise ValueError('xpts,ypts,zpts must be 1D.')
+
+    for t in [xpts,ypts]:
+        if t[0] != 0:
+            raise ValueError('xpts[0],ypts[0] = 0 required.')
+
+    xg,yg,zg = np.meshgrid(xpts,ypts,zpts, indexing='ij')
+    xs, ys, zs = [ pts.size for pts in [xpts,ypts,zpts] ]
+    to_return = np.zeros([2*xs-1, 2*ys-1, zs])
+
+    #2. Calculate:
+    up_corner_psf = func(xg,yg,zg, **kwargs)
+
+    to_return[xs-1:,ys-1:,:] = up_corner_psf.copy()                 #x>0, y>0
+    to_return[:xs-1,ys-1:,:] = up_corner_psf[-1:0:-1,:,:].copy()    #x<0, y>0
+    to_return[xs-1:,:ys-1,:] = up_corner_psf[:,-1:0:-1,:].copy()    #x>0, y<0
+    to_return[:xs-1,:ys-1,:] = up_corner_psf[-1:0:-1,-1:0:-1,:].copy()#x<0,y<0
+
+    return to_return
+
