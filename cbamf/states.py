@@ -542,6 +542,9 @@ class ConfocalImagePython(State):
         if self.bkg:
             self.bkg.params = state[self.b_bkg]
 
+        if self.slab:
+            self.slab.params = state[self.b_slab]
+
         self._initialize()
 
     def _initialize(self):
