@@ -17,7 +17,8 @@ def moment(p, v, order=1):
 class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
-            pxsize=0.125, method='fftn', support_factor=2, normalize=False, *args, **kwargs):
+            pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=None,
+            nkpts=None, cutoffval=None, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -72,6 +73,21 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         support_factor : integer
             size of the support
 
+        normalize : boolean
+            if True, use the normalization as calculated by the PSF instead of
+            unit normalization
+
+        sigkf : float
+            Width of wavelengths to use in the polychromatic psf, None is
+            monochromatic. Values for kfki = kfki +- sigkf, unitless
+
+        nkpts : integer
+            number of integration points to use for the polychromatic psf
+
+        cutoffval : float
+            percentage of peak psf value to cutoff using a 3-axis exp(-(r-r0)**4)
+            function where r0 is determined by cutoffval
+
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
             psf, (z,y,x) = a.psf_slice(1., size=51)
@@ -83,14 +99,26 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.support_factor = support_factor
         self.normalize = normalize
 
+        self.polychromatic = False
+        self.sigkf = sigkf
+        self.nkpts = nkpts
+        self.cutoffval = cutoffval
+
+        if self.sigkf is not None:
+            self.nkpts = self.nkpts or 3
+            self.polychromatic = True
+        elif self.nkpts is not None:
+            self.sigkf = 0.0
+            self.polychromatic = True
+
         # FIXME -- zrange can't be none right now -- need to fix boundary calculations
         if zrange is None:
             zrange = (0, shape[0])
         self.zrange = zrange
 
         # text location of parameters for ease of extraction
-        self.param_order = ['kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser_wavelength']
-        params = np.array( [ kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength ])
+        self.param_order = ['kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser_wavelength', 'sigkf']
+        params = np.array( [ kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength,   sigkf ])
         self.param_dict = {k:params[i] for i,k in enumerate(self.param_order)}
 
         super(ExactLineScanConfocalPSF, self).__init__(*args, params=params,
@@ -106,7 +134,13 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         zoffset *= zint > 0
 
         x,y,z = [self._p2k(i) for i in [x,y,z+zoffset]]
-        psf = psfcalc.calculate_linescan_psf(x, y, z, zint=zint, **self.args()).T
+
+        if self.polychromatic:
+            psffunc = psfcalc.calculate_polychrome_linescan_psf
+        else:
+            psffunc = psfcalc.calculate_linescan_psf
+
+        psf = psffunc(x, y, z, zint=zint, **self.args()).T
         return psf, tile.coords(meshed=True)
 
     def todict(self):
@@ -117,15 +151,25 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         Pack the parameters into the form necessary for the integration
         routines above.  For example, packs for calculate_linescan_psf
         """
-        # FIXME -- why the __dict__.get? backwards compatibility.
-        norm = self.__dict__.get('normalize', False)
-
         d = self.todict()
-        d.update({'polar_angle': self.polar_angle, 'normalize': norm})
+        d.update({'polar_angle': self.polar_angle, 'normalize': self.normalize})
         d.pop('laser_wavelength')
         d.pop('zslab')
         d.pop('zscale')
+
+        if not self.polychromatic:
+            d.pop('sigkf')
+
         return d
+
+    def _compatibility_patch(self):
+        # FIXME -- why this function with __dict__.get? backwards compatibility
+        # each of these parameters were added after the original class was made
+        self.normalize = self.__dict__.get('normalize', False)
+        self.cutoffval = self.__dict__.get('cutoffval', None)
+        self.sigkf = self.__dict__.get('sigkf', None)
+        self.nkpts = self.__dict__.get('nkpts', None)
+        self.polychromatic = self.sigkf is not None or self.nkpts is not None
 
     def _p2k(self, v):
         """ Convert from pixel to 1/k_incoming (laser_wavelength/(2\pi)) units """
@@ -279,6 +323,10 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         odict = super(ChebyshevLineScanConfocalPSF, self).__getstate__()
         util.cdd(odict, ['slices'])
         return odict
+
+    def __setstate__(self, idict):
+        self.__dict__.update(idict)
+        self._compatibility_patch()
 
 class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
     def __init__(self, cheb_degree=3, cheb_evals=4, *args, **kwargs):
