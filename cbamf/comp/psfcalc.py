@@ -72,7 +72,7 @@ def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False):
 
     return to_return
 
-def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1):
+def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1, **kwargs):
     """
     Internal function for calculating psf's. Returns various integrals that
     appear in Hell's psf calculation.
