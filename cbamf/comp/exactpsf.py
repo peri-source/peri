@@ -241,7 +241,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         """ Give the pixel offset at a given z value for the current parameters """
         return np.polyval(self.drift_poly, z)
 
-    def measure_size_drift(self, z, size=41, zoffset=0.):
+    def measure_size_drift(self, z, size=31, zoffset=0.):
         """ Returns the 'size' of the psf in each direction a particular z (px) """
         drift = 0.0
         for i in xrange(self.measurement_iterations):
