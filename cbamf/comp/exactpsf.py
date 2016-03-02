@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.ndimage as nd
 
 from cbamf import util
 from cbamf import interpolation
@@ -11,6 +12,9 @@ def moment(p, v, order=1):
     elif order == 2:
         return np.sqrt( ((v**2)*p).sum() - (v*p).sum()**2 )
 
+def oddify(a):
+    return a + (a%2==0)
+
 #=============================================================================
 # The actual interfaces that can be used in the cbamf system
 #=============================================================================
@@ -18,7 +22,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
             pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=None,
-            nkpts=None, cutoffval=None, *args, **kwargs):
+            nkpts=None, cutoffval=None, measurement_iterations=None, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -85,8 +89,14 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             number of integration points to use for the polychromatic psf
 
         cutoffval : float
-            percentage of peak psf value to cutoff using a 3-axis exp(-(r-r0)**4)
-            function where r0 is determined by cutoffval
+            Percentage of peak psf value to cutoff using a 3-axis
+            exp(-(r-r0)**4) function where r0 is determined by cutoffval. A
+            good value for this is the bit depth of the camera, or possibly the
+            SNR, so 1/2**8 or 1/50.
+
+        measurement_iterations : int
+            number of interations used when trying to find the center of mass
+            of the psf in a certain slice
 
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
@@ -98,6 +108,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.polar_angle = polar_angle
         self.support_factor = support_factor
         self.normalize = normalize
+        self.measurement_iterations = measurement_iterations or 1
 
         self.polychromatic = False
         self.sigkf = sigkf
@@ -124,24 +135,70 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         super(ExactLineScanConfocalPSF, self).__init__(*args, params=params,
                                                         shape=shape, **kwargs)
 
-    def psf_slice(self, zint, size=11, zoffset=0.):
-        """ Calculates the 3D psf at a particular z pixel height """
-        tile = util.Tile(left=0, size=size, centered=True)
-        z,y,x = tile.coords(meshed=False, flat=True)
+    def psf_slice(self, zint, size=11, zoffset=0., getextent=False):
+        """
+        Calculates the 3D psf at a particular z pixel height
 
+        Parameters:
+        -----------
+        zint : float
+            z pixel height in image coordinates , converted to 1/k by the
+            function using the slab position as well
+
+        size : int, list, tuple
+            The size over which to calculate the psf, can be 1 or 3 elements
+            for the different axes in image pixel coordinates
+
+        zoffset : float
+            Offset in pixel units to use in the calculation of the psf
+
+        cutval : float
+            If not None, the psf will be cut along a curve corresponding to
+            p(r) == 0 with exponential damping exp(-d^4)
+
+        getextent : boolean
+            If True, also return the extent of the psf in pixels for example
+            to get the support size. Can only be used with cutval.
+        """
         # calculate the current pixel value in 1/k, making sure we are above the slab
         zint = max(self._p2k(self._tz(zint)), 0)
-        zoffset *= zint > 0
+        offset = np.array([zoffset*(zint>0), 0, 0])
 
-        x,y,z = [self._p2k(i) for i in [x,y,z+zoffset]]
+        # create the coordinate vectors for where to actually calculate the 
+        tile = util.Tile(left=0, size=size, centered=True)
+        vecs = tile.coords(meshed=False, flat=True)
+        vecs = [self._p2k(i+o) for i,o in zip(vecs, offset)]
 
         if self.polychromatic:
             psffunc = psfcalc.calculate_polychrome_linescan_psf
         else:
             psffunc = psfcalc.calculate_linescan_psf
 
-        psf = psffunc(x, y, z, zint=zint, **self.args()).T
-        return psf, tile.coords(meshed=True)
+        psf = psffunc(*vecs[::-1], zint=zint, **self.args()).T
+        vec = tile.coords(meshed=True)
+
+        # create a smoothly varying point spread function by cutting off the psf
+        # at a certain value and smoothly taking it to zero
+        if self.cutoffval is not None:
+            # find the edges of the PSF
+            edge = psf > psf.max() * self.cutoffval
+            dd = nd.morphology.distance_transform_edt(~edge)
+
+            # calculate the new PSF and normalize it to the new support
+            psf = psf * np.exp(-dd**4)
+            psf /= psf.sum()
+
+            if getextent:
+                # the size is determined by the edge plus a 2 pad for the
+                # exponential damping to zero at the edge
+                size = np.array([
+                    (vec*edge).min(axis=(1,2,3))-2,
+                    (vec*edge).max(axis=(1,2,3))+2,
+                ]).T
+                return psf, vec, size
+            return psf, vec
+
+        return psf, vec
 
     def todict(self):
         return {k:self.params[i] for i,k in enumerate(self.param_order)}
@@ -157,7 +214,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         d.pop('zslab')
         d.pop('zscale')
 
-        if not self.polychromatic:
+        if not self.polychromatic and d.has_key('sigkf'):
             d.pop('sigkf')
 
         return d
@@ -183,24 +240,34 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         """ Give the pixel offset at a given z value for the current parameters """
         return np.polyval(self.drift_poly, z)
 
-    def measure_size_drift(self, z, size=21, zoffset=0.):
+    def measure_size_drift(self, z, size=41, zoffset=0.):
         """ Returns the 'size' of the psf in each direction a particular z (px) """
-        psf, (z,y,x) = self.psf_slice(z, size=size, zoffset=zoffset)
-        psf = psf / psf.sum()
-        drift = moment(psf, z, order=1)
-        size = [moment(psf, i, order=2) for i in (z,y,x)]
-        return np.array(size), drift
+        drift = 0.0
+        for i in xrange(self.measurement_iterations):
+            psf, vec = self.psf_slice(z, size=size, zoffset=zoffset+drift)
+            psf = psf / psf.sum()
+
+            drift += moment(psf, vec[0], order=1)
+            psize = [moment(psf, j, order=2) for j in vec]
+        return np.array(psize), drift
 
     def characterize_psf(self):
         """ Get support size and drift polynomial for current set of params """
         l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1]
 
-        size_l, drift_l = self.measure_size_drift(l, size=31)
-        size_u, drift_u = self.measure_size_drift(u, size=31)
+        size_l, drift_l = self.measure_size_drift(l)
+        size_u, drift_u = self.measure_size_drift(u)
 
         # FIXME -- must be odd for now or have a better system for getting the center
-        self.support = 2*self.support_factor*size_u.astype('int')+1
+        self.support = oddify(2*self.support_factor*size_u.astype('int'))
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
+
+        if self.cutoffval is not None:
+            psf, vec, size_l = self.psf_slice(l, size=51, zoffset=drift_l, getextent=True)
+            psf, vec, size_u = self.psf_slice(u, size=51, zoffset=drift_u, getextent=True)
+
+            ss = [np.abs(i).sum(axis=-1) for i in [size_l, size_u]]
+            self.support = oddify(util.amax(*ss))
 
     def get_params(self):
         return self.params
@@ -320,13 +387,19 @@ class ExactLineScanConfocalPSF(psfs.PSF):
                     planner_effort=self.fftw_planning_level)
 
     def __getstate__(self):
-        odict = super(ChebyshevLineScanConfocalPSF, self).__getstate__()
-        util.cdd(odict, ['slices'])
+        odict = self.__dict__.copy()
+        util.cdd(odict, ['_rx', '_ry', '_rz', '_rvecs', '_rlen'])
+        util.cdd(odict, ['_kx', '_ky', '_kz', '_kvecs', '_klen'])
+        util.cdd(odict, ['_fftn', '_ifftn', '_fftn_data', '_ifftn_data'])
+        util.cdd(odict, ['_memoize_clear', '_memoize_caches'])
+        util.cdd(odict, ['rpsf', 'kpsf'])
+        util.cdd(odict, ['cheb', 'slices'])
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
         self._compatibility_patch()
+        self._setup_ffts()
 
 class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
     def __init__(self, cheb_degree=3, cheb_evals=4, *args, **kwargs):
@@ -403,3 +476,8 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
         util.cdd(odict, ['rpsf', 'kpsf'])
         util.cdd(odict, ['cheb'])
         return odict
+
+    def __setstate__(self, idict):
+        self.__dict__.update(idict)
+        self._compatibility_patch()
+        self._setup_ffts()
