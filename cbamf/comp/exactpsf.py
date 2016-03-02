@@ -121,6 +121,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         elif self.nkpts is not None:
             self.sigkf = 0.0
             self.polychromatic = True
+        else:
+            self.sigkf = sigkf = 0.0
+            self.polychromatic = False
 
         # FIXME -- zrange can't be none right now -- need to fix boundary calculations
         if zrange is None:
