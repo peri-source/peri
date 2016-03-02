@@ -162,8 +162,13 @@ class LegendrePoly3D(Polynomial3D):
 # 2+1d functional representations of ILMs, p(x,y)+q(z)
 #=============================================================================
 class Polynomial2P1D(object):
-    def __init__(self, shape, order=(1,1,1)):
+    def __init__(self, shape, order=(1,1,1), operation='*'):
+        """
+        Polynomial of the form p(x,y) & q(z) where & can either be * or +
+        depending on the argument `operation`.
+        """
         self.shape = shape
+        self.operation = operation
         self.xyorder = order[:2]
         self.zorder = order[-1]
 
@@ -215,7 +220,11 @@ class Polynomial2P1D(object):
             ind = self._indices.index(order)
             self._polyz += self.params[ind] * self._term(order)
 
-        self.bkg = self._polyxy * self._polyz
+        if self.operation == '*':
+            self.bkg = self._polyxy * self._polyz
+        else:
+            self.bkg = self._polyxy + self._polyz
+
         return self.bkg
 
     def from_ilm(self, ilm):
@@ -281,7 +290,11 @@ class Polynomial2P1D(object):
                 _term -= self.params[b] * self._term(order)
                 self.params[b] = params[b]
                 _term += self.params[b] * self._term(order)
-                self.bkg = self._polyxy * self._polyz
+
+                if self.operation == '*':
+                    self.bkg = self._polyxy * self._polyz
+                else:
+                    self.bkg = self._polyxy + self._polyz
         else:
             self.params = params
             self._bkg()
@@ -300,6 +313,7 @@ class Polynomial2P1D(object):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
+        self.operation = self.__dict__.get('operation', '*')
         self._setup()
         self.tile = Tile(self.shape)
         self.set_tile(Tile(self.shape))
