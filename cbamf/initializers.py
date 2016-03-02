@@ -75,13 +75,6 @@ def normalize(im, invert=False):
         out = 1 - out
     return out
 
-def fsmooth(im, sigma):
-    kz, ky, kx = np.meshgrid(*[np.fft.fftfreq(i) for i in feat.shape], indexing='ij')
-    ksq = kx**2 + ky**2 + kz**2
-    kim = np.fft.fftn(im)
-    kim *= np.exp(-ksq * sigma**2)
-    return np.real(np.fft.ifftn(kim))
-
 def generate_sphere(radius):
     x,y,z = np.mgrid[0:2*radius,0:2*radius,0:2*radius]
     r = np.sqrt((x-radius-0.5)**2 + (y-radius-0.5)**2 + (z-radius-0.5)**2)
@@ -104,6 +97,25 @@ def trackpy_featuring(im, size=10):
     return pos
 
 def remove_overlaps(pos, rad, zscale=1, doprint=False):
+    N = rad.shape[0]
+    z = np.array([zscale, 1, 1])
+    for i in xrange(N):
+        o = np.arange(i+1, N)
+        d = np.sqrt( ((z*(pos[i] - pos[o]))**2).sum(axis=-1) )
+        r = rad[i] + rad[o]
+
+        diff = d-r
+        mask = diff < 0
+        imask = o[mask]
+        dmask = diff[mask]
+
+        for j, d in zip(imask, dmask):
+            rad[i] -= np.abs(d)*rad[i]/(rad[i]+rad[j]) + 1e-10
+            rad[j] -= np.abs(d)*rad[j]/(rad[i]+rad[j]) + 1e-10
+            if doprint:
+                print diff, rad[i], rad[j]
+
+def remove_overlaps_naive(pos, rad, zscale=1, doprint=False):
     N = rad.shape[0]
     z = np.array([zscale, 1, 1])
     for i in xrange(N):

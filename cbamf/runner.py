@@ -6,16 +6,33 @@ import tempfile
 import pickle
 
 from cbamf import const
+from cbamf import states, initializers
+from cbamf.util import RawImage
 from cbamf.mc import samplers, engines, observers
+from cbamf.comp import objs, psfs, ilms
+
+# Linear fit function, because I can
+def linear_fit(x, y, sigma=1, N=100, burn=1000):
+    from cbamf.states import LinearFit
+    poly = np.polyfit(x,y,1)
+
+    s = LinearFit(x, y, sigma=sigma)
+    s.state[:2] = poly
+
+    bl = s.explode(s.block_all())
+    h = sample_state(s, s.explode(s.block_all()), N=burn, doprint=True, procedure='uniform')
+    h = sample_state(s, s.explode(s.block_all()), N=burn, doprint=True, procedure='uniform')
+
+    return s, h.get_histogram()
 
 #=============================================================================
 # Sampling methods that run through blocks and sample
 #=============================================================================
-def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False):
+def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False, procedure='uniform'):
     eng = engines.SequentialBlockEngine(state)
     opsay = observers.Printer()
-    ohist = observers.HistogramObserver(block=blocks[0])
-    eng.add_samplers([samplers.SliceSampler1D(stepout, block=b, procedure='overrelaxed') for b in blocks])
+    ohist = observers.HistogramObserver(block=np.array(blocks).any(axis=0))
+    eng.add_samplers([samplers.SliceSampler1D(stepout, block=b, procedure=procedure) for b in blocks])
 
     eng.add_likelihood_observers(opsay) if doprint else None
     eng.add_state_observers(ohist)
@@ -50,13 +67,12 @@ def scan_noise(image, state, element, size=0.01, N=1000):
 
     return xs, ys
 
-def sample_particles(state, stepout=1):
-    print '{:-^39}'.format(' POS / RAD ')
-    for particle in xrange(state.obj.N):
-        if not state.isactive(particle):
-            continue
-
-        print particle
+def sample_particles(state, stepout=1, start=0, quiet=False):
+    if not quiet:
+        print '{:-^39}'.format(' POS / RAD ')
+    for particle in state.active_particles():
+        if not quiet:
+            print particle
         sys.stdout.flush()
 
         blocks = state.blocks_particle(particle)
@@ -64,13 +80,13 @@ def sample_particles(state, stepout=1):
 
     return state.state.copy()
 
-def sample_particle_pos(state, stepout=1):
-    print '{:-^39}'.format(' POS ')
-    for particle in xrange(state.obj.N):
-        if not state.isactive(particle):
-            continue
+def sample_particle_pos(state, stepout=1, start=0, quiet=False):
+    if not quiet:
+        print '{:-^39}'.format(' POS ')
 
-        print particle
+    for particle in state.active_particles():
+        if not quiet:
+            print particle
         sys.stdout.flush()
 
         blocks = state.blocks_particle(particle)[:-1]
@@ -78,13 +94,14 @@ def sample_particle_pos(state, stepout=1):
 
     return state.state.copy()
 
-def sample_particle_rad(state, stepout=1):
-    print '{:-^39}'.format(' RAD ')
-    for particle in xrange(state.obj.N):
-        if not state.isactive(particle):
-            continue
+def sample_particle_rad(state, stepout=1, start=0, quiet=False):
+    if not quiet:
+        print '{:-^39}'.format(' RAD ')
 
-        print particle
+    for particle in state.active_particles():
+        if not quiet:
+            print particle
+
         sys.stdout.flush()
 
         blocks = [state.blocks_particle(particle)[-1]]
@@ -92,8 +109,10 @@ def sample_particle_rad(state, stepout=1):
 
     return state.state.copy()
 
-def sample_block(state, blockname, explode=True, stepout=0.1):
-    print '{:-^39}'.format(' '+blockname.upper()+' ')
+def sample_block(state, blockname, explode=True, stepout=0.1, quiet=False):
+    if not quiet:
+        print '{:-^39}'.format(' '+blockname.upper()+' ')
+
     blocks = [state.create_block(blockname)]
 
     if explode:
@@ -101,13 +120,13 @@ def sample_block(state, blockname, explode=True, stepout=0.1):
 
     return sample_state(state, blocks, stepout)
 
-def sample_block_list(state, blocklist, stepout=0.1):
+def sample_block_list(state, blocklist, stepout=0.1, quiet=False):
     for bl in blocklist:
-        sample_block(state, bl, stepout=stepout)
+        sample_block(state, bl, stepout=stepout, quiet=quiet)
     return state.state.copy(), state.loglikelihood()
 
-def do_samples(s, sweeps, burn, stepout=0.1, save_period=10,
-        prefix='cbamf', save_name=None, sigma=False, pos=False):
+def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
+        prefix='cbamf', save_name=None, sigma=True, pos=True, quiet=False, postfix=None):
     h = []
     ll = []
     if not save_name:
@@ -119,19 +138,29 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=10,
             with open(save_name, 'w') as tfile:
                 pickle.dump([s,h,ll], tfile)
 
-        print '{:=^79}'.format(' Sweep '+str(i)+' ')
+        if postfix is not None:
+            states.save(s, desc=postfix, extra=[np.array(h),np.array(ll)])
+
+        if not quiet:
+            print '{:=^79}'.format(' Sweep '+str(i)+' ')
 
         #sample_particles(s, stepout=stepout)
         if pos:
-            sample_particle_pos(s, stepout=stepout)
-        sample_particle_rad(s, stepout=stepout)
-        sample_block(s, 'psf', stepout=stepout)
-        sample_block(s, 'ilm', stepout=stepout)
-        sample_block(s, 'off', stepout=stepout)
-        sample_block(s, 'zscale', stepout=stepout)
+            sample_particle_pos(s, stepout=stepout, quiet=quiet)
+        sample_particle_rad(s, stepout=stepout, quiet=quiet)
+        sample_block(s, 'psf', stepout=stepout, quiet=quiet)
+        sample_block(s, 'ilm', stepout=stepout, quiet=quiet)
+        sample_block(s, 'off', stepout=stepout, quiet=quiet)
+        sample_block(s, 'zscale', stepout=stepout, quiet=quiet)
 
-        if sigma:
-            sample_block(s, 'sigma', stepout=0.005)
+        if s.bkg:
+            sample_block(s, 'bkg', stepout=stepout, quiet=quiet)
+
+        if s.slab:
+            sample_block(s, 'slab', stepout=stepout, quiet=quiet)
+
+        if sigma and s.nlogs:
+            sample_block(s, 'sigma', stepout=stepout/10, quiet=quiet)
 
         if i >= burn:
             h.append(s.state.copy())
@@ -144,16 +173,72 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=10,
     ll = np.array(ll)
     return h, ll
 
+def do_blocks(s, blocks, sweeps, burn, stepout=0.1, postfix=None, quiet=False):
+    h, ll = [], []
+
+    for i in xrange(sweeps):
+        if postfix is not None:
+            states.save(s, desc=postfix, extra=[np.array(h),np.array(ll)])
+
+        if not quiet:
+            print '{:=^79}'.format(' Sweep '+str(i)+' ')
+
+        sample_state(s, blocks, stepout=stepout, N=1, doprint=~quiet)
+
+        if i >= burn:
+            h.append(s.state.copy())
+            ll.append(s.loglikelihood())
+
+    h = np.array(h)
+    ll = np.array(ll)
+    return h, ll
+
 #=============================================================================
 # Optimization methods like gradient descent
 #=============================================================================
+def optimize_particle(state, index, method='gn', doradius=True):
+    """
+    Methods available are
+        gn : Gauss-Newton with JTJ (recommended)
+        nr : Newton-Rhaphson with hessian
+
+    if doradius, also optimize the radius.
+    """
+    blocks = state.blocks_particle(index)
+
+    if not doradius:
+        blocks = blocks[:-1]
+
+    g = state.gradloglikelihood(blocks=blocks)
+    if method == 'gn':
+        h = state.jtj(blocks=blocks)
+    if method == 'nr':
+        h = state.hessloglikelihood(blocks=blocks)
+    step = np.linalg.solve(h, g)
+
+    h = np.zeros_like(g)
+    for i in xrange(len(g)):
+        state.update(blocks[i], state.state[blocks[i]] - step[i])
+    return g,h
+
+def optimize_particles(state, *args, **kwargs):
+    for i in state.active_particles():
+        optimize_particle(state, i, *args, **kwargs)
+
 def modify(state, blocks, vec):
     for bl, val in zip(blocks, vec):
         state.update(bl, np.array([val]))
 
-def residual(vec, state, blocks):
-    print 'res', state.loglikelihood()
+import time
+
+def residual(vec, state, blocks, relax_particles=True):
+    print time.time(), 'res', state.loglikelihood()
     modify(state, blocks, vec)
+
+    for i in xrange(3):
+        #sample_particles(state, quiet=True)
+        optimize_particles(state)
+
     return state.residuals().flatten()
 
 def jac(vec, state, blocks):
@@ -176,8 +261,8 @@ def hessloglikelihood(vec, state, blocks):
 def gradient_descent(state, blocks, method='L-BFGS-B'):
     from scipy.optimize import minimize
 
-    t = np.array(blocks).any(axis=0)
-    return minimize(residual_sq, state.state[t], args=(state, blocks),
+    t = np.array([state.state[b] for b in blocks])
+    return minimize(residual_sq, t, args=(state, blocks),
             method=method)#, jac=gradloglikelihood, hess=hessloglikelihood)
 
 def lm(state, blocks, method='lm'):
@@ -187,11 +272,16 @@ def lm(state, blocks, method='lm'):
     return root(residual, state.state[t], args=(state, blocks),
             method=method)
 
-def leastsq(state, blocks):
+def leastsq(state, blocks, dojac=True):
     from scipy.optimize import leastsq
 
-    t = np.array(blocks).any(axis=0)
-    return leastsq(residual, state.state[t], args=(state, blocks), Dfun=jac, col_deriv=True)
+    if dojac:
+        jacfunc = jac
+    else:
+        jacfunc = None
+
+    t = np.array([state.state[b] for b in blocks])
+    return leastsq(residual, t, args=(state, blocks), Dfun=jacfunc, col_deriv=True)
 
 def gd(state, N=1, ratio=1e-1):
     state.set_current_particle()
@@ -205,19 +295,147 @@ def gd(state, N=1, ratio=1e-1):
 #=============================================================================
 # Initialization methods to go full circle
 #=============================================================================
+def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=False,
+        ignoreimage=False, psftype='gauss4d', ilmtype='poly3d',
+        psfargs={}, ilmargs={}, objargs={}, stateargs={}):
+    """
+    Create a state from a blank image, set of pos and radii
+
+    Parameters:
+    -----------
+    image : ndarray or `cbamf.util.RawImage`
+        raw confocal image with which to compare.
+
+    pos : initial conditions for positions (in raw image coordinates)
+    rad : initial conditions for radii array (can be scalar)
+    sigma : float, noise level
+
+    slab : float
+        z-position of the microscope slide in the image (pixel units)
+
+    pad_for_extra : boolean
+        whether to include extra blank particles for sampling over
+
+    ignoreimage : boolean
+        whether to refer to `image` just for shape. really use the model
+        image as the true raw image
+
+    psftype : ['gauss2d', 'gauss3d', 'gauss4d', 'gaussian_pca']
+        which type of psf to use in the state
+
+    ilmtype : ['poly3d', 'leg3d', 'cheb2p1d', 'poly2p1d', 'leg2p1d']
+        which type of illumination field
+
+    psfargs : arguments to the psf object
+    ilmargs: arguments to the ilm object
+    objargs: arguments to the sphere collection object
+    stateargs : dictionary of arguments to pass to state
+    """
+    tpsfs = ['gauss3d', 'gauss4d']
+    tilms = ['poly3d', 'leg3d', 'cheb2p1d', 'poly2p1d', 'leg2p1d']
+
+    # first, decide if we got a RawImage or just an image array
+    rawimage = None
+    if isinstance(image, RawImage):
+        rawimage = image
+        image = rawimage.get_image()
+
+    # we accept radius as a scalar, so check if we need to expand it
+    if not hasattr(rad, '__iter__'):
+        rad = rad*np.ones(pos.shape[0])
+
+    # let's create the padded image required of the state
+    pad = stateargs.get('pad', const.PAD)
+    image, pos, rad = states.prepare_for_state(image, pos, rad, pad=pad)
+
+    # create some default arguments for the image components
+    def_obj = {'pos': pos, 'rad': rad, 'shape': image.shape}
+    def_psf = {'shape': image.shape}
+    def_ilm = {'order': (1,1,1), 'shape': image.shape}
+
+    # create the SphereCollectionRealSpace object
+    def_obj.update(objargs)
+
+    nfake = None
+    if pad_extra_particles:
+        nfake = pos.shape[0]
+        pos, rad = pad_fake_particles(pos, rad, nfake)
+
+    def_obj.update({'pad': nfake})
+    obj = objs.SphereCollectionRealSpace(**def_obj)
+
+    # setup the ilm based on the choice and arguments
+    if ilmtype == 'poly3d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.Polynomial3D(**def_ilm)
+    if ilmtype == 'leg3d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.LegendrePoly3D(**def_ilm)
+    if ilmtype == 'cheb2p1d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.ChebyshevPoly2P1D(**def_ilm)
+    if ilmtype == 'poly2p1d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.Polynomial2P1D(**def_ilm)
+    if ilmtype == 'leg2p1d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.LegendrePoly2P1D(**def_ilm)
+
+    # setup the psf based on the choice and arguments
+    if psftype == 'gauss2d':
+        def_psf.update({'params': (2.0, 4.0)})
+        def_psf.update(psfargs)
+        psf = psfs.AnisotropicGaussian(**def_psf)
+    if psftype == 'gauss3d':
+        def_psf.update({'params': (2.0, 1.0, 4.0)})
+        def_psf.update(psfargs)
+        psf = psfs.AnisotropicGaussianXYZ(**def_psf)
+    if psftype == 'gauss4d':
+        def_psf.update({'params': (2.0, 1.0, 4.0)})
+        def_psf.update(psfargs)
+        psf = psfs.Gaussian4DPoly(**def_psf)
+
+    if slab is not None:
+        slab = objs.Slab(zpos=slab+pad, shape=image.shape)
+    if rawimage is not None:
+        image = rawimage
+
+    stateargs.update({'sigma': sigma})
+    stateargs.update({'slab': slab})
+    s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm, **stateargs)
+
+    if ignoreimage:
+        s.model_to_true_image()
+    return s
+
+def set_varyn(state, varyn, nfake=None):
+    if not state.varyn and varyn:
+        state.varyn = True
+        nfake = nfake or state.N
+
+        opos, orad = pad_fake_particles(state.obj.pos, state.obj.rad, nfake)
+        state.obj = objs.SphereCollectionRealSpace(pos=opos, rad=orad,
+                shape=state.image.shape, pad=nfake)
+        state.reset()
+
+    if state.varyn and not varyn:
+        n = state.active_particles()
+        opos = state.obj.pos[n]
+        orad = state.obj.rad[n]
+
+        state.varyn = False
+        state.obj = objs.SphereCollectionRealSpace(pos=opos, rad=orad,
+                shape=state.image.shape)
+        state.reset()
+
 def pad_fake_particles(pos, rad, nfake):
     opos = np.vstack([pos, np.zeros((nfake, 3))])
     orad = np.hstack([rad, rad[0]*np.ones(nfake)])
     return opos, orad
 
-def zero_particles(n):
-    return np.zeros((n,3)), np.ones(n), np.zeros(n)
-
 def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, imzstop=-1, invert=False,
         pad_for_extra=True, threads=-1, phi=0.5, sigma=0.05, zscale=1.0,
-        PSF=(2.0, 4.0), ORDER=(3,3,2)):
-    from cbamf import states, initializers
-    from cbamf.comp import objs, psfs, ilms
+        PSF=(2.0, 4.0), ORDER=(3,3,2), slab=None):
 
     itrue = initializers.normalize(rawimage[imzstart:imzstop,:imsize,:imsize], invert)
     feat = initializers.remove_background(itrue.copy(), order=ORDER)
@@ -237,6 +455,9 @@ def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, imzstop=-1, i
     ilm = ilms.LegendrePoly3D(order=ORDER, shape=imsize)
     ilm.from_data(image, mask=image > const.PADVAL)
 
+    if slab is not None:
+        slab = objs.Slab(zpos=slab, shape=imsize)
+
     diff = (ilm.get_field() - image)
     ptp = diff[image > const.PADVAL].ptp()
 
@@ -246,20 +467,8 @@ def raw_to_state(rawimage, rad=7.3, frad=9, imsize=-1, imzstart=0, imzstop=-1, i
 
     s = states.ConfocalImagePython(image, obj=obj, psf=psf, ilm=ilm,
             zscale=zscale, sigma=sigma, offset=ptp, doprior=(not pad_for_extra),
-            nlogs=(not pad_for_extra), varyn=pad_for_extra)
+            nlogs=(not pad_for_extra), varyn=pad_for_extra, slab=slab)
 
-    return s
-
-def feature_addsubtract(s, sweeps=3, rad=5):
-    from cbamf import states, initializers
-    addsubtract(s, rad=rad, sweeps=sweeps, particle_group_size=s.N/(sweeps+1))
-
-    """
-    initializers.remove_overlaps(s.obj.pos, s.obj.rad, zscale=s.zscale)
-    s = states.ConfocalImagePython(s.image, obj=s.obj, psf=s.psf, ilm=s.ilm,
-            zscale=s.zscale, sigma=s.sigma, offset=s.offset, doprior=True,
-            nlogs=True, varyn=False)
-    """
     return s
 
 def feature(rawimage, sweeps=20, samples=15, rad=7.3, frad=9,
@@ -275,19 +484,14 @@ def feature(rawimage, sweeps=20, samples=15, rad=7.3, frad=9,
 
     if addsubtract:
         print "Adding, removing particles"
-        s = feature_addsubtract(s, rad=rad)
+        addsubtract(s, rad=rad, sweeps=sweeps, particle_group_size=s.N/(sweeps+1))
 
     return do_samples(s, sweeps, burn, stepout=0.10)
-
-def trim_extra_particles(s):
-    # TODO -- take out particles that are already
-    # not able to be sampled (according to the sampler methods)
-    raise AttributeError("STUB")
 
 #=======================================================================
 # More involved featuring functions using MC
 #=======================================================================
-def sample_n_add(s, rad, tries=5):
+def sample_n_add(s, rad, tries=5, steps=8):
     diff = (s.get_model_image() - s.get_true_image()).copy()
 
     smoothdiff = nd.gaussian_filter(diff, rad/2.0)
@@ -309,12 +513,14 @@ def sample_n_add(s, rad, tries=5):
 
         n = s.add_particle(p, rad)
         bl = s.blocks_particle(n)[:-1]
-        sample_state(s, bl, stepout=1, N=1)
+        sample_state(s, bl, stepout=1, N=steps)
 
         ll1 = s.loglikelihood()
 
         print p, ll0, ll1
-        if (ll0**2).sum() < (ll1**2).sum():
+        if ((not s.nlogs and (ll0**2).sum() < (ll1**2).sum()) or 
+            (s.nlogs and (ll0**2).sum() > (ll1**2).sum())):
+            bt = s.block_particle_typ(n)
             s.update(bt, np.array([0]))
         else:
             accepts += 1
@@ -342,8 +548,9 @@ def sample_n_remove(s, rad, tries=5):
 
         ll1 = s.loglikelihood()
 
-        print s.obj.pos[n], ll0, ll1
+        print pos[i], ll0, ll1
         if (ll0**2).sum() < (ll1**2).sum():
+            bt = s.block_particle_typ(s.closest_particle(pos[i]))
             s.update(bt, np.array([1]))
         else:
             accepts += 1

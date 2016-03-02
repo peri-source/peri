@@ -1,9 +1,10 @@
 import os
 import numpy as np
+import cPickle as pickle
 
 from cbamf import const
 from cbamf import initializers
-from cbamf.util import Tile, amin, amax, ProgressBar
+from cbamf.util import Tile, amin, amax, ProgressBar, RawImage
 from cbamf.priors import overlap
 
 class State:
@@ -144,9 +145,12 @@ class JointState(State):
 """
 
 class LinearFit(State):
-    def __init__(self, x, y, *args, **kwargs):
-        State.__init__(self, nparams=2, *args, **kwargs)
+    def __init__(self, x, y, sigma=1, *args, **kwargs):
+        State.__init__(self, nparams=3, *args, **kwargs)
         self.dx, self.dy = (np.array(i) for i in zip(*sorted(zip(x, y))))
+
+        self.b_sigma = self.explode(self.block_all())[-1]
+        self.state[self.b_sigma] = sigma
 
     def plot(self, state):
         import pylab as pl
@@ -159,12 +163,21 @@ class LinearFit(State):
         return self.state[0]*self.dx + self.state[1]
 
     def dologlikelihood(self):
-        return -((self._calculate() - self.dy)**2).sum()
+        sig = self.state[self.b_sigma]
+        return (-((self._calculate() - self.dy)**2).sum() / (2*sig**2) + 
+                -(np.log(abs(sig)) + np.log(np.sqrt(2*np.pi))))
 
     def reset(self):
         self.state *= 0
 
-def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True):
+def prepare_image(image, imz=(0,None), imsize=None, invert=False, pad=const.PAD, dopad=True):
+    image = initializers.normalize(image[imz[0]:imz[1],:imsize,:imsize], invert)
+    if dopad:
+        image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
+    return image
+
+def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True,
+        remove_overlaps=False):
     """
     Prepares a set of positions, radii, and a test image for use
     in the ConfocalImagePython object
@@ -189,12 +202,16 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True):
     pad : integer (optional)
         The amount of padding to add to the raw image, should be at least
         2 times the PSF size.  Not recommended to set manually
+
+    remove_overlaps : boolean
+        whether to remove overlaps from the pos, rad given.  not recommended,
+        has bugs
     """
     # normalize and pad the image, add the same offset to the positions
     image = initializers.normalize(image, invert)
     if dopad:
         image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
-        pos += pad
+        pos = pos.copy() + pad
 
     if not isinstance(rad, np.ndarray):
         rad = rad*np.ones(pos.shape[0])
@@ -216,15 +233,19 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True):
     rad = rad[keeps]
 
     # change overlapping particles so that the radii do not coincide
-    initializers.remove_overlaps(pos, rad)
+    if remove_overlaps:
+        initializers.remove_overlaps(pos, rad)
     return image, pos, rad
 
+# NOTE -- for adding new parameters, add to the end until full rewrite so older states
+# can still be loaded.  this is because of the __getinitargs__ of pickle
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
-            sigma=0.04, doprior=True, constoff=True,
-            varyn=False, allowdimers=False, nlogs=False, difference=True,
-            pad=const.PAD, sigmapad=True, *args, **kwargs):
+            sigma=0.04, doprior=False, constoff=False,
+            varyn=False, allowdimers=False, nlogs=True, difference=True,
+            pad=const.PAD, sigmapad=False, slab=None, newconst=True, bkg=None,
+            method=None, *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -235,10 +256,12 @@ class ConfocalImagePython(State):
 
         Parameters:
         -----------
-        image : (Nz, Ny, Nx) ndarray
+        image : (Nz, Ny, Nx) ndarray OR `cbamf.util.RawImage` object
             The raw image with which to compare the model image from this class.
             This image should have been prepared through prepare_for_state, which
-            does things such as padding necessary for this class.
+            does things such as padding necessary for this class. In the case of the
+            RawImage, paths are used to keep track of the image object to save
+            on pickle size.
 
         obj : component
             A component object which handles the platonic image creation, e.g., 
@@ -257,10 +280,10 @@ class ConfocalImagePython(State):
         offset : float, typically (0, 1) [default: 1]
             The level that particles inset into the illumination field
 
-        doprior: boolean [default: True]
+        doprior: boolean [default: False]
             Whether or not to turn on overlap priors using neighborlists
 
-        constoff: boolean [default: True]
+        constoff: boolean [default: False]
             Changes the model so to:
 
                 Image = \int PSF(x-x') (ILM(x)*-OFF*SPH(x)) dx'
@@ -284,9 +307,38 @@ class ConfocalImagePython(State):
             No recommended to set by hand.  The padding level of the raw image needed
             by the PSF support.
 
-        sigmapad : boolean [default: True]
+        sigmapad : boolean [default: False]
             If True, varies the sigma values at the edge of the image, changing them
             slowly to zero over the size of the psf support
+
+        slab : `cbamf.comp.objs.Slab` [default: None]
+            If not None, include a slab in the model image and associated analysis.
+            This object should be from the platonic components module.
+
+        newconst : boolean [default: True]
+            If True, overrides constoff to implement a image formation of the form:
+
+                Image = \int PSF(x-x') (ILM(x)*(1-SPH(X)) + OFF*SPH(x)) dx'
+                      = \int PSF(x-x') (ILM(x) + (OFF-ILM(x))*SPH(x)) dx'
+
+        bkg : `cbamf.comp.ilms.*`
+            a polynomial that represents the background field in dark parts of
+            the image
+
+        method : int
+
+            a int that describes the model that we wish to employ (how to
+            combine the components into a model image). Given the following
+            symbols
+
+                I=ILM, B=BKG, c=OFFSET, P=platonic, p=particles, s=slab, H=PSF
+
+            then the following ints correspond to the listed equations (x is
+            convolution)
+
+                1 : [I(1-P)]xH + B
+                2 : [I(1-p)]xH + sxH + B
+                3 : I[(1-p)xH - sxH] + B
         """
         self.pad = pad
         self.index = None
@@ -298,10 +350,14 @@ class ConfocalImagePython(State):
         self.varyn = varyn
         self.difference = difference
         self.sigmapad = sigmapad
+        self.newconst = newconst
+        self.method = method
 
         self.psf = psf
         self.ilm = ilm
+        self.bkg = bkg
         self.obj = obj
+        self.slab = slab
         self.zscale = zscale
         self.rscale = 1.0
         self.offset = offset
@@ -312,7 +368,10 @@ class ConfocalImagePython(State):
 
     def reset(self):
         self._build_state()
-        self.set_image(self.padded_image())
+        if self.rawimage is not None:
+            self.set_image(self.rawimage)
+        else:
+            self.set_image(self.padded_image())
 
     def set_obj(self, obj):
         self.obj = obj
@@ -326,6 +385,14 @@ class ConfocalImagePython(State):
         self.ilm = ilm
         self.reset()
 
+    def set_bkg(self, bkg):
+        self.bkg = bkg
+        self.reset()
+
+    def set_pos_rad(self, pos, rad):
+        self.obj.set_pos_rad(pos, rad)
+        self.reset()
+
     def padded_image(self):
         o = self.image.copy()
         o[self.image_mask == 0] = const.PADVAL
@@ -335,10 +402,17 @@ class ConfocalImagePython(State):
         """
         Update the current comparison (real) image
         """
+        if isinstance(image, RawImage):
+            self.rawimage = image
+            image = image.get_padded_image(self.pad)
+        else:
+            self.rawimage = None
+
         self.image = image.copy()
         self.image_mask = (image > const.PADVAL).astype('float')
         self.image *= self.image_mask
 
+        self.inner = (np.s_[self.pad:-self.pad],)*3
         self._build_internal_variables()
         self._initialize()
 
@@ -359,13 +433,23 @@ class ConfocalImagePython(State):
     def get_true_image(self):
         return self.image * self.image_mask
 
+    def get_difference_image(self, doslice=True):
+        o = self.get_true_image() - self.get_model_image()
+        if doslice:
+            return o[self.inner]
+        return o
+
     def _build_state(self):
+        self.N = self.obj.N
+
         self.param_dict = {
             'pos': 3*self.obj.N,
             'rad': self.obj.N,
             'typ': self.obj.N*self.varyn,
             'psf': len(self.psf.get_params()),
             'ilm': len(self.ilm.get_params()),
+            'bkg': len(self.bkg.get_params()) if self.bkg else 0,
+            'slab': len(self.slab.get_params()) if self.slab else 0,
             'off': 1,
             'rscale': 1,
             'zscale': 1,
@@ -373,23 +457,30 @@ class ConfocalImagePython(State):
         }
 
         self.param_order = [
-            'pos', 'rad', 'typ', 'psf', 'ilm', 'off',
+            'pos', 'rad', 'typ', 'psf', 'ilm', 'bkg', 'off', 'slab',
             'rscale', 'zscale', 'sigma'
         ]
         self.param_lengths = [self.param_dict[k] for k in self.param_order]
 
         out = []
         for param in self.param_order:
+            if self.param_dict[param] == 0:
+                continue
+
             if param == 'pos':
                 out.append(self.obj.get_params_pos())
             if param == 'rad':
                 out.append(self.obj.get_params_rad())
-            if param == 'typ' and self.varyn:
+            if param == 'typ':
                 out.append(self.obj.get_params_typ())
             if param == 'psf':
                 out.append(self.psf.get_params())
             if param == 'ilm':
                 out.append(self.ilm.get_params())
+            if param == 'bkg':
+                out.append(self.bkg.get_params())
+            if param == 'slab':
+                out.append(self.slab.get_params())
             if param == 'off':
                 out.append(self.offset)
             if param == 'rscale':
@@ -409,7 +500,9 @@ class ConfocalImagePython(State):
         self.b_typ = self.create_block('typ')
         self.b_psf = self.create_block('psf')
         self.b_ilm = self.create_block('ilm')
+        self.b_bkg = self.create_block('bkg')
         self.b_off = self.create_block('off')
+        self.b_slab = self.create_block('slab')
         self.b_rscale = self.create_block('rscale')
         self.b_zscale = self.create_block('zscale')
         self.b_sigma = self.create_block('sigma')
@@ -438,11 +531,20 @@ class ConfocalImagePython(State):
             self.psf.set_tile(Tile(self._sigma_field.shape))
             self._sigma_field = self.psf.execute(self._sigma_field)
 
+        self._sigma_field_log = np.log(self._sigma_field)#*(self._sigma_field > 0) + 1e-16)
+
     def set_state(self, state):
-        self.obj.pos = state[self.b_pos]
+        self.obj.pos = state[self.b_pos].reshape(-1,3)
         self.obj.rad = state[self.b_rad]
         self.ilm.params = state[self.b_ilm]
         self.psf.params = state[self.b_psf]
+
+        if self.bkg:
+            self.bkg.params = state[self.b_bkg]
+
+        if self.slab:
+            self.slab.params = state[self.b_slab]
+
         self._initialize()
 
     def _initialize(self):
@@ -455,6 +557,12 @@ class ConfocalImagePython(State):
         self.psf.update(self.state[self.b_psf])
         self.obj.initialize(self.zscale)
         self.ilm.initialize()
+
+        if self.bkg:
+            self.bkg.initialize()
+
+        if self.slab:
+            self.slab.initialize()
 
         self._update_global()
 
@@ -506,67 +614,169 @@ class ConfocalImagePython(State):
         s = slicer
         oldll = self._loglikelihood_field[s].sum()
 
+        # make temporary variables since slicing is 'hard'
+        im = self.image[s]
+        sig = self._sigma_field[s]
+        lsig = self._sigma_field_log[s]
+        tmask = self.image_mask[s]
+
         self._loglikelihood_field[s] = (
-                -self.image_mask[s] * (data - self.image[s])**2 / (2*self._sigma_field[s]**2)
-                -self.image_mask[s] * np.log( np.sqrt(2*np.pi) * self._sigma_field[s] )*self.nlogs
+                -tmask * (data - im)**2 / (2*sig**2)
+                -tmask * (lsig + np.log(np.sqrt(2*np.pi)))*self.nlogs
             )
 
         newll = self._loglikelihood_field[s].sum()
         self._loglikelihood += newll - oldll
 
+    def _platonic_image(self):
+        """
+        Since platonic is a combination of several different components, return
+        the complete combination for the platonic.
+        """
+        platonic = self.obj.get_field().copy()
+
+        if self.slab:
+            platonic += self.slab.get_field()
+
+        if self.allowdimers:
+            platonic = np.clip(platonic, -1, 1)
+
+        return platonic
+
+    def _set_tiles(self, tile):
+        self.obj.set_tile(tile)
+        self.ilm.set_tile(tile)
+        self.psf.set_tile(tile)
+
+        if self.bkg:
+            self.bkg.set_tile(tile)
+
+        if self.slab:
+            self.slab.set_tile(tile)
+
     def _update_global(self):
         self._update_tile(*self._tile_global(), difference=False)
 
     def _update_tile(self, otile, itile, ioslice, difference=False):
+        """
+        Actually calculates the model in a section of image given by the slice.
+        If using difference images, then that is usually for platonic update
+        so calculate replacement differences
+        """
         self._last_slices = (otile, itile, ioslice)
-
-        self.obj.set_tile(otile)
-        self.ilm.set_tile(otile)
-        self.psf.set_tile(otile)
-
+        self._set_tiles(otile)
         islice = itile.slicer
 
-        if difference:
-            platonic = self.obj.get_diff_field()
+        # unpack a few variables to that this is easier to read, nice compact
+        # formulas coming up, B = bkg, I = ilm, C = off
+        B = self.bkg.get_field() if self.bkg else None
+        I = self.ilm.get_field()
+        C = self.offset
 
-            if self.constoff:
-                replacement = self.offset*platonic
+        if not difference:
+            # unpack one more variable, the platonic image (with slab)
+            P = self._platonic_image()
+
+            # Section QUX -- notes on this section:
+            #   * for a formula to be correct it must have a term I(1-P)
+            #   * sometimes C and B are both used to improve compatibility
+            #   * terms B*P are to improve convergence times since it makes them
+            #       independent of I(1-P) terms
+            if self.method == 1:
+                # [I(1-P)]xH + B
+                replacement = I*(1-P) + C*P
+                pass
+            elif self.method == 2:
+                # [I(1-p)]xH + sxH + B
+                pass
+            elif self.method == 3:
+                # I[(1-p)xH - sxH] + B
+                pass
+            elif self.newconst and self.bkg is None:
+                # 3. the first correct formula, but which sets the illumation to
+                # zero where there are particles and adds a constant there
+                replacement = I*(1-P) + C*P
+            elif self.bkg and self.newconst:
+                # 5. the correct formula with a background field. C, while degenerate,
+                # is kept around so that other rewrites are unnecessary.
+                replacement = I*(1-P) + (C+B)*P
+
+            # TODO -- these last three are incorrect, remove them
+            elif self.bkg and not self.newconst:
+                # 4. the first bkg formula, but based on 1,2 so incorrect
+                replacement = I*(1-C*P) + B*P
+            elif self.constoff:
+                # 2. the second formula, but still has P dependent on I
+                replacement = I - C*P
             else:
-                replacement = self.ilm.get_field() * self.offset*platonic
+                # 1. the original formula, but has P dependent on I since it takes out
+                # a fraction of the original illumination, not all of it.
+                replacement = I*(1-C*P)
 
-        else:
-            platonic = self.obj.get_field()
+            replacement = self.psf.execute(replacement)
 
-            if self.allowdimers:
-                platonic = np.clip(platonic, -1, 1)
-
-            if self.constoff:
-                replacement = self.ilm.get_field() - self.offset*platonic
+            if self.method == 1:
+                self.model_image[islice] = replacement[ioslice] + B[ioslice]
             else:
-                replacement = self.ilm.get_field() * (1 - self.offset*platonic)
-
-        replacement = self.psf.execute(replacement)
-
-        if difference:
-            self.model_image[islice] -= replacement[ioslice]
+                self.model_image[islice] = replacement[ioslice]
         else:
-            self.model_image[islice] = replacement[ioslice]
+            # this section is currently only run for particles
+            # unpack one more variable, the change in the platonic image
+            dP = self.obj.get_diff_field()
+
+            # each of the following formulas are derived from the section marked
+            # QUX (search for it), taking the variation with respect to P, for
+            # example:
+            #       M = I*(1-P) + C*P
+            #      dM = (C-I)dP
+            if self.method == 1:
+                replacement = (C-I)*dP
+            elif self.newconst and self.bkg is None:
+                replacement = (C-I)*dP
+            elif self.bkg and self.newconst:
+                replacement = (C+B-I)*dP
+            elif self.bkg and not self.newconst:
+                replacement = (B-C*I)*dP
+            elif self.constoff:
+                replacement = C*dP
+            else:
+                replacement = -C*I*dP
+
+            # FIXME -- if we move to other local updates, need to fix the last
+            # section here with self.method switches, also with dP changing so
+            # lolz at that
+            replacement = self.psf.execute(replacement)
+            self.model_image[islice] += replacement[ioslice]
 
         self._update_ll_field(self.model_image[islice], islice)
 
+    def _block_to_particles(self, block):
+        """ Get the particles affected by block `block` by index """
+        pmask = block[self.b_pos].reshape(-1, 3).any(axis=-1)
+        rmask = block[self.b_rad]
+        tmask = block[self.b_typ] if self.varyn else (0*rmask).astype('bool')
+        particles = np.arange(self.obj.N)[pmask | rmask | tmask]
+        return particles
+
+    def update_many(self, block, data):
+        """
+        Update many blocks at once.  Unlike `update` this function does not
+        perform incremental update but rather calculates which objects are
+        affected, updates the parameters, and asks them to reinitialize
+        """
+        pass
+
     def update(self, block, data):
+        if block.sum() > 1:
+            raise AttributeError("Currently we only support 1 variable updates now")
+
         prev = self.state.copy()
 
         # TODO, instead, push the change in case we need to pop it
         self._update_state(block, data)
-
-        pmask = block[self.b_pos].reshape(-1, 3).any(axis=-1)
-        rmask = block[self.b_rad]
-        tmask = block[self.b_typ] if self.varyn else (0*rmask).astype('bool')
-
-        particles = np.arange(self.obj.N)[pmask | rmask | tmask]
-
         self._logprior = 0
+
+        particles = self._block_to_particles(block)
 
         # FIXME -- obj.create_diff_field not guaranteed to work for multiple particles
         # if the particle was changed, update locally
@@ -592,11 +802,11 @@ class ConfocalImagePython(State):
                 return False
 
             tiles = self._tile_from_particle_change(pos0, rad0, typ0, pos, rad, typ)
-            for tile in tiles[:2]:
-                top = self.image.shape[0] - self.pad
-                if (np.array(tile.shape) < 2*self.psf.get_support_size(top)).any():
-                    self.state[block] = prev[block]
-                    return False
+            #for tile in tiles[:2]:
+            #    top = self.image.shape[0] - self.pad
+            #    if (np.array(tile.shape) < 2*self.psf.get_support_size(top)).any():
+            #        self.state[block] = prev[block]
+            #        return False
 
             if self.doprior:
                 self.nbl.update(particles, pos, rad, typ)
@@ -618,6 +828,10 @@ class ConfocalImagePython(State):
         else:
             docalc = False
 
+            if self.slab and block[self.b_slab].any():
+                self.slab.update(self.state[self.b_slab])
+                docalc = True
+
             # if the psf was changed, update globally
             if block[self.b_psf].any():
                 self.psf.update(self.state[self.b_psf])
@@ -629,6 +843,11 @@ class ConfocalImagePython(State):
                 self.ilm.update(block[self.b_ilm], self.state[self.b_ilm])
                 docalc = True
 
+            # update the background if it has been changed
+            if block[self.b_bkg].any():
+                self.bkg.update(block[self.b_bkg], self.state[self.b_bkg])
+                docalc = True
+
             # we actually don't have to do anything if the offset is changed
             if block[self.b_off].any():
                 self.offset = self.state[self.b_off]
@@ -636,6 +855,12 @@ class ConfocalImagePython(State):
 
             if block[self.b_sigma].any():
                 self.sigma = self.state[self.b_sigma]
+
+                if self.sigma <= 0:
+                    self.state[block] = prev[block]
+                    self.sigma = self.state[self.b_sigma]
+                    return False
+
                 self._build_sigma_field()
                 self._update_ll_field()
 
@@ -673,6 +898,9 @@ class ConfocalImagePython(State):
         return True
 
     def add_particle(self, p, r):
+        if not self.varyn:
+            raise AttributeError("Add/remove particles not supported by state, varyn=False")
+
         n = self.obj.typ.argmin()
 
         bp = self.block_particle_pos(n)
@@ -686,6 +914,9 @@ class ConfocalImagePython(State):
         return n
 
     def remove_particle(self, n):
+        if not self.varyn:
+            raise AttributeError("Add/remove particles not supported by state, varyn=False")
+
         bt = self.block_particle_typ(n)
         self.update(bt, np.array([0]))
         return self.obj.pos[n], self.obj.rad[n]
@@ -700,6 +931,11 @@ class ConfocalImagePython(State):
         if self.varyn:
             return self.state[self.block_particle_typ(particle)] == 1
         return True
+
+    def active_particles(self):
+        if self.varyn:
+            return np.arange(self.N)[self.state[self.b_typ]==1.]
+        return np.arange(self.N)
 
     def blocks_particle(self, index):
         p_ind, r_ind = 3*index, 3*self.obj.N + index
@@ -756,8 +992,10 @@ class ConfocalImagePython(State):
 
         return (m1 - m0) / (2*dl)
 
-    def residuals(self):
-        return self.image_mask*(self.image - self.get_model_image())
+    def residuals(self, masked=False):
+        if not masked:
+            return self.image_mask*(self.image - self.get_model_image())
+        return (self.image - self.get_model_image())[self.image_mask == 1.0]
 
     def fisher_information(self, blocks=None, dl=1e-3):
         if blocks is None:
@@ -800,6 +1038,47 @@ class ConfocalImagePython(State):
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
 
+    def todict(self, samples=None):
+        """
+        Transform ourselves (state) or a state vector into a dictionary for
+        better storage options.  In the form {block_name: parameters}.
+
+        Essentially the output of this function is of the form
+        {b:samples[...,self.create_block(b)] for b in self.param_order}
+        but we need to special handle some cases, so `for` loop
+        """
+        local = False
+        if samples is None:
+            samples = self.state.copy()
+            local = True
+
+        active = tuple(self.active_particles())
+        nactive = len(active)
+
+        out = {}
+        for b in self.param_order:
+            d = samples[...,self.create_block(b)]
+
+            # reshape positions properly
+            if b == 'pos':
+                if not local:
+                    d = d.reshape(-1,self.N,3)
+                else:
+                    d = d.reshape(self.N, 3)
+                d = d[...,active,:]
+
+            if b == 'rad':
+                d = d[...,active]
+
+            # transform scalars to lists
+            if b in ['off', 'rscale', 'zscale', 'sigma']:
+                if local:
+                    d = np.array([d])
+                d = np.squeeze(d)
+
+            out[b] = d
+        return out
+
     def __getstate__(self):
         return {}
 
@@ -807,8 +1086,60 @@ class ConfocalImagePython(State):
         pass
 
     def __getinitargs__(self):
-        return ((self.image + const.PADVAL*(1-self.image_mask)),
+        # FIXME -- unify interface for RawImage
+        if self.rawimage is not None:
+            im = self.rawimage
+        else:
+            im = self.padded_image()
+
+        return (im,
             self.obj, self.psf, self.ilm, self.zscale, self.offset,
             self.sigma, self.doprior, self.constoff,
             self.varyn, self.allowdimers, self.nlogs, self.difference,
-            self.pad)
+            self.pad, self.sigmapad, self.slab, self.newconst, self.bkg,
+            self.method)
+
+def save(state, filename=None, desc='', extra=None):
+    """
+    Save the current state with extra information (for example samples and LL
+    from the optimization procedure).
+
+    state : cbamf.states.ConfocalImagePython
+        the state object which to save
+
+    filename : string
+        if provided, will override the default that is constructed based on
+        the state's raw image file.  If there is no filename and the state has
+        a RawImage, the it is saved to RawImage.filename + "-peri-save.pkl"
+
+    desc : string
+        if provided, will augment the default filename to be 
+        RawImage.filename + '-peri-' + desc + '.pkl'
+
+    extra : list of pickleable objects
+        if provided, will be saved with the state
+    """
+    if state.rawimage is not None:
+        desc = desc or 'save'
+        filename = filename or state.rawimage.filename + '-peri-' + desc + '.pkl'
+    else:
+        if not filename:
+            raise AttributeError, "Must provide filename since RawImage is not used"
+
+    if extra is None:
+        save = state
+    else:
+        save = [state] + extra
+
+    if os.path.exists(filename):
+        ff = "{}-tmp-for-copy".format(filename)
+
+        if os.path.exists(ff):
+            os.remove(ff)
+
+        os.rename(filename, ff)
+
+    pickle.dump(save, open(filename, 'wb'))
+
+def load(filename):
+    return pickle.load(open(filename, 'rb'))

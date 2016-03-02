@@ -4,6 +4,8 @@ import datetime
 import numpy as np
 import code, traceback, signal
 
+from cbamf import const, initializers
+
 #=============================================================================
 # Tiling utilities
 #=============================================================================
@@ -13,27 +15,55 @@ def amin(a, b):
 def amax(a, b):
     return np.vstack([a, b]).max(axis=0)
 
+def a3(a):
+    """ Convert an integer or iterable list to numpy 3 array """
+    if not hasattr(a, '__iter__'):
+        return np.array([a]*3, dtype='int')
+    return np.array(a).astype('int')
+
 class Tile(object):
-    def __init__(self, left, right=None, mins=None, maxs=None):
+    def __init__(self, left, right=None, mins=None, maxs=None,
+            size=None, centered=False):
+        """
+        Creates a tile element using many different combinations (where []
+        indicates an array created from either a single number or any
+        iterable):
+
+            left : [0,0,0] -> [left]
+            left, right : [left] -> [right]
+            left, size : [left] -> [left] + [size]              (if not centered)
+            left, size : [left] - [size]/2 -> [left] + ([size]+1)/2 (if centered)
+
+        The addition +1 on the last variety is to ensure that odd sized arrays
+        are treated correctly i.e. left=0, size=3 -> [-1,0,1]. Each of these
+        can be limited by using (mins, maxs) which are applied after
+        calculating left, right for each element:
+
+            left = max(left, [mins])
+            right = min(right, [maxs])
+
+        Since tiles are used for array slicing, they only allow integer values,
+        which can truncated without warning from float.
+        """
         if right is None:
-            right = left
-            left = np.zeros(len(left), dtype='int')
+            if size is None:
+                right = left
+                left = 0
+            else:
+                if not centered:
+                    right = a3(left) + a3(size)
+                else:
+                    l, s = a3(left), a3(size)
+                    left, right = l - s/2, l + (s+1)/2
 
-        if not hasattr(left, '__iter__'):
-            left = np.array([left]*3, dtype='int')
-
-        if not hasattr(right, '__iter__'):
-            right = np.array([right]*3, dtype='int')
+        left = a3(left)
+        right = a3(right)
 
         if mins is not None:
-            if not hasattr(mins, '__iter__'):
-                mins = np.array([mins]*3)
-            left = amax(left, mins)
+            left = amax(left, a3(mins))
 
         if maxs is not None:
-            if not hasattr(maxs, '__iter__'):
-                maxs = np.array([maxs]*3)
-            right = amin(right, maxs)
+            right = amin(right, a3(maxs))
 
         l, r = left, right
         self.l = np.array(l)
@@ -43,13 +73,43 @@ class Tile(object):
         self.slicer = np.s_[l[0]:r[0], l[1]:r[1], l[2]:r[2]]
 
     def center(self, norm=1.0):
+        """ Return the center of the tile """
         return (self.r + self.l)/2.0 / norm
 
-    def coords(self, norm=1.0):
-        z = np.arange(self.l[0], self.r[0]) / norm
-        y = np.arange(self.l[1], self.r[1]) / norm
-        x = np.arange(self.l[2], self.r[2]) / norm
-        return np.meshgrid(z, y, x, indexing='ij')
+    # FIXME -- switch meshed to False, or make a type list [meshed, vector, flat]
+    def coords(self, norm=False, meshed=True, vector=False, flat=False):
+        """
+        Returns the coordinate vectors associated with the tile. 
+
+        Norm can rescale the coordinates for you. False is no rescaling, True
+        is rescaling so that all coordinates are from 0 -> 1.  If a scalar, the
+        same norm is applied uniformally while if an iterable, each scale is
+        applied to each dimension.
+
+        If meshed, the arrays are broadcasted so that they form 3, 3D arrays.
+
+        If vector, the arrays are broadcasted and formed into one [Nz, Ny, Nx, 3]
+        dimensional array
+        """
+        if not norm:
+            norm = np.ones(3)
+        if norm is True:
+            norm = self.shape
+        if not hasattr(norm, '__iter__'):
+            norm = [norm]*3
+
+        z = np.arange(self.l[0], self.r[0]) / norm[0]
+        y = np.arange(self.l[1], self.r[1]) / norm[1]
+        x = np.arange(self.l[2], self.r[2]) / norm[2]
+
+        if meshed:
+            return np.meshgrid(z, y, x, indexing='ij')
+        if vector:
+            z,y,x = np.meshgrid(z, y, x, indexing='ij')
+            return np.rollaxis(np.array(np.broadcast_arrays(z,y,x)),0,4)
+        if flat:
+            return z,y,x
+        return z[:,None,None], y[None,:,None], x[None,None,:]
 
     def __str__(self):
         return self.__repr__()
@@ -57,6 +117,81 @@ class Tile(object):
     def __repr__(self):
         return str(self.__class__.__name__)+" {} -> {} ({})".format(
                 list(self.l), list(self.r), list(self.shape))
+
+    def contains(self, items, pad=0):
+        o = ((items > self.l-pad) & (items < self.r+pad))
+        if len(o.shape) == 2:
+            o = o.all(axis=-1)
+        return o
+
+class RawImage():
+    def __init__(self, filename, tile=None, zstart=None, zstop=None,
+            xysize=None, invert=False):
+        """
+        An image object which stores information about desired region and padding,
+        etc.  There are number of ways to create an image object:
+
+        filename : str
+            path of the image file.  recommended that you supply a relative path
+            so that transfer between computers is possible
+
+        tile : `cbamf.util.Tile`
+
+        """
+        self.filename = filename
+        self.invert = invert
+        self.filters = None
+
+        self.load_image()
+
+        if tile is not None:
+            self.tile = tile
+        else:
+            zstart = zstart or 0
+            zstop = zstop or self.image.shape[0]
+
+            left = (zstart, 0, 0)
+            right = (zstop, xysize, xysize)
+            self.tile = Tile(left=left, right=right)
+
+    def load_image(self):
+        try:
+            self.image = initializers.load_tiff(self.filename)
+            self.image = initializers.normalize(self.image, invert=self.invert)
+        except IOError as e:
+            print "Could not find image '%s'" % self.filename
+            raise e
+
+    def get_image(self):
+        im = self.image[self.tile.slicer]
+
+        if not self.filters:
+            return im
+        return self.filtered_image(im)
+
+    def get_padded_image(self, pad=const.PAD, padval=const.PADVAL):
+        return np.pad(self.get_image(), pad, mode='constant', constant_values=padval)
+
+    def filtered_image(self, im):
+        q = np.fft.fftn(im)
+        for k,v in self.filters:
+            q[k] -= v
+        return np.real(np.fft.ifftn(q))
+
+    def set_filter(self, slices, values):
+        self.filters = [[sl,values[sl]] for sl in slices]
+
+    def __getstate__(self):
+        d = self.__dict__.copy()
+        cdd(d, ['image'])
+        return d
+
+    def __setstate__(self, idct):
+        self.__dict__.update(idct)
+        self.load_image()
+
+    #def __getinitargs__(self):
+    #    return (self.filename, self.tile, None, None, None, self.invert, self.filters)
 
 def cdd(d, k):
     """ Conditionally delete key (or list of keys) 'k' from dict 'd' """
@@ -214,6 +349,82 @@ class ProgressBar(object):
     def end(self):
         if self.display:
             print '\r{lett:>{screen}}'.format(**{'lett':'', 'screen': self.screen})
+
+
+#=============================================================================
+# useful decorators
+#=============================================================================
+import collections
+import functools
+import types
+
+def newcache():
+    out = {}
+    out['hits'] = 0
+    out['misses'] = 0
+    out['size'] = 0
+    return out
+
+def memoize(cache_max_size=1e9):
+    def memoize_inner(obj):
+        cache_name = str(obj)
+
+        @functools.wraps(obj)
+        def wrapper(self, *args, **kwargs):
+            # add the memoize cache to the object first, if not present
+            # provide a method to the object to clear the cache too
+            if not hasattr(self, '_memoize_caches'):
+                def clear_cache(self):
+                    for k,v in self._memoize_caches.iteritems():
+                        self._memoize_caches[k] = newcache()
+                self._memoize_caches = {}
+                self._memoize_clear = types.MethodType(clear_cache, self)
+
+            # next, add the particular cache for this method if it does
+            # not already exist in the parent 'self'
+            cache = self._memoize_caches.get(cache_name)
+            if not cache:
+                cache = newcache()
+                self._memoize_caches[cache_name] = cache
+
+            size = 0
+            hashed = []
+
+            # let's hash the arguments (both args, kwargs) and be mindful of
+            # numpy arrays -- that is, only take care of its data, not the obj
+            # itself
+            for arg in args:
+                if isinstance(arg, np.ndarray):
+                    hashed.append(arg.tostring())
+                else:
+                    hashed.append(arg)
+            for k,v in kwargs.iteritems():
+                if isinstance(v, np.ndarray):
+                    hashed.append(v.tostring())
+                else:
+                    hashed.append(v)
+
+            hashed = tuple(hashed)
+            if hashed not in cache:
+                ans = obj(self, *args, **kwargs)
+
+                # if it is not too much to ask, place the answer in the cache
+                if isinstance(ans, np.ndarray):
+                    size = ans.nbytes
+
+                newsize = size + cache['size']
+                if newsize < cache_max_size:
+                    cache[hashed] = ans
+                    cache['misses'] += 1
+                    cache['size'] = newsize
+                return ans
+
+            cache['hits'] += 1
+            return cache[hashed]
+
+        return wrapper
+
+    return memoize_inner
 
 #=============================================================================
 # debugging / python interpreter / logging

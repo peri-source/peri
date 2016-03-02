@@ -3,19 +3,22 @@ import matplotlib as mpl
 import matplotlib.pylab as pl
 from matplotlib.gridspec import GridSpec
 
-"""
-TODO -- plans for web-based GUI
-    - bokeh graphs from matplotlib
-    - tornado backend
-"""
+from cbamf import runner
+
 class OrthoManipulator(object):
-    def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', vmin=0.0, vmax=1.0, incsize=18.0):
+    def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', incsize=18.0):
         self.incsize = incsize
-        self.mode = 'view'
-        self.inset = 'none'
-        self.views = ['field', 'diff', 'cropped']
+        self.modes = ['view', 'add', 'remove', 'grab', 'optimize']
+        self.mode = self.modes[0]
+
         self.insets = ['exposure']
-        self.view = self.views[0]
+        self.inset = 'none'
+
+        self.views = ['field', 'diff', 'cropped']
+        self.view = self.views[2]
+
+        self.modifiers = ['none', 'fft']
+        self.modifier = self.modifiers[0]
 
         self.state = state
         self.cmap_abs = cmap_abs
@@ -41,11 +44,8 @@ class OrthoManipulator(object):
 
         self.slices = (np.array(self.state.image.shape)/2).astype('int')
 
-        #self.vmin = min([self.state.image.min(), self.state.get_model_image().min()])
-        #self.vmax = max([self.state.image.max(), self.state.get_model_image().max()])
         self._grab = None
-        self.vmin = vmin
-        self.vmax = vmax
+        self.set_field()
         self.draw()
         self.register_events()
 
@@ -53,19 +53,38 @@ class OrthoManipulator(object):
         ax.set_xticks([])
         ax.set_yticks([])
 
-    def draw(self):
-        self.draw_ortho(self.state.image, self.gl, cmap=self.cmap_abs,
-                vmin=self.vmin, vmax=self.vmax)
-
+    def set_field(self):
         if self.view == 'field':
-            self.draw_ortho(self.state.model_image, self.gr,
-                cmap=self.cmap_abs, vmin=self.vmin, vmax=self.vmax)
+            out = self.state.model_image
+            vmin, vmax = 0.0, 1.0
+            cmap = self.cmap_abs
+
         if self.view == 'diff':
-            self.draw_ortho(self.state.image - self.state.get_model_image(),
-                self.gr, cmap=self.cmap_diff, vmin=-self.vmax/5, vmax=self.vmax/5)
+            out = (self.state.image - self.state.get_model_image())
+            vmin, vmax = -0.2, 0.2
+            cmap = self.cmap_diff
+
         if self.view == 'cropped':
-            self.draw_ortho(self.state.get_model_image(),
-                self.gr, cmap=self.cmap_abs, vmin=self.vmin, vmax=self.vmax)
+            out = self.state.get_model_image()
+            vmin, vmax = 0.0, 1.0
+            cmap = self.cmap_abs
+
+        if self.modifier == 'fft':
+            out = np.real(np.abs(np.fft.fftn(out)))**0.2
+            out[0,0,0] = 1.0
+            out = np.fft.fftshift(out)
+            vmin = out.min()
+            vmax = out.max()
+            cmap = self.cmap_abs
+
+        self.field = out
+        self.vmin = vmin
+        self.vmax = vmax
+        self.cmap = cmap
+
+    def draw(self):
+        self.draw_ortho(self.state.image, self.gl, cmap=self.cmap_abs, vmin=0.0, vmax=1.0)
+        self.draw_ortho(self.field, self.gr, cmap=self.cmap, vmin=self.vmin, vmax=self.vmax)
 
     def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
         slices = self.slices
@@ -117,6 +136,8 @@ class OrthoManipulator(object):
             self._calls.append(self.fig.canvas.mpl_connect('button_press_event', self.mouse_press_add))
         if self.mode == 'remove':
             self._calls.append(self.fig.canvas.mpl_connect('button_press_event', self.mouse_press_remove))
+        if self.mode == 'optimize':
+            self._calls.append(self.fig.canvas.mpl_connect('button_press_event', self.mouse_press_optimize))
         if self.mode == 'grab':
             self._calls.append(self.fig.canvas.mpl_connect('button_press_event', self.mouse_press_grab))
             self._calls.append(self.fig.canvas.mpl_connect('motion_notify_event', self.mouse_move_grab))
@@ -144,6 +165,7 @@ class OrthoManipulator(object):
         if p is not None and self._grab is not None:
             b = self.state.block_particle_pos(self._grab)
             self.state.update(b, p)
+            self.set_field()
             self.draw()
 
     def mouse_scroll_grab(self, event):
@@ -154,6 +176,7 @@ class OrthoManipulator(object):
             n = self.state.closest_particle(p)
             b = self.state.block_particle_rad(n)
             self.state.update(b, self.state.obj.rad[n]+event.step/self.incsize)
+            self.set_field()
             self.draw()
 
     def _pt_xyz(self, event):
@@ -187,6 +210,7 @@ class OrthoManipulator(object):
 
         p = self._pt_xyz(event)
         if p is not None:
+            print "Moving view to %r" % p
             self.slices = p
         self.draw()
 
@@ -195,8 +219,12 @@ class OrthoManipulator(object):
 
         p = self._pt_xyz(event)
         if p is not None:
-            print "Adding particle at", p
-            self.state.add_particle(p, self.state.obj.rad.mean())
+            p = np.array(p)
+            r = self.state.obj.rad[self.state.obj.typ==1.].mean()
+
+            print "Adding particle at", p, r
+            self.state.add_particle(p, r)
+        self.set_field()
         self.draw()
 
     def mouse_press_remove(self, event):
@@ -206,7 +234,24 @@ class OrthoManipulator(object):
         if p is not None:
             print "Removing particle near", p
             self.state.remove_closest_particle(p)
+        self.set_field()
         self.draw()
+
+    def mouse_press_optimize(self, event):
+        self.event = event
+        p = self._pt_xyz(event)
+
+        if p is not None:
+            print "Optimizing particle near", p
+            n = self.state.closest_particle(p)
+            bl = self.state.blocks_particle(n)
+            runner.sample_state(self.state, bl, stepout=0.1, doprint=True, N=3)
+
+        self.set_field()
+        self.draw()
+
+    def cycle(self, c, clist):
+        return clist[(clist.index(c)+1) % len(clist)]
 
     def key_press_event(self, event):
         self.event = event
@@ -219,8 +264,16 @@ class OrthoManipulator(object):
             self.mode = 'remove'
         if event.key == 'g':
             self.mode = 'grab'
+        if event.key == 'e':
+            self.mode = 'optimize'
         if event.key == 'q':
-            self.view = self.views[(self.views.index(self.view)+1) % len(self.views)]
+            self.view = self.cycle(self.view, self.views)
+            self.set_field()
+            self.draw()
+            return
+        if event.key == 'w':
+            self.modifier = self.cycle(self.modifier, self.modifiers)
+            self.set_field()
             self.draw()
             return
 

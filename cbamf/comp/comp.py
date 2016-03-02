@@ -1,3 +1,14 @@
+# TODO -- register parameters with a function that gets a unique number
+# probably a counter.  then, building the parameters would look like:
+#
+#     pgrp = ['b1', 'b2', 'zscale', ...]
+#     pnum = [4, 5, 1, ...]
+#
+# creates:
+#
+#     pdict = {'b1_0': 0, 'b1_1': 1, ..., 'zscale': 9, ...}
+#     blocks = pdict.keys()
+
 class ParameterGroup(object):
     category = 'param'
 
@@ -39,7 +50,19 @@ class Component(ParameterGroup):
     def set_tile(self, tile):
         pass
 
-    def get_support_size(self):
+    def get_support_size(self, blocks):
+        """
+        This method returns the actual image area to be modified by
+        the update to `blocks'. 
+
+        Parameters:
+        -----------
+        blocks: list-like, Block object
+            an array 
+        """
+        pass
+
+    def get_pad_size(self):
         pass
 
     def get_field(self):
