@@ -227,6 +227,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.sigkf = self.__dict__.get('sigkf', None)
         self.nkpts = self.__dict__.get('nkpts', None)
         self.polychromatic = self.sigkf is not None or self.nkpts is not None
+        self.measurement_iterations = self.__dict__.get('measurement_iterations', 1)
 
     def _p2k(self, v):
         """ Convert from pixel to 1/k_incoming (laser_wavelength/(2\pi)) units """
