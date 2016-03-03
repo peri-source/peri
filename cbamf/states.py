@@ -907,7 +907,9 @@ class ConfocalImagePython(State):
         br = self.block_particle_rad(n)
         bt = self.block_particle_typ(n)
 
-        self.update(bp, p)
+        bps = self.explode(bp)
+        for i in xrange(bp.sum()):
+            self.update(bps[i], np.array([p.ravel()[i]]))
         self.update(br, np.array([r]))
         self.update(bt, np.array([1]))
 
