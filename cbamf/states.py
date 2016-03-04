@@ -533,9 +533,23 @@ class ConfocalImagePython(State):
 
         self._sigma_field_log = np.log(self._sigma_field)#*(self._sigma_field > 0) + 1e-16)
 
-    def set_state(self, state):
+    def set_state(self, state, blocks=None):
+        """
+        Update the state globally with new data. If `blocks` is provided, only
+        update the values associated with those particular data points. `state`
+        must be 1D with the same length as blocks.sum() and `blocks` must have
+        the same length as self.state
+        """
+        # if we are only provided some data, duplicate our current values
+        # into a new array to simplify updates
+        if blocks is not None:
+            st = self.state.copy()
+            st[blocks] = state[:]
+            state = st
+
         self.obj.pos = state[self.b_pos].reshape(-1,3)
         self.obj.rad = state[self.b_rad]
+        self.obj.typ = state[self.b_typ]
         self.ilm.params = state[self.b_ilm]
         self.psf.params = state[self.b_psf]
 
@@ -544,6 +558,10 @@ class ConfocalImagePython(State):
 
         if self.slab:
             self.slab.params = state[self.b_slab]
+
+        self.zscale = state[self.b_zscale]
+        self.offset = state[self.b_off]
+        self.sigma = state[self.b_sigma]
 
         self._initialize()
 
@@ -972,6 +990,23 @@ class ConfocalImagePython(State):
         end = off + self.param_lengths[index]
         return off, end
 
+    """
+    def _grad_func(self, bl, dl=1e-3, func=None, args=(), kwargs={}):
+        self.push_update(bl, self.state[bl]+dl)
+        m1 = func(*args, **kwargs)
+        self.pop_update()
+
+        self.push_update(bl, self.state[bl]-dl)
+        m0 = func(*args, **kwargs)
+        self.pop_update()
+
+        return (m1 - m0) / (2*dl)
+
+    def _build_funcs(self):
+        self._grad_image = partial(self._grad_func, func=self.get_model_image)
+        self._grad_residuals = partial(self._grad_func, func=self.residuals)
+    """
+
     def _grad_image(self, bl, dl=1e-3):
         self.push_update(bl, self.state[bl]+dl)
         m1 = self.get_model_image()
@@ -994,10 +1029,8 @@ class ConfocalImagePython(State):
 
         return (m1 - m0) / (2*dl)
 
-    def residuals(self, masked=False):
-        if not masked:
-            return self.image_mask*(self.image - self.get_model_image())
-        return (self.image - self.get_model_image())[self.image_mask == 1.0]
+    def residuals(self, masked=True):
+        return self.get_difference_image(doslice=masked)
 
     def fisher_information(self, blocks=None, dl=1e-3):
         if blocks is None:
@@ -1080,6 +1113,12 @@ class ConfocalImagePython(State):
 
             out[b] = d
         return out
+
+    def __str__(self):
+        return self.__class__.__name__
+
+    def __repr__(self):
+        return self.__str__()
 
     def __getstate__(self):
         return {}
