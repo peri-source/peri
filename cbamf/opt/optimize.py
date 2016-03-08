@@ -147,9 +147,9 @@ def update_state_global(s, block, data, keep_time=True, **kwargs):
     #pos:
     bpos = s.create_block('pos')
     if (bpos & block).sum() > 0:
-        raise NotImplementedError("updating the particle positions is hard")
-        #Mostly because I don't know wtf ns is in s.obj.update()
-        #ns = "n's" = numbers. Do s.obj.rad.size to get n, then update rad, type
+        new_pos_params = new_state[bpos].copy().reshape(-1,3)
+        s.obj.pos = new_pos_params
+        s.obj.initialize(s.zscale)
     #rad:
     brad = s.create_block('rad')
     if (brad & block).sum() > 0:
