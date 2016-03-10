@@ -1,8 +1,10 @@
+import os
 import sys
 import time
 import datetime
 import numpy as np
 import code, traceback, signal
+from contextlib import contextmanager
 
 from cbamf import const, initializers
 
@@ -444,3 +446,24 @@ def debug(sig, frame):
 def listen():
     # register handler
     signal.signal(signal.SIGUSR1, debug)
+
+#=============================================================================
+# misc helper functions
+#=============================================================================
+@contextmanager
+def indir(path):
+    """
+    Context manager for switching the current path of the process. Can be used:
+
+        with indir('/tmp'):
+            <do something in tmp>
+    """
+    cwd = os.getcwd()
+
+    try:
+        os.chdir(path)
+        yield
+    except Exception as e:
+        raise
+    finally:
+        os.chdir(cwd)

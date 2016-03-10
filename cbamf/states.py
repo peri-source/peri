@@ -4,7 +4,7 @@ import cPickle as pickle
 
 from cbamf import const
 from cbamf import initializers
-from cbamf.util import Tile, amin, amax, ProgressBar, RawImage
+from cbamf.util import Tile, amin, amax, ProgressBar, RawImage, indir
 from cbamf.priors import overlap
 
 class State:
@@ -1183,4 +1183,9 @@ def save(state, filename=None, desc='', extra=None):
     pickle.dump(save, open(filename, 'wb'))
 
 def load(filename):
-    return pickle.load(open(filename, 'rb'))
+    """ Load the state from the given file, moving to the file's directory during load """
+    path, name = os.path.split(filename)
+    path = path or '.'
+
+    with indir(path):
+        return pickle.load(open(filename, 'rb'))
