@@ -3,6 +3,7 @@ import scipy as sp
 
 from cbamf.priors import overlap
 from cbamf.util import Tile
+from cbamf.comp.objs import SphereCollectionRealSpace
 
 def pr(state, samples, depth=-10):
     d = state.todict(samples)
@@ -92,17 +93,36 @@ def gofr_surfaces(pos, rad, zscale):
     return np.array(seps)
 
 def gofr(pos, rad, zscale, resolution=3e-2, rmax=10, method='normal',
-        mask_start=None):
+        mask_start=None, phi_method='const', phi=None, state=None):
     """
     Pair correlation function calculation from 0 to rmax particle diameters
 
     method : str ['normal', 'surface']
         represents the gofr calculation method
+
+    phi_method : str ['pos', 'obj', 'state']
+        which data to use to calculate the packing_fraction. 
+            -- 'pos' : (not stable) calculate based on fractional spheres in
+                a cube, do not use
+
+            -- 'const' : the volume fraction is provided by the user via 
+                the variable phi
+
+            -- 'state' : the volume is calculated by using the platonic sphere
+                image of a given state. must provide argument state
     """
 
     d = 2*rad.mean()
     vol_particle = 4./3*np.pi*(d)**3
-    num_density = packing_fraction(pos, rad) / vol_particle
+
+    if phi_method == 'pos':
+        phi = packing_fraction(pos, rad)
+    if phi_method == 'const':
+        phi = phi or 1
+    if phi_method == 'state':
+        phi = packing_fraction_state(state)
+
+    num_density = phi / vol_particle
 
     if method == 'normal':
         o = gofr_normal(pos, rad, zscale)
@@ -121,6 +141,14 @@ def gofr(pos, rad, zscale, resolution=3e-2, rmax=10, method='normal',
         y = y[mask]
 
     return x/d, y/(4*np.pi*(x+d)**2*resolution) / num_density / float(len(rad))
+
+def packing_fraction_obj(pos, rad, shape, inner, zscale=1):
+    obj = SphereCollectionRealSpace(pos, rad, shape=shape)
+    obj.initialize(zscale)
+    return obj.particles[inner].mean()
+
+def packing_fraction_state(state):
+    return state.obj.particles[state.inner].mean()
 
 def packing_fraction(pos, rad, bounds=None, state=None, full_output=False):
     if state is not None:
