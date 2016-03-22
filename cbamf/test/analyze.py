@@ -5,6 +5,9 @@ from cbamf.priors import overlap
 from cbamf.util import Tile
 
 def pr(state, samples, depth=-10):
+    """
+    You should use get_good_pos_rad instead
+    """
     d = state.todict(samples)
     p = d['pos'][depth:].mean(axis=0)
     r = d['rad'][depth:].mean(axis=0)
@@ -40,6 +43,33 @@ def good_particles(state, inbox=True, inboxrad=False):
             mask &= trim_box(state, pos, rad=None)
 
     return mask
+    
+def get_good_pos_rad(state, samples, depth=-10, return_err=False):
+    """
+    Returns the sampled positions, radii of particles that are:
+        * radius > 0 
+        * position inside box
+        * active
+    """
+    
+    d = state.todict(samples)
+    p = d['pos'][depth:].mean(axis=0)
+    r = d['rad'][depth:].mean(axis=0)
+    if return_err:
+        er_p = d['pos'][depth:].std(axis=0)
+        er_r = d['rad'][depth:].std(axis=0)
+        
+    # m = good_particles(state, inbox=True, inboxrad=False)
+    m = (r > 0) & trim_box(state, p)
+    
+    if return_err:
+        return p[m].copy(), r[m].copy(), er_p[m].copy(), er_r[m].copy()
+    else:
+        return p[m].copy(), r[m].copy()
+
+def states_to_DataFrame(state_list):
+    #FIXME
+    raise NotImplementedError
 
 def trim_box(state, p, rad=None):
     """
