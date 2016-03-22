@@ -22,7 +22,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
             pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=None,
-            nkpts=None, cutoffval=None, measurement_iterations=None, *args, **kwargs):
+            nkpts=None, cutoffval=None, measurement_iterations=None, dosigkf=True, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -98,6 +98,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             number of interations used when trying to find the center of mass
             of the psf in a certain slice
 
+        dosigkf : boolean
+            Whether or not to include sigkf in the sampling procedure
+
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
             psf, (z,y,x) = a.psf_slice(1., size=51)
@@ -112,6 +115,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
         self.polychromatic = False
         self.sigkf = sigkf
+        self.dosigkf = dosigkf
         self.nkpts = nkpts
         self.cutoffval = cutoffval
 
@@ -133,6 +137,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         # text location of parameters for ease of extraction
         self.param_order = ['kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser_wavelength', 'sigkf']
         params = np.array( [ kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength,   sigkf ])
+
+        if not self.dosigkf:
+            self.param_order = self.param_order[:-1]
+            params = params[:-1]
+
         self.param_dict = {k:params[i] for i,k in enumerate(self.param_order)}
 
         super(ExactLineScanConfocalPSF, self).__init__(*args, params=params,
@@ -228,6 +237,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.normalize = self.__dict__.get('normalize', False)
         self.cutoffval = self.__dict__.get('cutoffval', None)
         self.sigkf = self.__dict__.get('sigkf', None)
+        self.dosigkf = self.__dict__.get('dosigkf', None)
         self.nkpts = self.__dict__.get('nkpts', None)
         self.polychromatic = self.sigkf is not None or self.nkpts is not None
         self.measurement_iterations = self.__dict__.get('measurement_iterations', 1)
