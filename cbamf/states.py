@@ -241,7 +241,7 @@ def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True,
 # can still be loaded.  this is because of the __getinitargs__ of pickle
 
 class ConfocalImagePython(State):
-    def __init__(self, image, obj, psf, ilm, zscale=1, offset=1,
+    def __init__(self, image, obj, psf, ilm, zscale=1, offset=0,
             sigma=0.04, doprior=False, constoff=False,
             varyn=False, allowdimers=False, nlogs=True, difference=True,
             pad=const.PAD, sigmapad=False, slab=None, newconst=True, bkg=None,
