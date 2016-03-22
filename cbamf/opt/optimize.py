@@ -1,7 +1,7 @@
 import os,sys, time
 import numpy as np
 from numpy.random import randint
-from scipy.optimize import newton
+from scipy.optimize import newton, minimize_scalar
 from cbamf.util import Tile
 
 """
@@ -58,18 +58,25 @@ def calculate_J_exact(s, blocks, **kwargs): #delete me
 def calculate_err_approx(s, inds):
     return s.get_difference_image()[inds[0], inds[1], inds[2]].ravel().copy()
     
-def eval_deriv(s, block, dl=2e-5, be_nice=True, **kwargs):
+def eval_deriv(s, block, dl=2e-5, be_nice=True, threept=False, **kwargs):
     """
     Using a centered difference / 3pt stencil approximation:
     """
+    if not threept:
+        i0 = s.get_difference_image().copy()
+    
     p0 = s.state[block]
     s.update(block, p0+dl)
     i1 = s.get_difference_image().copy()
-    s.update(block, p0-dl)
-    i2 = s.get_difference_image().copy()
+    if threept:
+        s.update(block, p0-dl)
+        i2 = s.get_difference_image().copy()
+        deriv = 0.5*(i1-i2)/dl
+    else:
+        deriv = (i1-i0)/dl
     if be_nice:
        s.update(block, p0) 
-    return 0.5*(i1-i2)/dl
+    return deriv
     
 def calculate_JTJ_grad_approx(s, blocks, num_inds=1000, **kwargs):
     if num_inds < s.image[s.inner].size:
@@ -106,10 +113,10 @@ def calc_im_grad(s, J, inds):
     err = calculate_err_approx(s, inds)
     return np.dot(J, err)
 
-def find_LM_updates(JTJ, grad, accel=1.0, min_eigval=1e-12, quiet=True, **kwargs):
+def find_LM_updates(JTJ, grad, damp=1.0, min_eigval=1e-12, quiet=True, **kwargs):
     diag = np.diagflat(np.diag(JTJ))
     
-    A0 = JTJ + accel*diag
+    A0 = JTJ + damp*diag
     # delta0 = np.linalg.solve(A0, -grad)
     delta0, res, rank, s = np.linalg.lstsq(A0, -grad, rcond=min_eigval)
     if not quiet:
@@ -224,8 +231,8 @@ def get_num_px_jtj(s, nparams, decimate=400, max_mem=2e9, min_redundant=20, **kw
     num_px = np.clip(px_dec, px_red, px_mem)
     return num_px
     
-def do_levmarq(s, block, accel=0.1, daccel=0.1, num_iter=5, do_run=True, \
-         run_length=3, **kwargs):
+def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
+         run_length=5, **kwargs):
     """
     Runs Levenberg-Marquardt minimization on a cbamf state, based on a
     random approximant of J. Doesn't return anything, only updates the state. 
@@ -235,13 +242,13 @@ def do_levmarq(s, block, accel=0.1, daccel=0.1, num_iter=5, do_run=True, \
         The cbamf state to optimize. 
     block: Boolean numpy.array
         The desired blocks of the state s to minimize over. Do NOT explode it. 
-    accel: Float scalar, >=0. 
-        The acceleration parameter in the Levenberg-Marquardt optimization.
-        Big acceleration means gradient descent with a small step, accel=0
+    damp: Float scalar, >=0. 
+        The damping parameter in the Levenberg-Marquardt optimization.
+        Big damping means gradient descent with a small step, damp=0
         means Hessian inversion. Default is 0.1. 
-    daccel: Float scalar, >0. 
-        Multiplicative value to update accel by. Internally decides when to
-        update and when to use accel or 1/accel. Default is 0.1. 
+    ddamp: Float scalar, >0. 
+        Multiplicative value to update damp by. Internally decides when to
+        update and when to use damp or 1/damp. Default is 0.1. 
     num_iter: Int. 
         Number of Levenberg-Marquardt iterations before returning. 
     do_run: Bool
@@ -277,8 +284,17 @@ def do_levmarq(s, block, accel=0.1, daccel=0.1, num_iter=5, do_run=True, \
     dl: Float scalar.
         The amount to update parameters by when evaluating derivatives. 
         Default is 2e-5. 
+    threept: Bool
+        Set to True to use a 3-point stencil instead of a 2-point. More 
+        accurate but 20% slower. Default is False. 
+    
     See Also
     --------
+    do_levmarq_particles: Exact (not random-block) Levenberg-Marquardt 
+        specially designed for optimizing particle positions. 
+    do_levmarq_all_particle_groups: Wrapper for do_levmarq_particles 
+        which blocks particles by distance and iterates over all 
+        the particles in the state. 
     do_conj_grad_jtj: Conjugate gradient minimization with a random-block
         approximation to J. 
     
@@ -293,15 +309,15 @@ def do_levmarq(s, block, accel=0.1, daccel=0.1, num_iter=5, do_run=True, \
     #First I find out how many pixels I use:
     num_px = get_num_px_jtj(s, block.sum(), **kwargs)    
     
-    def do_internal_run(J, inds, accel):
+    def do_internal_run(J, inds, damp):
         """
-        Uses the local vars s, accel, run_length, block
+        Uses the local vars s, damp, run_length, block
         """
         print 'Running....'
         for rn in xrange(run_length):
             new_grad = calc_im_grad(s, J, inds)
             p0 = s.state[block].copy()
-            dnew = find_LM_updates(JTJ, new_grad, accel=accel)
+            dnew = find_LM_updates(JTJ, new_grad, damp=damp)
             old_err = get_err(s)
             update_state_global(s, block, p0+dnew)
             new_err = get_err(s)
@@ -325,8 +341,8 @@ def do_levmarq(s, block, accel=0.1, daccel=0.1, num_iter=5, do_run=True, \
             grad = calc_im_grad(s, J, inds) #internal because s gets updated
         
         #2. Calculate and implement first guess for updates
-        d0 = find_LM_updates(JTJ, grad, accel=accel)
-        d1 = find_LM_updates(JTJ, grad, accel=accel*daccel)
+        d0 = find_LM_updates(JTJ, grad, damp=damp)
+        d1 = find_LM_updates(JTJ, grad, damp=damp*ddamp)
         update_state_global(s, block, p0+d0)
         err0 = get_err(s)
         update_state_global(s, block, p0+d1)
@@ -339,22 +355,22 @@ def do_levmarq(s, block, accel=0.1, daccel=0.1, num_iter=5, do_run=True, \
             #Avoiding infinite loops by adding a small amount to counter:
             counter += 0.1 
             if err0 < err1: 
-                #d_accel is the wrong "sign", so we invert:
-                print 'Changing daccel:\t%f\t%f' % (daccel, 1.0/daccel)
-                daccel = 1.0/daccel
+                #d_damp is the wrong "sign", so we invert:
+                print 'Changing ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
+                ddamp = 1.0/ddamp
             else: 
-                #daccel is the correct sign but accel is too big:
-                accel *= (daccel*daccel)
+                #ddamp is the correct sign but damp is too big:
+                damp *= (ddamp*ddamp)
         
         else: #at least 1 good step:
-            if err0 < err1: #good step and accel, re-update:
+            if err0 < err1: #good step and damp, re-update:
                 update_state_global(s, block, p0+d0)
                 print 'Good step:\t%f\t%f\t%f' % (err_start, err0, err1)
-            else: #err1 < err0 < err_start, good step but decrease accel:
-                accel *= daccel
-                print 'Decreasing acceleration:\t%f\t%f' % (err_start, err1)
+            else: #err1 < err0 < err_start, good step but decrease damp:
+                damp *= ddamp
+                print 'Decreasing damping:\t%f\t%f\t%f' % (err_start, err0, err1)
             if do_run:
-                do_internal_run(J, inds, accel)
+                do_internal_run(J, inds, damp)
             recalc_J = True
             counter += 1
 
@@ -399,6 +415,9 @@ def do_conj_grad_jtj(s, block, min_eigval=1e-12, num_sweeps=2, **kwargs):
     dl: Float scalar.
         The amount to update parameters by when evaluating derivatives. 
         Default is 2e-5. 
+    threept: Bool
+        Set to True to use a 3-point stencil instead of a 2-point. More 
+        accurate but 20% slower. Default is False. 
     See Also
     --------
     do_levmarq: Levenberg-Marquardt minimization with a random-block
@@ -437,7 +456,6 @@ def do_conj_grad_jtj(s, block, min_eigval=1e-12, num_sweeps=2, **kwargs):
             do_line_min(s, block, cur_vec, **kwargs)
             print 'Direction min %d \t%f' % (a, get_err(s))
 
-from scipy.optimize import minimize_scalar
 def do_line_min(s, block, vec, maxiter=10, **kwargs):
     """
     Does a line minimization over the state
@@ -490,7 +508,7 @@ def do_line_min(s, block, vec, maxiter=10, **kwargs):
 #               ~~~~~        Single particle stuff    ~~~~~
 #=============================================================================#
 def update_one_particle(s, particle, pos, rad, typ=None, relative=False, 
-        do_update_tile=True, **kwargs):
+        do_update_tile=True, ignore_errors=False, **kwargs):
     """
     Updates a single particle (labeled ind) in the state s. 
     
@@ -545,6 +563,15 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
     else:
         p1 = pos.copy()
         r1 = rad.copy()
+        
+    if np.any(p1 < 0) or np.any(p1 > np.array(s.image.shape)) or np.any(r1<0):
+        if ignore_errors:
+            p1 = np.clip(p1, 0, np.array(s.image.shape)-1e-3)
+            r1 = np.clip(r1, 0, np.inf)
+            #And we delete the particel:
+            t1 *= 0
+        else:
+            raise ValueError('Particle outside image / negative radius!')
     
     tiles = s._tile_from_particle_change(p0, r0, t0, p1, r1, t1) #312 us
     s.obj.update(particle, p1, r1, t1, s.zscale, difference=s.difference) #4.93 ms
@@ -705,7 +732,8 @@ def update_particles(s, particles, params, **kwargs):
     
     s._update_tile(outer_tile, inner_tile, ioslice, difference=s.difference)
     
-def do_levmarq_particles(s, particles, accel=0.1, daccel=0.2, num_iter=2, **kwargs):
+def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
+        do_run=True, run_length=5, **kwargs):
     """
     Runs an exact (i.e. not stochastic number of pixels) Levenberg-Marquardt 
     minimization on a set of particles in a cbamf state. Doesn't return 
@@ -716,15 +744,21 @@ def do_levmarq_particles(s, particles, accel=0.1, daccel=0.2, num_iter=2, **kwar
         The cbamf state to optimize. 
     particles: Int numpy.array
         The desired indices of the particles to minimize over.
-    accel: Float scalar, >=0. 
-        The acceleration parameter in the Levenberg-Marquardt optimization.
-        Big acceleration means gradient descent with a small step, accel=0
+    damp: Float scalar, >=0. 
+        The damping parameter in the Levenberg-Marquardt optimization.
+        Big damping means gradient descent with a small step, damp=0
         means Hessian inversion. Default is 0.1. 
-    daccel: Float scalar, >0. 
-        Multiplicative value to update accel by. Internally decides when
-        to update and when to use accel or 1/accel. Default is 0.2. 
+    ddamp: Float scalar, >0. 
+        Multiplicative value to update damp by. Internally decides when
+        to update and when to use damp or 1/damp. Default is 0.2. 
     num_iter: Int. 
-        Number of Levenberg-Marquardt iterations to execute. Default is 2
+        Number of Levenberg-Marquardt iterations to execute. Default is 3.
+    do_run: Bool
+        Set to True to attempt multiple minimzations by using the old
+        (expensive) JTJ to re-calculate a next step. Default is True. 
+    run_length: Int. 
+        Maximum number of attempted iterations with a fixed JTJ. Only 
+        matters if do_run=True. Default is 5. 
     min_eigval: Float scalar, <<1. 
         The minimum eigenvalue to use in inverting the JTJ matrix, to 
         avoid degeneracies in the parameter space (i.e. 'rcond' in 
@@ -734,7 +768,7 @@ def do_levmarq_particles(s, particles, accel=0.1, daccel=0.2, num_iter=2, **kwar
         Default is 2e-5. 
     threept: Bool
         Set to True to use a 3-point stencil instead of a 2-point. More 
-        accurate but 20% slower. 
+        accurate but 20% slower. Default is False. 
     See Also
     --------
     do_levmarq_all_particle_groups: Convenience wrapper that splits all
@@ -748,6 +782,28 @@ def do_levmarq_particles(s, particles, accel=0.1, daccel=0.2, num_iter=2, **kwar
     """    
     recalc_J = True
     counter = 0
+    
+    def do_internal_run():
+        """
+        Uses the local vars s, damp, run_length, dif_tile, J, JTJ
+        """
+        print 'Running....'
+        for rn in xrange(run_length):
+            new_grad = np.dot(J, get_slicered_difference(s, dif_tile.slicer, 
+                s.image_mask[dif_tile.slicer].astype('bool')))
+
+            dnew = find_LM_updates(JTJ, new_grad, damp=damp)
+            old_err = get_err(s)
+            update_particles(s, particles, dnew, relative=True, \
+                    ignore_errors=True)
+            new_err = get_err(s)
+            print '%f\t%f' % (old_err, new_err)
+            if new_err > old_err:
+                #done running, put back old params
+                update_particles(s, particles, -dnew, relative=True, \
+                        ignore_errors=True)
+                break
+    
     while counter < num_iter:
         # p0 = s.state[block].copy() -- actually I don't know if I want to use this
         err_start = get_err(s)
@@ -760,17 +816,16 @@ def do_levmarq_particles(s, particles, accel=0.1, daccel=0.2, num_iter=2, **kwar
             JTJ = j_to_jtj(J)
 
         #2. Get -grad from the tiles:
-        # grad = calc_im_grad(s, J, inds)
         grad = np.dot(J, get_slicered_difference(s, dif_tile.slicer, 
                 s.image_mask[dif_tile.slicer].astype('bool')))
         
         #3. get LM updates: -- here down is practically copied; could be moved into an engine
-        d0 = find_LM_updates(JTJ, grad, accel=accel)
-        d1 = find_LM_updates(JTJ, grad, accel=accel*daccel)
+        d0 = find_LM_updates(JTJ, grad, damp=damp)
+        d1 = find_LM_updates(JTJ, grad, damp=damp*ddamp)
         
-        update_particles(s, particles, d0, relative=True)
+        update_particles(s, particles, d0, relative=True, ignore_errors=True)
         err0 = get_err(s)
-        update_particles(s, particles, d1-d0, relative=True)
+        update_particles(s, particles, d1-d0, relative=True, ignore_errors=True)
         err1 = get_err(s)
         
         #4. Pick the best value, continue
@@ -781,22 +836,22 @@ def do_levmarq_particles(s, particles, accel=0.1, daccel=0.2, num_iter=2, **kwar
             #Avoiding infinite loops by adding a small amount to counter:
             counter += 0.1 
             if err0 < err1: 
-                #d_accel is the wrong "sign", so we invert:
-                print 'Changing daccel:\t%f\t%f' % (daccel, 1.0/daccel)
-                daccel = 1.0/daccel
+                #d_damp is the wrong "sign", so we invert:
+                print 'Changing ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
+                ddamp = 1.0/ddamp
             else: 
-                #daccel is the correct sign but accel is too big:
-                accel *= (daccel*daccel)
+                #ddamp is the correct sign but damp is too big:
+                damp *= (ddamp*ddamp)
         
         else: #at least 1 good step:
-            if err0 < err1: #good step and accel, re-update:
+            if err0 < err1: #good step and damp, re-update:
                 update_particles(s, particles, d0-d1, relative=True)
                 print 'Good step:\t%f\t%f\t%f' % (err_start, err0, err1)
-            else: #err1 < err0 < err_start, good step but decrease accel:
-                accel *= daccel
-                print 'Decreasing acceleration:\t%f\t%f' % (err_start, err1)
-            # if do_run:
-                # do_internal_run(J, inds, accel)
+            else: #err1 < err0 < err_start, good step but decrease damp:
+                damp *= ddamp
+                print 'Decreasing damping:\t%f\t%f\t%f' % (err_start,err0,err1)
+            if do_run:
+                do_internal_run()
             recalc_J = True
             counter += 1
 
@@ -884,13 +939,13 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=False,
 
     **kwargs parameters of interest:
     ------------
-    accel: Float scalar, >=0. 
-        The acceleration parameter in the Levenberg-Marquardt optimization.
-        Big acceleration means gradient descent with a small step, accel=0
+    damp: Float scalar, >=0. 
+        The damping parameter in the Levenberg-Marquardt optimization.
+        Big damping means gradient descent with a small step, damp=0
         means Hessian inversion. Default is 0.1. 
-    daccel: Float scalar, >0. 
-        Multiplicative value to update accel by. Internally decides when
-        to update and when to use accel or 1/accel. Default is 0.2. 
+    ddamp: Float scalar, >0. 
+        Multiplicative value to update damp by. Internally decides when
+        to update and when to use damp or 1/damp. Default is 0.2. 
     num_iter: Int. 
         Number of Levenberg-Marquardt iterations to execute. Default is 2.
     """
