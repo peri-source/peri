@@ -1,4 +1,4 @@
-import os,sys, time
+import os,sys, time, warnings
 import numpy as np
 from numpy.random import randint
 from scipy.optimize import newton, minimize_scalar
@@ -58,7 +58,7 @@ def calculate_J_exact(s, blocks, **kwargs): #delete me
 def calculate_err_approx(s, inds):
     return s.get_difference_image()[inds[0], inds[1], inds[2]].ravel().copy()
     
-def eval_deriv(s, block, dl=2e-5, be_nice=True, threept=False, **kwargs):
+def eval_deriv(s, block, dl=1e-8, be_nice=False, threept=False, **kwargs):
     """
     Using a centered difference / 3pt stencil approximation:
     """
@@ -117,7 +117,6 @@ def find_LM_updates(JTJ, grad, damp=1.0, min_eigval=1e-12, quiet=True, **kwargs)
     diag = np.diagflat(np.diag(JTJ))
     
     A0 = JTJ + damp*diag
-    # delta0 = np.linalg.solve(A0, -grad)
     delta0, res, rank, s = np.linalg.lstsq(A0, -grad, rcond=min_eigval)
     if not quiet:
         print '%d degenerate of %d total directions' % (delta0.size-rank, delta0.size)
@@ -274,16 +273,15 @@ def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
         degeneracies in the parameter space (i.e. 'rcond' in np.linalg.lstsq).
         Default is 1e-12. 
     keep_time: Bool
-        Set to True to print a bunch of irritating messages about how long
-        each step of the algorithm took. Default is False. 
-    be_nice: Bool. 
-        If True, evaluating the derivative doesn't change the state. If 
-        False, when the derivative is evaluated the state isn't changed 
-        back to its original value, which saves time (33%) but may wreak 
-        havoc. Default is True (i.e. slower, no havoc). 
+        Set to True to print messages about how long each step of the
+        algorithm took. Default is False. 
+    be_nice: Bool
+        If True, spends extra updates placing the parameters back to
+        their original values after evaluating the derivatives. Default
+        is False, i.e. plays fast (2x with threept=False) and dangerous. 
     dl: Float scalar.
         The amount to update parameters by when evaluating derivatives. 
-        Default is 2e-5. 
+        Default is 1e-8, which is fine for everything but rscale. 
     threept: Bool
         Set to True to use a 3-point stencil instead of a 2-point. More 
         accurate but 20% slower. Default is False. 
@@ -356,7 +354,7 @@ def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
             counter += 0.1 
             if err0 < err1: 
                 #d_damp is the wrong "sign", so we invert:
-                print 'Changing ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
+                print 'Inverting ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
                 ddamp = 1.0/ddamp
             else: 
                 #ddamp is the correct sign but damp is too big:
@@ -368,7 +366,7 @@ def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
                 print 'Good step:\t%f\t%f\t%f' % (err_start, err0, err1)
             else: #err1 < err0 < err_start, good step but decrease damp:
                 damp *= ddamp
-                print 'Decreasing damping:\t%f\t%f\t%f' % (err_start, err0, err1)
+                print 'Changing damping:\t%f\t%f\t%f' % (err_start, err0, err1)
             if do_run:
                 do_internal_run(J, inds, damp)
             recalc_J = True
@@ -405,8 +403,8 @@ def do_conj_grad_jtj(s, block, min_eigval=1e-12, num_sweeps=2, **kwargs):
         If max_mem and min_redundant result in an incompatible size an
         error is raised. Default is 20. 
     keep_time: Bool
-        Set to True to print a bunch of irritating messages about how long
-        each step of the algorithm took. Default is False. 
+        Set to True to print messages about how long each step of the
+        algorithm took. Default is False. 
     be_nice: Bool. 
         If True, evaluating the derivative doesn't change the state. If 
         False, when the derivative is evaluated the state isn't changed 
@@ -508,7 +506,7 @@ def do_line_min(s, block, vec, maxiter=10, **kwargs):
 #               ~~~~~        Single particle stuff    ~~~~~
 #=============================================================================#
 def update_one_particle(s, particle, pos, rad, typ=None, relative=False, 
-        do_update_tile=True, ignore_errors=False, **kwargs):
+        do_update_tile=True, fix_errors=False, **kwargs):
     """
     Updates a single particle (labeled ind) in the state s. 
     
@@ -523,37 +521,53 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
     rad: 1-element numpy.ndarray
         New radius of the particle. 
     typ: 1-element numpy.ndarray.
-        New typ of the particle; defaults to keeping the same as the previous.
+        New typ of the particle; defaults to the previous typ.
     relative: Bool
-        Set to true to make pos, rad updates relative to the previous position
-        (i.e. p1 = p0+pos instead of p1 = pos, etc for rad). Default is False. 
+        Set to true to make pos, rad updates relative to the previous 
+        position (i.e. p1 = p0+pos instead of p1 = pos, etc for rad). 
+        Default is False. 
     do_update_tile: Bool
         If False, only updates s.object and not the actual model image. 
         Set to False only if you're going to update manually later. 
         Default is True
+    fix_errors: Bool
+        Set to True to fix errors for placing particles outside the 
+        image or with negative radii (otherwise a ValueError is raised). 
+        Default is False
     
     Returns
     --------
     tiles: 3-element list. 
-        cbamf.util.Tile's of the region of the image affected by the update. 
-        Returns what s._tile_from_particle_change returns (outer, inner, slice)
+        cbamf.util.Tile's of the region of the image affected by the 
+        update. Returns what s._tile_from_particle_change returns 
+        (outer, inner, slice)
     """
-    
     if type(particle) != np.ndarray:
         particle = np.array([particle])
     
     prev = s.state.copy()
     p0 = prev[s.b_pos].copy().reshape(-1,3)[particle]
     r0 = prev[s.b_rad][particle]
-    if s.varyn:
-        t0 = prev[s.b_typ][particle]
-    else:
-        t0 = np.ones(len(particle))
-    if typ is None:
-        if s.varyn:
-            t1 = t0.copy()
+    t0 = prev[s.b_typ][particle]
+    
+        
+    is_bad_update = lambda p, r: np.any(p < 0) or np.any(p > \
+            np.array(s.image.shape)) or np.any(r < 0)
+    if fix_errors:
+        #Instead of ignoring errors, we modify pos, rad in place
+        #so that they are the best possible updates. 
+        if relative:
+            if is_bad_update(p0+pos, r0+rad):
+                pos = np.clip(pos, 1e-6-p0, np.array(s.image.shape)-1e-6-p0)
+                rad = np.clip(rad, 1e-6-r0, np.inf)
+            pass
         else:
-            t1 = np.ones(particle.size)
+            if is_bad_update(pos, rad):
+                pos = np.clip(pos, 1e-6, np.array(s.image.shape)-1e-6)
+                rad = np.clip(rad, 1e-6, np.inf)
+    
+    if typ is None:
+        t1 = t0.copy()
     else:
         t1 = typ
     
@@ -564,14 +578,8 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
         p1 = pos.copy()
         r1 = rad.copy()
         
-    if np.any(p1 < 0) or np.any(p1 > np.array(s.image.shape)) or np.any(r1<0):
-        if ignore_errors:
-            p1 = np.clip(p1, 0, np.array(s.image.shape)-1e-3)
-            r1 = np.clip(r1, 0, np.inf)
-            #And we delete the particel:
-            t1 *= 0
-        else:
-            raise ValueError('Particle outside image / negative radius!')
+    if is_bad_update(p1, r1):
+        raise ValueError('Particle outside image / negative radius!')
     
     tiles = s._tile_from_particle_change(p0, r0, t0, p1, r1, t1) #312 us
     s.obj.update(particle, p1, r1, t1, s.zscale, difference=s.difference) #4.93 ms
@@ -580,7 +588,8 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
     s._build_state()
     return tiles
     
-def eval_one_particle_grad(s, particle, dl=1e-4, threept=False, slicer=None, **kwargs):
+def eval_one_particle_grad(s, particle, dl=1e-6, threept=False, slicer=None, 
+        be_nice=False, **kwargs):
     """
     Evaluates the gradient of the image for 1 particle, for all of its 
     parameters (x,y,z,R). Used for J for LM. 
@@ -597,10 +606,14 @@ def eval_one_particle_grad(s, particle, dl=1e-4, threept=False, slicer=None, **k
         pixels changed by updating the particle and returns that. 
     dl: Float
         The amount to change values by when evaluating derivatives. 
-        Default is 1e-4. 
+        Default is 1e-6. 
     threept: Bool
         If True, uses a 3-point finite difference instead of 2-point. 
         Default is False (using two-point for 1 less function call).
+    be_nice: Bool
+        If True, spends 1x4 extra updates placing the (x,y,z,R) back to
+        their original values after evaluating the derivatives. Default
+        is False, i.e. plays fast and dangerous. 
     
     Returns
     --------
@@ -615,12 +628,15 @@ def eval_one_particle_grad(s, particle, dl=1e-4, threept=False, slicer=None, **k
     p0 = s.state[s.block_particle_pos(particle)].copy()
         
     grads = []
-    dx = np.zeros(p0.size)
     if slicer is not None:
         mask = s.image_mask[slicer] == 1
     
-    for a in xrange(3): #xyz. Deal with it being non generic. 
-        dx[a] = dl
+    #xyz pos:
+    for a in xrange(3):
+        if not threept:
+            i0 = get_slicered_difference(s, slicer, mask)
+        dx = np.zeros(p0.size)
+        dx[a] = 1*dl
         tiles = update_one_particle(s, particle, dx, 0, relative=True)
         if slicer == None:
             slicer = tiles[0].slicer
@@ -631,24 +647,28 @@ def eval_one_particle_grad(s, particle, dl=1e-4, threept=False, slicer=None, **k
             toss = update_one_particle(s, particle, -2*dx, 0, relative=True)
             #we want to compare the same slice. Also -2 to go backwards
             i2 = get_slicered_difference(s, slicer, mask)
-            toss = update_one_particle(s, particle, dx, 0, relative=True)
+            if be_nice:
+                toss = update_one_particle(s, particle, dx, 0, relative=True)
             grads.append((i1-i2)*0.5/dl)
         else:
-            toss = update_one_particle(s, particle, -dx, 0, relative=True)
-            i0 = get_slicered_difference(s, slicer, mask) #initial im
+            if be_nice:
+                toss = update_one_particle(s, particle, -dx, 0, relative=True)
             grads.append( (i1-i0)/dl )
     #rad:
+    if not threept:
+        i0 = get_slicered_difference(s, slicer, mask)
     dr = np.array([dl])
     toss = update_one_particle(s, particle, 0, 1*dr, relative=True)
     i1 = get_slicered_difference(s, slicer, mask)
     if threept:
         toss = update_one_particle(s, particle, 0, -2*dr, relative=True)
         i2 = get_slicered_difference(s, slicer, mask)
-        toss = update_one_particle(s, particle, 0, dr, relative=True)
+        if be_nice:
+            toss = update_one_particle(s, particle, 0, dr, relative=True)
         grads.append((i1-i2)*0.5/dl)
     else:
-        toss = update_one_particle(s, particle, 0, -dr, relative=True)
-        i0 = get_slicered_difference(s, slicer, mask)
+        if be_nice:
+            toss = update_one_particle(s, particle, 0, -dr, relative=True)
         grads.append( (i1-i0)/dl )
         
     return np.array(grads), slicer
@@ -712,18 +732,36 @@ def update_particles(s, particles, params, **kwargs):
     all_left = []
     all_right= []
     
+    def clean_up_tile(ar, left=True):
+        mask = map( lambda x: x == None, ar)
+        if left:
+            ar[mask] = 0
+        else:
+            ar[mask] = np.array(s.image.shape)[mask]
+        return ar
+    
     #We update the object but only update the field at the end
     for a in xrange(particles.size):
         pos = params[4*a:4*a+3]
         rad = params[4*a+3:4*a+4]
         updated_tiles = update_one_particle(s, particles[a], pos, rad, 
                 do_update_tile=False, **kwargs)
-        all_left.append(updated_tiles[0].l)
-        all_right.append(updated_tiles[0].r)
+        a_left = updated_tiles[0].l.copy()
+        a_right= updated_tiles[0].r.copy()
+        all_left.append( clean_up_tile(a_left, left=True))
+        all_right.append(clean_up_tile(a_right,left=False))
         
-    #Constructing the tiles to update the field:
-    left = np.min(all_left, axis=0)
-    right = np.max(all_right,axis=0)
+    #Constructing the tiles to update the field, making sure it's even...:
+    if True: #FIXME -- not sure if the tile needs to be even
+        left = np.min(all_left, axis=0) - 1
+        left += left % 2
+        right = np.max(all_right,axis=0) + 1
+        right += right % 2
+        left = np.clip(left, 0, s.image.shape)
+        right= np.clip(right,0, s.image.shape)
+    else:
+        left = np.min(all_left, axis=0)
+        right = np.max(all_right,axis=0)
     outer_tile = Tile(left, right=right)
     #Then I'm basically copying code from s._tile_from_particle_change
     # to get the correct inner, ioslice, which is sloppy so FIXME
@@ -731,6 +769,7 @@ def update_particles(s, particles, params, **kwargs):
     ioslice = tuple( [np.s_[1:-1] for i in xrange(3)])
     
     s._update_tile(outer_tile, inner_tile, ioslice, difference=s.difference)
+    return outer_tile, inner_tile, ioslice
     
 def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
         do_run=True, run_length=5, **kwargs):
@@ -765,10 +804,14 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
         np.linalg.lstsq). Default is 1e-12. 
     dl: Float scalar.
         The amount to update parameters by when evaluating derivatives. 
-        Default is 2e-5. 
+        Default is 1e-6. 
     threept: Bool
         Set to True to use a 3-point stencil instead of a 2-point. More 
         accurate but 20% slower. Default is False. 
+    be_nice: Bool
+        If True, spends extra updates placing the parameters back to
+        their original values after evaluating the derivatives. Default
+        is False, i.e. plays fast and dangerous. 
     See Also
     --------
     do_levmarq_all_particle_groups: Convenience wrapper that splits all
@@ -795,13 +838,13 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
             dnew = find_LM_updates(JTJ, new_grad, damp=damp)
             old_err = get_err(s)
             update_particles(s, particles, dnew, relative=True, \
-                    ignore_errors=True)
+                    fix_errors=True)
             new_err = get_err(s)
             print '%f\t%f' % (old_err, new_err)
             if new_err > old_err:
                 #done running, put back old params
                 update_particles(s, particles, -dnew, relative=True, \
-                        ignore_errors=True)
+                        fix_errors=True)
                 break
     
     while counter < num_iter:
@@ -823,21 +866,26 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
         d0 = find_LM_updates(JTJ, grad, damp=damp)
         d1 = find_LM_updates(JTJ, grad, damp=damp*ddamp)
         
-        update_particles(s, particles, d0, relative=True, ignore_errors=True)
+        update_particles(s, particles, d0, relative=True, fix_errors=True)
         err0 = get_err(s)
-        update_particles(s, particles, d1-d0, relative=True, ignore_errors=True)
+        update_particles(s, particles, d1-d0, relative=True, fix_errors=True)
         err1 = get_err(s)
         
         #4. Pick the best value, continue
         if np.min([err0, err1]) > err_start: #Bad step...
             print 'Bad step!\t%f\t%f\t%f' % (err_start, err0, err1)
             update_particles(s, particles, -d1, relative=True)
+            #debugging....
+            if get_err(s) > (err_start + 1e-3):#0.1):
+                # raise RuntimeError('Problem with putting back d1')
+                warnings.warn('Problem with putting back d1; resetting', RuntimeWarning)
+                s.reset()
             recalc_J = False
             #Avoiding infinite loops by adding a small amount to counter:
             counter += 0.1 
             if err0 < err1: 
                 #d_damp is the wrong "sign", so we invert:
-                print 'Changing ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
+                print 'Inverting ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
                 ddamp = 1.0/ddamp
             else: 
                 #ddamp is the correct sign but damp is too big:
@@ -849,7 +897,7 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
                 print 'Good step:\t%f\t%f\t%f' % (err_start, err0, err1)
             else: #err1 < err0 < err_start, good step but decrease damp:
                 damp *= ddamp
-                print 'Decreasing damping:\t%f\t%f\t%f' % (err_start,err0,err1)
+                print 'Changing damping:\t%f\t%f\t%f' % (err_start,err0,err1)
             if do_run:
                 do_internal_run()
             recalc_J = True
@@ -923,7 +971,7 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=False,
     -----------
     s : State
         The cbamf state to optimize. 
-    region_size: Int or 3-element list-like of ints. 
+    region_size: Int or 3-element numpy.ndarray
         The size of the box for particle grouping, through 
         separate_particles_into_groups. This groups particles into 
         boxes of shape (region_size, region_size, region_size). Default
@@ -950,16 +998,29 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=False,
         Number of Levenberg-Marquardt iterations to execute. Default is 2.
     """
     
+    def calc_mem_usage(region_size):
+        rs = np.array(region_size)
+        particle_groups = separate_particles_into_groups(s, region_size=
+                rs.tolist(), **kwargs)
+        num_particles = np.max(map(np.size, particle_groups))
+        mem_per_part = 32 * np.prod(rs + 2*s.pad*np.ones(3))
+        return num_particles * mem_per_part
+    
     if calc_region_size:
-        #mem is 8 * 4*num_particles*big_tile_size
-        #big_tile_size = np.prod(ones(3)*region_size + 2*s.pad)
-        #num_particles = particles_per_pix * region_size**3
-        particles_per_pix = s.obj.rad.size/float(s.get_difference_image().size)
-        calc_mem = lambda rs: 32 * (rs+2*s.pad)**3 * rs**3 * particles_per_pix
-        region_size = int(newton(lambda x: calc_mem(x)-max_mem, 40.0))
+        if calc_mem_usage(region_size) > max_mem:
+            while calc_mem_usage(region_size) and np.any(region_size > 2):
+                region_size -= 1
+        else:
+            while calc_mem_usage(region_size) and np.all(region_size < np.array(s.image.shape)):
+                region_size += 1
+            region_size -= 1
     
     particle_groups = separate_particles_into_groups(s, region_size=region_size,
             **kwargs)
     for group in particle_groups:
         do_levmarq_particles(s, group, **kwargs)
+        #then there is a problem with the psf (i think???) being too big
+        #and particle updates not being exact, so....
+        s.reset()
+        #i.e. FIXME
     
