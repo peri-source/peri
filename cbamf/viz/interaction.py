@@ -283,3 +283,103 @@ class OrthoManipulator(object):
             self.fig.canvas.mpl_disconnect(c)
 
         self.register_events()
+
+#=============================================================================
+# A simpler version for a single 3D field viewer
+#=============================================================================
+class OrthoViewer(object):
+    def __init__(self, field, cmap='bone', vmin=None, vmax=None):
+        """ Easy interactive viewing of 3D ndarray with view selection """
+        self.cmap = cmap
+        self.vmin = vmin
+        self.vmax = vmax
+        self.field = field
+
+        sh = self.field.shape
+        q = float(sh[1]) / (sh[0]+sh[1])
+
+        self.fig = pl.figure(figsize=(14,14))
+
+        self.g = {}
+        self.g['xy'] = self.fig.add_axes((0.0, 1-q, q,     q))
+        self.g['yz'] = self.fig.add_axes((q,   1-q, (1-q), q))
+        self.g['xz'] = self.fig.add_axes((0.0, 0.0, q,     1-q))
+        self.g['in'] = self.fig.add_axes((q,   0.0, (1-q), 1-q))
+
+        self.slices = (np.array(self.field.shape)/2).astype('int')
+
+        self.draw()
+        self.register_events()
+
+    def _format_ax(self, ax):
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    def draw(self):
+        self.draw_ortho(self.field, self.g, cmap=self.cmap, vmin=self.vmin, vmax=self.vmax)
+
+    def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
+        slices = self.slices
+        if vmin is None:
+            vmin = im.min()
+        if vmax is None:
+            vmax = im.max()
+
+        g['xy'].cla()
+        g['yz'].cla()
+        g['xz'].cla()
+        g['in'].cla()
+
+        g['xy'].imshow(im[slices[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
+        g['xy'].hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
+        g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(g['xy'])
+
+        g['yz'].imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
+        g['yz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        g['yz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(g['yz'])
+
+        g['xz'].imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
+        g['xz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
+        g['xz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(g['xz'])
+        self._format_ax(g['in'])
+        pl.draw()
+
+    def register_events(self):
+        self._calls = []
+        self._calls.append(self.fig.canvas.mpl_connect('button_press_event', self.mouse_press_view))
+
+    def _pt_xyz(self, event):
+        x0 = event.xdata
+        y0 = event.ydata
+
+        f = False
+        if event.inaxes == self.g['xy']:
+            z = self.slices[0]
+            x = x0
+            y = y0
+            f = True
+        if event.inaxes == self.g['yz']:
+            z = x0
+            x = self.slices[2]
+            y = y0
+            f = True
+        if event.inaxes == self.g['xz']:
+            y = self.slices[1]
+            z = y0
+            x = x0
+            f = True
+
+        if f:
+            return np.array((z,y,x))
+        return None
+
+    def mouse_press_view(self, event):
+        self.event = event
+
+        p = self._pt_xyz(event)
+        if p is not None:
+            self.slices = p
+        self.draw()
