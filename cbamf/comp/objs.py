@@ -164,7 +164,7 @@ except Exception as e:
     sphere_analytical_gaussian_fast = sphere_analytical_gaussian_trim
 
 def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
-        function=sphere_analytical_gaussian, **kwargs):
+        function=sphere_analytical_gaussian, max_radius_change=1e-2, **kwargs):
     """
     Perform an iterative method to calculate the effective sphere that perfectly
     (up to the volume_error) conserves volume.  Return the resulting image
@@ -181,6 +181,9 @@ def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
 
         rprime = rprime + 1.0*(vol_goal - vol_curr) / (4*np.pi*rprime**2)
 
+        if np.abs(rprime - radius)/radius > max_radius_change:
+            break
+
         dr = inner(rvec, pos, rprime, zscale=zscale)
         t = function(dr, rprime, **kwargs)
 
@@ -192,13 +195,30 @@ def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
 class SphereCollectionRealSpace(object):
     def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None,
                  method='exact-gaussian-fast', alpha=None, method_function=None,
-                 exact_volume=True, volume_error=1e-5):
+                 exact_volume=True, volume_error=1e-5, max_radius_change=1e-2):
         """
         method can be one of:
             [
                 'lerp', 'logistic', 'triangle', 'constrained-cubic',
                 'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast'
             ]
+
+        Parameters:
+        -----------
+        method_function : function
+            [not implemented] placeholder for providing your own sphere
+            generation function
+
+        exact_volume : boolean
+            whether to iterate effective particle size until exact volume
+            (within volume_error) is achieved
+
+        volume_error : float
+            relative volume error tolerance in iteration steps
+
+        max_radius_change : float
+            maximum relative radius change allowed during iteration (due to
+            edge particles and other confounding factors)
         """
         self.support_size = support_size
         self.pos = pos.astype('float')
@@ -206,6 +226,7 @@ class SphereCollectionRealSpace(object):
         self.N = rad.shape[0]
         self.exact_volume = exact_volume
         self.volume_error = volume_error
+        self.max_radius_change = max_radius_change
 
         # set the aliasing method and coefficient
         # FIXME -- check if function for method and set to that instead
@@ -280,13 +301,16 @@ class SphereCollectionRealSpace(object):
             self._setup_sphere_functions('logistic', 5.0)
         if not hasattr(self, 'alpha'):
             self._setup_sphere_functions(self.method)
+        if not hasattr(self, 'max_radius_change'):
+            self.max_radius_change = 1e-2
 
         # if required, do an iteration to find the best radius to produce
         # the goal volume as given by the particular goal radius
         if self.exact_volume:
             t = sign*exact_volume_sphere(
                     rvec, pos, rad, zscale=zscale, volume_error=self.volume_error,
-                    function=self.sphere_functions[self.method], alpha=self.alpha
+                    function=self.sphere_functions[self.method], alpha=self.alpha,
+                    max_radius_change=self.max_radius_change
                 )
         else:
             # calculate the anti-aliasing according to the interpolation type
