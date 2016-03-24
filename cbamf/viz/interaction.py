@@ -288,12 +288,17 @@ class OrthoManipulator(object):
 # A simpler version for a single 3D field viewer
 #=============================================================================
 class OrthoViewer(object):
-    def __init__(self, field, cmap='bone', vmin=None, vmax=None):
+    def __init__(self, field, onesided=True, vmin=None, vmax=None, cmap='bone'):
         """ Easy interactive viewing of 3D ndarray with view selection """
-        self.cmap = cmap
         self.vmin = vmin
         self.vmax = vmax
         self.field = field
+        self.onesided = onesided
+
+        if self.onesided is None:
+            self.cmap = cmap
+        else:
+            self.cmap = 'bone' if self.onesided else 'RdBu_r'
 
         sh = self.field.shape
         q = float(sh[1]) / (sh[0]+sh[1])
@@ -324,6 +329,11 @@ class OrthoViewer(object):
             vmin = im.min()
         if vmax is None:
             vmax = im.max()
+
+        if self.cmap == 'RdBu_r':
+            val = np.max(np.abs([vmin, vmax]))
+            vmin = -val
+            vmax = val
 
         g['xy'].cla()
         g['yz'].cla()
