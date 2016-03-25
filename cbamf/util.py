@@ -11,11 +11,14 @@ from cbamf import const, initializers
 #=============================================================================
 # Tiling utilities
 #=============================================================================
+def oddify(a):
+    return a + (a%2==0)
+
 def amin(a, b):
-    return np.vstack([a, b]).min(axis=0)
+    return np.vstack([a3(a), a3(b)]).min(axis=0)
 
 def amax(a, b):
-    return np.vstack([a, b]).max(axis=0)
+    return np.vstack([a3(a), a3(b)]).max(axis=0)
 
 def a3(a):
     """ Convert an integer or iterable list to numpy 3 array """
@@ -67,12 +70,21 @@ class Tile(object):
         if maxs is not None:
             right = amin(right, a3(maxs))
 
-        l, r = left, right
-        self.l = np.array(l)
-        self.r = np.array(r)
-        self.bounds = (l, r)
-        self.shape = self.r - self.l
-        self.slicer = np.s_[l[0]:r[0], l[1]:r[1], l[2]:r[2]]
+        self.l = np.array(left)
+        self.r = np.array(right)
+
+    @property
+    def slicer(self):
+        l, r = self.bounds
+        return np.s_[l[0]:r[0], l[1]:r[1], l[2]:r[2]]
+
+    @property
+    def shape(self):
+        return self.r - self.l
+
+    @property
+    def bounds(self):
+        return (self.l, self.r)
 
     def center(self, norm=1.0):
         """ Return the center of the tile """
@@ -121,10 +133,75 @@ class Tile(object):
                 list(self.l), list(self.r), list(self.shape))
 
     def contains(self, items, pad=0):
+        """
+        Test whether coordinates are contained within this tile.
+
+        Parameters:
+        -----------
+        items : ndarray [3] or [N, 3]
+            N coordinates to check are within the bounds of the tile
+
+        pad : integer or ndarray [3]
+            anisotropic padding to apply in the contain test
+        """
         o = ((items > self.l-pad) & (items < self.r+pad))
         if len(o.shape) == 2:
             o = o.all(axis=-1)
         return o
+
+    # TODO -- implement as operators?
+    @staticmethod
+    def intersection(tiles):
+        """ Intersection of two tiles, returned as a tile """
+        if not isinstance(tiles, (list,tuple)):
+            return tiles
+
+        tile = tiles[0]
+        l, r = tile.l.copy(), tile.r.copy()
+        for tile in tiles[1:]:
+            l = amax(l, tile.l)
+            r = amin(r, tile.r)
+        return Tile(l, r)
+
+    @staticmethod
+    def boundingtile(tiles):
+        """ Convex bounding box of a group of tiles """
+        if not isinstance(tiles, (list,tuple)):
+            return tiles
+
+        tile = tiles[0]
+        l, r = tile.l.copy(), tile.r.copy()
+        for tile in tiles[1:]:
+            l = amin(l, tile.l)
+            r = amax(r, tile.r)
+        return Tile(l, r)
+
+    def copy(self):
+        return Tile(self.l.copy(), self.r.copy())
+
+    def translate(self, dr):
+        """ Translate a tile by an amount dr """
+        tile = self.copy()
+        tile.l += dr
+        tile.r += dr
+        return tile
+
+    def pad(self, pad):
+        """ Pad this tile by an equal amount on each side as specified by pad """
+        tile = self.copy()
+        tile.l -= pad
+        tile.r += pad
+        return tile
+
+    def overhang(self, tile):
+        """
+        Get the left and right absolute overflow -- the amount of box
+        overhanging `tile`, can be viewed as self \\ tile (set theory relative
+        complement, but in a bounding sense)
+        """
+        ll = np.abs(amin(self.l - tile.l, 0))
+        rr = np.abs(amax(self.r - tile.r, 0))
+        return ll, rr
 
 class RawImage():
     def __init__(self, filename, tile=None, zstart=None, zstop=None,
