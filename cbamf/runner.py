@@ -391,7 +391,7 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         def_psf.update(psfargs)
         psf = psfs.AnisotropicGaussianXYZ(**def_psf)
     if psftype == 'gauss4d':
-        def_psf.update({'params': (2.0, 1.0, 4.0)})
+        def_psf.update({'params': (1.5, 0.7, 3.0)})
         def_psf.update(psfargs)
         psf = psfs.Gaussian4DPoly(**def_psf)
 
