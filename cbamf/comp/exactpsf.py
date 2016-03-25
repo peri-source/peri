@@ -12,9 +12,6 @@ def moment(p, v, order=1):
     elif order == 2:
         return np.sqrt( ((v**2)*p).sum() - (v*p).sum()**2 )
 
-def oddify(a):
-    return a + (a%2==0)
-
 #=============================================================================
 # The actual interfaces that can be used in the cbamf system
 #=============================================================================
@@ -273,7 +270,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         size_u, drift_u = self.measure_size_drift(u)
 
         # FIXME -- must be odd for now or have a better system for getting the center
-        self.support = oddify(2*self.support_factor*size_u.astype('int'))
+        self.support = util.oddify(2*self.support_factor*size_u.astype('int'))
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
 
         if self.cutoffval is not None:
@@ -281,7 +278,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             psf, vec, size_u = self.psf_slice(u, size=51, zoffset=drift_u, getextent=True)
 
             ss = [np.abs(i).sum(axis=-1) for i in [size_l, size_u]]
-            self.support = oddify(util.amax(*ss))
+            self.support = util.oddify(util.amax(*ss))
 
     def get_params(self):
         return self.params
@@ -474,12 +471,12 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
             shape = self.tile.shape.copy()
             self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
             self._fftn = psfs.rfftn(self._fftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level)
+                    planner_effort=self.fftw_planning_level, s=shape)
 
             oshape = self.fftn(np.zeros(shape)).shape
             self._ifftn_data = psfs.pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
             self._ifftn = psfs.irfftn(self._ifftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level)
+                    planner_effort=self.fftw_planning_level, s=shape)
 
     def __getstate__(self):
         odict = self.__dict__.copy()
