@@ -1,6 +1,7 @@
+import warnings
 import numpy as np
 from numpy.lib.scimath import sqrt as csqrt
-from scipy.special import j0,j1
+from scipy.special import j0,j1, la_roots
 
 from cbamf import const, util
 from cbamf import interpolation
@@ -387,7 +388,7 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
     return hdet if normalize else hdet / hdet.sum()
 
 def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
-        sigkf=0.1, zint=100., nkpts=3, **kwargs):
+        sigkf=0.1, zint=100., nkpts=3, dist_type='gaussian', **kwargs):
     """
     Calculates the full PSF for a line-scanning confocal with a polydisperse
     emission spectrum of the dye. The dye's emission spectrum is assumed to be
@@ -402,6 +403,10 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
             Default is 0.889
         - sigkf: Float scalar; sigma of kfki -- kfki values are kfki +- sigkf.
         - zint: The position of the optical interface, in units of 1/k_incoming
+        - dist_type: The distribution type of the polychromatic light. 
+            Can be one of 'laguerre'/'gamma' or 'gaussian.' If 'gaussian'
+            the resulting k-values are taken in absolute value. Default
+            is 'gaussian.'
     Other **kwargs
         - polar_angle: Float scalar of the polarization angle of the light with
             respect to the line direction (x). From calculate_linescan_ilm_psf;
@@ -411,12 +416,31 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
     Outputs:
         - psf: 3D- numpy.array of the point-spread function. Indexing is
             psf[x,y,z].
+    Comments:
+        Neither distribution type is perfect. If sigkf/k0 is big (>0.5ish)
+        then part of the Gaussian is negative. To avoid issues an abs() is
+        taken, but then the actual mean and variance are not what is 
+        supplied. Conversely, if sigkf/k0 is small (<0.0815), then the
+        requisite associated Laguerre quadrature becomes unstable. To
+        prevent this sigkf/k0 is effectively clipped to be > 0.0815. 
     """
-
-    pts, wts = np.polynomial.hermite.hermgauss(nkpts)
-
-    kfkipts = kfki + sigkf*np.sqrt(2)*pts
-    wts /= np.sqrt(np.pi) #normalizing integral
+    if dist_type.lower() == 'gaussian':
+        pts, wts = np.polynomial.hermite.hermgauss(nkpts)
+        kfkipts = np.abs(kfki + sigkf*np.sqrt(2)*pts)
+    elif dist_type.lower() == 'laguerre' or dist_type.lower() == 'gamma':
+        k_scale = sigkf**2/kfki
+        associated_order = kfki**2/sigkf**2 - 1
+        #Associated Laguerre with alpha >~170 becomes numerically unstable, so:
+        max_order=150 
+        if associated_order > max_order or associated_order < (-1+1e-3):
+            warnings.warn('Numerically unstable sigk, clipping', RuntimeWarning)
+            associated_order = np.clip(associated_order, -1+1e-3, max_order)
+        kfkipts, wts = la_roots(nkpts, associated_order)
+        kfkipts *= k_scale
+    else:
+        raise ValueError('dist_type must be either gaussian or laguerre')
+    
+    wts /= wts.sum() #normalizing integral
 
     #~~~Things I'd rather not have in this code.
     x3,y3,z3 = np.meshgrid(x,y,z,indexing='ij')

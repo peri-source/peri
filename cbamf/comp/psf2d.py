@@ -11,6 +11,7 @@ TODO:
 import numpy as np
 from multiprocessing import cpu_count
 from cbamf.util import Tile, cdd
+from cbamf.comp import psfcalc
 
 try:
     import pyfftw
@@ -25,12 +26,6 @@ FFTW_PLAN_FAST = 'FFTW_ESTIMATE'
 FFTW_PLAN_NORMAL = 'FFTW_MEASURE'
 FFTW_PLAN_SLOW = 'FFTW_PATIENT'
 
-
-#For writing this --
-import os,sys
-sys.path.append('F:\\BAMF Featuring measurements\\Numerical Point Spread Functions_from Hell')
-# import calculate_psf_func_fastest as psf
-import calculate_psf_func_complex as psf
 
 class PSF2D(object):
     """
@@ -238,6 +233,10 @@ class PSF2D(object):
 #                          Begin subclassed 2D PSFs
 #######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
 
+###=========================================================================###
+#                       Epifluorescence 2D PSFs                               #
+###=========================================================================###
+
 class PerfectMonochromaticLens(PSF2D):
     
     """
@@ -264,8 +263,8 @@ class PerfectMonochromaticLens(PSF2D):
         
         k = params[1]
         
-        this_psf = psf.wrap_and_calc_psf( k*x, k*y, k*z,
-            psf.calculate_monochrome_brightfield_psf, alpha=params[0], 
+        this_psf = psfcalc.wrap_and_calc_psf( k*x, k*y, k*z,
+            psfcalc.calculate_monochrome_brightfield_psf, alpha=params[0], 
             zint=0., n2n1 = 1. )
         
         return xyz_to_zxy(this_psf)
@@ -298,8 +297,8 @@ class IndexMismatchedMonochromaticLens(PSF2D):
         
         k = params[1]
         
-        this_psf = psf.wrap_and_calc_psf( k*x, k*y, k*z,
-            psf.calculate_monochrome_brightfield_psf, alpha=params[0], 
+        this_psf = psfcalc.wrap_and_calc_psf( k*x, k*y, k*z,
+            psfcalc.calculate_monochrome_brightfield_psf, alpha=params[0], 
             zint=params[2], n2n1 = params[3] )
         
         return xyz_to_zxy(this_psf)        
@@ -327,8 +326,8 @@ class PerfectPolychromaticLens(PSF2D):
         y = self._ypts[self._yr:]
         z = self._zpts
         
-        this_psf = psf.wrap_and_calc_psf( x, y, z,
-            psf.calculate_polychrome_brightfield_psf, k0=params[1], 
+        this_psf = psfcalc.wrap_and_calc_psf( x, y, z,
+            psfcalc.calculate_polychrome_brightfield_psf, k0=params[1], 
             sigk=params[2], alpha=params[0], zint=0., n2n1 = 1. )
         
         return xyz_to_zxy(this_psf)
@@ -359,11 +358,69 @@ class IndexMismatchedPolychromaticLens(PSF2D):
         y = self._ypts[self._yr:]
         z = self._zpts
         
-        this_psf = psf.wrap_and_calc_psf(x, y, z,
-            psf.calculate_polychrome_brightfield_psf, k0=params[1], 
+        this_psf = psfcalc.wrap_and_calc_psf(x, y, z,
+            psfcalc.calculate_polychrome_brightfield_psf, k0=params[1], 
             sigk=params[2], alpha=params[0], zint=params[3], n2n1 = params[4])
         
         return xyz_to_zxy(this_psf)  
+
+###=========================================================================###
+#                       Epifluorescence 2D PSFs                               #
+###=========================================================================###
+
+class PolychromeDipoleInterferingLens_IndexMismatched(PSF2D):
+    """
+    params is a 8-element numpy.array of floats:
+        params[0]: Alpha, opening angle of the lens
+        params[1]: k0, the wavelength of the light used. 
+        params[2]: sigk, the Gaussian standard-deviation of the light. 
+        params[3]: dz, the defocus of the lens from the center of the image. 
+            Degenerate with changing all the particle positions, but 
+            allows for better optimization / severe defocusing. 
+        params[4]: scatter_strength; the ratio of the homodyne:heterodyne 
+            scattering
+        params[5]: working_distance: The working distance in the object 
+            space of the lens, in units of 1/k. 
+        params[6]: n2n1, the ratio of index mismatch of the optics to 
+            the suspending fluid for the particles. 
+        params[7]: zint, the distance of the lens' nominal focus from
+            the interface. 
+    Wavevectors are in units of 2pi/lambda, lambda in pixels.
+    """
+    def _calc_support_size(self, params):
+        wid = guess_psf_width(self.error, k=params[1], alpha=params[0], \
+                round=True)*2+1 #hack to make it better SS
+        return np.array([self.shape[0],wid,wid])
+    
+    def _calc_psf(self, params):
+        #Meh. I'd rather put this in the init but w/e
+        keys = ['alpha','k0','sigk','dz','scatter_strength','working_distance',
+            'n2n1','zint']
+        param_dict = {key:value for (key, value) in zip(keys, params.tolist())}
+        #
+        x1 = self._xpts
+        y1 = self._ypts
+        z1 = self._zpts
+        
+        xr = self._xpts[(self._xpts.size-1)/2:]
+        yr = self._ypts[(self._ypts.size-1)/2:]
+        func = lambda x,y,z: make_polydisperse_psf(np.sqrt(x*x+y*y), \
+                z-param_dict['dz'], func=\
+                monodisperse_2d_self_interfering_aberrated, **param_dict)
+        this_psf = psfcalc.wrap_and_calc_psf(xr, yr, z1, func)
+        
+        # x3,y3,z3 = np.meshgrid(x1, y1, z1, indexing='ij')
+        # rho3 = np.sqrt(x3*x3 + y3*y3)
+        
+        # this_psf = make_polydisperse_psf(rho3, z3-param_dict['dz'], \
+                # func=monodisperse_2d_self_interfering_aberrated, **param_dict)
+        
+        #And I want to make a param_dict, just because:
+        try:
+            self.param_dict.update(param_dict)
+        except AttributeError:
+            self.param_dict = param_dict
+        return xyz_to_zxy(this_psf)        
 
 #debugging PSFS:
 
@@ -445,9 +502,78 @@ def guess_aberration_shift(alpha, zint, n2n1):
     
     return slope * zint
     
+#Should go in psfcalc:
+def monodisperse_2d_self_interfering_aberrated(rho, z, scatter_strength=0.1, \
+        **kwargs):
+    """
+    Given rho, z, returns the image of a dipole scatterer as imaged 
+    through a finite-aperture lens with spherical aberrations due to an 
+    index mismatch between the lens and fluid, using monochromatic light.
+    Includes both the heterodyne and homodyne contributions. 
+    Inputs: 
+        - rho: N-element numpy.array of the rho values at which to 
+            evaluate the psf. Arbitrary shape. Units of 1/k. 
+        - z: numpy.array of the same shape as rho; the z values at 
+            which to evaluate the psf. Units of 1/k. 
+        - alpha: Float scalar The opening angle of the lens aperture. 
+        - working_distance: Float scalar. The working distance of the 
+            lens in the object space, in units of 1/k. 
+        - scatter_strength: Float scalar; the ratio of the strength of 
+            the scattered light to the incident light, i.e. the ratio of
+            the output heterodyne to the output homodyne. Physically 
+            should be something like (ka)^3*(er-1)/(er+2) /2, where a 
+            is the size of the scatterer and er the ratio of the 
+            scatterer:medium's permitivities.
+        - n2n1: Float scalar, the ratio of the index of the suspending fluid
+            to the optics index. 
+        - zint: Float scalar. The distance 
+    Outputs:
+        psf: numpy.array of the same shape as rho, of the image of a 
+            dipole scatterer at varying z's in the image space. Same 
+            shape as rho,z. 
+    """
+    
+    if rho.shape != z.shape:
+        raise ValueError('rho.shape != z.shape')
+    
+    incident_field = calc_incident_field(**kwargs)
+    
+    I1a = psfcalc.get_K(rho, z, K=1, get_hdet=True, **kwargs)
+    I2a = psfcalc.get_K(rho, z, K=2, get_hdet=True, **kwargs)
+    
+    hetero = 2*np.real(1j * np.exp(1j*z) * I1a * incident_field)
+    homo = np.real(I1a*I1a.conj() + I2a*I2a.conj())
+
+    return hetero + scatter_strength*homo
+
+def make_polydisperse_psf(rho, z, k0=1.0, sigk=0.3, num_hg=10, \
+        func=monodisperse_2d_self_interfering_aberrated, **kwargs):
+    """
+    Given a monodisperse PSF calculates a polydisperse PSF. 
+    TODO: 
+    Give this a way to do non-gaussian distributions of k
+    """
+    
+    if rho.shape != z.shape:
+        raise ValueError('rho.shape != z.shape')
+        
+    pts, wts = np.polynomial.hermite.hermgauss(num_hg)
+    wts /= np.sqrt(np.pi)
+    kpts = pts*np.sqrt(2)*sigk + k0
+    
+    ans=0*rho
+    for k,w in zip(kpts, wts):
+        ans += w*func(rho*k, z*k, **kwargs)
+        
+    return ans    
+def calc_incident_field(alpha=1.173, n2n1=1.0, working_distance=2.5e3, **kwargs):
+    ca = np.cos(alpha)
+    t_normal_inc = 2.0 / (1+n2n1)
+    incident_field = t_normal_inc * (1 - ca*np.exp(1j*working_distance*(1-ca)))
+    return incident_field
     
 from scipy.optimize import minimize_scalar
-def calc_aberration_shift(alpha, zint, n2n1, func=psf.calculate_monochrome_brightfield_psf,\
+def calc_aberration_shift(alpha, zint, n2n1, func=psfcalc.calculate_monochrome_brightfield_psf,\
         **kwargs):
     """
     Calculates the exact shift of the PSF by looking for max(psf(x=0,y=0,z))
