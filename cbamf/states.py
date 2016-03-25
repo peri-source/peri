@@ -585,43 +585,37 @@ class ConfocalImagePython(State):
         self._update_global()
 
     def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
-        pref = 1 if self.difference else 2
-        extr = 1 if self.difference else 0
+        # FIXME -- self.difference is ignored in this function
 
+        # FIXME -- this should really be called get_update_tile ??
+        # so that psf really is support size since it does not have translation
         sl, sr = self.obj.get_support_size(p0, r0, t0, p1, r1, t1, self.zscale)
 
         tl = self.psf.get_support_size(sl)
         tr = self.psf.get_support_size(sr)
-        t_xy = np.max([tl, tr], axis=0)[1:]
-        tl[1:] = t_xy
-        tr[1:] = t_xy
 
-        pl = sl - pref*tl - extr
-        pr = sr + pref*tr + extr
-        pl = np.floor(pl).astype('int')
-        pr = np.ceil (pr).astype('int')
+        # FIXME -- more ceil functions?
+        # get the object's tile and the psf tile size
+        otile = Tile(sl, sr, 0, self.image.shape)
+        ptile = Tile.boundingtile([Tile(np.ceil(i)) for i in [tl, tr]])
 
-        pl += pl % 2
-        pr += pr % 2
-        outer = Tile(pl, pr, 0, self.image.shape)
+        # now remove the part of the tile that is outside the image and
+        # pad the interior part with that overhang
+        img = Tile(self.image.shape)
 
-        if self.difference:
-            inner = Tile(pl+extr, pr-extr, extr, np.array(self.image.shape)-extr)
-            ioslice = tuple([np.s_[extr:-extr] for i in xrange(3)])
-        else:
-            ipl = np.ceil(self.psf.get_support_size(sl)).astype('int')
-            ipr = np.ceil(self.psf.get_support_size(sr)).astype('int')
+        # reflect the necessary padding back into the image itself for
+        # the outer slice which we will call outer
+        outer = otile.pad(ptile.shape/2+1)
+        inner, outer = outer.reflect_overhang(img)
+        iotile = inner.translate(-outer.l)
 
-            inner = Tile(pl+ipl, pr-ipr, ipl, np.array(self.image.shape)-ipr)
-            ioslice = tuple([np.s_[ipsc[i]:-ipsc[i]] for i in xrange(3)])
-
-        return outer, inner, ioslice
+        return outer, inner, iotile.slicer
 
     def _tile_global(self):
         outer = Tile(0, self.image.shape)
-        inner = Tile(1, np.array(self.image.shape)-1)
-        ioslice = (np.s_[1:-1],)*3
-        return outer, inner, ioslice
+        inner = Tile(0, self.image.shape)
+        iotile = inner.translate(outer.l)
+        return outer, inner, iotile.slicer
 
     def _update_ll_field(self, data=None, slicer=np.s_[:]):
         if data is None:
