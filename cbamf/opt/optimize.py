@@ -733,7 +733,7 @@ def update_particles(s, particles, params, **kwargs):
     all_right= []
     
     def clean_up_tile(ar, left=True):
-        mask = map( lambda x: x == None, ar)
+        mask = np.array(map( lambda x: x == None, ar))
         if left:
             ar[mask] = 0
         else:
@@ -751,6 +751,7 @@ def update_particles(s, particles, params, **kwargs):
         all_left.append( clean_up_tile(a_left, left=True))
         all_right.append(clean_up_tile(a_right,left=False))
         
+    ####FIXME -- needs to be updated for new Tile with reflect-overlap
     #Constructing the tiles to update the field, making sure it's even...:
     if True: #FIXME -- not sure if the tile needs to be even
         left = np.min(all_left, axis=0) - 1
@@ -767,6 +768,7 @@ def update_particles(s, particles, params, **kwargs):
     # to get the correct inner, ioslice, which is sloppy so FIXME
     inner_tile = Tile(left+1, right=right-1)
     ioslice = tuple( [np.s_[1:-1] for i in xrange(3)])
+    ####
     
     s._update_tile(outer_tile, inner_tile, ioslice, difference=s.difference)
     return outer_tile, inner_tile, ioslice
@@ -868,14 +870,16 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
         
         update_particles(s, particles, d0, relative=True, fix_errors=True)
         err0 = get_err(s)
-        update_particles(s, particles, d1-d0, relative=True, fix_errors=True)
+        d1md0 = d1-d0 #we need update_particles to modify this in place
+        # update_particles(s, particles, d1-d0, relative=True, fix_errors=True)
+        update_particles(s, particles, d1md0, relative=True, fix_errors=True)
         err1 = get_err(s)
         
         #4. Pick the best value, continue
         if np.min([err0, err1]) > err_start: #Bad step...
             print 'Bad step!\t%f\t%f\t%f' % (err_start, err0, err1)
-            update_particles(s, particles, -d1, relative=True)
-            #debugging....
+            # update_particles(s, particles, -d1, relative=True)
+            update_particles(s, particles, -d1md0-d0, relative=True)
             if get_err(s) > (err_start + 1e-3):#0.1):
                 # raise RuntimeError('Problem with putting back d1')
                 warnings.warn('Problem with putting back d1; resetting', RuntimeWarning)
@@ -893,7 +897,7 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
         
         else: #at least 1 good step:
             if err0 < err1: #good step and damp, re-update:
-                update_particles(s, particles, d0-d1, relative=True)
+                update_particles(s, particles, d1md0, relative=True)
                 print 'Good step:\t%f\t%f\t%f' % (err_start, err0, err1)
             else: #err1 < err0 < err_start, good step but decrease damp:
                 damp *= ddamp
