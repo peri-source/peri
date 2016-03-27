@@ -14,6 +14,13 @@ from cbamf import const, initializers
 def oddify(a):
     return a + (a%2==0)
 
+def listify(a):
+    if a is None:
+        return []
+    elif not isinstance(a, (tuple, list)):
+        return [a]
+    return list(a)
+
 def amin(a, b):
     return np.vstack([a3(a), a3(b)]).min(axis=0)
 
@@ -151,10 +158,12 @@ class Tile(object):
 
     # TODO -- implement as operators?
     @staticmethod
-    def intersection(tiles):
-        """ Intersection of two tiles, returned as a tile """
-        if not isinstance(tiles, (list,tuple)):
-            return tiles
+    def intersection(tiles, *args):
+        """ Intersection of tiles, returned as a tile """
+        tiles = listify(tiles) + listify(args)
+
+        if len(tiles) < 2:
+            return tiles[0]
 
         tile = tiles[0]
         l, r = tile.l.copy(), tile.r.copy()
@@ -164,10 +173,12 @@ class Tile(object):
         return Tile(l, r)
 
     @staticmethod
-    def boundingtile(tiles):
+    def boundingtile(tiles, *args):
         """ Convex bounding box of a group of tiles """
-        if not isinstance(tiles, (list,tuple)):
-            return tiles
+        tiles = listify(tiles) + listify(args)
+
+        if len(tiles) < 2:
+            return tiles[0]
 
         tile = tiles[0]
         l, r = tile.l.copy(), tile.r.copy()
@@ -175,6 +186,12 @@ class Tile(object):
             l = amin(l, tile.l)
             r = amax(r, tile.r)
         return Tile(l, r)
+
+    def __and__(self, other):
+        return Tile.intersection(self, other)
+
+    def __or__(self, other):
+        return Tile.boundingtile(self, other)
 
     def copy(self):
         return Tile(self.l.copy(), self.r.copy())
