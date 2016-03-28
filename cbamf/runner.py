@@ -9,7 +9,7 @@ from cbamf import const
 from cbamf import states, initializers
 from cbamf.util import RawImage
 from cbamf.mc import samplers, engines, observers
-from cbamf.comp import objs, psfs, ilms
+from cbamf.comp import objs, psfs, ilms, exactpsf
 
 # Linear fit function, because I can
 def linear_fit(x, y, sigma=1, N=100, burn=1000):
@@ -320,10 +320,12 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         whether to refer to `image` just for shape. really use the model
         image as the true raw image
 
-    psftype : ['gauss2d', 'gauss3d', 'gauss4d', 'gaussian_pca']
+    psftype : ['gauss2d', 'gauss3d', 'gauss4d', 'gaussian_pca', 'linescan',
+               'cheb-linescan']
         which type of psf to use in the state
 
-    ilmtype : ['poly3d', 'leg3d', 'cheb2p1d', 'poly2p1d', 'leg2p1d']
+    ilmtype : ['poly3d', 'leg3d', 'cheb2p1d', 'poly2p1d', 'leg2p1d',
+               'barnesleg2p1d', 'barnesleg2p1dx']
         which type of illumination field
 
     psfargs : arguments to the psf object
@@ -380,6 +382,12 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
     if ilmtype == 'leg2p1d':
         def_ilm.update(ilmargs)
         ilm = ilms.LegendrePoly2P1D(**def_ilm)
+    if ilmtype == 'barnesleg2p1d':
+        def_ilm.update(ilmargs)
+        ilm = ilms.BarnesStreakLegPoly2P1D(**def_ilm)
+    if ilmtype == 'barnesleg2p1dx':
+        def_ilm.update(ilmargs)
+        ilm = ilms.BarnesStreakLegPoly2P1DX3(**def_ilm)
 
     # setup the psf based on the choice and arguments
     if psftype == 'gauss2d':
@@ -394,6 +402,22 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         def_psf.update({'params': (1.5, 0.7, 3.0)})
         def_psf.update(psfargs)
         psf = psfs.Gaussian4DPoly(**def_psf)
+    if psftype == 'linescan':
+        def_psf.update({
+            'zrange': (0, image.shape[0]),
+            'cutoffval': 1./255,
+            'measurement_iterations': 3,
+        })
+        def_psf.update(psfargs)
+        psf = exactpsf.ExactLineScanConfocalPSF(**def_psf)
+    if psftype == 'cheb-linescan':
+        def_psf.update({
+            'zrange': (0, image.shape[0]),
+            'cutoffval': 1./255,
+            'measurement_iterations': 3,
+        })
+        def_psf.update(psfargs)
+        psf = exactpsf.ChebyshevLineScanConfocalPSF(**def_psf)
 
     if slab is not None:
         slab = objs.Slab(zpos=slab+pad, shape=image.shape)
