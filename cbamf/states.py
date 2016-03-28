@@ -787,7 +787,6 @@ class ConfocalImagePython(State):
             bl = s.explode(blocks)
 
         for b, d in zip(blocks, data):
-            print b.sum(), d
             self.update(b, d, update_model=False)
         self._update_global()
 
