@@ -172,6 +172,8 @@ def update_state_global(s, block, data, keep_time=False, **kwargs):
     if (bp & block).sum() > 0:
         new_psf_params = new_state[bp].copy()
         s.psf.update(new_psf_params)
+        #And for some reason I need to do this:
+        # s.psf._setup_ffts()
         
     #ilm:
     bi = s.create_block('ilm')
@@ -185,18 +187,21 @@ def update_state_global(s, block, data, keep_time=False, **kwargs):
         new_bkg_params = new_state[bb].copy()
         s.bkg.update(s.bkg.block, new_bkg_params)
     
+    #slab:
+    bs = s.create_block('slab')
+    if (bs & block).sum() > 0:
+        new_slab_params = new_state[bs].copy()
+        s.slab.update(new_slab_params)
+    
+    #and I think the psf support size, ffts aren't updated after updating psf
+    #which is why....
+    
     #off:
     bo = s.create_block('off')
     if (bo & block).sum() > 0:
         new_off = new_state[bo].copy()
         s.update(bo, new_off)
     
-    #slab:
-    bs = s.create_block('slab')
-    if (bs & block).sum() > 0:
-        new_slab_params = new_state[bs].copy()
-        s.slab.update(new_slab_params)
-        
     #rscale:
     brscl = s.create_block('rscale')
     if (brscl & block).sum() > 0:
@@ -219,7 +224,7 @@ def get_err(s):
     d = s.get_difference_image()
     return np.sum(d*d)
 
-def get_num_px_jtj(s, nparams, decimate=400, max_mem=2e9, min_redundant=20, **kwargs):
+def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwargs):
     #1. Max for a given max_mem:
     px_mem = int( max_mem /8/ nparams) #1 float = 8 bytes
     #2. # for a given
@@ -262,7 +267,8 @@ def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
         The desired amount to decimate the pixels by for a random image (e.g.
         decimate of 10 takes  1/10 of the pixels). However, the actual amount
         of pixels is determined by max_mem and min_redundant as well. If < 1, 
-        the attempts to use all the pixels in the image. Default is 400. 
+        the attempts to use all the pixels in the image. Default is 1, i.e.
+        uses the max amount of memory allowed. 
     max_mem: Float scalar. 
         The maximum memory (in bytes) that J should occupy. Default is 2GB. 
     min_redundant: Float scalar. 
@@ -355,7 +361,7 @@ def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
             update_state_global(s, block, p0)
             recalc_J = False
             #Avoiding infinite loops by adding a small amount to counter:
-            counter += 0.1 
+            counter += 0.4 
             if err0 < err1: 
                 #d_damp is the wrong "sign", so we invert:
                 print 'Inverting ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
@@ -398,7 +404,8 @@ def do_conj_grad_jtj(s, block, min_eigval=1e-12, num_sweeps=2, **kwargs):
         The desired amount to decimate the pixels by for a random image (e.g.
         decimate of 10 takes  1/10 of the pixels). However, the actual amount
         of pixels is determined by max_mem and min_redundant as well. If < 1, 
-        the attempts to use all the pixels in the image. Default is 400. 
+        the attempts to use all the pixels in the image. Default is 1, i.e.
+        uses the max amount of memory allowed. 
     max_mem: Float scalar. 
         The maximum memory (in bytes) that J should occupy. Default is 2GB. 
     min_redundant: Float scalar. 
@@ -546,6 +553,9 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
         update. Returns what s._tile_from_particle_change returns 
         (outer, inner, slice)
     """
+    #the closest a particle can get to an edge, > any reasonable dl 
+    MIN_DIST=3e-3
+    
     if type(particle) != np.ndarray:
         particle = np.array([particle])
     
@@ -562,13 +572,13 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
         #so that they are the best possible updates. 
         if relative:
             if is_bad_update(p0+pos, r0+rad):
-                pos = np.clip(pos, 1e-6-p0, np.array(s.image.shape)-1e-6-p0)
-                rad = np.clip(rad, 1e-6-r0, np.inf)
-            pass
+                pos[:] = np.clip(pos, MIN_DIST-p0, np.array(s.image.shape)-
+                        MIN_DIST-p0)
+                rad[:] = np.clip(rad, MIN_DIST-r0, np.inf)
         else:
             if is_bad_update(pos, rad):
-                pos = np.clip(pos, 1e-6, np.array(s.image.shape)-1e-6)
-                rad = np.clip(rad, 1e-6, np.inf)
+                pos[:] = np.clip(pos, MIN_DIST, np.array(s.image.shape)-MIN_DIST)
+                rad[:] = np.clip(rad, MIN_DIST, np.inf)
     
     if typ is None:
         t1 = t0.copy()
@@ -586,7 +596,7 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
         raise ValueError('Particle outside image / negative radius!')
     
     tiles = s._tile_from_particle_change(p0, r0, t0, p1, r1, t1) #312 us
-    s.obj.update(particle, p1, r1, t1, s.zscale, difference=s.difference) #4.93 ms
+    s.obj.update(particle, p1.reshape(-1,3), r1, t1, s.zscale, difference=s.difference) #4.93 ms
     if do_update_tile:
         s._update_tile(*tiles, difference=s.difference) #66.5 ms
     s._build_state()
@@ -733,52 +743,55 @@ def get_tile_from_multiple_particle_change(s, inds):
 def update_particles(s, particles, params, **kwargs):
     #eval_particle_grad returns parameters in order(p0,r0,p1,r1,p2,r2...)
     #so that determines the order for updating particles:
-    all_left = []
-    all_right= []
+    all_part_tiles = []
     
-    def clean_up_tile(ar, left=True):
-        mask = np.array(map( lambda x: x == None, ar))
-        if left:
-            ar[mask] = 0
-        else:
-            ar[mask] = np.array(s.image.shape)[mask]
-        return ar
+    #FIXME 
+    #You have a function get_tile_from_particle change. You should update
+    #it to use the new tile version below, and call it here. 
+    #Right now it's being used to get the LM comparison region for do_levmarq_particles
+    #but you could also use it in update_particles and in 
+    #do_levmarq_all_particle_groups.calc_mem_usage
+    #Plus, it would be nice to give it to Matt
     
     #We update the object but only update the field at the end
     for a in xrange(particles.size):
-        pos = params[4*a:4*a+3]
-        rad = params[4*a+3:4*a+4]
-        updated_tiles = update_one_particle(s, particles[a], pos, rad, 
-                do_update_tile=False, **kwargs)
-        a_left = updated_tiles[0].l.copy()
-        a_right= updated_tiles[0].r.copy()
-        all_left.append( clean_up_tile(a_left, left=True))
-        all_right.append(clean_up_tile(a_right,left=False))
+        # pos = params[4*a:4*a+3]
+        # rad = params[4*a+3:4*a+4]
         
-    ####FIXME -- needs to be updated for new Tile with reflect-overlap
-    #Constructing the tiles to update the field, making sure it's even...:
-    if True: #FIXME -- not sure if the tile needs to be even
-        left = np.min(all_left, axis=0) - 1
-        left += left % 2
-        right = np.max(all_right,axis=0) + 1
-        right += right % 2
-        left = np.clip(left, 0, s.image.shape)
-        right= np.clip(right,0, s.image.shape)
-    else:
-        left = np.min(all_left, axis=0)
-        right = np.max(all_right,axis=0)
-    outer_tile = Tile(left, right=right)
-    #Then I'm basically copying code from s._tile_from_particle_change
-    # to get the correct inner, ioslice, which is sloppy so FIXME
-    inner_tile = Tile(left+1, right=right-1)
-    ioslice = tuple( [np.s_[1:-1] for i in xrange(3)])
-    ####
+        #To play nice with relative, we get p0, r0 first, then p1, r1
+        p0 = s.obj.pos[particles[a]].copy()
+        r0 = np.array([s.obj.rad[particles[a]]])
+        t0 = np.array([s.obj.typ[particles[a]]])
+
+        toss = update_one_particle(s, particles[a], params[4*a:4*a+3], 
+                params[4*a+3:4*a+4], do_update_tile=False, **kwargs)
+        
+        p1 = s.obj.pos[particles[a]].copy()
+        r1 = np.array([s.obj.rad[particles[a]]])
+        t1 = np.array([s.obj.typ[particles[a]]])
+        #We reconstruct the tiles separately to deal with edge-particle
+        #overhang pads:
+        left, right = s.obj.get_support_size(p0, r0, t0, p1, r1, t1, s.zscale)
+        all_part_tiles.append(Tile(left, right, mins=0, maxs=s.image.shape))
+        
+    particle_tile = all_part_tiles[0].boundingtile(all_part_tiles)
     
+    #From here down is basically copied from states._tile_from_particle_change
+    psf_pad_l = s.psf.get_support_size(particle_tile.l[0])
+    psf_pad_r = s.psf.get_support_size(particle_tile.r[0])
+    psftile = Tile.boundingtile([Tile(np.ceil(i)) for i in [psf_pad_l, psf_pad_r]])
+    img = Tile(s.image.shape)
+    outer_tile = particle_tile.pad(psftile.shape/2+1)
+    inner_tile, outer_tile = outer_tile.reflect_overhang(img)
+    iotile = inner_tile.translate(-outer_tile.l)
+    ioslice = iotile.slicer
+    #end copy
+
     s._update_tile(outer_tile, inner_tile, ioslice, difference=s.difference)
     return outer_tile, inner_tile, ioslice
     
 def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
-        do_run=True, run_length=5, **kwargs):
+        do_run=True, run_length=5, quiet=False, **kwargs):
     """
     Runs an exact (i.e. not stochastic number of pixels) Levenberg-Marquardt 
     minimization on a set of particles in a cbamf state. Doesn't return 
@@ -804,6 +817,9 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
     run_length: Int. 
         Maximum number of attempted iterations with a fixed JTJ. Only 
         matters if do_run=True. Default is 5. 
+    quiet: Bool
+        Set to True to avoid printing out messages on how the fit is going. 
+        Default is False, no messages. 
     min_eigval: Float scalar, <<1. 
         The minimum eigenvalue to use in inverting the JTJ matrix, to 
         avoid degeneracies in the parameter space (i.e. 'rcond' in 
@@ -840,7 +856,8 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
         """
         Uses the local vars s, damp, run_length, dif_tile, J, JTJ
         """
-        print 'Running....'
+        if not quiet:
+            print 'Running....'
         for rn in xrange(run_length):
             new_grad = np.dot(J, get_slicered_difference(s, dif_tile.slicer, 
                 s.image_mask[dif_tile.slicer].astype('bool')))
@@ -850,7 +867,8 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
             update_particles(s, particles, dnew, relative=True, \
                     fix_errors=True)
             new_err = get_err(s)
-            print '%f\t%f' % (old_err, new_err)
+            if not quiet:
+                print '%f\t%f' % (old_err, new_err)
             if new_err > old_err:
                 #done running, put back old params
                 update_particles(s, particles, -dnew, relative=True, \
@@ -875,7 +893,6 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
         #3. get LM updates: -- here down is practically copied; could be moved into an engine
         d0 = find_LM_updates(JTJ, grad, damp=damp)
         d1 = find_LM_updates(JTJ, grad, damp=damp*ddamp)
-        
         update_particles(s, particles, d0, relative=True, fix_errors=True)
         err0 = get_err(s)
         d1md0 = d1-d0 #we need update_particles to modify this in place
@@ -885,19 +902,23 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
         
         #4. Pick the best value, continue
         if np.min([err0, err1]) > err_start: #Bad step...
-            print 'Bad step!\t%f\t%f\t%f' % (err_start, err0, err1)
+            if not quiet:
+                print 'Bad step!\t%f\t%f\t%f' % (err_start, err0, err1)
             # update_particles(s, particles, -d1, relative=True)
             update_particles(s, particles, -d1md0-d0, relative=True)
             if get_err(s) > (err_start + 1e-3):#0.1):
-                # raise RuntimeError('Problem with putting back d1')
+                err_bad = get_err(s)
                 warnings.warn('Problem with putting back d1; resetting', RuntimeWarning)
                 s.reset()
+                # err_rst = get_err(s)
+                # raise RuntimeError('Problem with putting back d1')
             recalc_J = False
             #Avoiding infinite loops by adding a small amount to counter:
             counter += 0.1 
             if err0 < err1: 
                 #d_damp is the wrong "sign", so we invert:
-                print 'Inverting ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
+                if not quiet:
+                    print 'Inverting ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
                 ddamp = 1.0/ddamp
             else: 
                 #ddamp is the correct sign but damp is too big:
@@ -905,11 +926,13 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
         
         else: #at least 1 good step:
             if err0 < err1: #good step and damp, re-update:
-                update_particles(s, particles, d1md0, relative=True)
-                print 'Good step:\t%f\t%f\t%f' % (err_start, err0, err1)
+                update_particles(s, particles, -d1md0, relative=True)
+                if not quiet:
+                    print 'Good step:\t%f\t%f\t%f' % (err_start, err0, err1)
             else: #err1 < err0 < err_start, good step but decrease damp:
                 damp *= ddamp
-                print 'Changing damping:\t%f\t%f\t%f' % (err_start,err0,err1)
+                if not quiet:
+                    print 'Changing damping:\t%f\t%f\t%f' % (err_start,err0,err1)
             if do_run:
                 do_internal_run()
             recalc_J = True
@@ -1040,11 +1063,18 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=False,
     
     particle_groups = separate_particles_into_groups(s, region_size=region_size,
             **kwargs)
-    for group in particle_groups:
+    for group in particle_groups: 
         do_levmarq_particles(s, group, **kwargs)
         #then there is a problem with the psf (i think???) being too big
         #and particle updates not being exact, so....
+        #Instead we'll debug with this:
+        old_err = get_err(s)
         s.reset()
+        new_err = get_err(s)
+        if np.abs(old_err-new_err) > 1e-7*old_err:
+            print('updates still arent exact...')
+            print old_err, new_err, np.abs(old_err-new_err)/old_err
+            # raise RuntimeError('updates still arent exact...')
         #i.e. FIXME
     
 #=============================================================================#
@@ -1082,7 +1112,8 @@ def do_linear_fit(s, block, min_eigval=1e-11, relative=False, num_iter=5, **kwar
         The desired amount to decimate the pixels by for a random image (e.g.
         decimate of 10 takes  1/10 of the pixels). However, the actual amount
         of pixels is determined by max_mem and min_redundant as well. If < 1, 
-        the attempts to use all the pixels in the image. Default is 400. 
+        the attempts to use all the pixels in the image. Default is 1, i.e.
+        uses the max amount of memory allowed.  
     max_mem: Float scalar. 
         The maximum memory (in bytes) that the fit matrix should occupy. 
         Default is 2GB. 
@@ -1103,6 +1134,12 @@ def do_linear_fit(s, block, min_eigval=1e-11, relative=False, num_iter=5, **kwar
         the particles in the state. 
     do_conj_grad_jtj: Conjugate gradient minimization with a random-block
         approximation to J. 
+        
+    Comments
+    --------
+    This is sort of pointless, since it's (almost) the exact same as 
+    do_levmarq with damp=0. There are a few differences in how its 
+    implemented though...
     """
     #1. Getting the raveled indices for comparison:
     tot_pix = s.image[s.inner].size
