@@ -1,4 +1,4 @@
-from cbamf.util import Tile
+from cbamf import util
 
 import numpy as np
 import scipy as sp
@@ -19,7 +19,7 @@ def initialize_particles(N=None, tile=None, phi=None, radius=5., polydispersity=
     elif N and phi:
         vbox = N * vparticle / phi
         side = vbox**(1./3)
-        tile = Tile(side)
+        tile = util.Tile(side)
 
     pos = np.random.rand(N, 3)*tile.shape + tile.l
     rad = np.abs(np.random.normal(
@@ -162,3 +162,16 @@ class BrownianHardSphereSimulation(object):
                 f[i] += forces.sum(axis=0)
     
         return f
+
+    def neighbors(self, cutoff, indices=None):
+        """ Returns neighbors within a cutoff for certain particles """
+        indices = indices if indices is not None else np.arange(self.N)
+        indices = util.listify(indices)
+        neighs = []
+
+        for i in indices:
+            rij = self.pos[i] - self.pos
+            dist = np.sqrt((rij**2).sum(axis=-1))
+            neighs.append(np.arange(self.N)[dist <= cutoff])
+
+        return neighs
