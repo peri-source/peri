@@ -28,7 +28,7 @@ def initialize_particles(N=None, tile=None, phi=None, radius=5., polydispersity=
     return pos, rad, tile
 
 class BrownianHardSphereSimulation(object):
-    def __init__(self, pos, rad, tile, beta=1, epsilon=120, T=1, dt=1e-2):
+    def __init__(self, pos, rad, tile, D=0.2, epsilon=10.0, dt=1e-1):
         """
         Creates a hard sphere brownian dynamics simulation in ND as specified
         by the pos, rad and tile supplied to initializer.
@@ -44,14 +44,12 @@ class BrownianHardSphereSimulation(object):
         tile : `cbamf.util.Tile`
             The simulation box defined by a tile with left and right bounds.
 
-        beta : float
-            damping parameter f = -\beta v
+        D : float
+            diffusion constant in proper units
 
         epsilon : float
-            force constant for the soft-sphere potential f = \epsilon (1-d/d_0)^{3/2}
-
-        T : float
-            temperature of the active participants
+            Force constant for the soft-sphere potential f = \epsilon (1-d/d_0)^{3/2}.
+            This parameter is really a ratio of epsilon / eta (the damping parameter)
 
         dt : float
             timestep for the integrator
@@ -62,23 +60,15 @@ class BrownianHardSphereSimulation(object):
 
         self.N = self.pos.shape[0]
         self.dim = self.pos.shape[1]
-
         self.forces = 0*self.pos
-        self.vel = 0*self.pos
 
-        self.beta = beta
-        self.epsilon = epsilon
-        self.T = T
+        self.D = D
         self.dt = dt
+        self.epsilon = epsilon
 
-    def force_damp(self):
-        """ Calculate the damping force -beta v """
-        vlen = np.sqrt((self.vel**2).sum(axis=-1))[:,None]
-        return - self.beta * vlen * self.vel / (vlen + 1e-6)
-    
     def force_noise(self):
         """ Calculate the effective force of the Langevin dynamics """
-        coeff = np.sqrt(2*self.T*self.beta/self.dt)
+        coeff = np.sqrt(2*self.D)
         return coeff * np.random.randn(*self.pos.shape)
     
     def boundary_condition(self):
@@ -86,11 +76,9 @@ class BrownianHardSphereSimulation(object):
         for i in xrange(self.dim):
             mask = (self.pos[:,i] < self.tile.l[i])
             self.pos[mask,i] = 2*self.tile.l[i]-self.pos[mask,i]
-            self.vel[mask,i] *= -1
     
             mask = (self.pos[:,i] > self.tile.r[i])
             self.pos[mask,i] = 2*self.tile.r[i]-self.pos[mask,i]
-            self.vel[mask,i] *= -1
     
     def integrate(self, forces):
         """
@@ -105,8 +93,7 @@ class BrownianHardSphereSimulation(object):
         forces : ndarray[N,2]
             the forces on each particle
         """
-        self.vel += forces*self.dt
-        self.pos += self.vel*self.dt
+        self.pos += forces*self.dt
     
     def step(self, steps=100, mask=None):
         """
@@ -125,7 +112,7 @@ class BrownianHardSphereSimulation(object):
             mask = np.ones_like(self.rad).astype('bool')
 
         for step in xrange(steps):
-            self.forces = self.force_hardsphere(mask) + self.force_damp() + self.force_noise()
+            self.forces = self.force_hardsphere(mask) + self.force_noise()
             self.forces[~mask, :] = 0.
             self.integrate(self.forces)
             self.boundary_condition()
@@ -133,7 +120,7 @@ class BrownianHardSphereSimulation(object):
     def relax(self, steps=1000):
         """ Relax the current configuration using just pair wise forces (no noise) """
         for step in xrange(steps):
-            self.forces = self.force_hardsphere() + self.force_damp()
+            self.forces = self.force_hardsphere()
             self.integrate(self.forces)
             self.boundary_condition()
 
@@ -145,6 +132,9 @@ class BrownianHardSphereSimulation(object):
             V(r_{ij}) = \epsilon (1 - r_{ij} / 2a)^{5/2}
         """
         N, pos, rad = self.N, self.pos, self.rad
+
+        if mask is None:
+            mask = np.ones_like(self.rad).astype('bool')
     
         f = np.zeros_like(pos)
         for i in np.arange(N)[mask]:
@@ -152,7 +142,7 @@ class BrownianHardSphereSimulation(object):
             dist = np.sqrt((rij**2).sum(axis=-1))
 
             dia = rad + rad[i]
-            mask = (dist > 0)&(dist < dia)
+            mask = (dist > 1e-5)&(dist < dia)
             dia = dia[mask]
             rij = rij[mask]
             dist = dist[mask][:,None]
