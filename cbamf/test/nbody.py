@@ -108,7 +108,7 @@ class BrownianHardSphereSimulation(object):
         self.vel += forces*self.dt
         self.pos += self.vel*self.dt
     
-    def step(self, steps=100):
+    def step(self, steps=100, mask=None):
         """
         Perform a set of integration / BC steps and update plot
 
@@ -116,9 +116,17 @@ class BrownianHardSphereSimulation(object):
         -----------
         steps : int
             number of time steps of size self.dt to perform
+
+        mask : boolean ndarray[N]
+            if provided, only simulate the motion of certain particles given
+            by the boolean array mask
         """
+        if mask is None:
+            mask = np.ones_like(self.rad).astype('bool')
+
         for step in xrange(steps):
             self.forces = self.force_hardsphere() + self.force_damp() + self.force_noise()
+            self.forces[~mask, :] = 0.
             self.integrate(self.forces)
             self.boundary_condition()
 
