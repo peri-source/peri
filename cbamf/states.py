@@ -770,15 +770,28 @@ class ConfocalImagePython(State):
         particles = np.arange(self.obj.N)[pmask | rmask | tmask]
         return particles
 
-    def update_many(self, block, data):
+    def update_many(self, blocks, data):
         """
-        Update many blocks at once.  Unlike `update` this function does not
-        perform incremental update but rather calculates which objects are
-        affected, updates the parameters, and asks them to reinitialize
-        """
-        pass
+        Update many blocks at once by updating locally each parameter then at
+        the very end ask for the convolution of the components.
 
-    def update(self, block, data):
+        Parameters
+        ----------
+        blocks : list, ndarray
+            if list, explodes into a list of ndarrays representing the blocks
+
+        data : ndarray
+            each element corresponding to new values for the blocks
+        """
+        if not isinstance(blocks, list):
+            bl = s.explode(blocks)
+
+        for b, d in zip(blocks, data):
+            print b.sum(), d
+            self.update(b, d, update_model=False)
+        self._update_global()
+
+    def update(self, block, data, update_model=True):
         if block.sum() > 1:
             raise AttributeError("Currently we only support 1 variable updates now")
 
@@ -836,7 +849,9 @@ class ConfocalImagePython(State):
 
             # Finally, modify the image
             self.obj.update(particles, pos, rad, typ, self.zscale, difference=self.difference)
-            self._update_tile(*tiles, difference=self.difference)
+
+            if update_model:
+                self._update_tile(*tiles, difference=self.difference)
         else:
             docalc = False
 
@@ -892,7 +907,8 @@ class ConfocalImagePython(State):
                     self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
 
                 self.obj.initialize(self.zscale)
-                self._update_global()
+                if update_model:
+                    self._update_global()
 
             if block[self.b_rscale].any():
                 new_rscale = self.state[self.b_rscale][0]
@@ -900,11 +916,12 @@ class ConfocalImagePython(State):
 
                 self.obj.rad *= f
                 self.obj.initialize(self.zscale)
-                self._update_global()
+                if update_model:
+                    self._update_global()
 
                 self.rscale = new_rscale
 
-            if docalc:
+            if docalc and update_model:
                 self._update_global()
 
         return True
