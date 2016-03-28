@@ -125,7 +125,7 @@ class BrownianHardSphereSimulation(object):
             mask = np.ones_like(self.rad).astype('bool')
 
         for step in xrange(steps):
-            self.forces = self.force_hardsphere() + self.force_damp() + self.force_noise()
+            self.forces = self.force_hardsphere(mask) + self.force_damp() + self.force_noise()
             self.forces[~mask, :] = 0.
             self.integrate(self.forces)
             self.boundary_condition()
@@ -137,7 +137,7 @@ class BrownianHardSphereSimulation(object):
             self.integrate(self.forces)
             self.boundary_condition()
 
-    def force_hardsphere(self):
+    def force_hardsphere(self, mask=None):
         """
         Calculate 'hard shere' forces between all particles. In this case,
         hard sphere means Hertzian potential
@@ -147,7 +147,7 @@ class BrownianHardSphereSimulation(object):
         N, pos, rad = self.N, self.pos, self.rad
     
         f = np.zeros_like(pos)
-        for i in xrange(N):
+        for i in np.arange(N)[mask]:
             rij = pos[i] - pos
             dist = np.sqrt((rij**2).sum(axis=-1))
 
