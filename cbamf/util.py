@@ -17,7 +17,7 @@ def oddify(a):
 def listify(a):
     if a is None:
         return []
-    elif not isinstance(a, (tuple, list)):
+    elif not isinstance(a, (tuple, list)) and not hasattr(a, '__iter__'):
         return [a]
     return list(a)
 
