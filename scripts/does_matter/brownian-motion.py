@@ -4,7 +4,7 @@ import scipy as sp
 
 import common
 from cbamf import const, runner, initializers
-from cbamf.test import init
+from cbamf.test import init, nbody
 
 def diffusion(diffusion_constant, exposure_time, samples=200):
     """
@@ -20,10 +20,9 @@ def diffusion(diffusion_constant, exposure_time, samples=200):
     # create a base image of one particle
     s0 = init.create_single_particle_state(imsize=4*radius, 
             radius=radius, psfargs={'params': psfsize, 'error': 1e-6})
-    sl = np.s_[s0.pad:-s0.pad,s0.pad:-s0.pad,s0.pad:-s0.pad]
 
     # add up a bunch of trajectories
-    finalimage = 0*s0.get_model_image()[sl]
+    finalimage = 0*s0.get_model_image()[s0.inner]
     position = 0*s0.obj.pos[0]
 
     for i in xrange(samples):
@@ -31,7 +30,7 @@ def diffusion(diffusion_constant, exposure_time, samples=200):
         s0.obj.pos[0] = np.array(s0.image.shape)/2 + offset
         s0.reset()
 
-        finalimage += s0.get_model_image()[sl]
+        finalimage += s0.get_model_image()[s0.inner]
         position += s0.obj.pos[0]
 
     finalimage /= float(samples)
@@ -40,6 +39,52 @@ def diffusion(diffusion_constant, exposure_time, samples=200):
     # place that into a new image at the expected parameters
     s = init.create_single_particle_state(imsize=4*radius, sigma=0.05,
             radius=radius, psfargs={'params': psfsize, 'error': 1e-6})
+    s.reset()
+
+    # measure the true inferred parameters
+    return s, finalimage, position
+
+def diffusion_correlated(diffusion_constant, exposure_time, samples=200):
+    """
+    diffusion_constant is in terms of seconds and pixel sizes
+    exposure_time is in seconds
+
+    for 80% (60mPas), D = kT/(\pi\eta r) ~ 1 px^2/sec
+    a full 60 layer scan takes 0.1 sec, so a particle is 0.016 sec exposure
+    """
+    radius = 5
+    psfsize = np.array([2.0, 1.0, 3.0])
+
+    pos, rad, tile = nbody.initialize_particles(N=10, phi=0.5, polydispersity=0.1)
+    sim = nbody.BrownianHardSphereSimulation(pos, rad, tile)
+    sim.relax(steps=2000)
+
+    # move the center to index 0
+    c = ((sim.pos - sim.tile.center())**2).sum(axis=-1).argmin()
+    pc = sim.pos[c].copy()
+    sim.pos[c] = sim.pos[0]
+    sim.pos[0] = pc
+
+    img = np.zeros(sim.tile.shape)
+    s0 = runner.create_state(img, sim.pos, sim.rad, ignoreimage=True)
+
+    # add up a bunch of trajectories
+    finalimage = 0*s0.get_model_image()[s0.inner]
+    position = 0*s0.obj.pos
+
+    for i in xrange(samples):
+        sim.step(1)
+        s0.obj.pos = sim.pos.copy() + s0.pad
+        s0.reset()
+
+        finalimage += s0.get_model_image()[s0.inner]
+        position += s0.obj.pos
+
+    finalimage /= float(samples)
+    position /= float(samples)
+
+    # place that into a new image at the expected parameters
+    s = runner.create_state(img, sim.pos, sim.rad, ignoreimage=True)
     s.reset()
 
     # measure the true inferred parameters
