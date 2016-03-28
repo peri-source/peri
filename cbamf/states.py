@@ -783,14 +783,23 @@ class ConfocalImagePython(State):
         data : ndarray
             each element corresponding to new values for the blocks
         """
+        otiles, itiles = [], []
+
         if not isinstance(blocks, list):
             bl = s.explode(blocks)
 
         for b, d in zip(blocks, data):
-            self.update(b, d, update_model=False)
-        self._update_global()
+            otile, itile, _ = self.update(b, d, update_model=False, return_tiles=True)
+            otiles.append(otile)
+            itiles.append(itile)
 
-    def update(self, block, data, update_model=True):
+        otile = Tile.boundingtile(otiles)
+        itile = Tile.boundingtile(itiles)
+        iotile = itile.translate(-otile.l)
+
+        self._update_tile(otile, itile, iotile.slicer, difference=True)
+
+    def update(self, block, data, update_model=True, return_tiles=False):
         if block.sum() > 1:
             raise AttributeError("Currently we only support 1 variable updates now")
 
@@ -851,6 +860,8 @@ class ConfocalImagePython(State):
 
             if update_model:
                 self._update_tile(*tiles, difference=self.difference)
+            if return_tiles:
+                return tiles
         else:
             docalc = False
 
@@ -922,6 +933,8 @@ class ConfocalImagePython(State):
 
             if docalc and update_model:
                 self._update_global()
+            if return_tiles:
+                return self._tile_global()
 
         return True
 
