@@ -375,13 +375,12 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
             self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
             self._fftn = psfs.rfftn(self._fftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level)
+                    planner_effort=self.fftw_planning_level, s=shape)
 
-            t = np.zeros(shape)
-            o = self.fftn(t)
-            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(o.shape, 16, dtype='complex')
+            oshape = self.fftn(np.zeros(shape)).shape
+            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
             self._ifftn = psfs.irfftn(self._ifftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level)
+                    planner_effort=self.fftw_planning_level, s=shape)
 
         elif psfs.hasfftw and self.method == 'fft2':
             shape = self.tile.shape.copy()
@@ -389,13 +388,12 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
             self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
             self._fftn = psfs.rfft2(self._fftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level)
+                    planner_effort=self.fftw_planning_level, s=shape)
 
-            t = np.zeros(shape)
-            o = self.fftn(t)
-            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(o.shape, 16, dtype='complex')
+            oshape = self.fftn(np.zeros(shape)).shape
+            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
             self._ifftn = psfs.irfft2(self._ifftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level)
+                    planner_effort=self.fftw_planning_level, s=shape)
 
     def __getstate__(self):
         odict = self.__dict__.copy()
