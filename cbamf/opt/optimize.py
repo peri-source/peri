@@ -241,7 +241,8 @@ def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
          run_length=5, **kwargs):
     """
     Runs Levenberg-Marquardt minimization on a cbamf state, based on a
-    random approximant of J. Doesn't return anything, only updates the state. 
+    random approximant of J. Updates the state and returns a bool
+    based on a guess at success. 
     Parameters:
     -----------
     s : State
@@ -294,6 +295,12 @@ def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
         Set to True to use a 3-point stencil instead of a 2-point. More 
         accurate but 20% slower. Default is False. 
     
+    Returns
+    --------
+    no_troube: Bool
+        Boolean of whether the algorithm terminated at a good minimum or
+        had trouble. True = Good, False = Bad. 
+    
     See Also
     --------
     do_linear_fit: Does a linear fit on linear subblocks of the state,
@@ -342,12 +349,16 @@ def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
         p0 = s.state[block].copy()
         err_start = get_err(s)
         
-        #1. Get J, JTJ, grad
+        #1. Get J, JTJ
         if recalc_J:
             J, inds = get_rand_Japprox(s, blocks, num_inds=num_px, **kwargs)
             JTJ = j_to_jtj(J)
-            grad = calc_im_grad(s, J, inds) #internal because s gets updated
+            has_inverted = False
+            no_trouble = True
         
+        #1b. Get grad, outside recalc_J because it's fast and changes quickly
+        grad = calc_im_grad(s, J, inds)
+            
         #2. Calculate and implement first guess for updates
         d0 = find_LM_updates(JTJ, grad, damp=damp)
         d1 = find_LM_updates(JTJ, grad, damp=damp*ddamp)
@@ -361,11 +372,19 @@ def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
             update_state_global(s, block, p0)
             recalc_J = False
             #Avoiding infinite loops by adding a small amount to counter:
-            counter += 0.4 
+            counter += 0.2
             if err0 < err1: 
                 #d_damp is the wrong "sign", so we invert:
-                print 'Inverting ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
-                ddamp = 1.0/ddamp
+                if has_inverted:
+                    print 'Stuck, drastically increasing damping'
+                    ddamp = np.max([ddamp, 1/ddamp])
+                    damp = np.max([100.0, damp * ddamp])
+                    no_trouble = False
+                else:
+                    print 'Inverting ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
+                    ddamp = 1.0/ddamp
+                    has_inverted = True
+                #You need a better way to avoid infinite loops here
             else: 
                 #ddamp is the correct sign but damp is too big:
                 damp *= (ddamp*ddamp)
@@ -381,6 +400,7 @@ def do_levmarq(s, block, damp=0.1, ddamp=0.1, num_iter=5, do_run=True, \
                 do_internal_run(J, inds, damp)
             recalc_J = True
             counter += 1
+    return no_trouble        
 
 def do_conj_grad_jtj(s, block, min_eigval=1e-12, num_sweeps=2, **kwargs):
     """
@@ -562,7 +582,10 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
     prev = s.state.copy()
     p0 = prev[s.b_pos].copy().reshape(-1,3)[particle]
     r0 = prev[s.b_rad][particle]
-    t0 = prev[s.b_typ][particle]
+    if s.varyn:
+        t0 = prev[s.b_typ][particle]
+    else:
+        t0 = np.ones(particle.size)
     
         
     is_bad_update = lambda p, r: np.any(p < 0) or np.any(p > \
@@ -834,6 +857,13 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
         If True, spends extra updates placing the parameters back to
         their original values after evaluating the derivatives. Default
         is False, i.e. plays fast and dangerous. 
+
+    Returns
+    --------
+    no_troube: Bool
+        Boolean of whether the algorithm terminated at a good minimum or
+        had trouble. True = Good, False = Bad.
+
     See Also
     --------
     do_levmarq: Runs Levenberg-Marquardt minimization using a random
@@ -885,6 +915,8 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
             J = eval_many_particle_grad(s, particles, slicer=dif_tile.slicer, 
                     **kwargs)
             JTJ = j_to_jtj(J)
+            has_inverted = False
+            no_trouble = True
 
         #2. Get -grad from the tiles:
         grad = np.dot(J, get_slicered_difference(s, dif_tile.slicer, 
@@ -916,10 +948,17 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
             #Avoiding infinite loops by adding a small amount to counter:
             counter += 0.1 
             if err0 < err1: 
-                #d_damp is the wrong "sign", so we invert:
-                if not quiet:
-                    print 'Inverting ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
-                ddamp = 1.0/ddamp
+                if has_inverted:
+                    if not quiet:
+                        print 'Stuck, drastically increasing damping'
+                    ddamp = np.max([ddamp, 1/ddamp])
+                    damp = np.max([100.0, damp * ddamp])
+                    no_trouble = False
+                else:
+                    if not quiet:
+                        print 'Inverting ddamp:\t%f\t%f' % (ddamp, 1.0/ddamp)
+                    ddamp = 1.0/ddamp
+                    has_inverted = True
             else: 
                 #ddamp is the correct sign but damp is too big:
                 damp *= (ddamp*ddamp)
@@ -937,6 +976,7 @@ def do_levmarq_particles(s, particles, damp=0.1, ddamp=0.2, num_iter=3,
                 do_internal_run()
             recalc_J = True
             counter += 1
+    return no_trouble
 
 def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
     """
@@ -1032,6 +1072,12 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=False,
     num_iter: Int. 
         Number of Levenberg-Marquardt iterations to execute. Default is 2.
         
+    Returns
+    --------
+    no_troube: List of Bools
+        List of bools of whether the algorithm terminated without problems
+        for each particle group. 
+    
     See Also
     --------    
     do_levmarq: Runs Levenberg-Marquardt minimization using a random
@@ -1063,8 +1109,10 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=False,
     
     particle_groups = separate_particles_into_groups(s, region_size=region_size,
             **kwargs)
+    no_trouble = []
     for group in particle_groups: 
-        do_levmarq_particles(s, group, **kwargs)
+        group_ok = do_levmarq_particles(s, group, **kwargs)
+        no_trouble.append(group_ok)
         #then there is a problem with the psf (i think???) being too big
         #and particle updates not being exact, so....
         #Instead we'll debug with this:
@@ -1076,6 +1124,7 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=False,
             print old_err, new_err, np.abs(old_err-new_err)/old_err
             # raise RuntimeError('updates still arent exact...')
         #i.e. FIXME
+    return no_trouble
     
 #=============================================================================#
 #               ~~~~~        Linear fit stuff    ~~~~~
