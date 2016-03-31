@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import scipy.ndimage as nd
 
@@ -19,7 +20,8 @@ class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
             pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=None,
-            nkpts=None, cutoffval=None, measurement_iterations=None, dosigkf=True, *args, **kwargs):
+            nkpts=None, cutoffval=None, measurement_iterations=None, 
+            dosigkf=True, k_dist='gaussian', use_J1=True, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -97,6 +99,16 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
         dosigkf : boolean
             Whether or not to include sigkf in the sampling procedure
+            
+        k_dist : str
+            Eithe ['gaussian', 'gamma'] which control the wavevector
+            distribution for the polychromatic detection psf. Default
+            is Gaussian. 
+            
+        use_J1 : boolean
+            Which hdet confocal model to use. Set to True to include the 
+            J1 term corresponding to a large-NA focusing lens, False to
+            exclude it. Default is True
 
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
@@ -115,6 +127,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.dosigkf = dosigkf
         self.nkpts = nkpts
         self.cutoffval = cutoffval
+        
+        self.k_dist = k_dist
+        self.use_J1 = use_J1
 
         if self.sigkf is not None:
             self.nkpts = self.nkpts or 3
@@ -218,7 +233,10 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         routines above.  For example, packs for calculate_linescan_psf
         """
         d = self.todict()
-        d.update({'polar_angle': self.polar_angle, 'normalize': self.normalize})
+        d.update({'polar_angle': self.polar_angle, 'normalize': self.normalize,
+                'include_K3_det':self.use_J1}) 
+        if self.polychromatic:
+            d.update({'k_dist':self.k_dist})
         d.pop('laser_wavelength')
         d.pop('zslab')
         d.pop('zscale')
@@ -238,6 +256,8 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.nkpts = self.__dict__.get('nkpts', None)
         self.polychromatic = self.sigkf is not None or self.nkpts is not None
         self.measurement_iterations = self.__dict__.get('measurement_iterations', 1)
+        self.k_dist = self.__dict__.get('k_dist', 'gaussian')
+        self.use_J1 = self.__dict__.get('use_J1', True)
 
     def _p2k(self, v):
         """ Convert from pixel to 1/k_incoming (laser_wavelength/(2\pi)) units """
@@ -287,6 +307,18 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         return self.support
 
     def update(self, params):
+        #Clipping params to computable values:
+        alpha_ind = self.param_order.index('alpha')
+        zscal_ind = self.param_order.index('zscale')
+        max_alpha = np.pi*0.5
+        max_zscle = 100
+        if params[alpha_ind] < 1e-3 or params[alpha_ind] > max_alpha:
+            warnings.warn('Invalid alpha, clipping', RuntimeWarning)
+            params[alpha_ind] = np.clip(params[alpha_ind], 1e-3, max_alpha-1e-3)
+        if params[zscal_ind] < 1e-3 or params[zscal_ind] > max_zscle:
+            warnings.warn('Invalid zscale, clipping', RuntimeWarning)
+            params[zscal_ind] = np.clip(params[zscal_ind], 1e-3, max_zscle-1e-3)
+        
         self.params[:] = params[:]
         self.param_dict = self.todict()
         self.characterize_psf()
@@ -375,13 +407,12 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
             self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
             self._fftn = psfs.rfftn(self._fftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level)
+                    planner_effort=self.fftw_planning_level, s=shape)
 
-            t = np.zeros(shape)
-            o = self.fftn(t)
-            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(o.shape, 16, dtype='complex')
+            oshape = self.fftn(np.zeros(shape)).shape
+            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
             self._ifftn = psfs.irfftn(self._ifftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level)
+                    planner_effort=self.fftw_planning_level, s=shape)
 
         elif psfs.hasfftw and self.method == 'fft2':
             shape = self.tile.shape.copy()
@@ -389,13 +420,12 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
             self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
             self._fftn = psfs.rfft2(self._fftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level)
+                    planner_effort=self.fftw_planning_level, s=shape)
 
-            t = np.zeros(shape)
-            o = self.fftn(t)
-            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(o.shape, 16, dtype='complex')
+            oshape = self.fftn(np.zeros(shape)).shape
+            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
             self._ifftn = psfs.irfft2(self._ifftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level)
+                    planner_effort=self.fftw_planning_level, s=shape)
 
     def __getstate__(self):
         odict = self.__dict__.copy()
@@ -436,6 +466,18 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
         super(ChebyshevLineScanConfocalPSF, self).__init__(*args, **kwargs)
 
     def update(self, params):
+        #Clipping params to computable values:
+        alpha_ind = self.param_order.index('alpha')
+        zscal_ind = self.param_order.index('zscale')
+        max_alpha = np.pi*0.5
+        max_zscle = 100
+        if params[alpha_ind] < 1e-3 or params[alpha_ind] > max_alpha:
+            warnings.warn('Invalid alpha, clipping', RuntimeWarning)
+            params[alpha_ind] = np.clip(params[alpha_ind], 1e-3, max_alpha-1e-3)
+        if params[zscal_ind] < 1e-3 or params[zscal_ind] > max_zscle:
+            warnings.warn('Invalid zscale, clipping', RuntimeWarning)
+            params[zscal_ind] = np.clip(params[zscal_ind], 1e-3, max_zscle-1e-3)
+        
         self.params[:] = params[:]
         self.param_dict = self.todict()
         self.characterize_psf()
