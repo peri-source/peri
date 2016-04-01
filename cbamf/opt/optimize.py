@@ -737,7 +737,7 @@ def find_particles_in_box(s, bounds):
     
     """
     is_in_xi = lambda i: (s.obj.pos[:,i] > bounds[0][i]) & (s.obj.pos[:,i] <= bounds[1][i])
-    in_region = is_in_xi(0) & is_in_xi(1) & is_in_xi(2)
+    in_region = is_in_xi(0) & is_in_xi(1) & is_in_xi(2) & (s.obj.typ==1)
     return np.nonzero(in_region)[0]
 
 def get_slicered_difference(s, slicer, mask):
