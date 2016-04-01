@@ -155,7 +155,7 @@ def dist(a):
 
 def errs(val, pos):
     v,p = val, pos
-    return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
+    return np.sqrt(((v[...,:3] - p[:,:,None,:3])**2).sum(axis=-1)).mean(axis=(1,2))
 
 def snr_labels(i):
     pass
