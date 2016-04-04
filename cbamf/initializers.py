@@ -81,13 +81,20 @@ def generate_sphere(radius):
     sphere = r < radius - 1
     return sphere
 
-def local_max_featuring(im, radius=10, smooth=4):
+def local_max_featuring(im, radius=10, smooth=4, masscut=None):
     g = nd.gaussian_filter(im, smooth, mode='mirror')
-    e = nd.maximum_filter(g, footprint=generate_sphere(radius))
+    footprint = generate_sphere(radius)
+    e = nd.maximum_filter(g, footprint=footprint)
     lbl = nd.label(e == g)[0]
     ind = np.sort(np.unique(lbl))[1:]
     pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
-    return pos, e
+    if masscut is not None:
+        m = nd.convolve(im, footprint, mode='reflect')
+        mass = np.array(map(lambda x: m[x[0],x[1],x[2]], pos))
+        good = mass > masscut
+        return pos[good].copy(), e, mass[good].copy()
+    else:
+        return pos, e
 
 def trackpy_featuring(im, size=10):
     from trackpy.feature import locate
