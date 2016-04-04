@@ -39,7 +39,7 @@ class Polynomial3D(object):
     def _setup_rvecs(self):
         # normalize all sizes to a strict upper bound on image size
         # so we can transfer ILM between different images
-        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024., meshed=False)
+        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024.)
 
     def _setup_cache(self):
         self._last_index = None
@@ -198,7 +198,7 @@ class Polynomial2P1D(object):
     def _setup_rvecs(self):
         # normalize all sizes to a strict upper bound on image size
         # so we can transfer ILM between different images
-        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024., meshed=False)
+        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024.)
 
     def _setup(self):
         self._setup_rvecs()

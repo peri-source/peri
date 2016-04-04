@@ -21,7 +21,7 @@ def calc(N=28, scale=41):
     im,pos,pix = common.perfect_platonic_per_pixel(N, 5, scale=scale, returnpix=corner)
 
     tile = Tile(im.shape)
-    rvec = np.sqrt(((tile.coords(vector=True) - pos)**2).sum(axis=-1))
+    rvec = np.sqrt(((tile.coords(form='vector') - pos)**2).sum(axis=-1))
     approx = exact_volume_sphere(rvec, radius, function=sphere_analytical_gaussian, volume_error=1e-10)
 
     return im, pix, approx, corner

@@ -175,7 +175,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
         # create the coordinate vectors for where to actually calculate the 
         tile = util.Tile(left=0, size=size, centered=True)
-        vecs = tile.coords(meshed=False, flat=True)
+        vecs = tile.coords(form='flat')
         vecs = [self._p2k(i+o) for i,o in zip(vecs, offset)]
 
         if self.polychromatic:
@@ -184,7 +184,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             psffunc = psfcalc.calculate_linescan_psf
 
         psf = psffunc(*vecs[::-1], zint=zint, **self.args()).T
-        vec = tile.coords(meshed=True)
+        vec = tile.coords(form='meshed')
 
         # create a smoothly varying point spread function by cutting off the psf
         # at a certain value and smoothly taking it to zero
@@ -339,7 +339,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             raise AttributeError("Field passed to PSF incorrect shape")
 
         outfield = np.zeros_like(field, dtype='float')
-        zc,yc,xc = self.tile.coords(meshed=False, flat=True)
+        zc,yc,xc = self.tile.coords(form='flat')
 
         for i,z in enumerate(zc):
             # in this loop, z in the index for self.slices and i is the field index
@@ -453,7 +453,7 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
             raise AttributeError("Field passed to PSF incorrect shape")
 
         outfield = np.zeros_like(field, dtype='float')
-        zc,yc,xc = self.tile.coords(meshed=False, flat=True)
+        zc,yc,xc = self.tile.coords(form='flat')
 
         kfield = self.fftn(field)
         for k,c in enumerate(self.cheb.coefficients):

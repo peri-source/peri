@@ -279,8 +279,7 @@ class SphereCollectionRealSpace(object):
         self.alpha = alpha if alpha is not None else self.alpha_defaults[self.method]
 
     def _setup(self):
-        z,y,x = Tile(self.shape).coords()
-        self.rvecs = np.rollaxis(np.array(np.broadcast_arrays(z,y,x)), 0, 4)
+        self.rvecs = Tile(self.shape).coords(form='vector')
         self.particles = np.zeros(self.shape)
         self._diff_field = np.zeros(self.shape)
 
@@ -417,8 +416,7 @@ class Slab(object):
         self._setup()
 
     def _setup(self):
-        z,y,x = Tile(self.shape).coords()
-        self.rvecs = np.rollaxis(np.array(np.broadcast_arrays(z,y,x)), 0, 4)
+        self.rvecs = Tile(self.shape).coords(form='vector')
         self.image = np.zeros(self.shape)
 
     def _slab(self, zpos, norm, sign=1):

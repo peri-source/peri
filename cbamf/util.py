@@ -97,47 +97,85 @@ class Tile(object):
         """ Return the center of the tile """
         return (self.r + self.l)/2.0 / norm
 
-    # FIXME -- switch meshed to False, or make a type list [meshed, vector, flat]
-    def coords(self, norm=False, meshed=True, vector=False, flat=False):
+    def _format_vector(self, z, y, x, form='broadcast'):
         """
-        Returns the coordinate vectors associated with the tile. 
-
-        Norm can rescale the coordinates for you. False is no rescaling, True
-        is rescaling so that all coordinates are from 0 -> 1.  If a scalar, the
-        same norm is applied uniformally while if an iterable, each scale is
-        applied to each dimension.
-
-        If meshed, the arrays are broadcasted so that they form 3, 3D arrays.
-
-        If vector, the arrays are broadcasted and formed into one [Nz, Ny, Nx, 3]
-        dimensional array
+        Format a 3d vector field in certain ways, see `coords` for a description
+        of each formatting method.
         """
-        if not norm:
-            norm = np.ones(3)
-        if norm is True:
-            norm = self.shape
-        if not hasattr(norm, '__iter__'):
-            norm = [norm]*3
-
-        z = np.arange(self.l[0], self.r[0]) / norm[0]
-        y = np.arange(self.l[1], self.r[1]) / norm[1]
-        x = np.arange(self.l[2], self.r[2]) / norm[2]
-
-        if meshed:
+        if form == 'meshed':
             return np.meshgrid(z, y, x, indexing='ij')
-        if vector:
+        elif form == 'vector':
             z,y,x = np.meshgrid(z, y, x, indexing='ij')
             return np.rollaxis(np.array(np.broadcast_arrays(z,y,x)),0,4)
-        if flat:
+        elif form == 'flat':
             return z,y,x
-        return z[:,None,None], y[None,:,None], x[None,None,:]
+        else:
+            return z[:,None,None], y[None,:,None], x[None,None,:]
+
+    def coords(self, norm=False, form='broadcast'):
+        """
+        Returns the coordinate vectors associated with the tile.
+
+        Parameters:
+        -----------
+        norm : boolean
+            can rescale the coordinates for you. False is no rescaling, True is
+            rescaling so that all coordinates are from 0 -> 1.  If a scalar,
+            the same norm is applied uniformally while if an iterable, each
+            scale is applied to each dimension.
+
+        form : string
+            In what form to return the vector array. Can be one of:
+                'broadcast' -- return 1D arrays that are broadcasted to be 3D
+
+                'flat' -- return array without broadcasting so each component
+                    is 1D and the appropriate length as the tile
+
+                'meshed' -- arrays are explicitly broadcasted and so all have
+                    a 3D shape, each the size of the tile.
+
+                'vector' -- array is meshed and combined into one array with
+                    the vector components along last dimension [Nz, Ny, Nx, 3]
+        """
+        if norm is False:
+            norm = 1
+        if norm is True:
+            norm = np.array(self.shape)
+        norm = a3(norm).astype('float')
+
+        v = list(np.arange(self.l[i], self.r[i]) / norm[i] for i in [0,1,2])
+        return self._format_vector(*v, form=form)
+
+    def kvectors(self, norm=False, form='broadcast', real=False):
+        """
+        Return the kvectors associated with this tile, given the standard form
+        of -0.5 to 0.5. `norm` and `form` arguments arethe same as that passed to
+        `Tile.coords`.
+
+        Parameters:
+        -----------
+        real : boolean
+            whether to return kvectors associated with the real fft instead
+        """
+        if norm is False:
+            norm = 1
+        if norm is True:
+            norm = np.array(self.shape)
+        norm = a3(norm).astype('float')
+
+        v = list(np.fft.fftfreq(i) for i in self.shape)
+        if real:
+            v[-1] = v[-1][:(self.shape[-1]+1)/2]
+
+        return self._format_vector(*v, form=form)
 
     def __str__(self):
         return self.__repr__()
 
     def __repr__(self):
         return str(self.__class__.__name__)+" {} -> {} ({})".format(
-                list(self.l), list(self.r), list(self.shape))
+            list(self.l), list(self.r), list(self.shape)
+        )
 
     def contains(self, items, pad=0):
         """
@@ -156,7 +194,6 @@ class Tile(object):
             o = o.all(axis=-1)
         return o
 
-    # TODO -- implement as operators?
     @staticmethod
     def intersection(tiles, *args):
         """ Intersection of tiles, returned as a tile """
