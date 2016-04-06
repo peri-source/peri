@@ -411,7 +411,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self._setup_ffts()
 
 class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
-    def __init__(self, cheb_degree=3, cheb_evals=4, *args, **kwargs):
+    def __init__(self, cheb_degree=6, cheb_evals=8, *args, **kwargs):
         """
         Same as ExactLineScanConfocalPSF except that integration is performed
         in the 4th dimension by employing fast Chebyshev approximates to how
