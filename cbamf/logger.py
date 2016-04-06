@@ -204,13 +204,19 @@ def add_handler(log, name='console-color', level='info', formatter='standard', *
     handler.setFormatter(logging.Formatter(formatters[formatter]))
     log.addHandler(handler)
 
+def sanitize(v):
+    num = len(v)
+    num = min(max([0, num]), 5)
+    return 'v'*num
+
 lexer = LogLexer()
 log = logging.getLogger('cbamf')
 log.setLevel(1)
 
 conf = conf.load_conf()
-level = v2l.get(conf.get('verbosity'), 'info')
-form  = v2f.get(conf.get('verbosity'), 'standard')
+verbosity = sanitize(conf.get('verbosity'))
+level = v2l.get(verbosity, 'info')
+form  = v2f.get(verbosity, 'standard')
 color = 'console-color' if conf.get('log-colors') else 'console-bw'
 
 if conf.get('log-to-file'):
