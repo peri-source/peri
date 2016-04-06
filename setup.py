@@ -2,6 +2,7 @@
 from distutils.core import setup
 
 setup(name='cbamf',
+      license='MIT License',
       author='Matt Bierbaum, Brian Leahy, Alex Alemi',
       version='0.1.1',
 
@@ -13,4 +14,5 @@ setup(name='cbamf',
           "pyfftw>=0.9.1",
           "libtiff>=0.4",
       ],
+      scripts=['bin/cbamf']
 )
