@@ -370,39 +370,41 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
     if ilmtype == 'poly3d':
         def_ilm.update(ilmargs)
         ilm = ilms.Polynomial3D(**def_ilm)
-    if ilmtype == 'leg3d':
+    elif ilmtype == 'leg3d':
         def_ilm.update(ilmargs)
         ilm = ilms.LegendrePoly3D(**def_ilm)
-    if ilmtype == 'cheb2p1d':
+    elif ilmtype == 'cheb2p1d':
         def_ilm.update(ilmargs)
         ilm = ilms.ChebyshevPoly2P1D(**def_ilm)
-    if ilmtype == 'poly2p1d':
+    elif ilmtype == 'poly2p1d':
         def_ilm.update(ilmargs)
         ilm = ilms.Polynomial2P1D(**def_ilm)
-    if ilmtype == 'leg2p1d':
+    elif ilmtype == 'leg2p1d':
         def_ilm.update(ilmargs)
         ilm = ilms.LegendrePoly2P1D(**def_ilm)
-    if ilmtype == 'barnesleg2p1d':
+    elif ilmtype == 'barnesleg2p1d':
         def_ilm.update(ilmargs)
         ilm = ilms.BarnesStreakLegPoly2P1D(**def_ilm)
-    if ilmtype == 'barnesleg2p1dx':
+    elif ilmtype == 'barnesleg2p1dx':
         def_ilm.update(ilmargs)
         ilm = ilms.BarnesStreakLegPoly2P1DX3(**def_ilm)
+    else:
+        raise AttributeError("ilmtype not one of supplied options, see help")
 
     # setup the psf based on the choice and arguments
     if psftype == 'gauss2d':
         def_psf.update({'params': (2.0, 4.0)})
         def_psf.update(psfargs)
         psf = psfs.AnisotropicGaussian(**def_psf)
-    if psftype == 'gauss3d':
+    elif psftype == 'gauss3d':
         def_psf.update({'params': (2.0, 1.0, 4.0)})
         def_psf.update(psfargs)
         psf = psfs.AnisotropicGaussianXYZ(**def_psf)
-    if psftype == 'gauss4d':
+    elif psftype == 'gauss4d':
         def_psf.update({'params': (1.5, 0.7, 3.0)})
         def_psf.update(psfargs)
         psf = psfs.Gaussian4DPoly(**def_psf)
-    if psftype == 'linescan':
+    elif psftype == 'linescan':
         def_psf.update({
             'zrange': (0, image.shape[0]),
             'cutoffval': 1./255,
@@ -410,7 +412,7 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         })
         def_psf.update(psfargs)
         psf = exactpsf.ExactLineScanConfocalPSF(**def_psf)
-    if psftype == 'cheb-linescan':
+    elif psftype == 'cheb-linescan':
         def_psf.update({
             'zrange': (0, image.shape[0]),
             'cutoffval': 1./255,
@@ -418,6 +420,8 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         })
         def_psf.update(psfargs)
         psf = exactpsf.ChebyshevLineScanConfocalPSF(**def_psf)
+    else:
+        raise AttributeError("psftype not one of supplied options, see help")
 
     if slab is not None:
         slab = objs.Slab(zpos=slab+pad, shape=image.shape)
