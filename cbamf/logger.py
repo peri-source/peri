@@ -2,10 +2,10 @@
 A simple but pretty logging interface for configurable logs across all packages.
 To use, simply import the base log and (maybe) tack on a child context:
     
-    from logger import log
-    log = log.getChild("<child name>")
+    from cbamf.logger import log
+    log = log.getChild("<child name>") # optional
 
-    log.{info,debug,warn,error}(...)
+    log.{info,debug,warn,error,fatal}(...)
 """
 import os
 import re
@@ -180,7 +180,7 @@ v2f = {
     'vvvvv': 'verbose'
 }
 
-def get_logger(name='console-color'):
+def get_handler(name='console-color'):
     for h in log.handlers:
         if isinstance(h, types[name]):
             return h
@@ -189,12 +189,18 @@ def get_logger(name='console-color'):
 def set_level(level='info', handlers=None):
     if handlers is None:
         handlers = log.handlers
+    else:
+        handlers = [get_handler(h) for h in handlers]
+
     for h in handlers:
         h.setLevel(levels[level])
 
 def set_formatter(formatter='standard', handlers=None):
     if handlers is None:
         handlers = log.handlers
+    else:
+        handlers = [get_handler(h) for h in handlers]
+
     for h in handlers:
         h.setFormatter(formatters[formatter])
 
@@ -209,16 +215,18 @@ def sanitize(v):
     num = min(max([0, num]), 5)
     return 'v'*num
 
+def initialize_loggers(log):
+    conf = conf.load_conf()
+    verbosity = sanitize(conf.get('verbosity'))
+    level = v2l.get(verbosity, 'info')
+    form  = v2f.get(verbosity, 'standard')
+    color = 'console-color' if conf.get('log-colors') else 'console-bw'
+
+    if conf.get('log-to-file'):
+        add_handler(log, name='rotating-log', level=level, formatter=form)
+    add_handler(log, name=color, level=level, formatter=form)
+
 lexer = LogLexer()
 log = logging.getLogger('cbamf')
 log.setLevel(1)
-
-conf = conf.load_conf()
-verbosity = sanitize(conf.get('verbosity'))
-level = v2l.get(verbosity, 'info')
-form  = v2f.get(verbosity, 'standard')
-color = 'console-color' if conf.get('log-colors') else 'console-bw'
-
-if conf.get('log-to-file'):
-    add_handler(log, name='rotating-log', level=level, formatter=form)
-add_handler(log, name=color, level=level, formatter=form)
+initialize_loggers(log)
