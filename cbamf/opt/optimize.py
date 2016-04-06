@@ -1,10 +1,16 @@
-import os,sys, time, warnings
+import os, sys, time, warnings
 import numpy as np
 from numpy.random import randint
 from scipy.optimize import newton, minimize_scalar
 from cbamf.util import Tile
 
 """
+To fix:
+1. In the engine, make do_run_1() and do_run_2() play nicer with each other. 
+2. Maybe make an augmented state class that lets you update things like
+    rscale(z)? (e.g. instead of updating all r's equally, you could update
+    the r's in proportion to LegPoly(x,y,z) etc. Similar for their x,y,z pos's?
+    
 Algorithm is:
 1. Evaluate J_ia = df(xi,mu)/dmu_a
 2. Solve the for delta:
@@ -88,10 +94,10 @@ def calculate_JTJ_grad_approx(s, blocks, num_inds=1000, **kwargs):
     err = calculate_err_approx(s, inds)
     return JTJ, np.dot(J,err)
     
-def get_rand_Japprox(s, blocks, num_inds=1000, keep_time=True, **kwargs):
+def get_rand_Japprox(s, blocks, num_inds=1000, quiet=False, **kwargs):
     """
     """
-    if keep_time:
+    if not quiet:
         start_time = time.time()
     #You need a better way to select indices to minimize over.
     tot_pix = s.image[s.inner].size
@@ -102,7 +108,7 @@ def get_rand_Japprox(s, blocks, num_inds=1000, keep_time=True, **kwargs):
     else:
         inds = [slice(0,None), slice(0,None), slice(0,None)]
     J = calculate_J_approx(s, blocks, inds, **kwargs)
-    if keep_time:
+    if not quiet:
         print 'JTJ:\t%f' % (time.time()-start_time)
     return J, inds
         
@@ -586,7 +592,6 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
         t0 = prev[s.b_typ][particle]
     else:
         t0 = np.ones(particle.size)
-    
         
     is_bad_update = lambda p, r: np.any(p < 0) or np.any(p > \
             np.array(s.image.shape)) or np.any(r < 0)
@@ -1033,8 +1038,8 @@ def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
         
     return particle_groups 
 
-def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=False, 
-        max_mem=4e9, **kwargs):
+def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=True, 
+        max_mem=2e9, **kwargs):
     """
     Runs an exact Levenberg-Marquardt minimization on all the particles
     in the state, by splitting them up into groups of nearby particles
@@ -1052,13 +1057,11 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=False,
         boxes of shape (region_size, region_size, region_size). Default
         is 40. 
     calc_region_size: Bool
-        Set to True to calculate an approximate region size based on a 
-        maximum allowed memory for J. Very rough / a little bleeding edge.
-        Default is False. 
+        If True, calculates an approximate region size based on a maximum
+        allowed memory for J. Set to False to use the input region size.
+        Default is True. 
     max_mem: Numeric
-        The approximate maximum memory for J. Finds the region size with 
-        a very rough estimate, so this can be off by a factor of 10 or more. 
-        Default is 4e9. 
+        The approximate maximum memory for J. Default is 2e9. 
 
     **kwargs parameters of interest:
     ------------
@@ -1098,6 +1101,7 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=False,
         mem_per_part = 32 * np.prod(rs + 2*s.pad*np.ones(3))
         return num_particles * mem_per_part
     
+    region_size = np.array(region_size)
     if calc_region_size:
         if calc_mem_usage(region_size) > max_mem:
             while calc_mem_usage(region_size) and np.any(region_size > 2):
@@ -1242,3 +1246,557 @@ def do_linear_fit(s, block, min_eigval=1e-11, relative=False, num_iter=5, **kwar
         print 'No improvement via linear fit, reverting.'
         update_state_global(s, block, old_params)
     
+#=============================================================================#
+#         ~~~~~        Class/Engine LM minimization Stuff     ~~~~~
+#=============================================================================#
+class LMEngine(object):
+    def __init__(self, damping=1., increase_damp_factor=3., decrease_damp_factor=8., 
+                min_eigval=1e-12, marquardt_damping=True, transtrum_damping=None,
+                use_accel=False, max_accel_correction=1., ptol=1e-6, 
+                errtol=1e-5, costol=None, max_iter=5, run_length=5, 
+                update_J_frequency=5, broyden_update=False, eig_update=False, 
+                quiet=True):
+        """
+        Levenberg-Marquardt engine with all the options from the 
+        M. Transtrum J. Sethna 2012 ArXiV paper. 
+
+        Inputs:
+        -------
+            damping: Float
+                The initial damping factor for Levenberg-Marquardt. Adjusted 
+                internally. Default is 1. 
+            increase_damp_factor: Float
+                The amount to increase damping by when an attempted step
+                has failed. Default is 3. 
+            decrease_damp_factor: Float
+                The amount to decrease damping by after a successful step.
+                Default is 8. increase_damp_factor and decrease_damp_factor
+                must not have all the same factors.
+            
+            min_eigval: Float scalar, <<1. 
+                The minimum eigenvalue to use in inverting the JTJ matrix,
+                to avoid degeneracies in the parameter space (i.e. 'rcond' 
+                in np.linalg.lstsq). Default is 1e-12. 
+            marquardt_damping: Bool
+                Set to False to use Levenberg damping (damping matrix 
+                proportional to the identiy) instead of Marquardt damping
+                (damping matrix proportional to the diagonal terms of JTJ).
+                Default is True. 
+            transtrum_damping: Float or None
+                If not None, then clips the Marquardt damping diagonal
+                entries to be at least transtrum_damping. Default is None.
+                
+            use_accel: Bool
+                Set to True to incorporate the geodesic acceleration term
+                from M. Transtrum J. Sethna 2012. Default is False. 
+            max_accel_correction: Float
+                Acceleration corrections bigger than max_accel_correction*
+                the normal LM step are viewed as bad steps, causing a 
+                decrease in damping. Default is 1.0. Only applies to the 
+                do_run_1 method. 
+            
+            ptol: Float
+                Algorithm has converged when the none of the parameters 
+                have changed by more than ptol. Default is 1e-6.
+            errtol: Float
+                Algorithm has converged when the error has changed
+                by less than ptol after 1 step. Default is 1e-6. 
+            costol: Float
+                Algorithm has converged when the cosine of the angle 
+                between (residuals projected onto the model manifold)
+                and (the residuals) is < costol. Default is None, i.e.
+                doesn't check the cosine (since it takes a bit of time).
+            maxiter: Int
+                The maximum number of iterations before the algorithm
+                stops iterating. Default is 5. 
+                
+            update_J_frequency: Int
+                The frequency to re-calculate the full Jacobian matrix. 
+                Default is 5. Only matters for do_run_v1
+            broyden_update: Bool
+                Set to True to do a Broyden partial update on J after 
+                each step, updating the projection of J along the 
+                parameter change direction. Cheap in time cost, but not
+                always accurate. Default is False. 
+            eig_update: Bool
+                Set to True to update the projection of J along the most
+                stiff eigendirections of JTJ. Slower than broyden but 
+                more accurate & useful. Default is False. 
+                
+            quiet: Bool
+                Set to False to print messages about convergence. 
+        
+        Relevant attributes
+        -------------------
+            do_run_1: Function
+                ...what you should set when you use run_1 v run_2 etc
+                For instance run_2 might stop prematurely since its
+                internal runs update last_error, last_params, and it 
+                usually just runs until it takes a bad step == small
+                param update. 
+            do_run_2: Function
+            
+        """
+        self.damping = damping
+        self.increase_damp_factor = float(increase_damp_factor)
+        self.decrease_damp_factor = float(decrease_damp_factor)
+        self.min_eigval = min_eigval
+        self.quiet = quiet #maybe multiple quiets? one for algorithm speed, one for option speed/efficacy?
+        self.marquardt_damping = marquardt_damping
+        self.transtrum_damping = transtrum_damping
+        
+        self.use_accel = use_accel
+        self.max_accel_correction = max_accel_correction
+        
+        self.ptol = ptol
+        self.errtol = errtol
+        self.costol = costol
+        self.max_iter = max_iter
+        
+        self.update_J_frequency = update_J_frequency
+        self.broyden_update = broyden_update
+        self.eig_update = eig_update
+        self.run_length = run_length
+        
+        self._num_iter = 0
+        
+        #We want to start updating JTJ
+        self._J_update_counter = update_J_frequency
+        self._fresh_JTJ = False
+        
+        #the max # of times trying to decrease damping before giving up
+        self._max_inner_loop = 10 
+        
+        #Finally we set the error and parameters
+        self._set_err_params()
+        self._has_run = False
+    
+    def reset(self, new_damping=None):
+        """
+        Keeps all user supplied options the same, but resets counters etc. 
+        """
+        self._num_iter = 0
+        self._J_update_counter = self.update_J_frequency
+        self._fresh_JTJ = False
+        self._has_run = False
+        if new_damping is not None:
+            self.damping = new_damping
+        
+    def _set_err_params(self):
+        """
+        Must update:
+            self.error, self._last_error, self.params, self._last_params 
+        """
+        raise NotImplementedError('implement in subclass')
+    
+    def calc_J(self):
+        """Updates self.J, returns nothing"""
+        raise NotImplementedError('implement in subclass')
+        
+    def calc_residuals(self):
+        raise NotImplementedError('implement in subclass')
+        
+    def calc_model_cosine(self):
+        """
+        Calculates the cosine of the fittable residuals with the actual
+        residuals, cos(phi) = |P^T r| / |r| where P^T is the projection
+        operator onto the model manifold and r the residuals. 
+        """
+        #1. Calculate projection term
+        u, sig, v = np.linalg.svd(self.J, full_matrices=False)
+        # p = np.dot(v.T, v) - memory error, so term-by-term
+        r = self.calc_residuals()
+        v_r = np.dot(v,r)
+        projected = np.dot(v.T, v_r)
+        
+        #2. Calculate indiviual norms:
+        abs_r = np.sqrt((r*r).sum())
+        abs_prj = np.sqrt((projected*projected).sum())
+        
+        return abs_prj / abs_r
+    
+    def do_run_1(self):
+        """
+        LM run evaluating 1 step at a time. Broyden or eigendirection
+        updates replace full-J updates. No internal runs. 
+        """
+        while not self.check_terminate():
+            self._has_run = True
+            if self.check_update_J():
+                self.update_J()
+            else:
+                if self.check_Broyden_J():
+                    self.update_Broyden_J()
+                if self.check_update_eig_J():
+                    self.update_eig_J()
+
+            #1. Assuming that J starts updated:
+            delta_params = self.find_LM_updates(self.calc_grad())
+            
+            #2. Increase damping until we get a good step:
+            good_step = self.eval_n_check_step(self.params + delta_params, 
+                    put_back=False)
+            _try = 0
+            while (_try < self._max_inner_loop) and (not good_step):
+                _try += 1
+                self.increase_damping()
+                delta_params = self.find_LM_updates(self.calc_grad())
+                good_step = self.eval_n_check_step(self.params + delta_params, 
+                        put_back=False)
+            if _try == (self._max_inner_loop-1):
+                warnings.warn('Stuck!', RuntimeWarning)
+            
+            #state is updated, now params:
+            self.update_params(delta_params, incremental=True)
+            self.decrease_damping()
+            self._num_iter += 1
+    
+    def do_run_2(self):
+        """
+        LM run evaluating 2 steps (damped and not) and choosing the best. 
+        Runs with that damping + Broyden or eigendirection updates, until
+        deciding to do a full-J update. Only changes damping after full-J
+        updates. 
+        """
+        while not self.check_terminate():
+            self._has_run = True
+            if self.check_update_J():
+                self.update_J()
+            else:
+                if self.check_Broyden_J():
+                    self.update_Broyden_J()
+                if self.check_update_eig_J():
+                    self.update_eig_J()
+
+            #1. Calculate 2 possible steps
+            delta_params_1 = self.find_LM_updates(self.calc_grad(), 
+                    do_correct_damping=False)
+            self.decrease_damping()
+            delta_params_2 = self.find_LM_updates(self.calc_grad(), 
+                    do_correct_damping=False)
+            self.decrease_damping(undo_decrease=True)
+            
+            #2. Check which step is best:
+            er1 = self.update_function(self.params + delta_params_1)
+            er2 = self.update_function(self.params + delta_params_2)
+            
+            triplet = (self.error, er1, er2)
+            if self.error < min([er1, er2]):
+                #Both bad steps, increase damping:
+                _try = 0
+                good_step = False
+                if not self.quiet:
+                    print 'Bad step, increasing damping\t%f\t%f\t%f' % triplet
+                while (_try < self._max_inner_loop) and (not good_step):
+                    self.increase_damping()
+                    delta_params = self.find_LM_updates(self.calc_grad())
+                    good_step = self.eval_n_check_step(self.params + 
+                            delta_params, put_back=False)
+                    _try += 1
+                if _try == (self._max_inner_loop-1):
+                    warnings.warn('Stuck!', RuntimeWarning) 
+            elif er1 <= er2:
+                if not self.quiet:
+                    print 'Good step, same damping\t%f\t%f\t%f' % triplet
+                good_step = self.eval_n_check_step(self.params + delta_params_1)
+                self.update_params(delta_params_1, incremental=True)
+
+                if not good_step:
+                    raise NotImplementedError('You messed up coding this') #FIXME obv
+            else: #Good steps
+                #er2 < er1
+                if not self.quiet:
+                    print 'Good step, decreasing damping\t%f\t%f\t%f' % triplet
+                good_step = self.eval_n_check_step(self.params + delta_params_2)
+                self.update_params(delta_params_2, incremental=True)
+                self.decrease_damping()
+                if not good_step:
+                    raise NotImplementedError('You messed up coding this') #FIXME obv
+                    
+            #3. Run with current J, damping:
+            _run_counter = 0
+            if not self.quiet:
+                print 'Running...'
+            while (_run_counter < self.run_length) & (good_step):
+                if self.check_Broyden_J():
+                    self.update_Broyden_J()
+                if self.check_update_eig_J():
+                    self.update_eig_J()
+                delta_params = self.find_LM_updates(self.calc_grad(), 
+                    do_correct_damping=False)
+                good_step = self.eval_n_check_step(self.params + delta_params,
+                        put_back=False)
+                if good_step:
+                    if not self.quiet:
+                        print '%f\t%f' % (self._last_error, self.error)
+                    self.update_params(delta_params, incremental=True)
+                    #^I don't like that syntax FIXME
+                _run_counter += 1
+            
+            #1 loop
+            self._num_iter += 1
+            
+    def eval_n_check_step(self, new_params, put_back=False):
+        """
+        Doesn't update back to the old params ONLY IF the step is good
+        If the step is bad, you HAVE to go back to the original params
+        """        
+        _last_error = self.error*1
+        _last_residuals = self.calc_residuals()
+        self.error = self.update_function(new_params)
+        good_step = self.error <= _last_error
+        
+        #something for cosine options...
+        
+        if (not good_step) and not(self.quiet) and (not put_back):
+            pass
+            # print 'Bad step:\t%f\t->\t%f' % (self._last_error, self.error)
+        if (not good_step) or put_back:
+            self.error = self.update_function(self.params)
+        else:
+            if not self.quiet:
+                pass
+                # print 'Good step:\t%f\t->\t%f' % (self._last_error, self.error)
+            self._last_error = _last_error
+            self._last_residuals = _last_residuals
+        return good_step
+        
+    def update_function(self, params):
+        """Takes an array params, updates function, returns the new error"""
+        raise NotImplementedError('implement in subclass')
+    
+    def _calc_damped_jtj(self):
+        diag = 0*self.JTJ
+        mid = np.arange(diag.shape[0], dtype='int')
+
+        if self.marquardt_damping:
+            diag[mid, mid] = self.JTJ[mid, mid].copy()
+        elif self.transtrum_damping is not None:
+            diag[mid, mid] = np.clip(self.JTJ[mid, mid].copy(),
+                    self.transtrum_damping, np.inf)
+        else:
+            diag[mid, mid] = 1.0
+        
+        damped_JTJ = self.JTJ + self.damping*diag
+        return damped_JTJ
+        
+    def find_LM_updates(self, grad, do_correct_damping=True):
+        """
+        Calculates LM updates, with or without the acceleration correction. 
+        """
+        damped_JTJ = self._calc_damped_jtj()
+        delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, -grad, rcond=self.min_eigval)
+        if (not self.quiet) & self._fresh_JTJ:
+            print '%d degenerate of %d total directions' % (delta0.size-rank, delta0.size)
+        
+        if self.use_accel:
+            accel_correction = self.calc_accel_correction(damped_JTJ, delta0)
+            nrm_d0 = np.sqrt(np.sum(delta0**2))
+            nrm_corr = np.sqrt(np.sum(accel_correction**2))
+            if not self.quiet:
+                print 'Norm of: initial vector\t%e\tcorrection term\t%e' % \
+                    (nrm_d0, nrm_corr)
+            if nrm_corr/nrm_d0 < self.max_accel_correction:
+                delta0 += accel_correction
+            elif do_correct_damping:
+                if not self.quiet:
+                    print 'Untrustworthy step! Increasing damping...'
+                    self.increase_damping()
+                    damped_JTJ = self._calc_damped_jtj()
+                    delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, -grad, \
+                            rcond=self.min_eigval)
+            
+        return delta0
+    
+    def increase_damping(self):
+        self.damping *= self.increase_damp_factor
+        
+    def decrease_damping(self, undo_decrease=False):
+        if undo_decrease:
+            self.damping *= self.decrease_damp_factor
+        else:
+            self.damping /= self.decrease_damp_factor
+        
+    def update_params(self, new_params, incremental=False):
+        self._last_params = self.params.copy()
+        if incremental:
+            self.params += new_params
+        else:
+            self.params = new_params.copy()
+        #And we've updated, so JTJ is no longer valid:
+        self._fresh_JTJ = False
+            
+    def check_terminate(self):
+        """
+        Termination if ftol, ptol, costol are < a certain amount
+        Currently costol is not used / supported
+        """
+        
+        if not self._has_run:
+            return False
+        else:
+            terminate = False
+            
+            #1. change in params small enough?
+            delta_params = self._last_params - self.params
+            terminate |= np.all(np.abs(delta_params) < self.ptol)
+            
+            #2. change in err small enough?
+            delta_err = self._last_error - self.error
+            terminate |= (delta_err < self.errtol)
+            
+            #3. change in cosine small enough? 
+            if self.costol is not None:
+                curcos = self.calc_model_cosine()
+                terminate |= (curcos < self.costol)
+            
+            #4. too many iterations??
+            terminate |= (self._num_iter > self.max_iter)
+            return terminate
+        
+    def check_update_J(self):
+        """
+        Checks if the full J should be updated. Right now, just updates if 
+        we've done update_J_frequency loops
+        """
+        self._J_update_counter += 1
+        update = self._J_update_counter > self.update_J_frequency
+        return update & (not self._fresh_JTJ)
+    
+    def update_J(self):
+        self.calc_J()
+        self.JTJ = np.dot(self.J, self.J.T)
+        self._fresh_JTJ = True
+        self._J_update_counter = 0
+        
+    def calc_grad(self):
+        residuals = self.calc_residuals()
+        return np.dot(self.J, residuals)
+    
+    def check_Broyden_J(self):
+        return self.broyden_update and (not self._fresh_JTJ)
+        
+    def update_Broyden_J(self):
+        """
+        Broyden update of jacobian. 
+        """
+        delta_params = self.params - self._last_params
+        delta_residuals = self.calc_residuals() - self._last_residuals
+        broyden_update = np.outer(delta_params, (delta_residuals -\
+                np.dot(self.J.T, delta_params))) / np.sum(delta_params**2)
+        self.J += broyden_update
+        self.JTJ = np.dot(self.J, self.J.T)
+    
+    def check_update_eig_J(self):
+        return self.eig_update and (not self._fresh_JTJ)
+        
+    def update_eig_J(self):
+        #1. Finding stiff direction
+        vls, vcs = np.linalg.eigh(self.JTJ)
+        stif_dir = vcs[-1] #already normalized
+        
+        #2. Evaluating derivative along that direction, we'll use dl=1e-3:
+        dl = 1e-3
+        res0 = self.calc_residuals()
+        _ = self.update_function(self.params+dl*stif_dir)
+        res1 = self.calc_residuals()
+        _ = self.update_function(self.params)
+        
+        #3. Updating
+        grad_stif = (res1-res0)/dl
+        update = np.outer(stif_dir, grad_stif - np.dot(self.J.T, stif_dir))
+        self.J += update
+        self.JTJ = np.dot(self.J, self.J.T)
+    
+    def calc_accel_correction(self, damped_JTJ, delta0):
+        dh = 0.2 #paper recommends 0.1, but I think it'll be better to do
+        #slightly higher to get more of a secant approximation
+        rm0 = self.calc_residuals()
+        _ = self.update_function(self.params + delta0*dh)
+        rm1 = self.calc_residuals()
+        term1 = (rm1 - rm0) / dh
+        #and putting back the parameters:
+        _ = self.update_function(self.params)
+        
+        term2 = np.dot(self.J.T, delta0)
+        der2 = 2./dh*(term1 - term2)
+        
+        damped_JTJ = self._calc_damped_jtj()
+        corr, res, rank, s = np.linalg.lstsq(damped_JTJ, np.dot(self.J, der2),
+                rcond=self.min_eigval)
+        corr *= -0.5
+        return corr
+    
+class LMGlobals(LMEngine):
+    def __init__(self, state, block, max_mem=3e9, opt_kwargs={}, **kwargs):
+        self.state = state
+        self.kwargs = opt_kwargs
+        self.num_pix = get_num_px_jtj(state, block.sum(), **self.kwargs)
+        self.blocks = state.explode(block)
+        self.block = block
+        super(LMGlobals, self).__init__(**kwargs)
+
+    def _set_err_params(self):
+        self.error = get_err(self.state)
+        self._last_error = get_err(self.state)
+        self.params = self.state.state[self.block].copy()
+        self._last_params = self.params.copy()
+
+    def calc_J(self):
+        J, inds = get_rand_Japprox(self.state, self.blocks, 
+                num_inds=self.num_pix, **self.kwargs)
+        self._inds = inds
+        self.J = J
+    
+    def calc_residuals(self):
+        return self.state.get_difference_image()[self._inds].ravel()
+        
+    def update_function(self, params):
+        update_state_global(self.state, self.block, params)
+        return get_err(self.state)
+    
+    def set_block(self, new_block, new_damping=None):
+        self.block = new_block
+        self.blocks = self.state.explode(new_block)
+        self._set_err_params()
+        self.reset(new_damping=new_damping)
+
+class LMParticles(LMEngine):
+    def __init__(self, state, particles, opt_kwargs={}, **kwargs):
+        self.state = state
+        self.kwargs = opt_kwargs
+        self.particles = particles
+        self.error = get_err(self.state)
+        self._dif_tile = get_tile_from_multiple_particle_change(state, particles)
+        super(LMParticles, self).__init__(**kwargs)
+        
+    def _set_err_params(self):
+        self.error = get_err(self.state)
+        self._last_error = get_err(self.state)
+        params = []
+        for p in self.particles:
+            params.extend(self.state.obj.pos[p].tolist() + [self.state.obj.rad[p]])
+        self.params = np.array(params)
+        self._last_params = self.params.copy()
+    
+    def calc_J(self):
+        self._dif_tile = get_tile_from_multiple_particle_change(self.state, 
+                self.particles)
+        self.J = eval_many_particle_grad(self.state, self.particles, 
+                slicer=self._dif_tile.slicer, **self.kwargs)
+                
+    def calc_residuals(self):
+        return get_slicered_difference(self.state, self._dif_tile.slicer, 
+                self.state.image_mask[self._dif_tile.slicer].astype('bool'))
+                
+    def update_function(self, params):
+        update_particles(self.state, self.particles, params, 
+                relative=False, fix_errors=True)
+        return get_err(self.state)
+        
+    def set_particles(self, new_particles, new_damping=None):
+        self.particles = new_particles
+        self._dif_tile = get_tile_from_multiple_particle_change(
+                self.state, particles)
+        self._set_err_params()
+        self.reset(new_damping=new_damping)
