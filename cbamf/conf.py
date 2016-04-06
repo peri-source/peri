@@ -1,10 +1,15 @@
 import os
 import json
+import copy
 
 from cbamf.const import CONF_FILE
 
 default_conf = {
-    "fftw_wisdom": os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl")
+    "fftw_wisdom": os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl"),
+    "log-filename": os.path.join(os.path.expanduser("~"), '.cbamf.log'),
+    "log-to-file": False,
+    "log-colors": False,
+    "verbosity": 'vvv',
 }
 
 def create_default_conf():
@@ -13,7 +18,9 @@ def create_default_conf():
 
 def load_conf():
     try:
-        return json.load(open(CONF_FILE))
+        conf = copy.copy(default_conf)
+        conf.update(json.load(open(CONF_FILE)))
+        return conf
     except IOError as e:
         create_default_conf()
         return load_conf()
@@ -21,3 +28,7 @@ def load_conf():
 def get_wisdom():
     conf = load_conf()
     return conf['fftw_wisdom']
+
+def get_logfile():
+    conf = load_conf()
+    return conf['logfile']
