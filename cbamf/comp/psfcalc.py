@@ -26,11 +26,31 @@ PTS_HG,WTS_HG = np.polynomial.hermite.hermgauss(NPTS*2)
 PTS_HG = PTS_HG[NPTS:]
 WTS_HG = WTS_HG[NPTS:]*np.exp(PTS_HG*PTS_HG)
 
-def f_theta(cos_theta, zint, z, n2n1=0.95):
+def f_theta(cos_theta, zint, z, n2n1=0.95, sph6_ab=None, **kwargs):
     """
+    Calculates the portions of the wavefront "aberration" due to z, theta
+    only. (the rho portion I've integrated analytically to Bessels.)
+    Inputs
+        cos_theta: N-element numpy.ndarray. 
+            The values of cos(theta) at which to compute f_theta. 
+        zint: Float
+            The position of the lens relative to the interface. 
+        z: M-element numpy.ndarray
+            The z-values to compute f_theta at. z.size is unrelated to
+            cos_theta.size. 
+        n2n1: Float
+            The ratio of the index of the immersed medium to the optics.
+        sph6_ab: Float or None. 
+            Set sph6_ab to a nonzero value to add residual 6th-order 
+            spherical aberration that is proportional to sph6_ab. Default
+            is None (i.e. doesn't calculate).
     """
-    return (np.outer(np.ones_like(z)*zint, cos_theta) -
+    wvfront = (np.outer(np.ones_like(z)*zint, cos_theta) -
             np.outer(zint+z, csqrt(n2n1**2-1+cos_theta**2)))
+    if sph6_ab is not None:
+        sec2_theta = 1.0/(cos_theta*cos_theta)
+        wvfront += sph6_ab * (sec2_theta-1)*(sec2_theta-2)*cos_theta
+    return wvfront
 
 def get_taus(cos_theta, n2n1=1./1.05):
     """
@@ -60,13 +80,14 @@ def get_taup(cos_theta, n2n1=1./1.05):
     """
     return 2*n2n1/(n2n1**2+csqrt(1-(1-n2n1**2)*cos_theta**-2))
 
-def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False):
+def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False, 
+        **kwargs):
     """
     Internal function called by get_K; gets the prefactor in the integrand
     that is independent of which integral is being called.
     """
 
-    phase = f_theta(cos_theta,zint,z,n2n1=n2n1)
+    phase = f_theta(cos_theta, zint, z, n2n1=n2n1, **kwargs)
     to_return = np.exp(-1j*phase)    
     if not get_hdet:
         to_return *= np.outer(np.ones_like(z),np.sqrt(cos_theta))
@@ -121,7 +142,7 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
     
     if Kprefactor is None:
         Kprefactor = get_Kprefactor(z, cos_theta, zint=zint, \
-            n2n1=n2n1,get_hdet=get_hdet)
+            n2n1=n2n1,get_hdet=get_hdet, **kwargs)
 
     if K==1:
         part_1 = j0(np.outer(rr,np.sqrt(1-cos_theta**2)))*\
