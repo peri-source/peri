@@ -67,13 +67,14 @@ def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False):
     """
 
     phase = f_theta(cos_theta,zint,z,n2n1=n2n1)
-    to_return = np.exp(-1j*phase)
+    to_return = np.exp(-1j*phase)    
     if not get_hdet:
         to_return *= np.outer(np.ones_like(z),np.sqrt(cos_theta))
 
     return to_return
 
-def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1, **kwargs):
+def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1, 
+        Kprefactor=None, return_Kprefactor=False, **kwargs):
     """
     Internal function for calculating psf's. Returns various integrals that
     appear in Hell's psf calculation.
@@ -91,10 +92,17 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1, **kwarg
         -get_hdet: Boolean. Set to True to get the detection portion of the
             psf; False to get the illumination portion of the psf.
         -K: 1, 2, or 3. Which of the 3 integrals to evaluate. Internal.
+        - Kprefactor: numpy.ndarray calculated internally. Pass it to 
+            avoid recalculation. 
+        - return_Kprefactor: Bool
+            Set to True to also return the Kprefactor (parameter above)
+            to speed up the calculation for the next values of K. 
     Outputs:
-        -integrand_rl: The integral's real      part; rho.shape numpy.array
-        -integrand_im: The integral's imaginary part; . rho.shape numpy.array
-
+        -integrand: The integral K_i; rho.shape numpy.array
+    Optional outputs:
+        Kprefactor: The prefactor for the Jn(....)*(taus+-taup) portion. 
+            Since it's used repeatedly, can be returned to be re-passed
+            as Kprefactor for speed. 
     Comments:
         This is the only function that relies on rho,z being numpy.arrays,
         and it's just in a flag that I've added.... move to psf?
@@ -110,9 +118,10 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1, **kwarg
     #Getting the array of points to quad at
     cos_theta = 0.5*(1-np.cos(alpha))*PTS+0.5*(1+np.cos(alpha))
     #[cosTheta,rho,z]
-
-    Kprefactor = get_Kprefactor(z, cos_theta, zint=zint, \
-        n2n1=n2n1,get_hdet=get_hdet)
+    
+    if Kprefactor is None:
+        Kprefactor = get_Kprefactor(z, cos_theta, zint=zint, \
+            n2n1=n2n1,get_hdet=get_hdet)
 
     if K==1:
         part_1 = j0(np.outer(rr,np.sqrt(1-cos_theta**2)))*\
@@ -141,7 +150,10 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1, **kwarg
     big_wts=np.outer(np.ones_like(rr),WTS)
     kint = (big_wts*integrand).sum(axis=1) * 0.5*(1-np.cos(alpha))
 
-    return kint.reshape(rho.shape)
+    if return_Kprefactor:
+        return kint.reshape(rho.shape), Kprefactor
+    else:
+        return kint.reshape(rho.shape)
 
 def get_hsym_asym(rho, z, get_hdet=False, include_K3_det=True, **kwargs):
     """
@@ -169,13 +181,16 @@ def get_hsym_asym(rho, z, get_hdet=False, include_K3_det=True, **kwargs):
         -hasym: rho.shape numpy.array of the symmetric portion of the PSF
     """
 
-    K1 = get_K(rho, z, K=1, get_hdet=get_hdet, **kwargs)
-    K2 = get_K(rho, z, K=2, get_hdet=get_hdet, **kwargs)
+    K1, Kprefactor = get_K(rho, z, K=1, get_hdet=get_hdet, Kprefactor=None,
+            return_Kprefactor=True, **kwargs)
+    K2 = get_K(rho, z, K=2, get_hdet=get_hdet, Kprefactor=Kprefactor,
+            return_Kprefactor=False, **kwargs)
 
     if get_hdet and not include_K3_det:
         K3 = 0*K1
     else:
-        K3 = get_K(rho, z, K=3, get_hdet=get_hdet, **kwargs)
+        K3 = get_K(rho, z, K=3, get_hdet=get_hdet, Kprefactor=Kprefactor,
+            return_Kprefactor=False, **kwargs)
 
     hsym = K1*K1.conj() + K2*K2.conj() + 0.5*(K3*K3.conj())
     hasym= K1*K2.conj() + K2*K1.conj() + 0.5*(K3*K3.conj())
@@ -272,7 +287,8 @@ def get_psf_scalar(x, y, z, kfki=1., zint=100.0, normalize=False, **kwargs):
     hilm = np.real( K1*K1.conj() )
 
     if np.abs(kfki - 1.0) > 1e-13:
-        Kdet = get_K(rho*kfki, z*kfki, K=1, zint=zint*kfki, get_hdet=True, **kwargs)
+        Kdet = get_K(rho*kfki, z*kfki, K=1, zint=zint*kfki, get_hdet=True, 
+                **kwargs)
         hdet = np.real( Kdet*Kdet.conj() )
     else:
         hdet = hilm.copy()
