@@ -47,7 +47,7 @@ def f_theta(cos_theta, zint, z, n2n1=0.95, sph6_ab=None, **kwargs):
     """
     wvfront = (np.outer(np.ones_like(z)*zint, cos_theta) -
             np.outer(zint+z, csqrt(n2n1**2-1+cos_theta**2)))
-    if sph6_ab is not None:
+    if (sph6_ab is not None) and (not np.isnan(sph6_ab)):
         sec2_theta = 1.0/(cos_theta*cos_theta)
         wvfront += sph6_ab * (sec2_theta-1)*(sec2_theta-2)*cos_theta
     return wvfront
