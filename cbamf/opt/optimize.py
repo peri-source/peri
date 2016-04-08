@@ -5,6 +5,16 @@ from scipy.optimize import newton, minimize_scalar
 from cbamf.util import Tile
 
 """
+To add: 
+1. Engine instantiation for groups of particles. I'd like it to be a list
+    of individual engine instantiations for particle groups, so they
+    can keep their own damping etc.... but that means it won't work
+    because you'll run out of memory. 
+2. Augmented state
+3. Engine instantiation for augmented state. 
+6. With opt using big regions for particles, globals, it makes sense to
+    put stuff back on the card again....
+
 To fix:
 1. In the engine, make do_run_1() and do_run_2() play nicer with each other. 
 2. Maybe make an augmented state class that lets you update things like
@@ -1117,17 +1127,6 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=True,
     for group in particle_groups: 
         group_ok = do_levmarq_particles(s, group, **kwargs)
         no_trouble.append(group_ok)
-        #then there is a problem with the psf (i think???) being too big
-        #and particle updates not being exact, so....
-        #Instead we'll debug with this:
-        old_err = get_err(s)
-        s.reset()
-        new_err = get_err(s)
-        if np.abs(old_err-new_err) > 1e-7*old_err:
-            print('updates still arent exact...')
-            print old_err, new_err, np.abs(old_err-new_err)/old_err
-            # raise RuntimeError('updates still arent exact...')
-        #i.e. FIXME
     return no_trouble
     
 #=============================================================================#
@@ -1255,7 +1254,7 @@ class LMEngine(object):
                 use_accel=False, max_accel_correction=1., ptol=1e-6, 
                 errtol=1e-5, costol=None, max_iter=5, run_length=5, 
                 update_J_frequency=5, broyden_update=False, eig_update=False, 
-                quiet=True):
+                partial_update_frequency=3, num_eig_dirs=2, quiet=True):
         """
         Levenberg-Marquardt engine with all the options from the 
         M. Transtrum J. Sethna 2012 ArXiV paper. 
@@ -1322,6 +1321,12 @@ class LMEngine(object):
                 Set to True to update the projection of J along the most
                 stiff eigendirections of JTJ. Slower than broyden but 
                 more accurate & useful. Default is False. 
+            num_eig_dirs: Int
+                If eig_update == True, the number of eigendirections to
+                update when doing the eigen update. Default is 2. 
+            partial_update_frequency: Int
+                If broyden_update or eig_update, the frequency to do 
+                either/both of those partial updates. Default is 3. 
                 
             quiet: Bool
                 Set to False to print messages about convergence. 
@@ -1356,7 +1361,10 @@ class LMEngine(object):
         self.update_J_frequency = update_J_frequency
         self.broyden_update = broyden_update
         self.eig_update = eig_update
+        self.num_eig_dirs = num_eig_dirs
         self.run_length = run_length
+        self._inner_run_counter = 0
+        self.partial_update_frequency = partial_update_frequency
         
         self._num_iter = 0
         
@@ -1376,6 +1384,7 @@ class LMEngine(object):
         Keeps all user supplied options the same, but resets counters etc. 
         """
         self._num_iter = 0
+        self._inner_run_counter = 0
         self._J_update_counter = self.update_J_frequency
         self._fresh_JTJ = False
         self._has_run = False
@@ -1449,7 +1458,7 @@ class LMEngine(object):
             #state is updated, now params:
             self.update_params(delta_params, incremental=True)
             self.decrease_damping()
-            self._num_iter += 1
+            self._num_iter += 1; self._inner_run_counter += 1
     
     def do_run_2(self):
         """
@@ -1479,6 +1488,9 @@ class LMEngine(object):
             #2. Check which step is best:
             er1 = self.update_function(self.params + delta_params_1)
             er2 = self.update_function(self.params + delta_params_2)
+            #ARG I need to put it back... this costs 1-2 extra function
+            #evaluations per loop. Try to clean up eval_n_check_step FIXME
+            _ = self.update_function(self.params)
             
             triplet = (self.error, er1, er2)
             if self.error < min([er1, er2]):
@@ -1514,27 +1526,36 @@ class LMEngine(object):
                     raise NotImplementedError('You messed up coding this') #FIXME obv
                     
             #3. Run with current J, damping:
-            _run_counter = 0
-            if not self.quiet:
-                print 'Running...'
-            while (_run_counter < self.run_length) & (good_step):
-                if self.check_Broyden_J():
-                    self.update_Broyden_J()
-                if self.check_update_eig_J():
-                    self.update_eig_J()
-                delta_params = self.find_LM_updates(self.calc_grad(), 
-                    do_correct_damping=False)
-                good_step = self.eval_n_check_step(self.params + delta_params,
-                        put_back=False)
-                if good_step:
-                    if not self.quiet:
-                        print '%f\t%f' % (self._last_error, self.error)
-                    self.update_params(delta_params, incremental=True)
-                    #^I don't like that syntax FIXME
-                _run_counter += 1
-            
+            if good_step:
+                self.do_internal_run()
             #1 loop
             self._num_iter += 1
+    
+    def do_internal_run(self):
+        """
+        Given a fixed damping, J, JTJ, iterates calculating steps, with
+        optional Broyden or eigendirection updates. 
+        Called internally by do_run_2() but might also be useful on its own. 
+        """
+        self._inner_run_counter = 0; good_step = True
+        if not self.quiet:
+            print 'Running...'
+        while ((self._inner_run_counter < self.run_length) & good_step &
+                (not self.check_terminate())):
+            if self.check_Broyden_J() and self._inner_run_counter != 0:
+                self.update_Broyden_J()
+            if self.check_update_eig_J() and self._inner_run_counter != 0:
+                self.update_eig_J()
+            delta_params = self.find_LM_updates(self.calc_grad(), 
+                do_correct_damping=False)
+            good_step = self.eval_n_check_step(self.params + delta_params,
+                    put_back=False)
+            if good_step:
+                if not self.quiet:
+                    print '%f\t%f' % (self._last_error, self.error)
+                self.update_params(delta_params, incremental=True)
+                #^I don't like that syntax FIXME
+            self._inner_run_counter += 1
             
     def eval_n_check_step(self, new_params, put_back=False):
         """
@@ -1674,7 +1695,9 @@ class LMEngine(object):
         return np.dot(self.J, residuals)
     
     def check_Broyden_J(self):
-        return self.broyden_update and (not self._fresh_JTJ)
+        do_update = (self.broyden_update & (not self._fresh_JTJ) & 
+                (self._inner_run_counter % self.partial_update_frequency) == 0)
+        return do_update
         
     def update_Broyden_J(self):
         """
@@ -1688,25 +1711,30 @@ class LMEngine(object):
         self.JTJ = np.dot(self.J, self.J.T)
     
     def check_update_eig_J(self):
-        return self.eig_update and (not self._fresh_JTJ)
+        do_update = (self.eig_update & (not self._fresh_JTJ) & 
+                (self._inner_run_counter % self.partial_update_frequency) == 0)
+        return do_update
         
     def update_eig_J(self):
-        #1. Finding stiff direction
         vls, vcs = np.linalg.eigh(self.JTJ)
-        stif_dir = vcs[-1] #already normalized
-        
-        #2. Evaluating derivative along that direction, we'll use dl=1e-3:
-        dl = 1e-3
         res0 = self.calc_residuals()
-        _ = self.update_function(self.params+dl*stif_dir)
-        res1 = self.calc_residuals()
-        _ = self.update_function(self.params)
+        for a in xrange(min([self.num_eig_dirs, vls.size])):
+            #1. Finding stiff directions
+            stif_dir = vcs[-(a+1)] #already normalized
+            
+            #2. Evaluating derivative along that direction, we'll use dl=5e-4:
+            dl = 5e-4
+            _ = self.update_function(self.params+dl*stif_dir)
+            res1 = self.calc_residuals()
+            
+            #3. Updating
+            grad_stif = (res1-res0)/dl
+            update = np.outer(stif_dir, grad_stif - np.dot(self.J.T, stif_dir))
+            self.J += update
+            self.JTJ = np.dot(self.J, self.J.T)
         
-        #3. Updating
-        grad_stif = (res1-res0)/dl
-        update = np.outer(stif_dir, grad_stif - np.dot(self.J.T, stif_dir))
-        self.J += update
-        self.JTJ = np.dot(self.J, self.J.T)
+        #Putting the parameters back:
+        _ = self.update_function(self.params)
     
     def calc_accel_correction(self, damped_JTJ, delta0):
         dh = 0.2 #paper recommends 0.1, but I think it'll be better to do
@@ -1800,3 +1828,40 @@ class LMParticles(LMEngine):
                 self.state, particles)
         self._set_err_params()
         self.reset(new_damping=new_damping)
+        
+class LMParticleGroupCollection(object):
+    """
+    ... I don't think this will work since you'll run out of memory keeping
+    J for every particle in the image
+    """
+    def __init__(self, state, region_size, do_calc_size=True, **kwargs):
+        """**kwargs for the individual lm collections"""
+        raise NotImplementedError
+    
+    def do_run_1(self):
+        for lm in self.lm_collections:
+            lm.do_run_1()
+        
+    def do_run_2(self):
+        for lm in self.lm_collections:
+            lm.do_run_2()
+            
+    def reset(self, new_damping=None):
+        for lm in self.lm_collections:
+            lm.reset(new_damping=new_damping)
+    
+    def create_particle_lm_groups(self):
+        pass
+        
+    def full_reset():
+        pass #also recalculates the groups, sets everything to the original values
+        #basically calls __init__ again except without the setup parts. 
+        #Or __init__ basically calls this
+
+class AugmentedState(object):
+    def __init__(self):
+        raise NotImplementedError
+        
+class LMAugmentedState(LMEngine):
+    def __init__(self):
+        raise NotImplementedError
