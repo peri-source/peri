@@ -371,6 +371,23 @@ class PSF4D(PSF):
     def __init__(self, params, shape, *args, **kwargs):
         super(PSF4D, self).__init__(*args, params=params, shape=shape, **kwargs)
 
+    def fftn(self, arr):
+        if hasfftw:
+            self._fftn_data[:] = arr
+            self._fftn.execute()
+            return self._fftn.get_output_array().copy()
+        else:
+            return np.fft.fft2(arr)
+
+    def ifftn(self, arr):
+        if hasfftw:
+            self._ifftn_data[:] = arr
+            self._ifftn.execute()
+            v = 1.0/self._fftn_data.size
+            return self._ifftn.get_output_array() * v
+        else:
+            return np.fft.ifft2(arr)
+
     def _setup_ffts(self):
         if hasfftw:
             self._fftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
@@ -472,15 +489,6 @@ class Gaussian4D(PSF4D):
         params = np.hstack([np.array(params)[:3], np.zeros(np.sum(order))])
         super(Gaussian4D, self).__init__(params=params, shape=shape, *args, **kwargs)
 
-    def _setup_ffts(self):
-        if hasfftw:
-            self._fftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
-            self._ifftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
-            self._fftn = fft2(self._fftn_data, overwrite_input=False,
-                    planner_effort=self.fftw_planning_level, threads=self.threads)
-            self._ifftn = ifft2(self._ifftn_data, overwrite_input=False,
-                    planner_effort=self.fftw_planning_level, threads=self.threads)
-
     def _sigma_coeffs(self, d=0):
         s = 3 + np.sum(self.order[:d+0])
         e = 3 + np.sum(self.order[:d+1])
@@ -561,15 +569,6 @@ class GaussianMomentExpansion(PSF4D):
         self.zrange = float(zrange)
         params = np.hstack([np.array(params)[:3], np.zeros(np.sum(order)), np.zeros(2*np.sum(moment_order))])
         super(GaussianMomentExpansion, self).__init__(params=params, shape=shape, *args, **kwargs)
-
-    def _setup_ffts(self):
-        if hasfftw:
-            self._fftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
-            self._ifftn_data = pyfftw.n_byte_align_empty(self.tile.shape, 16, dtype='complex')
-            self._fftn = fft2(self._fftn_data, overwrite_input=False,
-                    planner_effort=self.fftw_planning_level, threads=self.threads)
-            self._ifftn = ifft2(self._ifftn_data, overwrite_input=False,
-                    planner_effort=self.fftw_planning_level, threads=self.threads)
 
     def _sigma_coeffs(self, d=0):
         s = 3 + np.sum(self.order[:d+0])
