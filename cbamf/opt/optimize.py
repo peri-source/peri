@@ -168,8 +168,6 @@ def update_state_global(s, block, data, keep_time=False, **kwargs):
     if (bpos & block).sum() > 0:
         new_pos_params = new_state[bpos].copy().reshape(-1,3)
         s.obj.pos = new_pos_params
-        s.obj.initialize(s.zscale)
-
     #rad:
     brad = s.create_block('rad')
     if (brad & block).sum() > 0:
@@ -1114,10 +1112,12 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=True,
     region_size = np.array(region_size)
     if calc_region_size:
         if calc_mem_usage(region_size) > max_mem:
-            while calc_mem_usage(region_size) and np.any(region_size > 2):
+            while ((calc_mem_usage(region_size) > max_mem) and 
+                    np.all(region_size > 2)):
                 region_size -= 1
         else:
-            while calc_mem_usage(region_size) and np.all(region_size < np.array(s.image.shape)):
+            while ((calc_mem_usage(region_size) < max_mem) and 
+                    np.all(region_size < np.array(s.image.shape))):
                 region_size += 1
             region_size -= 1
     
@@ -1254,7 +1254,7 @@ class LMEngine(object):
                 use_accel=False, max_accel_correction=1., ptol=1e-6, 
                 errtol=1e-5, costol=None, max_iter=5, run_length=5, 
                 update_J_frequency=5, broyden_update=False, eig_update=False, 
-                partial_update_frequency=3, num_eig_dirs=2, quiet=True):
+                partial_update_frequency=3, num_eig_dirs=4, quiet=True):
         """
         Levenberg-Marquardt engine with all the options from the 
         M. Transtrum J. Sethna 2012 ArXiV paper. 
@@ -1305,7 +1305,7 @@ class LMEngine(object):
                 between (residuals projected onto the model manifold)
                 and (the residuals) is < costol. Default is None, i.e.
                 doesn't check the cosine (since it takes a bit of time).
-            maxiter: Int
+            max_iter: Int
                 The maximum number of iterations before the algorithm
                 stops iterating. Default is 5. 
                 
@@ -1323,7 +1323,7 @@ class LMEngine(object):
                 more accurate & useful. Default is False. 
             num_eig_dirs: Int
                 If eig_update == True, the number of eigendirections to
-                update when doing the eigen update. Default is 2. 
+                update when doing the eigen update. Default is 4. 
             partial_update_frequency: Int
                 If broyden_update or eig_update, the frequency to do 
                 either/both of those partial updates. Default is 3. 
@@ -1342,7 +1342,7 @@ class LMEngine(object):
             do_run_2: Function
             
         """
-        self.damping = damping
+        self.damping = float(damping)
         self.increase_damp_factor = float(increase_damp_factor)
         self.decrease_damp_factor = float(decrease_damp_factor)
         self.min_eigval = min_eigval
@@ -1506,7 +1506,9 @@ class LMEngine(object):
                             delta_params, put_back=False)
                     _try += 1
                 if _try == (self._max_inner_loop-1):
-                    warnings.warn('Stuck!', RuntimeWarning) 
+                    warnings.warn('Stuck!', RuntimeWarning)
+                elif good_step:
+                    print 'Sufficiently decreased damping\t%f\t%f' % (triplet[0], self.error)
             elif er1 <= er2:
                 if not self.quiet:
                     print 'Good step, same damping\t%f\t%f\t%f' % triplet
@@ -1555,6 +1557,8 @@ class LMEngine(object):
                     print '%f\t%f' % (self._last_error, self.error)
                 self.update_params(delta_params, incremental=True)
                 #^I don't like that syntax FIXME
+            elif not self.quiet:
+                print 'Bad step!' #right now thru eval_n_check doesn't give bad step
             self._inner_run_counter += 1
             
     def eval_n_check_step(self, new_params, put_back=False):
@@ -1615,8 +1619,7 @@ class LMEngine(object):
             nrm_d0 = np.sqrt(np.sum(delta0**2))
             nrm_corr = np.sqrt(np.sum(accel_correction**2))
             if not self.quiet:
-                print 'Norm of: initial vector\t%e\tcorrection term\t%e' % \
-                    (nrm_d0, nrm_corr)
+                print '|correction term| / |initial vector|\t%e' % (nrm_corr/nrm_d0)
             if nrm_corr/nrm_d0 < self.max_accel_correction:
                 delta0 += accel_correction
             elif do_correct_damping:
@@ -1757,6 +1760,24 @@ class LMEngine(object):
     
 class LMGlobals(LMEngine):
     def __init__(self, state, block, max_mem=3e9, opt_kwargs={}, **kwargs):
+        """
+        Levenberg-Marquardt engine for state globals with all the options 
+        from the M. Transtrum J. Sethna 2012 ArXiV paper. See LMGlobals
+        for documentation. 
+
+        Inputs:
+        -------
+        state: cbamf.states.ConfocalImagePython instance
+            The state to optimize
+        block: np.ndarray of bools
+            The (un-exploded) blocks to optimize over. 
+        max_mem: Int
+            The maximum memory to use for the optimization; controls block
+            decimation. Default is 3e9. 
+        opt_kwargs: Dict
+            Dict of **kwargs for opt implementation. Right now only for
+            opt.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
+        """
         self.state = state
         self.kwargs = opt_kwargs
         self.num_pix = get_num_px_jtj(state, block.sum(), **self.kwargs)
@@ -1859,9 +1880,136 @@ class LMParticleGroupCollection(object):
         #Or __init__ basically calls this
 
 class AugmentedState(object):
-    def __init__(self):
+    """
+    A state that, in addition to having normal state update options, 
+    allows for updating all the particle R, xyz's depending on their 
+    positions -- basically rscale(x) for everything. 
+    Right now I'm just doing this with R(z)
+    """
+    def __init__(self, state, block, rz_order=3):
+        """
+        block can be an array of False, that's OK
+        """
+        self.state = state
+        self.block = block
+
+        #You need some way of controlling the params, so:
+        globals_mask = np.zeros(block.sum() + rz_order, dtype='bool')
+        globals_mask[:blocks.sum()] = True
+        rscale_mask = -globals_mask
+        self.globals_mask = globals_mask
+        self.rscale_mask = rscale_mask
+        
+        params = np.zeros(globals_mask.size, dtype='float')
+        params[:block.sum()] = self.state.state[block].copy()
+        self.params = params
+
+    def set_block(self, new_block):
+        """
+        I don't think there is a point to this since the rscale(z) aren't
+        actual parameters
+        """
         raise NotImplementedError
         
+        
+    def rad_func(self, pos):
+        """Right now exp(legval(z))"""
+        return np.exp(self._poly(pos[:,2]))
+    
+    def _poly(self, z):
+        """Right now legval(z)"""
+        shp = self.state.image.shape
+        zmax = float(shp[0])
+        zmin = 0.0
+        zmid = zmax / 2
+        
+        ans = np.polynomial.legendre.legval((z-zmid)/zmid, 
+                self.params[self.rscale_mask])
+        return ans
+    
+    def update(self, params):
+        """Updates all the parameters of the state + rscale(z)"""
+        self.update_rscl_x_params(params[self.rscale_mask], do_reset=False)
+        update_state_global(self.state, self.block, self.params[self.globals_mask])
+        self.params[:] = params
+    
+    def update_rscl_x_params(self, new_rscl_params, do_reset=True):
+        s = self.state
+        #1. What to change:
+        m = s.obj.typ == 1
+        p = s.obj.pos[m]
+        rold = s.obj.rad[m]
+        
+        #2. New, old values:
+        old_scale = self.rad_func(p)
+        self.params[self.rscale_mask] = new_rscl_params
+        new_scale = self.rad_func(p)
+        
+        rnew = rold * (new_scale / old_scale)
+        s.obj.rad[m] = rnew
+        s.obj.initialize(zscale=s.zscale)
+        if do_reset:
+            s.reset()
+        
 class LMAugmentedState(LMEngine):
-    def __init__(self):
+    def __init__(self, aug_state, rz_order=3, max_mem=3e9,
+            opt_kwargs={}, **kwargs):
+        """
+        Levenberg-Marquardt engine for state globals with all the options 
+        from the M. Transtrum J. Sethna 2012 ArXiV paper. See LMGlobals
+        for documentation. 
+
+        Inputs:
+        -------
+        state: cbamf.states.ConfocalImagePython instance
+            The state to optimize
+        max_mem: Int
+            The maximum memory to use for the optimization; controls block
+            decimation. Default is 3e9. 
+        opt_kwargs: Dict
+            Dict of **kwargs for opt implementation. Right now only for
+            opt.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
+        """
+        self.aug_state = aug_state
+        self.kwargs = opt_kwargs
+        self.num_pix = get_num_px_jtj(state, block.sum()+rz_order, 
+                **self.kwargs)
+        super(LMGlobals, self).__init__(**kwargs)
         raise NotImplementedError
+        
+    def _set_err_params(self):
+        self.error = get_err(self.aug_state.state)
+        self._last_error = get_err(self.aug_state.state)
+        self.params = self.aug_state.params
+        self._last_params = self.params.copy()
+
+    def calc_J(self):
+        #1. J for the state:
+        s = self.aug_state.state
+        sa = self.aug_state
+        blocks = s.explode(self.aug_state.block)
+        J_st, inds = get_rand_Japprox(s, blocks, num_inds=self.num_pix,
+                **self.kwargs)
+        self._inds = inds
+        
+        #2. J for the augmented portion:
+        old_aug_params = sa.params[sa.rscale_mask].copy()
+        dl = 1e-6
+        J_aug = []
+        i0 = s.get_difference_image()
+        for a in xrange(old_aug_params.size):
+            dx = np.zeros(old_aug_params.size)
+            dx[a] = dl
+            sa.update_rscl_x_params(old_aug_params + dl, do_reset=True)
+            i1 = s.get_difference_image()
+            der = (i1-i0)/dl
+            J_aug.apppend(der[self._inds].ravel())
+        
+        self.J = np.append(J_st, np.array(J_aug), axis=0)
+
+    def calc_residuals(self):
+        return self.state.get_difference_image()[self._inds].ravel()
+
+    def update_function(self, params):
+        self.aug_state.update(params)
+        return get_err(self.aug_state.state)
