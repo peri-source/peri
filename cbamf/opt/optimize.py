@@ -1253,7 +1253,7 @@ class LMEngine(object):
                 min_eigval=1e-12, marquardt_damping=True, transtrum_damping=None,
                 use_accel=False, max_accel_correction=1., ptol=1e-6, 
                 errtol=1e-5, costol=None, max_iter=5, run_length=5, 
-                update_J_frequency=5, broyden_update=False, eig_update=False, 
+                update_J_frequency=1, broyden_update=False, eig_update=False, 
                 partial_update_frequency=3, num_eig_dirs=4, quiet=True):
         """
         Levenberg-Marquardt engine with all the options from the 
@@ -1390,7 +1390,8 @@ class LMEngine(object):
         self._has_run = False
         if new_damping is not None:
             self.damping = new_damping
-        
+        self._set_err_params()    
+   
     def _set_err_params(self):
         """
         Must update:
@@ -1412,17 +1413,16 @@ class LMEngine(object):
         operator onto the model manifold and r the residuals. 
         """
         #1. Calculate projection term
-        u, sig, v = np.linalg.svd(self.J, full_matrices=False)
+        u, sig, v = np.linalg.svd(self.J, full_matrices=False) #slow part
         # p = np.dot(v.T, v) - memory error, so term-by-term
         r = self.calc_residuals()
-        v_r = np.dot(v,r)
+        abs_r = np.sqrt((r*r).sum())
+
+        v_r = np.dot(v,r/abs_r)
         projected = np.dot(v.T, v_r)
         
-        #2. Calculate indiviual norms:
-        abs_r = np.sqrt((r*r).sum())
-        abs_prj = np.sqrt((projected*projected).sum())
-        
-        return abs_prj / abs_r
+        abs_cos = np.sqrt((projected*projected).sum())
+        return abs_cos
     
     def do_run_1(self):
         """
@@ -1468,7 +1468,6 @@ class LMEngine(object):
         updates. 
         """
         while not self.check_terminate():
-            self._has_run = True
             if self.check_update_J():
                 self.update_J()
             else:
@@ -1477,6 +1476,12 @@ class LMEngine(object):
                 if self.check_update_eig_J():
                     self.update_eig_J()
 
+            #0. Find _last_residuals, _last_error, etc:
+            _last_residuals = self.calc_residuals().copy()
+            _last_error = 1*self.error
+            _last_params = self.params.copy()
+            
+            
             #1. Calculate 2 possible steps
             delta_params_1 = self.find_LM_updates(self.calc_grad(), 
                     do_correct_damping=False)
@@ -1488,13 +1493,14 @@ class LMEngine(object):
             #2. Check which step is best:
             er1 = self.update_function(self.params + delta_params_1)
             er2 = self.update_function(self.params + delta_params_2)
-            #ARG I need to put it back... this costs 1-2 extra function
-            #evaluations per loop. Try to clean up eval_n_check_step FIXME
-            _ = self.update_function(self.params)
+            # # # # # # #ARG I need to put it back... this costs 1-2 extra function
+            # # # # # # #evaluations per loop. Try to clean up eval_n_check_step FIXME
+            # # # # # # _ = self.update_function(self.params)
             
             triplet = (self.error, er1, er2)
             if self.error < min([er1, er2]):
-                #Both bad steps, increase damping:
+                #Both bad steps, put back & increase damping:
+                _ = self.update_function(self.params.copy())
                 _try = 0
                 good_step = False
                 if not self.quiet:
@@ -1502,34 +1508,57 @@ class LMEngine(object):
                 while (_try < self._max_inner_loop) and (not good_step):
                     self.increase_damping()
                     delta_params = self.find_LM_updates(self.calc_grad())
-                    good_step = self.eval_n_check_step(self.params + 
-                            delta_params, put_back=False)
+                    # good_step = self.eval_n_check_step(self.params + 
+                            # delta_params, put_back=False)
+                    er_new = self.update_function(self.params + delta_params)
+                    good_step = er_new < self.error
                     _try += 1
-                if _try == (self._max_inner_loop-1):
+                if not good_step:
+                    #Throw a warning, put back the parameters
                     warnings.warn('Stuck!', RuntimeWarning)
-                elif good_step:
-                    print 'Sufficiently decreased damping\t%f\t%f' % (triplet[0], self.error)
+                    self.error = self.update_function(self.params.copy())
+                else:
+                    #Good step => Update params, error:
+                    self.update_params(delta_params, incremental=True)
+                    self.error = er_new
+                    if not self.quiet:
+                        print 'Sufficiently increased damping\t%f\t%f' % (
+                                triplet[0], self.error)
+            
             elif er1 <= er2:
+                good_step = True
                 if not self.quiet:
                     print 'Good step, same damping\t%f\t%f\t%f' % triplet
-                good_step = self.eval_n_check_step(self.params + delta_params_1)
+                #Update to er1 params:
+                er1_1 = self.update_function(self.params + delta_params_1)
+                # good_step = self.eval_n_check_step(self.params + delta_params_1)
                 self.update_params(delta_params_1, incremental=True)
-
-                if not good_step:
-                    raise NotImplementedError('You messed up coding this') #FIXME obv
-            else: #Good steps
-                #er2 < er1
+                if np.abs(er1_1 - er1) > 1e-6:
+                    raise RuntimeError('GODDAMMIT!') #FIXME
+                self.error = er1
+                # if not good_step:
+                    # raise NotImplementedError('You messed up coding this') #FIXME obv
+            
+            else: #er2 < er1
+                good_step = True
+                self.error = er2
                 if not self.quiet:
                     print 'Good step, decreasing damping\t%f\t%f\t%f' % triplet
-                good_step = self.eval_n_check_step(self.params + delta_params_2)
+                # good_step = self.eval_n_check_step(self.params + delta_params_2)
+                #-we're already at the correct parameters
                 self.update_params(delta_params_2, incremental=True)
                 self.decrease_damping()
-                if not good_step:
-                    raise NotImplementedError('You messed up coding this') #FIXME obv
+                # if not good_step:
+                    # raise NotImplementedError('You messed up coding this') #FIXME obv
                     
-            #3. Run with current J, damping:
+            #3. Run with current J, damping; update what we need to::
             if good_step:
+                self._last_residuals = _last_residuals
+                self._last_error = _last_error
+                self._last_params = _last_params
+                self.error
                 self.do_internal_run()
+                self._has_run = True
             #1 loop
             self._num_iter += 1
     
@@ -1537,54 +1566,103 @@ class LMEngine(object):
         """
         Given a fixed damping, J, JTJ, iterates calculating steps, with
         optional Broyden or eigendirection updates. 
-        Called internally by do_run_2() but might also be useful on its own. 
+        Called internally by do_run_2() but might also be useful on its own.
+
+        When I update the function, I need to update:
+            self.update_params()
+            self._last_residuals
+            self._last_error
+            self.error
         """
         self._inner_run_counter = 0; good_step = True
         if not self.quiet:
             print 'Running...'
+        
+        #Things we need defined in the loop:
+        grad = self.calc_grad()
+        _last_residuals = self.calc_residuals().copy()
+        _last_error = 1*self.error
+        
         while ((self._inner_run_counter < self.run_length) & good_step &
                 (not self.check_terminate())):
+            #1. Checking if we update J
             if self.check_Broyden_J() and self._inner_run_counter != 0:
                 self.update_Broyden_J()
             if self.check_update_eig_J() and self._inner_run_counter != 0:
                 self.update_eig_J()
-            delta_params = self.find_LM_updates(self.calc_grad(), 
-                do_correct_damping=False)
-            good_step = self.eval_n_check_step(self.params + delta_params,
-                    put_back=False)
+            
+            #2. Getting parameters, error
+            er0 = _last_error; old_params = self.params.copy()
+            delta_params = self.find_LM_updates(grad, do_correct_damping=False)
+            er1 = self.update_function(self.params + delta_params)
+            good_step = er1 < er0
+            # good_step = self.eval_n_check_step(self.params + delta_params,
+                    # put_back=False)
+            
             if good_step:
                 if not self.quiet:
-                    print '%f\t%f' % (self._last_error, self.error)
+                    # print '%f\t%f' % (self._last_error, self.error)
+                    print '%f\t%f' % (_last_error, er1)
+                #Updating:
                 self.update_params(delta_params, incremental=True)
-                #^I don't like that syntax FIXME
-            elif not self.quiet:
-                print 'Bad step!' #right now thru eval_n_check doesn't give bad step
+                self._last_residuals = _last_residuals.copy()
+                self._last_error = _last_error*1
+                self.error = er1
+                
+                #and updating the things we need in the loop
+                grad = self.calc_grad()
+                _last_residuals = self.calc_residuals().copy()
+                _last_error = 1*self.error
+            else:
+                er0_0 = self.update_function(self.params)
+                if not self.quiet:
+                    print 'Bad step!' #right now thru eval_n_check doesn't give bad step
+                if np.abs(er0 - er0_0) > 1e-6:
+                    raise RuntimeError('GODDAMMIT!') #FIXME
+            
             self._inner_run_counter += 1
             
     def eval_n_check_step(self, new_params, put_back=False):
         """
+        What does this need to do?
+        It needs to:
+            1. Check if a step is good by updating the function/state
+            2. update the following
+                    self.error
+                    self._last_error
+                    self._last_residuals
+                    self._last_params????
+                    
+        Of these really only self._last_error, self._last_residuals
+        need to be done during the update. 
+        
         Doesn't update back to the old params ONLY IF the step is good
         If the step is bad, you HAVE to go back to the original params
         """        
         _last_error = self.error*1
-        _last_residuals = self.calc_residuals()
-        self.error = self.update_function(new_params)
-        good_step = self.error <= _last_error
+        _last_residuals = self.calc_residuals().copy()
+        _last_params = self.params.copy()
+        new_error = self.update_function(new_params)
+        # good_step = self.error <= _last_error
+        #There are issues with resetting to float precision, so
+        ok_step_tol = max([1e-7, self.errtol*0.1])
+        good_step = self.error <= (_last_error + ok_step_tol)
         
         #something for cosine options...
-        
-        if (not good_step) and not(self.quiet) and (not put_back):
-            pass
-            # print 'Bad step:\t%f\t->\t%f' % (self._last_error, self.error)
         if (not good_step) or put_back:
-            self.error = self.update_function(self.params)
+            _ = self.update_function(self.params)
         else:
             if not self.quiet:
                 pass
                 # print 'Good step:\t%f\t->\t%f' % (self._last_error, self.error)
+            self.error = new_error
             self._last_error = _last_error
             self._last_residuals = _last_residuals
+        if self._last_error < (self.error-ok_step_tol):
+            raise RuntimeError('ARG!!!!') #FIXME
         return good_step
+        
+    # def _eval_n_check_good_step()
         
     def update_function(self, params):
         """Takes an array params, updates function, returns the new error"""
@@ -1892,10 +1970,11 @@ class AugmentedState(object):
         """
         self.state = state
         self.block = block
+        self.rz_order = rz_order
 
         #You need some way of controlling the params, so:
         globals_mask = np.zeros(block.sum() + rz_order, dtype='bool')
-        globals_mask[:blocks.sum()] = True
+        globals_mask[:block.sum()] = True
         rscale_mask = -globals_mask
         self.globals_mask = globals_mask
         self.rscale_mask = rscale_mask
@@ -1923,9 +2002,21 @@ class AugmentedState(object):
         zmin = 0.0
         zmid = zmax / 2
         
-        ans = np.polynomial.legendre.legval((z-zmid)/zmid, 
-                self.params[self.rscale_mask])
+        coeffs = self.params[self.rscale_mask].copy()
+        if coeffs.size == 0:
+            ans = 0*z
+        else:
+            ans = np.polynomial.legendre.legval((z-zmid)/zmid, 
+                    self.params[self.rscale_mask])
         return ans
+        
+    def _get_rad_block(self):
+        s = self.state
+        block = s.block_none()
+        for a in xrange(s.obj.typ.size):
+            if s.obj.typ[a] == 1:
+                block |= s.block_particle_rad(1*a)
+        return block
     
     def update(self, params):
         """Updates all the parameters of the state + rscale(z)"""
@@ -1946,14 +2037,14 @@ class AugmentedState(object):
         new_scale = self.rad_func(p)
         
         rnew = rold * (new_scale / old_scale)
-        s.obj.rad[m] = rnew
-        s.obj.initialize(zscale=s.zscale)
         if do_reset:
-            s.reset()
+            update_state_global(self.state, self._get_rad_block(), rnew)
+        else:
+            s.obj.rad[m] = rnew
+            s.obj.initialize(zscale=s.zscale)
         
 class LMAugmentedState(LMEngine):
-    def __init__(self, aug_state, rz_order=3, max_mem=3e9,
-            opt_kwargs={}, **kwargs):
+    def __init__(self, aug_state, max_mem=3e9, opt_kwargs={}, **kwargs):
         """
         Levenberg-Marquardt engine for state globals with all the options 
         from the M. Transtrum J. Sethna 2012 ArXiV paper. See LMGlobals
@@ -1961,8 +2052,8 @@ class LMAugmentedState(LMEngine):
 
         Inputs:
         -------
-        state: cbamf.states.ConfocalImagePython instance
-            The state to optimize
+        aug_state: opt.AugmentedState instance
+            The augmented state to optimize
         max_mem: Int
             The maximum memory to use for the optimization; controls block
             decimation. Default is 3e9. 
@@ -1972,15 +2063,14 @@ class LMAugmentedState(LMEngine):
         """
         self.aug_state = aug_state
         self.kwargs = opt_kwargs
-        self.num_pix = get_num_px_jtj(state, block.sum()+rz_order, 
-                **self.kwargs)
-        super(LMGlobals, self).__init__(**kwargs)
-        raise NotImplementedError
+        self.num_pix = get_num_px_jtj(aug_state.state, aug_state.block.sum() + 
+                aug_state.rz_order, **self.kwargs)
+        super(LMAugmentedState, self).__init__(**kwargs)
         
     def _set_err_params(self):
         self.error = get_err(self.aug_state.state)
         self._last_error = get_err(self.aug_state.state)
-        self.params = self.aug_state.params
+        self.params = self.aug_state.params.copy()
         self._last_params = self.params.copy()
 
     def calc_J(self):
@@ -2003,12 +2093,17 @@ class LMAugmentedState(LMEngine):
             sa.update_rscl_x_params(old_aug_params + dl, do_reset=True)
             i1 = s.get_difference_image()
             der = (i1-i0)/dl
-            J_aug.apppend(der[self._inds].ravel())
+            J_aug.append(der[self._inds].ravel())
         
-        self.J = np.append(J_st, np.array(J_aug), axis=0)
+        if J_st.size == 0:
+            self.J = np.array(J_aug)
+        elif old_aug_params.size == 0:
+            self.J = J_st
+        else:
+            self.J = np.append(J_st, np.array(J_aug), axis=0)
 
     def calc_residuals(self):
-        return self.state.get_difference_image()[self._inds].ravel()
+        return self.aug_state.state.get_difference_image()[self._inds].ravel()
 
     def update_function(self, params):
         self.aug_state.update(params)
