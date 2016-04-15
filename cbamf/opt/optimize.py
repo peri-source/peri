@@ -2,7 +2,10 @@ import os, sys, time, warnings
 import numpy as np
 from numpy.random import randint
 from scipy.optimize import newton, minimize_scalar
+
 from cbamf.util import Tile
+from cbamf.comp import psfs, ilms, objs
+from cbamf import states
 
 """
 To add: 
@@ -31,16 +34,12 @@ To solve eq. (1), we need to:
 1. Construct the matrix JTJ = J^T*J
 2. Construct the matrix A=JTJ + l*Diag(JTJ)
 3. Construct err= y-f(x,beta)
-4. np.linalg.solve(A,err)
+4. np.linalg.leastsq(A,err, rcond=min_eigval) to avoid near-zero eigenvalues
 
 My only change to this is, instead of calculating J_ia, we calculate
 J_ia for a small subset (say 1%) of the pixels in the image randomly selected,
-rather than for all the pixels
-
-You need a way to deal with flat / near flat components in the JTJ. 
-If the eigenvalue is 0 then the matrix inverse is super ill-conditioned
-and you get crap for the suggested step. 
-
+rather than for all the pixels (in addition to leastsq solution instead of 
+linalg.solve
 """
 
 def calculate_J_approx(s, blocks, inds, **kwargs):
@@ -1272,7 +1271,58 @@ def do_linear_fit(s, block, min_eigval=1e-11, relative=False, num_iter=5, **kwar
     if new_err > old_err:
         print 'No improvement via linear fit, reverting.'
         update_state_global(s, block, old_params)
+ 
+def fit_ilm(new_ilm, old_ilm, use_engine=True, run_engine=True, **kwargs):
+    """
+    Fits a new cbamf.comp.ilms instance to (mostly) match the get_field
+    of the old ilm, by creating a fake state with no particles and an
+    identity psf and using *.do_levmarq()
     
+    Parameters:
+    -----------
+    new_ilm : cbamf.comp.ilms instance
+        The new ilm. 
+    old_ilm : cbamf.comp.ilms instance
+        The old ilm to match to. 
+    use_engine: Bool
+        Whether to use the LMEngine instances or call *.do_levmarq(). 
+        Default is True (engine)s. 
+    run_engine: Bool
+        If use_engine, whether to use the LMEngine instances or call *.do_levmarq(). 
+        Default is True (engine). 
+    **kwargs: The keyword args passed to either of the optimizers.     
+    
+
+    See Also
+    --------
+    do_levmarq: Runs Levenberg-Marquardt minimization using a random
+        subset of the image pixels. Works for any fit blocks. 
+    LMGlobals: Same, but with a cleaner engine instantiation. 
+        
+    Comments
+    --------
+    The ILMs are not necessarily linear fits. If they are linear fits, 
+    call this with a low damping, low decrease damping. If they are not, 
+    start with a high damping. 
+    
+    """
+    #The ILM isn't a linear fit necessarily so we just do opt.do_levmarq:
+    psf = psfs.IdentityPSF(params=np.zeros(1), shape=old_ilm.bkg.shape)
+    obj = objs.SphereCollectionRealSpace(np.zeros([1,3]), np.zeros(1), shape=
+            old_ilm.bkg.shape, typ=np.zeros(1))
+    fake_s = states.ConfocalImagePython(old_ilm.bkg.copy(), obj, psf, new_ilm,
+            varyn=True, pad=1)
+    
+    blk = fake_s.create_block('ilm')
+    if use_engine:
+        lm = LMGlobals(fake_s, blk, **kwargs)
+        if run_engine:
+            lm.do_run_2()
+        return fake_s.ilm, lm
+    else:
+        opt.do_levmarq(fake_s, blk, **kwargs)
+        return fake_s.ilm
+
 #=============================================================================#
 #         ~~~~~        Class/Engine LM minimization Stuff     ~~~~~
 #=============================================================================#
@@ -1281,7 +1331,7 @@ class LMEngine(object):
                 min_eigval=1e-12, marquardt_damping=True, transtrum_damping=None,
                 use_accel=False, max_accel_correction=1., ptol=1e-6, 
                 errtol=1e-5, costol=None, max_iter=5, run_length=5, 
-                update_J_frequency=1, broyden_update=False, eig_update=False, 
+                update_J_frequency=2, broyden_update=False, eig_update=False, 
                 partial_update_frequency=3, num_eig_dirs=4, quiet=True):
         """
         Levenberg-Marquardt engine with all the options from the 
@@ -1339,7 +1389,7 @@ class LMEngine(object):
                 
             update_J_frequency: Int
                 The frequency to re-calculate the full Jacobian matrix. 
-                Default is 5. Only matters for do_run_v1
+                Default is 2, i.e. every other run. 
             broyden_update: Bool
                 Set to True to do a Broyden partial update on J after 
                 each step, updating the projection of J along the 
@@ -1434,16 +1484,22 @@ class LMEngine(object):
     def calc_residuals(self):
         raise NotImplementedError('implement in subclass')
         
-    def calc_model_cosine(self):
+    def calc_model_cosine(self, decimate=None):
         """
         Calculates the cosine of the fittable residuals with the actual
         residuals, cos(phi) = |P^T r| / |r| where P^T is the projection
         operator onto the model manifold and r the residuals. 
+        
+        `Decimate' allows for every nth pixel only to be counted for speed. 
+        While this is n x faster, it is considerably less accurate, so the
+        default is no decimation. (set decimate to an int or None). 
         """
+        slicer = slice(0,-1,decimate)
+        
         #1. Calculate projection term
-        u, sig, v = np.linalg.svd(self.J, full_matrices=False) #slow part
+        u, sig, v = np.linalg.svd(self.J[:,slicer], full_matrices=False) #slow part
         # p = np.dot(v.T, v) - memory error, so term-by-term
-        r = self.calc_residuals()
+        r = self.calc_residuals()[slicer]
         abs_r = np.sqrt((r*r).sum())
 
         v_r = np.dot(v,r/abs_r)
@@ -1690,8 +1746,6 @@ class LMEngine(object):
             raise RuntimeError('ARG!!!!') #FIXME
         return good_step
         
-    # def _eval_n_check_good_step()
-        
     def update_function(self, params):
         """Takes an array params, updates function, returns the new error"""
         raise NotImplementedError('implement in subclass')
@@ -1790,7 +1844,7 @@ class LMEngine(object):
         we've done update_J_frequency loops
         """
         self._J_update_counter += 1
-        update = self._J_update_counter > self.update_J_frequency
+        update = self._J_update_counter >= self.update_J_frequency
         return update & (not self._fresh_JTJ)
     
     def update_J(self):
