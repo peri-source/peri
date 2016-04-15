@@ -1063,8 +1063,36 @@ def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
         
     return particle_groups 
 
+def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
+    """
+    Finds the biggest region size for LM particle optimization with a
+    given memory constraint.
+    """
+    region_size = np.array(region_size).astype('int')
+    
+    def calc_mem_usage(region_size):
+        rs = np.array(region_size)
+        particle_groups = separate_particles_into_groups(s, region_size=
+                rs.tolist(), **kwargs)
+        num_particles = np.max(map(np.size, particle_groups))
+        mem_per_part = 32 * np.prod(rs + 2*s.pad*np.ones(3))
+        return num_particles * mem_per_part
+    
+    im_shape = np.array(s.image.shape).astype('int')
+    if calc_mem_usage(region_size) > max_mem:
+        while ((calc_mem_usage(region_size) > max_mem) and 
+                np.any(region_size > 2)):
+            region_size = np.clip(region_size-1, 2, im_shape)
+    else:
+        while ((calc_mem_usage(region_size) < max_mem) and 
+                np.any(region_size < im_shape)):
+            region_size = np.clip(region_size+1, 2, im_shape)
+        region_size -= 1 #need to be < memory, so we undo 1 iteration
+    
+    return region_size
+
 def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=True, 
-        max_mem=2e9, **kwargs):
+        **kwargs):
     """
     Runs an exact Levenberg-Marquardt minimization on all the particles
     in the state, by splitting them up into groups of nearby particles
@@ -1118,26 +1146,9 @@ def do_levmarq_all_particle_groups(s, region_size=40, calc_region_size=True,
         approximation to J.
     """
     
-    def calc_mem_usage(region_size):
-        rs = np.array(region_size)
-        particle_groups = separate_particles_into_groups(s, region_size=
-                rs.tolist(), **kwargs)
-        num_particles = np.max(map(np.size, particle_groups))
-        mem_per_part = 32 * np.prod(rs + 2*s.pad*np.ones(3))
-        return num_particles * mem_per_part
-    
-    region_size = np.array(region_size)
     if calc_region_size:
-        if calc_mem_usage(region_size) > max_mem:
-            while ((calc_mem_usage(region_size) > max_mem) and 
-                    np.all(region_size > 2)):
-                region_size -= 1
-        else:
-            while ((calc_mem_usage(region_size) < max_mem) and 
-                    np.all(region_size < np.array(s.image.shape))):
-                region_size += 1
-            region_size -= 1
-    
+        region_size = calc_particle_group_region_size(s, region_size, **kwargs)
+        
     particle_groups = separate_particles_into_groups(s, region_size=region_size,
             **kwargs)
     no_trouble = []
@@ -1953,33 +1964,59 @@ class LMParticles(LMEngine):
         
 class LMParticleGroupCollection(object):
     """
-    ... I don't think this will work since you'll run out of memory keeping
-    J for every particle in the image
+    Convenience wrapper for LMParticles. This generates a separate instance
+    for the particle groups each time and optimizes with that, since storing
+    J for the particles is too large. 
+    
+    Methods
+    -------
+        reset: Re-calculate all the groups
+        do_run_1: Run do_run_1 for every group of particles
+        do_run_2: Run do_run_2 for every group of particles
     """
-    def __init__(self, state, region_size, do_calc_size=True, **kwargs):
-        """**kwargs for the individual lm collections"""
-        raise NotImplementedError
+    def __init__(self, state, region_size=40, do_calc_size=True, **kwargs):
+        """
+        Parameters
+        ----------
+            state: cbamf.states instance
+                The state to optimize
+            region_size: Int or 3-element list-like of ints
+                The region size for sub-blocking particles. Default is 40
+            do_calc_size: Bool
+                If True, calculates the region size internally based on
+                the maximum allowed memory. Default is True
+            **kwargs: 
+                Pass any kwargs that would be passed to LMParticles.
+                Stored in self._kwargs for reference. 
+        """
+        
+        self.state = state
+        self._kwargs = kwargs
+        self.region_size = region_size
+        self.reset(do_calc_size=do_calc_size)
+        
+    def reset(self, new_region_size=None, do_calc_size=True):
+        """Resets the particle groups and optionally the region size."""
+        if new_region_size is not None:
+            self.region_size = new_region_size
+        
+        if do_calc_size:
+            self.region_size = calc_particle_group_region_size(self.state, 
+                    self.region_size, **self._kwargs)
+            
+        self.particle_groups = separate_particles_into_groups(self.state, 
+                self.region_size)
     
     def do_run_1(self):
-        for lm in self.lm_collections:
-            lm.do_run_1()
+        for group in self.particle_groups:
+            lp = LMParticles(self.state, group, **self._kwargs)
+            lp.do_run_1()
         
     def do_run_2(self):
-        for lm in self.lm_collections:
-            lm.do_run_2()
+        for group in self.particle_groups:
+            lp = LMParticles(self.state, group, **self._kwargs)
+            lp.do_run_2()
             
-    def reset(self, new_damping=None):
-        for lm in self.lm_collections:
-            lm.reset(new_damping=new_damping)
-    
-    def create_particle_lm_groups(self):
-        pass
-        
-    def full_reset():
-        pass #also recalculates the groups, sets everything to the original values
-        #basically calls __init__ again except without the setup parts. 
-        #Or __init__ basically calls this
-
 class AugmentedState(object):
     """
     A state that, in addition to having normal state update options, 
