@@ -651,7 +651,7 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
     return tiles
     
 def eval_one_particle_grad(s, particle, dl=1e-6, threept=False, slicer=None, 
-        be_nice=False, **kwargs):
+        be_nice=False, include_rad=True, **kwargs):
     """
     Evaluates the gradient of the image for 1 particle, for all of its 
     parameters (x,y,z,R). Used for J for LM. 
@@ -717,21 +717,22 @@ def eval_one_particle_grad(s, particle, dl=1e-6, threept=False, slicer=None,
                 toss = update_one_particle(s, particle, -dx, 0, relative=True)
             grads.append( (i1-i0)/dl )
     #rad:
-    if not threept:
-        i0 = get_slicered_difference(s, slicer, mask)
-    dr = np.array([dl])
-    toss = update_one_particle(s, particle, 0, 1*dr, relative=True)
-    i1 = get_slicered_difference(s, slicer, mask)
-    if threept:
-        toss = update_one_particle(s, particle, 0, -2*dr, relative=True)
-        i2 = get_slicered_difference(s, slicer, mask)
-        if be_nice:
-            toss = update_one_particle(s, particle, 0, dr, relative=True)
-        grads.append((i1-i2)*0.5/dl)
-    else:
-        if be_nice:
-            toss = update_one_particle(s, particle, 0, -dr, relative=True)
-        grads.append( (i1-i0)/dl )
+    if include_rad:
+        if not threept:
+            i0 = get_slicered_difference(s, slicer, mask)
+        dr = np.array([dl])
+        toss = update_one_particle(s, particle, 0, 1*dr, relative=True)
+        i1 = get_slicered_difference(s, slicer, mask)
+        if threept:
+            toss = update_one_particle(s, particle, 0, -2*dr, relative=True)
+            i2 = get_slicered_difference(s, slicer, mask)
+            if be_nice:
+                toss = update_one_particle(s, particle, 0, dr, relative=True)
+            grads.append((i1-i2)*0.5/dl)
+        else:
+            if be_nice:
+                toss = update_one_particle(s, particle, 0, -dr, relative=True)
+            grads.append( (i1-i0)/dl )
         
     return np.array(grads), slicer
 
@@ -788,7 +789,7 @@ def get_tile_from_multiple_particle_change(s, inds):
     
     return Tile(left, right=right)
 
-def update_particles(s, particles, params, **kwargs):
+def update_particles(s, particles, params, include_rad=True, **kwargs):
     #eval_particle_grad returns parameters in order(p0,r0,p1,r1,p2,r2...)
     #so that determines the order for updating particles:
     all_part_tiles = []
@@ -803,17 +804,21 @@ def update_particles(s, particles, params, **kwargs):
     
     #We update the object but only update the field at the end
     for a in xrange(particles.size):
-        # pos = params[4*a:4*a+3]
-        # rad = params[4*a+3:4*a+4]
+        # pos = params[4*a:4*a+3] if include_rad else params[3*a:3*a+3]
+        # rad = params[4*a+3:4*a+4] if include_rad else r0
         
         #To play nice with relative, we get p0, r0 first, then p1, r1
         p0 = s.obj.pos[particles[a]].copy()
         r0 = np.array([s.obj.rad[particles[a]]])
         t0 = np.array([s.obj.typ[particles[a]]])
 
-        toss = update_one_particle(s, particles[a], params[4*a:4*a+3], 
-                params[4*a+3:4*a+4], do_update_tile=False, **kwargs)
-        
+        if include_rad:
+            toss = update_one_particle(s, particles[a], params[4*a:4*a+3], 
+                    params[4*a+3:4*a+4], do_update_tile=False, **kwargs)
+        else:
+            toss = update_one_particle(s, particles[a], params[3*a:3*a+3], 
+                    r0.copy(), do_update_tile=False, **kwargs)
+
         p1 = s.obj.pos[particles[a]].copy()
         r1 = np.array([s.obj.rad[particles[a]]])
         t1 = np.array([s.obj.typ[particles[a]]])
@@ -1901,9 +1906,10 @@ class LMGlobals(LMEngine):
         self.reset(new_damping=new_damping)
 
 class LMParticles(LMEngine):
-    def __init__(self, state, particles, opt_kwargs={}, **kwargs):
+    def __init__(self, state, particles, particle_kwargs={}, **kwargs):
+        """include_rad is in particle_kwargs"""
         self.state = state
-        self.kwargs = opt_kwargs
+        self.particle_kwargs = particle_kwargs
         self.particles = particles
         self.error = get_err(self.state)
         self._dif_tile = get_tile_from_multiple_particle_change(state, particles)
@@ -1913,8 +1919,13 @@ class LMParticles(LMEngine):
         self.error = get_err(self.state)
         self._last_error = get_err(self.state)
         params = []
-        for p in self.particles:
-            params.extend(self.state.obj.pos[p].tolist() + [self.state.obj.rad[p]])
+        if (self.particle_kwargs.has_key('include_rad') and 
+                self.particle_kwargs['include_rad'] == False):
+            for p in self.particles:
+                params.extend(self.state.obj.pos[p].tolist())
+        else:
+            for p in self.particles:
+                params.extend(self.state.obj.pos[p].tolist() + [self.state.obj.rad[p]])
         self.params = np.array(params)
         self._last_params = self.params.copy()
     
@@ -1922,7 +1933,7 @@ class LMParticles(LMEngine):
         self._dif_tile = get_tile_from_multiple_particle_change(self.state, 
                 self.particles)
         self.J = eval_many_particle_grad(self.state, self.particles, 
-                slicer=self._dif_tile.slicer, **self.kwargs)
+                slicer=self._dif_tile.slicer, **self.particle_kwargs)
                 
     def calc_residuals(self):
         return get_slicered_difference(self.state, self._dif_tile.slicer, 
@@ -1930,7 +1941,7 @@ class LMParticles(LMEngine):
                 
     def update_function(self, params):
         update_particles(self.state, self.particles, params, 
-                relative=False, fix_errors=True)
+                relative=False, fix_errors=True, **self.particle_kwargs)
         return get_err(self.state)
         
     def set_particles(self, new_particles, new_damping=None):
