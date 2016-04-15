@@ -237,6 +237,18 @@ def update_state_global(s, block, data, keep_time=False, **kwargs):
 def get_err(s):
     d = s.get_difference_image()
     return np.sum(d*d)
+    
+def block_globals(s, include_rscale=True, include_off=False, include_sigma=False):
+    blk = ( s.create_block('ilm') | s.create_block('bkg') | 
+            s.create_block('psf') | s.create_block('slab') |
+            s.create_block('zscale') )
+    if include_rscale:
+        blk |= s.create_block('rscale')
+    if include_sigma:
+        blk |= s.create_block('sigma')
+    if include_off:
+        blk |= s.create_block('off')
+    return blk
 
 def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwargs):
     #1. Max for a given max_mem:
