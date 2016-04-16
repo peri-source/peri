@@ -1875,7 +1875,7 @@ class LMEngine(object):
     
     def check_update_eig_J(self):
         do_update = (self.eig_update & (not self._fresh_JTJ) & 
-                (self._inner_run_counter % self.partial_update_frequency) == 0)
+                ((self._inner_run_counter % self.partial_update_frequency) == 0))
         return do_update
         
     def update_eig_J(self):
