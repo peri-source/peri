@@ -579,9 +579,10 @@ class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
     PSF with a fixed global support size of [35, 17, 25], which is 
     a normal fitted SS, clipped to 2*s.pad for a pad of 17. 
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, support_size=[35,17,25], *args, **kwargs):
         super(FixedSSChebLinePSF, self).__init__(*args, **kwargs)
         self.cutoffval = None
+        self.support = np.array(support_size)
         
     def characterize_psf(self):
         """ Get support size and drift polynomial for current set of params """
@@ -592,7 +593,6 @@ class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
 
         # FIXME -- must be odd for now or have a better system for getting the center
         # self.support = util.oddify(2*self.support_factor*size_u.astype('int'))
-        self.support = np.array([35,17,25])
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
 
         # if self.cutoffval is not None:
@@ -602,6 +602,12 @@ class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
             # ss = [np.abs(i).sum(axis=-1) for i in [size_l, size_u]]
             # self.support = util.oddify(util.amax(*ss))
         pass
+        
+    def _compatibility_patch(self):
+        # FIXME -- why this function with __dict__.get? backwards compatibility
+        # each of these parameters were added after the original class was made
+        self.support = self.__dict__.get('support', np.array([35,17,25]))
+        super(FixedSSChebLinePSF, self)._compatibility_patch()
 
 class FixedBigSSChebLinePSF(FixedSSChebLinePSF):
     """
@@ -616,20 +622,3 @@ class FixedBigSSChebLinePSF(FixedSSChebLinePSF):
 
         self.support = np.array([61, 25, 33])
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
-
-class FixedSSMedianChebLinePSF(FixedSSChebLinePSF):
-    """
-    Sounds like a great idea, but I don't think the median finding is stable
-    with the chebyshev... if you take the median of any given slice it's all
-    over the place (+- 3px sometimes)
-    """
-    def measure_size_drift(self, z, size=31, zoffset=0.):
-        """ Returns the 'size' of the psf in each direction a particular z (px) """
-        drift = 0.0
-        for i in xrange(self.measurement_iterations):
-            psf, vec = self.psf_slice(z, size=size, zoffset=zoffset+drift)
-            psf = psf / psf.sum()
-
-            drift += median_width(psf, axis=0, order=1)
-            psize = [median_width(psf, axis=j, order=2) for j in xrange(len(vec))]
-        return np.array(psize), drift
