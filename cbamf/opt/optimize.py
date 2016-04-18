@@ -1859,7 +1859,7 @@ class LMEngine(object):
     
     def check_Broyden_J(self):
         do_update = (self.broyden_update & (not self._fresh_JTJ) & 
-                (self._inner_run_counter % self.partial_update_frequency) == 0)
+                ((self._inner_run_counter % self.partial_update_frequency) == 0))
         return do_update
         
     def update_Broyden_J(self):
