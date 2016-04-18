@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import cPickle as pickle
+from contextlib import contextmanager
 
 from cbamf import const
 from cbamf import initializers
@@ -353,6 +354,8 @@ class ConfocalImagePython(State):
         self.newconst = newconst
         self.method = method
 
+        self.dollupdate = True
+
         self.psf = psf
         self.ilm = ilm
         self.bkg = bkg
@@ -618,6 +621,9 @@ class ConfocalImagePython(State):
         return outer, inner, iotile.slicer
 
     def _update_ll_field(self, data=None, slicer=np.s_[:]):
+        if not self.dollupdate:
+            return
+
         if data is None:
             self._loglikelihood = 0
             self._loglikelihood_field *= 0
@@ -697,7 +703,6 @@ class ConfocalImagePython(State):
             if self.method == 1:
                 # [I(1-P)]xH + B
                 replacement = I*(1-P) + C*P
-                pass
             elif self.method == 2:
                 # [I(1-p)]xH + sxH + B
                 pass
@@ -1162,6 +1167,16 @@ class ConfocalImagePython(State):
             self.varyn, self.allowdimers, self.nlogs, self.difference,
             self.pad, self.sigmapad, self.slab, self.newconst, self.bkg,
             self.method)
+
+    @contextmanager
+    def no_ll_update(self):
+        try:
+            self.dollupdate = False
+            yield
+        except Exception as e:
+            raise
+        finally:
+            self.dollupdate = True
 
 def save(state, filename=None, desc='', extra=None):
     """
