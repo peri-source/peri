@@ -193,6 +193,28 @@ class PSF(object):
     def __repr__(self):
         return str(self.__class__.__name__)+" {} ".format(self.params)
 
+class IdentityPSF(PSF):
+    """
+    Delta-function PSF; returns the field passed to execute identically. 
+    Params is an N-element numpy.ndarray, doesn't do anything. 
+    """
+    def execute(self, field):
+        return field
+    
+    def get_support_size(self, *args):
+        return np.ones(3)
+    
+    def update(self, params):
+        self.params = params
+    
+    def _setup_ffts(self):
+        """Does not waste time setting up the ffts"""
+        pass
+    
+    def set_tile(self, tile):
+        if (self.tile.shape != tile.shape).any():
+            self.tile = tile
+
 class AnisotropicGaussian(PSF):
     def __init__(self, params, shape, error=1.0/255, *args, **kwargs):
         self.error = error

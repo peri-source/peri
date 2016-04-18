@@ -1,9 +1,39 @@
+import warnings
 import numpy as np
 import scipy.ndimage as nd
 
 from cbamf import util
 from cbamf import interpolation
 from cbamf.comp import psfs, psfcalc
+
+def calc_quintile(p, quintile, axis=0):
+    """p = rho, v = xyz"""
+    inds = [0,1,2]
+    inds.remove(axis)
+    partial_int = p.sum(axis=tuple(inds))
+    lut = 0*partial_int
+    for a in xrange(lut.size):
+        lut[a] = partial_int[:a+1].sum()
+    just_above = np.nonzero(lut > quintile)[0][0]
+    just_below = just_above - 1
+    slope = lut[just_above] - lut[just_below]
+    delta = (0.5-lut[just_below]) / slope
+    ans_px = just_below + delta
+    ans_coord = ans_px - p.shape[axis]/2
+    return ans_coord
+
+def median_width(p, axis=0, order=1):
+    """
+    Rather than calculating a moment, calculates a median (order=1)
+    and the max distance to the upper or lower quartiles (order=2)
+    """
+    if order == 1:
+        return calc_quintile(p, 0.5, axis=axis)
+    elif order == 2:
+        med = calc_quintile(p, 0.50, axis=axis)
+        low = calc_quintile(p, 0.25, axis=axis)
+        hih = calc_quintile(p, 0.75, axis=axis)
+        return np.max([hih-med, med-low])
 
 def moment(p, v, order=1):
     """ Calculates the moments of the probability distribution p with vector v """
@@ -19,7 +49,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
             pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=None,
-            nkpts=None, cutoffval=None, measurement_iterations=None, dosigkf=True, *args, **kwargs):
+            nkpts=None, cutoffval=None, measurement_iterations=None, 
+            dosigkf=True, k_dist='gaussian', use_J1=True, sph6_ab=None,
+            *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -97,6 +129,16 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
         dosigkf : boolean
             Whether or not to include sigkf in the sampling procedure
+            
+        k_dist : str
+            Eithe ['gaussian', 'gamma'] which control the wavevector
+            distribution for the polychromatic detection psf. Default
+            is Gaussian. 
+            
+        use_J1 : boolean
+            Which hdet confocal model to use. Set to True to include the 
+            J1 term corresponding to a large-NA focusing lens, False to
+            exclude it. Default is True
 
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
@@ -115,6 +157,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.dosigkf = dosigkf
         self.nkpts = nkpts
         self.cutoffval = cutoffval
+        
+        self.k_dist = k_dist
+        self.use_J1 = use_J1
 
         if self.sigkf is not None:
             self.nkpts = self.nkpts or 3
@@ -125,6 +170,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         else:
             self.sigkf = sigkf = 0.0
             self.polychromatic = False
+            
+        if (sph6_ab is not None) and (not np.isnan(sph6_ab)):
+            self.use_sph6_ab = True #necessary? FIXME
+        else:
+            self.use_sph6_ab = False
 
         # FIXME -- zrange can't be none right now -- need to fix boundary calculations
         if zrange is None:
@@ -132,8 +182,8 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.zrange = zrange
 
         # text location of parameters for ease of extraction
-        self.param_order = ['kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser_wavelength', 'sigkf']
-        params = np.array( [ kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength,   sigkf ])
+        self.param_order = ['kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser_wavelength', 'sigkf', 'sph6_ab']
+        params = np.array( [ kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength,   sigkf, sph6_ab ])
 
         if not self.dosigkf:
             self.param_order = self.param_order[:-1]
@@ -218,13 +268,18 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         routines above.  For example, packs for calculate_linescan_psf
         """
         d = self.todict()
-        d.update({'polar_angle': self.polar_angle, 'normalize': self.normalize})
+        d.update({'polar_angle': self.polar_angle, 'normalize': self.normalize,
+                'include_K3_det':self.use_J1}) 
+        if self.polychromatic:
+            d.update({'k_dist':self.k_dist})
         d.pop('laser_wavelength')
         d.pop('zslab')
         d.pop('zscale')
 
         if not self.polychromatic and d.has_key('sigkf'):
             d.pop('sigkf')
+        if not self.use_sph6_ab and d.has_key('sph6_ab'):
+            d.pop('sph6_ab')
 
         return d
 
@@ -238,6 +293,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.nkpts = self.__dict__.get('nkpts', None)
         self.polychromatic = self.sigkf is not None or self.nkpts is not None
         self.measurement_iterations = self.__dict__.get('measurement_iterations', 1)
+        self.k_dist = self.__dict__.get('k_dist', 'gaussian')
+        self.use_J1 = self.__dict__.get('use_J1', True)
+        self.use_sph6_ab = self.__dict__.get('use_sph6_ab', False)
 
     def _p2k(self, v):
         """ Convert from pixel to 1/k_incoming (laser_wavelength/(2\pi)) units """
@@ -287,6 +345,18 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         return self.support
 
     def update(self, params):
+        #Clipping params to computable values:
+        alpha_ind = self.param_order.index('alpha')
+        zscal_ind = self.param_order.index('zscale')
+        max_alpha = np.pi*0.5
+        max_zscle = 100
+        if params[alpha_ind] < 1e-3 or params[alpha_ind] > max_alpha:
+            warnings.warn('Invalid alpha, clipping', RuntimeWarning)
+            params[alpha_ind] = np.clip(params[alpha_ind], 1e-3, max_alpha-1e-3)
+        if params[zscal_ind] < 1e-3 or params[zscal_ind] > max_zscle:
+            warnings.warn('Invalid zscale, clipping', RuntimeWarning)
+            params[zscal_ind] = np.clip(params[zscal_ind], 1e-3, max_zscle-1e-3)
+        
         self.params[:] = params[:]
         self.param_dict = self.todict()
         self.characterize_psf()
@@ -434,6 +504,18 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
         super(ChebyshevLineScanConfocalPSF, self).__init__(*args, **kwargs)
 
     def update(self, params):
+        #Clipping params to computable values:
+        alpha_ind = self.param_order.index('alpha')
+        zscal_ind = self.param_order.index('zscale')
+        max_alpha = np.pi*0.5
+        max_zscle = 100
+        if params[alpha_ind] < 1e-3 or params[alpha_ind] > max_alpha:
+            warnings.warn('Invalid alpha, clipping', RuntimeWarning)
+            params[alpha_ind] = np.clip(params[alpha_ind], 1e-3, max_alpha-1e-3)
+        if params[zscal_ind] < 1e-3 or params[zscal_ind] > max_zscle:
+            warnings.warn('Invalid zscale, clipping', RuntimeWarning)
+            params[zscal_ind] = np.clip(params[zscal_ind], 1e-3, max_zscle-1e-3)
+        
         self.params[:] = params[:]
         self.param_dict = self.todict()
         self.characterize_psf()
@@ -490,3 +572,64 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
         self.__dict__.update(idict)
         self._compatibility_patch()
         self._setup_ffts()
+
+#And a debugging psf..
+class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
+    """
+    PSF with a fixed global support size of [35, 17, 25], which is 
+    a normal fitted SS, clipped to 2*s.pad for a pad of 17. 
+    """
+    def __init__(self, *args, **kwargs):
+        super(FixedSSChebLinePSF, self).__init__(*args, **kwargs)
+        self.cutoffval = None
+        
+    def characterize_psf(self):
+        """ Get support size and drift polynomial for current set of params """
+        l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1]
+
+        size_l, drift_l = self.measure_size_drift(l)
+        size_u, drift_u = self.measure_size_drift(u)
+
+        # FIXME -- must be odd for now or have a better system for getting the center
+        # self.support = util.oddify(2*self.support_factor*size_u.astype('int'))
+        self.support = np.array([35,17,25])
+        self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
+
+        # if self.cutoffval is not None:
+            # psf, vec, size_l = self.psf_slice(l, size=51, zoffset=drift_l, getextent=True)
+            # psf, vec, size_u = self.psf_slice(u, size=51, zoffset=drift_u, getextent=True)
+
+            # ss = [np.abs(i).sum(axis=-1) for i in [size_l, size_u]]
+            # self.support = util.oddify(util.amax(*ss))
+        pass
+
+class FixedBigSSChebLinePSF(FixedSSChebLinePSF):
+    """
+    PSF with a bigger fixed global support size of [61, 25, 33]
+    """
+    def characterize_psf(self):
+        """ Get support size and drift polynomial for current set of params """
+        l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1]
+
+        size_l, drift_l = self.measure_size_drift(l)
+        size_u, drift_u = self.measure_size_drift(u)
+
+        self.support = np.array([61, 25, 33])
+        self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
+
+class FixedSSMedianChebLinePSF(FixedSSChebLinePSF):
+    """
+    Sounds like a great idea, but I don't think the median finding is stable
+    with the chebyshev... if you take the median of any given slice it's all
+    over the place (+- 3px sometimes)
+    """
+    def measure_size_drift(self, z, size=31, zoffset=0.):
+        """ Returns the 'size' of the psf in each direction a particular z (px) """
+        drift = 0.0
+        for i in xrange(self.measurement_iterations):
+            psf, vec = self.psf_slice(z, size=size, zoffset=zoffset+drift)
+            psf = psf / psf.sum()
+
+            drift += median_width(psf, axis=0, order=1)
+            psize = [median_width(psf, axis=j, order=2) for j in xrange(len(vec))]
+        return np.array(psize), drift
