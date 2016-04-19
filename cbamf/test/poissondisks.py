@@ -152,7 +152,7 @@ class PolydisperseDiskCollection:
     distribution that will fit into a crack. However this code will give
     something that is polydisperse and "mostly done."
     """
-    def __init__( self, grid_shape, get_radii, pad, k=30, max_sep_factor=1.0):
+    def __init__( self, grid_shape, get_radii, pad, k=30, max_sep_factor=0.5):
         """
         Calculates a collection of _polydisperse_ hard disks that are not 
         overlapping. Uses a modified version of the algorith in Bridson Siggraph
@@ -167,17 +167,38 @@ class PolydisperseDiskCollection:
             get_radii() should return a radius for a random particle attempt. 
         
         pad:            int
-            The maximum size of the particle. This is enforced internally.
+            The maximum radius of the particle. This is enforced internally.
         
         k:              int
             maximum number of rejections before moving on
 
         max_sep_factor : float
             The size of the step to take. Not sure if it does anything....
+            
+        Attributes:
+        -----------
+            positions:  np.ndarray
+                [N,3] element numpy.ndarray of the N particle positions. 
+            
+            radii:      np.ndarray
+                N element numpy.ndarray of the N particle radii. 
+            
+            disk_grid:  np.ndarray
+                grid_shape shaped numpy.ndarray, 0 where there is no particle
+                and an integer corresponding to the particle's label on the
+                pixels that a given particle is closest to. 
+            
+            pad:        int
+                The maximum radius of the particles.  
         """
         if len(grid_shape) > 3:
             raise AttributeError("Can only handle 2D / 3D grids")
 
+            
+        #Bookkeping:
+        #   self.active_list=padded positions, self.positions=raw positions. 
+        #   particle_labels: The labels on the disk grid. Labels in the lists
+        #       are particle_labels-1
         #Step 0. Initialize:
         self.pad = pad
         self.disk_grid = np.zeros(np.array(grid_shape) + 2*pad,dtype ='int')
@@ -187,12 +208,10 @@ class PolydisperseDiskCollection:
         start_pos = np.random.rand(len(grid_shape)) * np.array(grid_shape)
         start_ind = float_to_index( start_pos )
         self.disk_grid[tuple(start_ind)] = counter
-        #The var active_list will be the padded positions, the var positions 
-        #the raw positions. 
         active_list = [[start_pos + pad, 1*counter]]
         counter += 1
-        positions = [start_pos]
-        radii = [np.clip(get_radii(), 0, pad)]
+        self.positions = [start_pos]
+        self.radii = [np.clip(get_radii(), 0, pad)]
         
         #Step 2: Loop over all elements in the active list:
         while len( active_list ) > 0:
@@ -206,53 +225,76 @@ class PolydisperseDiskCollection:
             #   annulus on (minsep, 2*minsep); try to put them on:
             for attempt in xrange(k):
                 #Generate a normalized attempt of the correct magnitude
-                this_radius= np.clip(get_radii(), 0, pad)
-                min_sep = 0.5 * (this_radius + radii[part_lbl-1])
+                this_radius = np.clip(get_radii(), 0, pad)
+                min_sep = (this_radius + self.radii[part_lbl-1])
                 this_point = np.random.randn(len(self.disk_grid.shape))
-                this_point /= np.sqrt((this_point**2).sum())#normalize
+                this_point /= np.sqrt((this_point**2).sum())#normalize                
                 this_point *= min_sep*(1.0 + max_sep_factor*np.random.rand() )
-                this_point += cur_pos #the correct offset
+                this_point += cur_pos #the correct offset, making this padded
 
-                overlapped = self.check_overlap( this_point, min_sep)
+                overlapped = self.check_overlap(this_point, this_radius)
                 if not overlapped:
                     #First, replace the popped particle:
                     active_list.insert( this_ind, [cur_pos, part_lbl] )
                     active_list.append( [this_point, counter] )
 
                     #Add the radii, de-padded position to the cumulative list:
-                    positions.append( this_point - pad )
-                    radii.append( this_radius )
+                    self.positions.append( this_point - pad )
+                    self.radii.append( this_radius )
                     self.disk_grid[tuple(float_to_index(this_point))]=counter
                     counter += 1
-                    continue
 
         #And I need to un-pad...
-        self.disk_grid = self.disk_grid[min_sep:-min_sep, min_sep:-min_sep].copy()
-        self.positions = np.array(positions)
-        self.radii = np.array(radii)
+        pd = self.pad
+        if len(self.disk_grid.shape) == 2:
+            self.disk_grid = self.disk_grid[pd:-pd,pd:-pd].copy()
+        elif len(self.disk_grid.shape) == 3:
+            self.disk_grid = self.disk_grid[pd:-pd,pd:-pd,pd:-pd].copy()
+        
+        self.positions = np.array(self.positions)
+        self.radii = np.array(self.radii)
 
-    def check_overlap(self, pos_to_check, min_sep):
-        ms = int(np.ceil(min_sep)) 
+    def check_overlap(self, pos_to_check, this_radius):
+        """
+        pos_to_check is padded
+        """
+        # ms = int(np.ceil(min_sep))
+        ms = 2*self.pad + 1
         ind = float_to_index(pos_to_check)
+        lind = np.clip(ind-ms,0,self.disk_grid.shape)
+        rind = np.clip(ind+ms,0,self.disk_grid.shape)
         
         #We call outside the image an overlap:
         if np.any(ind <= self.pad) or np.any(ind >= \
                 np.array(self.disk_grid.shape) - self.pad ):
             return True
-
-        pts = np.arange(-ms, ms+1)
+        
+        #1. Check for possibly overlapping particles:
         if len(ind) == 2:
             #2D
-            x,y = np.meshgrid(pts, pts)
-            mask = x**2 + y**2 < ms**2
-            cur_grid = self.disk_grid[ind[0]-ms:ind[0]+ms+1,ind[1]-ms:ind[1]+ms+1]
+            nearby_grid = self.disk_grid[lind[0]:rind[0], lind[1]:rind[1]]
+            # cur_grid = self.disk_grid[ind[0]-ms:ind[0]+ms+1,ind[1]-ms:ind[1]+ms+1]
         elif len(ind) == 3:
             #3D
-            x,y,z = np.meshgrid( pts, pts, pts )
-            mask = x**2 + y**2 + z**3 < ms**3
-            cur_grid = self.disk_grid[ ind[0]-ms:ind[0]+ms+1,ind[1]-ms:ind[1]+\
-                ms+1, ind[2] - ms:ind[2]+ms + 1]
-
-        #FIXME this is too stringent -- it's just checking if it's within 1 px
-        #of overlapping
-        return np.any(cur_grid * mask) 
+            nearby_grid = self.disk_grid[lind[0]:rind[0], lind[1]:rind[1], lind[2]:rind[2]]
+            # x,y,z = np.meshgrid( pts, pts, pts )
+            # mask = x**2 + y**2 + z**3 < ms**3
+            # cur_grid = self.disk_grid[ ind[0]-ms:ind[0]+ms+1,ind[1]-ms:ind[1]+\
+                # ms+1, ind[2] - ms:ind[2]+ms + 1]
+        maybe_overlap = np.sort(np.unique(nearby_grid))[1:] #killing the 0
+        return self._check_exact_overlap(pos_to_check, this_radius, inds=maybe_overlap)
+        # return self._check_exact_overlap(pos_to_check, this_radius, inds=None)
+        
+    def _check_exact_overlap(self, pos_to_check, rad_to_check, inds=None):
+        """
+        Given a position, radii, and a set of inds, exhaustively checks if a 
+        trial position overlaps with any of the positions. 
+        inds are 
+        """
+        if inds is None:
+            inds = np.sort(np.unique(self.disk_grid))[1:]
+        overlap = False
+        for i in inds:
+            overlap |= (np.sqrt(np.sum((pos_to_check-self.pad-self.positions[i-1])**2)) -
+                    self.radii[i-1] - rad_to_check) < 0
+        return overlap
