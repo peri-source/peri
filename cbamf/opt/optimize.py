@@ -237,7 +237,7 @@ def get_err(s):
     d = s.get_difference_image()
     return np.sum(d*d)
     
-def block_globals(s, include_rscale=True, include_off=False, include_sigma=False):
+def block_globals(s, include_rscale=True, include_off=True, include_sigma=False):
     blk = ( s.create_block('ilm') | s.create_block('bkg') | 
             s.create_block('psf') | s.create_block('slab') |
             s.create_block('zscale') )
@@ -1331,7 +1331,7 @@ class LMEngine(object):
                 min_eigval=1e-12, marquardt_damping=True, transtrum_damping=None,
                 use_accel=False, max_accel_correction=1., ptol=1e-6, 
                 errtol=1e-5, costol=None, max_iter=5, run_length=5, 
-                update_J_frequency=2, broyden_update=False, eig_update=False, 
+                update_J_frequency=1, broyden_update=False, eig_update=False, 
                 partial_update_frequency=3, num_eig_dirs=4, quiet=True):
         """
         Levenberg-Marquardt engine with all the options from the 
@@ -1809,7 +1809,39 @@ class LMEngine(object):
             self.params = new_params.copy()
         #And we've updated, so JTJ is no longer valid:
         self._fresh_JTJ = False
-            
+    
+    def get_termination_stats(self):
+        """
+        Returns a dict of termination statistics
+        """
+        delta_params = self._last_params - self.params
+        delta_err = self._last_error - self.error
+        model_cosine = self.calc_model_cosine()
+        to_return = {'delta_params':delta_params, 'delta_err':delta_err, 
+                    'model_cosine':model_cosine, 'num_iter':1*self._num_iter}
+        return to_return
+
+    def check_completion(self):
+        """
+        Checks if the algorithm has found a satisfactory minimum
+        """
+        terminate = False
+        
+        #1. change in params small enough?
+        delta_params = self._last_params - self.params
+        terminate |= np.all(np.abs(delta_params) < self.ptol)
+        
+        #2. change in err small enough?
+        delta_err = self._last_error - self.error
+        terminate |= (delta_err < self.errtol)
+        
+        #3. change in cosine small enough? 
+        if self.costol is not None:
+            curcos = self.calc_model_cosine()
+            terminate |= (curcos < self.costol)
+        
+        return terminate
+    
     def check_terminate(self):
         """
         Termination if ftol, ptol, costol are < a certain amount
@@ -1819,20 +1851,8 @@ class LMEngine(object):
         if not self._has_run:
             return False
         else:
-            terminate = False
-            
-            #1. change in params small enough?
-            delta_params = self._last_params - self.params
-            terminate |= np.all(np.abs(delta_params) < self.ptol)
-            
-            #2. change in err small enough?
-            delta_err = self._last_error - self.error
-            terminate |= (delta_err < self.errtol)
-            
-            #3. change in cosine small enough? 
-            if self.costol is not None:
-                curcos = self.calc_model_cosine()
-                terminate |= (curcos < self.costol)
+            #1-3. errtol, ptol, model cosine low enough?
+            terminate = self.check_completion()
             
             #4. too many iterations??
             terminate |= (self._num_iter > self.max_iter)
@@ -2028,7 +2048,8 @@ class LMParticleGroupCollection(object):
         do_run_1: Run do_run_1 for every group of particles
         do_run_2: Run do_run_2 for every group of particles
     """
-    def __init__(self, state, region_size=40, do_calc_size=True, **kwargs):
+    def __init__(self, state, region_size=40, do_calc_size=True, 
+            collect_stats=False, **kwargs):
         """
         Parameters
         ----------
@@ -2039,6 +2060,10 @@ class LMParticleGroupCollection(object):
             do_calc_size: Bool
                 If True, calculates the region size internally based on
                 the maximum allowed memory. Default is True
+            collect_stats: Bool
+                If True, collects statistics on each individual group's run,
+                using LMEngine.get_termination_stats(), stored in self.stats. 
+                Default is False
             **kwargs: 
                 Pass any kwargs that would be passed to LMParticles.
                 Stored in self._kwargs for reference. 
@@ -2047,16 +2072,17 @@ class LMParticleGroupCollection(object):
         self.state = state
         self._kwargs = kwargs
         self.region_size = region_size
+        self.collect_stats = collect_stats
         self.reset(do_calc_size=do_calc_size)
         
     def reset(self, new_region_size=None, do_calc_size=True):
         """Resets the particle groups and optionally the region size."""
         if new_region_size is not None:
             self.region_size = new_region_size
-        
         if do_calc_size:
             self.region_size = calc_particle_group_region_size(self.state, 
                     self.region_size, **self._kwargs)
+        self.stats = [] if self.collect_stats else None
             
         self.particle_groups = separate_particles_into_groups(self.state, 
                 self.region_size)
@@ -2065,12 +2091,16 @@ class LMParticleGroupCollection(object):
         for group in self.particle_groups:
             lp = LMParticles(self.state, group, **self._kwargs)
             lp.do_run_1()
+            if self.collect_stats:
+                self.stats.append(lp.get_termination_stats())
         
     def do_run_2(self):
         for group in self.particle_groups:
             lp = LMParticles(self.state, group, **self._kwargs)
             lp.do_run_2()
-            
+            if self.collect_stats:
+                self.stats.append(lp.get_termination_stats())
+
 class AugmentedState(object):
     """
     A state that, in addition to having normal state update options, 
@@ -2081,12 +2111,17 @@ class AugmentedState(object):
     def __init__(self, state, block, rz_order=3):
         """
         block can be an array of False, that's OK
+        However it cannot have any radii blocks
         """
+        
+        if np.any(block & state.b_rad) or np.any(block & state.create_block('rscale')):
+            raise ValueError('block must not contain any radii blocks.')
+        
         self.state = state
         self.block = block
         self.rz_order = rz_order
 
-        #You need some way of controlling the params, so:
+        #Controling which params are globals, which are r(xyz) parameters
         globals_mask = np.zeros(block.sum() + rz_order, dtype='bool')
         globals_mask[:block.sum()] = True
         rscale_mask = -globals_mask
@@ -2096,6 +2131,19 @@ class AugmentedState(object):
         params = np.zeros(globals_mask.size, dtype='float')
         params[:block.sum()] = self.state.state[block].copy()
         self.params = params
+        self.reset()
+        
+    def reset(self):
+        """
+        Resets the initial radii used for updating the particles. Call
+        if any of the particle radii or positions have been changed
+        external to the augmented state. 
+        """
+        self._particle_mask = self.state.obj.typ == 1
+        self._initial_rad = self.state.obj.rad[self._particle_mask].copy()
+        self._initial_pos = self.state.obj.pos[self._particle_mask].copy()
+        self.params[self.rscale_mask] = 0
+        self._st_rad_blk = self._get_rad_block()
 
     def set_block(self, new_block):
         """
@@ -2103,7 +2151,6 @@ class AugmentedState(object):
         actual parameters
         """
         raise NotImplementedError
-        
         
     def rad_func(self, pos):
         """Right now exp(legval(z))"""
@@ -2135,27 +2182,23 @@ class AugmentedState(object):
     def update(self, params):
         """Updates all the parameters of the state + rscale(z)"""
         self.update_rscl_x_params(params[self.rscale_mask], do_reset=False)
-        update_state_global(self.state, self.block, self.params[self.globals_mask])
-        self.params[:] = params
+        update_state_global(self.state, self.block, params[self.globals_mask])
+        self.params[:] = params.copy()
     
     def update_rscl_x_params(self, new_rscl_params, do_reset=True):
-        s = self.state
         #1. What to change:
-        m = s.obj.typ == 1
-        p = s.obj.pos[m]
-        rold = s.obj.rad[m]
+        p = self._initial_pos
         
         #2. New, old values:
-        old_scale = self.rad_func(p)
         self.params[self.rscale_mask] = new_rscl_params
         new_scale = self.rad_func(p)
         
-        rnew = rold * (new_scale / old_scale)
+        rnew = self._initial_rad * new_scale
         if do_reset:
-            update_state_global(self.state, self._get_rad_block(), rnew)
+            update_state_global(self.state, self._st_rad_blk, rnew)
         else:
-            s.obj.rad[m] = rnew
-            s.obj.initialize(zscale=s.zscale)
+            self.state.obj.rad[self._particle_mask] = rnew
+            self.state.obj.initialize(zscale=self.state.zscale)
         
 class LMAugmentedState(LMEngine):
     def __init__(self, aug_state, max_mem=3e9, opt_kwargs={}, **kwargs):
@@ -2222,3 +2265,9 @@ class LMAugmentedState(LMEngine):
     def update_function(self, params):
         self.aug_state.update(params)
         return get_err(self.aug_state.state)
+        
+    def reset(self, **kwargs):
+        """Resets the aug_state and the LMEngine"""
+        self.aug_state.reset()
+        super(LMAugmentedState, self).reset(**kwargs)
+        

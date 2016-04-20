@@ -17,7 +17,7 @@ def calc_quintile(p, quintile, axis=0):
     just_above = np.nonzero(lut > quintile)[0][0]
     just_below = just_above - 1
     slope = lut[just_above] - lut[just_below]
-    delta = (0.5-lut[just_below]) / slope
+    delta = (quintile-lut[just_below]) / slope
     ans_px = just_below + delta - 1 #-1 for the [0] + ... + [0] at the ends
     ans_coord = ans_px - p.shape[axis]/2
     return ans_coord
