@@ -824,3 +824,5 @@ class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
             self.params[s] = 1.0*(i==0) + q
 
         self.initialize()
+        self.params[0] -= self.get_field().max() - 1.0
+        self.initialize()
