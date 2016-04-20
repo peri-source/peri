@@ -798,3 +798,29 @@ class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
             for q in self.npts
         ]
 
+    def randomize_parameters(self, ptp=0.2, fourier=False):
+        """
+        Create random parameters for this ILM that mimic experiments
+        as closely as possible without real assumptions.
+        """
+        for i, o in enumerate(self._indices_xy[1:]):
+            self.params[i] = ptp*(np.random.rand() - 0.5) / (np.prod(o)+1) / 2
+
+        off = len(self._indices_xy)
+        for i, o in enumerate(self._indices_z[1:]):
+            self.params[i+off+1] = ptp*(np.random.rand() - 0.5) / (np.prod(o)+1) / 2
+
+        for i, s in enumerate(self.slicers):
+            N = self.params[s].shape[0]
+            if fourier:
+                t = ((np.random.rand(N)-0.5) + 1.j*(np.random.rand(N)-0.5))/(np.arange(N)+1)
+                q = np.real(np.fft.ifftn(t))
+            else:
+                t = ptp*np.sqrt(N)*(np.random.rand(N)-0.5)
+                q = np.cumsum(t)
+
+            q = ptp * q / q.ptp() / len(self.slicers)
+            q -= q.mean()
+            self.params[s] = 1.0*(i==0) + q
+
+        self.initialize()
