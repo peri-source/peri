@@ -370,7 +370,7 @@ class StreakInterpolator(object):
         pass
 
 class BarnesStreakLegPoly2P1D(object):
-    def __init__(self, shape, order=(1,1,1), nstreakpoints=40):
+    def __init__(self, shape, order=(1,1,1), nstreakpoints=40, barnes_dist=2.0):
         """
         An illumination field of the form (b(e) + p(x,y))*q(z) where
         e is the axis of the 1d streak, be in x or y.
@@ -386,8 +386,12 @@ class BarnesStreakLegPoly2P1D(object):
 
         nstreakpoints : int
             number of points to include in the approximation of the barnes streak
+
+        barnes_dist : float
+            fractional distance to use for the barnes interpolator
         """
         self.shape = shape
+        self.barnes_dist = barnes_dist
         self.xyorder = order[:2]
         self.zorder = order[-1]
 
@@ -438,9 +442,10 @@ class BarnesStreakLegPoly2P1D(object):
         self._indices_z = list(self._poly_orders_z())
 
     def _barnes(self, y):
+        bdist = self.__dict__.get('barnes_dist', 2.0)
         b = BarnesInterpolation1D(
                 self.b_in, self.params[self.streak_slicer],
-                filter_size=(self.b_in[1]-self.b_in[0])*1.0/2, damp=0.9, iterations=3
+                filter_size=(self.b_in[1]-self.b_in[0])*1.0/bdist, damp=0.9, iterations=3
         )
         return b(y)
 
@@ -691,7 +696,7 @@ class BarnesStreakLegPoly2P1DX2(BarnesStreakLegPoly2P1D):
             self._bkg()
 
 class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
-    def __init__(self, shape, order=(1,1,1), npts=(40,20)):
+    def __init__(self, shape, order=(1,1,1), npts=(40,20), barnes_dist=2.0):
         """
         Yet another Barnes interpolant. This one is of the form
 
@@ -701,6 +706,7 @@ class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
         polynomials. p and q are the same as previous ILMs.
         """
         self.shape = shape
+        self.barnes_dist = barnes_dist
         self.xyorder = order[:2]
         self.zorder = order[-1]
 
@@ -731,10 +737,11 @@ class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
         return legval(np.squeeze(self.ry), weights)[:,None]
 
     def _barnes(self, y, n=0):
+        bdist = self.__dict__.get('barnes_dist', 2.0)
         b_in = self.b_in[n]
         b = BarnesInterpolation1D(
                 b_in, self.params[self.slicers[n]],
-                filter_size=(b_in[1]-b_in[0])*1.0/2, damp=0.9, iterations=3
+                filter_size=(b_in[1]-b_in[0])*1.0/bdist, damp=0.9, iterations=3
         )
         return b(y)
 
@@ -798,7 +805,7 @@ class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
             for q in self.npts
         ]
 
-    def randomize_parameters(self, ptp=0.2, fourier=False):
+    def randomize_parameters(self, ptp=0.2, fourier=False, vmin=None, vmax=None):
         """
         Create random parameters for this ILM that mimic experiments
         as closely as possible without real assumptions.
@@ -824,5 +831,10 @@ class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
             self.params[s] = 1.0*(i==0) + q
 
         self.initialize()
-        self.params[0] -= self.get_field().max() - 1.0
+        if vmin:
+            diff = self.get_field().min() - vmin
+            self.params[0] -= diff * (diff < 0)
+        if vmax:
+            diff = self.get_field().max() - vmax
+            self.params[0] -= diff * (diff > 0)
         self.initialize()
