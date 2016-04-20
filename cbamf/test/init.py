@@ -104,11 +104,11 @@ def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, axis='x'
     return create_state(np.zeros(imsize), pos, rad, ignoreimage=True, **kwargs)
 
 from cbamf.comp.ilms import BarnesStreakLegPoly2P1DX3
-def randomize_barnes_ilm(ilm, inner=np.s_[:], ptp=0.2):
+def randomize_barnes_ilm(ilm, inner=np.s_[:], ptp=0.2, fourier=False):
     if not isinstance(ilm, BarnesStreakLegPoly2P1DX3):
         raise AttributeError("needs to be BarnesStreakLegPoly2P1DX3")
 
-    def rng(tmp, ptp):
+    def rng(tmp, ptp, fourier=fourier):
         for i, o in enumerate(ilm._indices_xy[1:]):
             tmp.params[i] = ptp*(np.random.rand() - 0.5) / (np.prod(o)+1) / 2
 
@@ -118,12 +118,16 @@ def randomize_barnes_ilm(ilm, inner=np.s_[:], ptp=0.2):
 
         for i, s in enumerate(ilm.slicers):
             N = tmp.params[s].shape[0]
-            t = ((np.random.rand(N)-0.5) + 1.j*(np.random.rand(N)-0.5))/(np.arange(N)+1)
-            q = np.real(np.fft.ifftn(t))
+            if fourier:
+                t = ((np.random.rand(N)-0.5) + 1.j*(np.random.rand(N)-0.5))/(np.arange(N)+1)
+                q = np.real(np.fft.ifftn(t))
+            else:
+                t = ptp*np.sqrt(N)*(np.random.rand(N)-0.5)
+                q = np.cumsum(t)
 
-            q = ptp * q / q.ptp() / 2
+            q = ptp * q / q.ptp() / len(ilm.slicers)
             q -= q.mean()
-            tmp.params[s] = q
+            tmp.params[s] = 1.0*(i==0) + q
 
         tmp.initialize()
 
