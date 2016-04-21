@@ -12,7 +12,7 @@ setup(name='cbamf',
           "scipy>=0.14.0",
           "matplotlib>=1.0.0",
           "pyfftw>=0.9.1",
-          "libtiff>=0.4",
+          "pillow>=1.1.7"
       ],
       scripts=['bin/cbamf']
 )
