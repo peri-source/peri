@@ -234,7 +234,7 @@ class SphereCollectionRealSpace(object):
         # set the aliasing method and coefficient
         # FIXME -- check if function for method and set to that instead
         # method='user-defined' and pass method_function
-        self._setup_sphere_functions(method=method, alpha=alpha)
+        self.set_draw_method(method=method, alpha=alpha)
 
         if typ is None:
             self.typ = np.ones(self.N)
@@ -252,7 +252,7 @@ class SphereCollectionRealSpace(object):
         self.typ = 1.*np.ones_like(rad)
         self.N = rad.shape[0]
 
-    def _setup_sphere_functions(self, method, alpha=None):
+    def set_draw_method(self, method, alpha=None):
         self.methods = [
             'lerp', 'logistic', 'triangle', 'constrained-cubic',
             'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast'
@@ -302,9 +302,9 @@ class SphereCollectionRealSpace(object):
             self.exact_volume = False
             self.volume_error = 1e-6
         if not hasattr(self, 'method'):
-            self._setup_sphere_functions('logistic', 5.0)
+            self.set_draw_method('logistic', 5.0)
         if not hasattr(self, 'alpha'):
-            self._setup_sphere_functions(self.method)
+            self.set_draw_method(self.method)
         if not hasattr(self, 'max_radius_change'):
             self.max_radius_change = 1e-2
 
