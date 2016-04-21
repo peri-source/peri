@@ -4,8 +4,14 @@ To use, simply import the base log and (maybe) tack on a child context:
     
     from cbamf.logger import log
     log = log.getChild("<child name>") # optional
-
+    
+    The possible options are:
     log.{info,debug,warn,error,fatal}(...)
+    Call with:
+    log.info('something'), log.error('bad thing')
+    You can set the level of information displayed, for example, to only 
+    display critical errors. 
+    The order is debug, info, warn, error, fatal
 """
 import logging
 import logging.handlers

@@ -10,15 +10,15 @@ def calc_quintile(p, quintile, axis=0):
     """p = rho, v = xyz"""
     inds = [0,1,2]
     inds.remove(axis)
-    partial_int = p.sum(axis=tuple(inds))
+    partial_int = np.array([0] + p.sum(axis=tuple(inds)).tolist() + [0])
     lut = 0*partial_int
     for a in xrange(lut.size):
-        lut[a] = partial_int[:a+1].sum()
+        lut[a] = np.trapz(partial_int[:a+1])
     just_above = np.nonzero(lut > quintile)[0][0]
     just_below = just_above - 1
     slope = lut[just_above] - lut[just_below]
-    delta = (0.5-lut[just_below]) / slope
-    ans_px = just_below + delta
+    delta = (quintile-lut[just_below]) / slope
+    ans_px = just_below + delta - 1 #-1 for the [0] + ... + [0] at the ends
     ans_coord = ans_px - p.shape[axis]/2
     return ans_coord
 
