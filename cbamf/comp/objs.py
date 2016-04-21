@@ -24,6 +24,9 @@ def inner(r, p, a, zscale=1.0):
     o = norm((d - a*dhat)/s)
     return o * np.sign(n - a)
 
+def sphere_bool(dr, a, alpha):
+    return 1.0*(dr < 0)
+
 def sphere_lerp(dr, a, alpha):
     """ Linearly interpolate the pixels for the platonic object """
     return (1-np.clip((dr+alpha) / (2*alpha), 0, 1))
@@ -199,7 +202,7 @@ class SphereCollectionRealSpace(object):
         """
         method can be one of:
             [
-                'lerp', 'logistic', 'triangle', 'constrained-cubic',
+                'bool', 'lerp', 'logistic', 'triangle', 'constrained-cubic',
                 'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast'
             ]
 
@@ -256,6 +259,7 @@ class SphereCollectionRealSpace(object):
         ]
 
         self.sphere_functions = {
+            'bool': sphere_bool,
             'lerp': sphere_lerp,
             'logistic': sphere_logistic,
             'triangle': sphere_triangle_cdf,
@@ -266,6 +270,7 @@ class SphereCollectionRealSpace(object):
         }
 
         self.alpha_defaults = {
+            'bool': 0,
             'lerp': 0.4539,
             'logistic': 6.5,
             'triangle': 0.6618,
