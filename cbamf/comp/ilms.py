@@ -696,7 +696,7 @@ class BarnesStreakLegPoly2P1DX2(BarnesStreakLegPoly2P1D):
             self._bkg()
 
 class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
-    def __init__(self, shape, order=(1,1,1), npts=(40,20), barnes_dist=2.0):
+    def __init__(self, shape, order=(1,1,1), npts=(40,20), barnes_dist=1.75):
         """
         Yet another Barnes interpolant. This one is of the form
 
@@ -821,10 +821,10 @@ class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
             N = self.params[s].shape[0]
             if fourier:
                 t = ((np.random.rand(N)-0.5) + 1.j*(np.random.rand(N)-0.5))/(np.arange(N)+1)
-                q = np.real(np.fft.ifftn(t))
+                q = np.real(np.fft.ifftn(t)) / (i+1)
             else:
                 t = ptp*np.sqrt(N)*(np.random.rand(N)-0.5)
-                q = np.cumsum(t)
+                q = np.cumsum(t) / (i+1)
 
             q = ptp * q / q.ptp() / len(self.slicers)
             q -= q.mean()
