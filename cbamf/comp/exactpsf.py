@@ -627,9 +627,9 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
 
 class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
     def __init__(self, support_size=[35,17,25], *args, **kwargs):
-        super(FixedSSChebLinePSF, self).__init__(*args, **kwargs)
         self.cutoffval = None
         self.support = np.array(support_size)
+        super(FixedSSChebLinePSF, self).__init__(*args, **kwargs)
         
     def characterize_psf(self):
         """ Get support size and drift polynomial for current set of params """
