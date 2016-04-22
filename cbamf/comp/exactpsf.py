@@ -161,6 +161,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.dosigkf = dosigkf
         self.nkpts = nkpts
         self.cutoffval = cutoffval
+        self.scale_fix = scale_fix
         
         self.k_dist = k_dist
         self.use_J1 = use_J1
