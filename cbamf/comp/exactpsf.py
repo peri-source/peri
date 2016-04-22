@@ -49,9 +49,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
             pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=None,
-            nkpts=None, cutoffval=None, measurement_iterations=None, 
+            nkpts=None, cutoffval=None, measurement_iterations=None,
             dosigkf=True, k_dist='gaussian', use_J1=True, sph6_ab=None,
-            scale_fix=True, *args, **kwargs):
+            scale_fix=True, cutbyval=True, cutfallrate=0.25, cutedgeval=1e-12, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -144,6 +144,18 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             fix previous issue with zscale no coupled to actual calculation
             besides through zint
 
+        cutbyval : boolean
+            If True, cuts the PSF based on the actual value instead of the
+            position associated with the nearest value.
+
+        cutfallrate : float
+            The relative value of the cutoffval over which to damp the
+            remaining values of the psf. 0.3 seems a good fit now.
+
+        cutedgeval : float
+            The value with which to determine the edge of the psf, typically
+            taken around floating point, 1e-12
+
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
             psf, (z,y,x) = a.psf_slice(1., size=51)
@@ -162,6 +174,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.nkpts = nkpts
         self.cutoffval = cutoffval
         self.scale_fix = scale_fix
+        self.cutbyval = cutbyval
+        self.cutfallrate = cutfallrate
+        self.cutedgeval = cutedgeval
         
         self.k_dist = k_dist
         self.use_J1 = use_J1
@@ -248,7 +263,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
         # create a smoothly varying point spread function by cutting off the psf
         # at a certain value and smoothly taking it to zero
-        if self.cutoffval is not None:
+        if self.cutoffval is not None and not self.cutbyval:
             # find the edges of the PSF
             edge = psf > psf.max() * self.cutoffval
             dd = nd.morphology.distance_transform_edt(~edge)
@@ -257,6 +272,29 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             psf = psf * np.exp(-dd**4)
             psf /= psf.sum()
 
+            if getextent:
+                # the size is determined by the edge plus a 2 pad for the
+                # exponential damping to zero at the edge
+                size = np.array([
+                    (vec*edge).min(axis=(1,2,3))-2,
+                    (vec*edge).max(axis=(1,2,3))+2,
+                ]).T
+                return psf, vec, size
+            return psf, vec
+
+        # perform a cut by value instead
+        if self.cutoffval is not None and self.cutbyval:
+            cutval = self.cutoffval * psf.max()
+
+            dd = (psf - cutval) / cutval
+            dd[dd > 0] = 0.
+
+            # calculate the new PSF and normalize it to the new support
+            psf = psf * np.exp(-(dd / self.cutfallrate)**4)
+            psf /= psf.sum()
+
+            # let the small values determine the edges
+            edge = psf > cutval * self.cutedgeval
             if getextent:
                 # the size is determined by the edge plus a 2 pad for the
                 # exponential damping to zero at the edge
@@ -298,6 +336,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         # each of these parameters were added after the original class was made
         self.normalize = self.__dict__.get('normalize', False)
         self.cutoffval = self.__dict__.get('cutoffval', None)
+        self.cutbyval = self.__dict__.get('cutbyval', False)
+        self.cutfallrate = self.__dict__.get('cutfallrate', 0.25)
+        self.cutedgeval = self.__dict__.get('cutedgeval', 1e-12)
         self.sigkf = self.__dict__.get('sigkf', None)
         self.dosigkf = self.__dict__.get('dosigkf', None)
         self.nkpts = self.__dict__.get('nkpts', None)
@@ -584,12 +625,7 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
         self._compatibility_patch()
         self._setup_ffts()
 
-#And a debugging psf..
 class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
-    """
-    PSF with a fixed global support size of [35, 17, 25], which is 
-    a normal fitted SS, clipped to 2*s.pad for a pad of 17. 
-    """
     def __init__(self, support_size=[35,17,25], *args, **kwargs):
         super(FixedSSChebLinePSF, self).__init__(*args, **kwargs)
         self.cutoffval = None
@@ -605,18 +641,8 @@ class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
         # FIXME -- must be odd for now or have a better system for getting the center
         # self.support = util.oddify(2*self.support_factor*size_u.astype('int'))
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
-
-        # if self.cutoffval is not None:
-            # psf, vec, size_l = self.psf_slice(l, size=51, zoffset=drift_l, getextent=True)
-            # psf, vec, size_u = self.psf_slice(u, size=51, zoffset=drift_u, getextent=True)
-
-            # ss = [np.abs(i).sum(axis=-1) for i in [size_l, size_u]]
-            # self.support = util.oddify(util.amax(*ss))
-        pass
         
     def _compatibility_patch(self):
-        # FIXME -- why this function with __dict__.get? backwards compatibility
-        # each of these parameters were added after the original class was made
         self.support = self.__dict__.get('support', np.array([35,17,25]))
         super(FixedSSChebLinePSF, self)._compatibility_patch()
 
