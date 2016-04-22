@@ -51,7 +51,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=None,
             nkpts=None, cutoffval=None, measurement_iterations=None, 
             dosigkf=True, k_dist='gaussian', use_J1=True, sph6_ab=None,
-            *args, **kwargs):
+            scale_fix=True, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -139,6 +139,10 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             Which hdet confocal model to use. Set to True to include the 
             J1 term corresponding to a large-NA focusing lens, False to
             exclude it. Default is True
+            
+        scale_fix : boolean
+            fix previous issue with zscale no coupled to actual calculation
+            besides through zint
 
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
@@ -222,11 +226,16 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         # calculate the current pixel value in 1/k, making sure we are above the slab
         zint = max(self._p2k(self._tz(zint)), 0)
         offset = np.array([zoffset*(zint>0), 0, 0])
+        
+        if self.scale_fix:
+            scale = [self.param_dict['zscale'], 1.0, 1.0]
+        else:
+            scale = [1.0]*3
 
         # create the coordinate vectors for where to actually calculate the 
         tile = util.Tile(left=0, size=size, centered=True)
         vecs = tile.coords(form='flat')
-        vecs = [self._p2k(i+o) for i,o in zip(vecs, offset)]
+        vecs = [self._p2k(s*i+o) for i,s,o in zip(vecs, scale, offset)]
 
         if self.polychromatic:
             psffunc = psfcalc.calculate_polychrome_linescan_psf
@@ -296,6 +305,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.k_dist = self.__dict__.get('k_dist', 'gaussian')
         self.use_J1 = self.__dict__.get('use_J1', True)
         self.use_sph6_ab = self.__dict__.get('use_sph6_ab', False)
+        self.scale_fix = self.__dict__.get('scale_fix', False)
 
     def _p2k(self, v):
         """ Convert from pixel to 1/k_incoming (laser_wavelength/(2\pi)) units """
