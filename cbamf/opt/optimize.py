@@ -2075,17 +2075,19 @@ class LMParticleGroupCollection(object):
         self.collect_stats = collect_stats
         self.reset(do_calc_size=do_calc_size)
         
-    def reset(self, new_region_size=None, do_calc_size=True):
-        """Resets the particle groups and optionally the region size."""
+    def reset(self, new_region_size=None, do_calc_size=True, new_damping=None):
+        """Resets the particle groups and optionally the region size and damping."""
         if new_region_size is not None:
             self.region_size = new_region_size
         if do_calc_size:
             self.region_size = calc_particle_group_region_size(self.state, 
                     self.region_size, **self._kwargs)
         self.stats = [] if self.collect_stats else None
-            
         self.particle_groups = separate_particles_into_groups(self.state, 
                 self.region_size)
+        if new_damping is not None:
+            self._kwargs.update({'damping':new_damping})
+        
     
     def do_run_1(self):
         for group in self.particle_groups:
