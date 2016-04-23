@@ -64,7 +64,7 @@ class LogLexer(RegexLexer):
     mimetypes = ['text/x-log']
 
     flags = re.VERBOSE
-    _logger = r'-\s(pipeline)(\.([a-z._\-0-9]+))*\s-'
+    _logger = r'-\s(cbamf)(\.([a-z._\-0-9]+))*\s-'
     _uuid   = r"([A-Z]{2}_[0-9]{12}_[0-9]{3}-and-[A-Z]{2}_[0-9]{12}_[0-9]{3}-[0-9]{5,})"
     _kimid  = r"((?:[_a-zA-Z][_a-zA-Z0-9]*?_?_)?[A-Z]{2}_[0-9]{12}(?:_[0-9]{3})?)"
     _path   = r'(?:[a-zA-Z0-9_-]{0,}/{1,2}[a-zA-Z0-9_\.-]+)+'
