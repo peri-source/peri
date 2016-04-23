@@ -27,7 +27,10 @@ class OrthoManipulator(object):
         sh = self.state.image.shape
         q = float(sh[1]) / (sh[0]+sh[1])
 
+        tooltip = mpl.rcParams['toolbar']
+        mpl.rcParams['toolbar'] = 'None'
         self.fig = pl.figure(figsize=(16,8))
+        mpl.rcParams['toolbar'] = tooltip
 
         h = 0.5
         self.gl = {}
@@ -303,7 +306,10 @@ class OrthoViewer(object):
         sh = self.field.shape
         q = float(sh[1]) / (sh[0]+sh[1])
 
+        tooltip = mpl.rcParams['toolbar']
+        mpl.rcParams['toolbar'] = 'None'
         self.fig = pl.figure(figsize=(14,14))
+        mpl.rcParams['toolbar'] = tooltip
 
         self.g = {}
         self.g['xy'] = self.fig.add_axes((0.0, 1-q, q,     q))
