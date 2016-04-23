@@ -473,7 +473,10 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             fs = np.array(self.tile.shape)
             fs[0] = self.support[0]
 
-            zslice = np.clip(z, *self.zrange)
+            if z < self.zrange[0] or z > self.zrange[1]:
+                continue
+
+            zslice = int(np.clip(z, *self.zrange) - self.zrange[0])
             middle = field.shape[0]/2
 
             subpsf = self._kpad(self.slices[zslice], fs, method=self.method, norm=True)
