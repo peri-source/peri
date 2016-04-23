@@ -21,7 +21,7 @@ def create_image(N=128, size=64, radius=6.0, pad=16):
 
     slab_zpos = -radius
     s = runner.create_state(
-        blank, pos, rad, slab=slab_zpos, sigma=0.02,
+        blank, pos, rad, slab=slab_zpos, sigma=0.001,
         stateargs={'pad': pad, 'offset': 0.18},
         psftype='cheb-linescan', psfargs={'zslab': slab_zpos, 'cheb_degree': 6, 'cheb_evals': 8},
         ilmtype='barnesleg2p1dx', ilmargs={'order': (1,1,3), 'npts': (30,10,5)}
@@ -45,29 +45,28 @@ def optimize(s):
         lm1.do_run_2()
         lm1.reset(0.5)
 
-def table(datas, names, vary_func):
-    s = create_image()
+def table(s, datas, names, vary_func):
     p0 = s.obj.pos.copy()
     r0 = s.obj.rad.copy()
 
+    slicer = np.s_[s.image[s.inner].shape[0]/2]
+    model_image = s.image[s.inner][slicer].copy()
+
     results = {}
-    results['reference'] = (p0, r0)
+    results['reference'] = (0, model_image, p0, r0)
 
     for i, (name, data) in enumerate(zip(names, datas)):
         print i, name, data
 
         vary_func(s, data)
-        s.obj.pos = p0
-        s.obj.rad = r0
+        s.obj.pos = p0.copy()
+        s.obj.rad = r0.copy()
         s.reset()
 
         optimize(s)
 
-        diff_image = s.get_difference_image()
-        diff_image = diff_image[diff_image.shape[0]/2]
-
         results[name] = (
-            i, diff_image,
+            i, s.get_difference_image()[slicer].copy(),
             s.obj.pos.copy(),
             s.obj.rad.copy()
         )
@@ -76,6 +75,7 @@ def table(datas, names, vary_func):
 
 def table_platonic():
     np.random.seed(10)
+    s = create_image()
 
     platonics = [
         ('lerp', 0.05),
@@ -95,10 +95,11 @@ def table_platonic():
         s.obj.volume_error = 100.
         s.obj.set_draw_method(*data)
 
-    return table(platonics, names, vary_func)
+    return table(s, platonics, names, vary_func)
 
 def table_ilms():
     np.random.seed(11)
+    s = create_image()
 
     lilms = [
         ilms.LegendrePoly2P1D(shape=s.ilm.shape, order=(1,1,1)),
@@ -118,10 +119,11 @@ def table_ilms():
     def vary_func(s, data):
         s.set_ilm(data)
 
-    return table(lilms, names, vary_func)
+    return table(s, lilms, names, vary_func)
 
 def table_psfs():
     np.random.seed(12)
+    s = create_image()
 
     lpsfs = [
         psfs.IdentityPSF(shape=s.psf.shape, params=np.array([0.0])),
@@ -141,7 +143,7 @@ def table_psfs():
     def vary_func(s, data):
         s.set_psf(data)
 
-    return table(lpsfs, names, vary_func)
+    return table(s, lpsfs, names, vary_func)
 
 def gogogo():
     r0 = table_platonic()
@@ -150,19 +152,19 @@ def gogogo():
     return r0, r1, r2
 
 def scores(results):
-    tresults = copy.copy(results)
+    tmp = copy.copy(results)
 
     scores = []
-    for result in tresults:
-        ref = result.pop('reference')
+    for result in tmp:
+        ref = tmp.pop('reference')
 
         errors = {}
-        for k,v in result.iteritems():
+        for k,v in tmp.iteritems():
             errors[k] = (
-                np.sqrt(((ref[0] - v[0])**2).sum(axis=-1)).mean(),
-                np.sqrt(((ref[0] - v[0])**2).sum(axis=-1)).std(),
-                np.sqrt((ref[1] - v[1])**2).mean(),
-                np.sqrt((ref[1] - v[1])**2).std(),
+                np.sqrt(((ref[2] - v[2])**2).sum(axis=-1)).mean(),
+                np.sqrt(((ref[2] - v[2])**2).sum(axis=-1)).std(),
+                np.sqrt((ref[3] - v[3])**2).mean(),
+                np.sqrt((ref[3] - v[3])**2).std(),
             )
         scores.append(errors)
     return scores
