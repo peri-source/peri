@@ -48,10 +48,10 @@ def moment(p, v, order=1):
 class ExactLineScanConfocalPSF(psfs.PSF):
     def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
-            pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=None,
+            pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=0.0,
             nkpts=None, cutoffval=None, measurement_iterations=None,
-            dosigkf=True, k_dist='gaussian', use_J1=True, sph6_ab=None,
-            scale_fix=True, cutbyval=True, cutfallrate=0.25, cutedgeval=1e-12, *args, **kwargs):
+            k_dist='gaussian', use_J1=True, sph6_ab=None, scale_fix=True,
+            cutbyval=True, cutfallrate=0.25, cutedgeval=1e-12, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -127,9 +127,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             number of interations used when trying to find the center of mass
             of the psf in a certain slice
 
-        dosigkf : boolean
-            Whether or not to include sigkf in the sampling procedure
-            
         k_dist : str
             Eithe ['gaussian', 'gamma'] which control the wavevector
             distribution for the polychromatic detection psf. Default
@@ -170,7 +167,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
         self.polychromatic = False
         self.sigkf = sigkf
-        self.dosigkf = dosigkf
         self.nkpts = nkpts
         self.cutoffval = cutoffval
         self.scale_fix = scale_fix
@@ -205,9 +201,15 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.param_order = ['kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser_wavelength', 'sigkf', 'sph6_ab']
         params = np.array( [ kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength,   sigkf, sph6_ab ])
 
-        if not self.dosigkf:
-            self.param_order = self.param_order[:-1]
-            params = params[:-1]
+        # the next statements must occur in the correct order so that
+        # other parameters are not deleted by mistake
+        if not self.polychromatic:
+            self.param_order.pop(-2)
+            params = np.delete(params, -2)
+
+        if not self.use_sph6_ab:
+            self.param_order.pop(-1)
+            params = np.delete(params, -1)
 
         self.param_dict = {k:params[i] for i,k in enumerate(self.param_order)}
 
@@ -340,7 +342,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.cutfallrate = self.__dict__.get('cutfallrate', 0.25)
         self.cutedgeval = self.__dict__.get('cutedgeval', 1e-12)
         self.sigkf = self.__dict__.get('sigkf', None)
-        self.dosigkf = self.__dict__.get('dosigkf', None)
         self.nkpts = self.__dict__.get('nkpts', None)
         self.polychromatic = self.sigkf is not None or self.nkpts is not None
         self.measurement_iterations = self.__dict__.get('measurement_iterations', 1)
@@ -426,7 +427,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self.tile = tile
             self._setup_ffts()
 
-    def _kpad(self, field, finalshape, method='fftn', zpad=False):
+    def _kpad(self, field, finalshape, method='fftn', zpad=False, norm=True):
         """
         fftshift and pad the field with zeros until it has size finalshape.
         if zpad is off, then no padding is put on the z direction. returns
@@ -452,8 +453,8 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         rpsf = np.fft.ifftshift(rpsf, axes=axes)
         kpsf = self.fftn(rpsf)
 
-        # FIXME -- need to normalize here?
-        #kpsf /= (np.real(kpsf[0,0,0]) + 1e-15)
+        if norm:
+            kpsf[0,0,0] = 1.0
         return kpsf
 
     def execute(self, field):
@@ -463,29 +464,28 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         outfield = np.zeros_like(field, dtype='float')
         zc,yc,xc = self.tile.coords(form='flat')
 
+        # here's the plan. we are going to rotate the field so that the current
+        # plane of interest is in the center. we then crop the image to the
+        # size of the support so that we are only convolving a small region.
+        # finally, take the mid plane back out as the solution.
         for i,z in enumerate(zc):
-            # in this loop, z in the index for self.slices and i is the field index
-            # don't calculate this slice if we are outside the acceptable zrange
-            if z < self.zrange[0] or z > self.zrange[1]:
-                continue
-
-            if i < self.support[0]/2 or i > self.tile.shape[0]-self.support[0]/2-1:
-                continue
-
             # pad the psf slice for the convolution
             fs = np.array(self.tile.shape)
             fs[0] = self.support[0]
-            kpsf = self._kpad(self.slices[i-self.zrange[0]], fs, method=self.method)
 
-            # need to grab the right slice of the field to convolve with PSF
-            zslice = np.s_[max(i-fs[0]/2,0):min(i+fs[0]/2+1,self.tile.shape[0])]
+            zslice = np.clip(z, *self.zrange)
+            middle = field.shape[0]/2
 
-            kfield = self.fftn(field[zslice])
+            subpsf = self._kpad(self.slices[zslice], fs, method=self.method, norm=True)
+            subfield = np.roll(field, middle - i, axis=0)
+            subfield = subfield[middle-fs[0]/2:middle+fs[0]/2+1]
+
+            kfield = self.fftn(subfield)
 
             if self.method == 'fftn':
-                outfield[i] = np.real(self.ifftn(kfield * kpsf))[self.support[0]/2]
+                outfield[i] = np.real(self.ifftn(kfield * subpsf))[self.support[0]/2]
             else:
-                outfield[i] = np.real(self.ifftn(kfield * kpsf)).sum(axis=0)
+                outfield[i] = np.real(self.ifftn(kfield * subpsf)).sum(axis=0)
 
         return outfield
 
@@ -591,7 +591,7 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
 
         kfield = self.fftn(field)
         for k,c in enumerate(self.cheb.coefficients):
-            pad = self._kpad(c, finalshape=self.tile.shape, zpad=True)
+            pad = self._kpad(c, finalshape=self.tile.shape, zpad=True, norm=False)
             cov = np.real(self.ifftn(kfield * pad))
 
             outfield += self.cheb.tk(k, zc)[:,None,None] * cov
