@@ -57,18 +57,19 @@ def table(s, datas, names, vary_func):
 
     for i, (name, data) in enumerate(zip(names, datas)):
         print i, name, data
+        state = copy.copy(s)
 
-        vary_func(s, data)
-        s.obj.pos = p0.copy()
-        s.obj.rad = r0.copy()
-        s.reset()
+        vary_func(state, data)
+        state.obj.pos = p0.copy()
+        state.obj.rad = r0.copy()
+        state.reset()
 
-        optimize(s)
+        optimize(state)
 
         results[name] = (
-            i, s.get_difference_image()[slicer].copy(),
-            s.obj.pos.copy(),
-            s.obj.rad.copy()
+            i, state.get_difference_image()[slicer].copy(),
+            state.obj.pos.copy(),
+            state.obj.rad.copy()
         )
 
     return results
