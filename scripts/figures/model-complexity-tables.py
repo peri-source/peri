@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import scipy as sp
 import pylab as pl
+from collections import OrderedDict
 
 from cbamf import util, runner
 from cbamf.test import nbody
@@ -52,7 +53,7 @@ def table(s, datas, names, vary_func):
     slicer = np.s_[s.image[s.inner].shape[0]/2]
     model_image = s.image[s.inner][slicer].copy()
 
-    results = {}
+    results = OrderedDict()
     results['reference'] = (0, model_image, p0, r0)
 
     for i, (name, data) in enumerate(zip(names, datas)):
@@ -152,24 +153,41 @@ def gogogo():
     r2 = table_psfs()
     return r0, r1, r2
 
+# temporary helper function
+def toOD(table):
+    return OrderedDict(sorted(table.iteritems(), key=lambda x: x[1][0]))
+
 def scores(results):
     tmp = copy.copy(results)
 
     scores = []
     for result in tmp:
-        ref = tmp.pop('reference')
+        ref = result.pop('reference')
 
-        errors = {}
-        for k,v in tmp.iteritems():
+        errors = OrderedDict()
+        for k,v in result.iteritems():
             errors[k] = (
                 np.sqrt(((ref[2] - v[2])**2).sum(axis=-1)).mean(),
                 np.sqrt(((ref[2] - v[2])**2).sum(axis=-1)).std(),
                 np.sqrt((ref[3] - v[3])**2).mean(),
                 np.sqrt((ref[3] - v[3])**2).std(),
             )
+
+        result['reference'] = ref
         scores.append(errors)
     return scores
 
-def make_plots(results):
-    pass
+def print_table(tbl):
+    strsize = max([len(i) for i in tbl.keys()]) + 3
+    elm = "& {:0.4f} \\pm {:0.5f} "
+    outstr = ''
+    for k,v in tbl.iteritems():
+        outstr += ("{:<{}s} "+"".join([elm]*2)+"\\\\").format(k, strsize, *v)
+        outstr += '\n'
+    return outstr
 
+def make_plots(results):
+    ln = len(results)
+
+    for k,v in results.iteritems():
+        pass
