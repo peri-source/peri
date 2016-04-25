@@ -11,6 +11,8 @@ from cbamf.test import nbody
 from cbamf.comp import ilms, objs, psfs, exactpsf
 from cbamf.opt import optimize as opt
 
+FIXEDSS = [31,17,29]
+
 def create_image(N=128, size=64, radius=6.0, pad=16):
     blank = np.zeros((size,)*3)
 
@@ -24,9 +26,12 @@ def create_image(N=128, size=64, radius=6.0, pad=16):
 
     slab_zpos = -radius
     s = runner.create_state(
-        blank, pos, rad, slab=slab_zpos, sigma=0.0001,
+        blank, pos, rad, slab=slab_zpos, sigma=0.00001,
         stateargs={'pad': pad, 'offset': 0.18},
-        psftype='cheb-linescan', psfargs={'zslab': slab_zpos, 'cheb_degree': 6, 'cheb_evals': 8},
+        psftype='cheb-linescan-fixedss', psfargs={
+            'zslab': 10., 'cheb_degree': 6, 'cheb_evals': 8,
+            'support_size': FIXEDSS,
+        },
         ilmtype='barnesleg2p1dx', ilmargs={'order': (1,1,3), 'npts': (30,10,5)}
     )
     s.ilm.randomize_parameters(ptp=0.4, vmax=1.0, fourier=False)
@@ -35,7 +40,8 @@ def create_image(N=128, size=64, radius=6.0, pad=16):
     return s
 
 def optimize(s):
-    args = dict(eig_update=True, update_J_frequency=2, partial_update_frequency=1, max_iter=3)
+    args = dict(eig_update=True, update_J_frequency=2,
+            partial_update_frequency=1, max_iter=3)
     blocks = s.b_ilm | s.b_psf | s.b_zscale
 
     lm0 = opt.LMGlobals(s, blocks, **args)
@@ -85,18 +91,25 @@ def table_platonic():
         ('lerp', 0.05),
         ('lerp', 0.5),
         ('logistic',),
+        ('constrained-cubic',),
         ('exact-gaussian-fast',)
     ]
     names = [
         r'Boolean cut',
         r'Linear interpolation',
         r'Logistic function',
+        r'Constrained cubic',
         r'Exact Gaussian convolution'
     ]
 
     def vary_func(s, data):
-        s.obj.exact_volume = False
-        s.obj.volume_error = 100.
+        if data[0] != 'exact-gaussian-fast':
+            s.obj.exact_volume = False
+            s.obj.volume_error = 100.
+        else:
+            s.obj.exact_volume = True
+            s.obj.volume_error = 1e-5
+
         s.obj.set_draw_method(*data)
 
     return table(s, platonics, names, vary_func)
@@ -128,13 +141,22 @@ def table_ilms():
 def table_psfs():
     np.random.seed(12)
     s = create_image()
+    sh = s.psf.shape
 
     lpsfs = [
-        psfs.IdentityPSF(shape=s.psf.shape, params=np.array([0.0])),
-        psfs.AnisotropicGaussian(shape=s.psf.shape, params=(2.0, 1.0, 3.0)),
-        psfs.Gaussian4DLegPoly(shape=s.psf.shape, order=(3,3,3)),
-        exactpsf.ChebyshevLineScanConfocalPSF(shape=s.psf.shape, zrange=(0, s.psf.shape[0]), cheb_degree=3, cheb_evals=6),
-        exactpsf.ChebyshevLineScanConfocalPSF(shape=s.psf.shape, zrange=(0, s.psf.shape[0]), cheb_degree=6, cheb_evals=8),
+        psfs.IdentityPSF(shape=sh, params=np.array([0.0])),
+        psfs.AnisotropicGaussian(shape=sh, params=(2.0, 1.0, 3.0)),
+        psfs.Gaussian4DLegPoly(shape=sh, order=(3,3,3)),
+        exactpsf.FixedSSChebLinePSF(
+            shape=sh, zrange=(0, sh[0]), cheb_degree=3, cheb_evals=6,
+            support_size=FIXEDSS, zslab=10., cutoffval= 1./255,
+            measurement_iterations=3,
+        ),
+        exactpsf.FixedSSChebLinePSF(
+            shape=sh, zrange=(0, sh[0]), cheb_degree=6, cheb_evals=8,
+            support_size=FIXEDSS, zslab=10., cutoffval= 1./255,
+            measurement_iterations=3,
+        ),
     ]
     names = [
         r'Identity',
@@ -154,10 +176,6 @@ def gogogo():
     r1 = table_ilms()
     r2 = table_psfs()
     return r0, r1, r2
-
-# temporary helper function
-#def toOD(table):
-#    return OrderedDict(sorted(table.iteritems(), key=lambda x: x[1][0]))
 
 def scores(results):
     tmp = copy.copy(results)
@@ -216,3 +234,22 @@ def make_plots(results):
         img[i].set_title(k.capitalize(), fontsize=12)
         img[i].set_xticks([])
         img[i].set_yticks([])
+
+def error_level(state, particle):
+    f = state.fisher_information(state.blocks_particle(particle))
+    e = np.sqrt(np.diag(np.linalg.inv(f)))
+    pos = np.sqrt((e[:3]**2).sum())
+    rad = e[-1]
+    return pos, rad
+
+def average_error(state):
+    particles = np.random.choice(state.N, 12)
+    pos, rad = [], []
+    for i, particle in enumerate(particles):
+        p, r = error_level(state, particle)
+        print i, particle, p, r
+        pos.append(p)
+        rad.append(r)
+    pos, rad = np.array(pos), np.array(rad)
+    return np.median(pos), np.median(rad)
+
