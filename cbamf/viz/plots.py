@@ -16,9 +16,9 @@ import numpy as np
 import time
 import pickle
 
-def lbl(axis, label):
+def lbl(axis, label, size=22):
     """ Put a figure label in an axis """
-    at = AnchoredText(label, loc=2, prop=dict(size=22), frameon=True)
+    at = AnchoredText(label, loc=2, prop=dict(size=size), frameon=True)
     at.patch.set_boxstyle("round,pad=0.,rounding_size=0.0")
     #bb = axis.get_yaxis_transform()
     #at = AnchoredText(label,
