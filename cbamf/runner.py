@@ -320,8 +320,8 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         whether to refer to `image` just for shape. really use the model
         image as the true raw image
 
-    psftype : ['gauss2d', 'gauss3d', 'gauss4d', 'gaussian_pca', 'linescan',
-               'cheb-linescan']
+    psftype : ['identity', 'gauss2d', 'gauss3d', 'gauss4d', 'gaussian_pca',
+               'linescan', 'cheb-linescan', 'cheb-linescan-fixedss']
         which type of psf to use in the state
 
     ilmtype : ['poly3d', 'leg3d', 'cheb2p1d', 'poly2p1d', 'leg2p1d',
@@ -392,7 +392,11 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         raise AttributeError("ilmtype not one of supplied options, see help")
 
     # setup the psf based on the choice and arguments
-    if psftype == 'gauss2d':
+    if psftype == 'identity':
+        def_psf.update({'params': (1.0, 1.0)})
+        def_psf.update(psfargs)
+        psf = psfs.IdentityPSF(**def_psf)
+    elif psftype == 'gauss2d':
         def_psf.update({'params': (2.0, 4.0)})
         def_psf.update(psfargs)
         psf = psfs.AnisotropicGaussian(**def_psf)
@@ -420,6 +424,15 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         })
         def_psf.update(psfargs)
         psf = exactpsf.ChebyshevLineScanConfocalPSF(**def_psf)
+    elif psftype == 'cheb-linescan-fixedss':
+        def_psf.update({
+            'support_size': [31, 17, 29],
+            'zrange': (0, image.shape[0]),
+            'cutoffval': 1./255,
+            'measurement_iterations': 3,
+        })
+        def_psf.update(psfargs)
+        psf = exactpsf.FixedSSChebLinePSF(**def_psf)
     else:
         raise AttributeError("psftype not one of supplied options, see help")
 
