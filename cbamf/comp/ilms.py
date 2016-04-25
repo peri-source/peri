@@ -810,6 +810,10 @@ class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
         Create random parameters for this ILM that mimic experiments
         as closely as possible without real assumptions.
         """
+        if vmin is not None and vmax is not None:
+            ptp = vmax - vmin
+            print "Warning: vmin and vmax set, using those for ptp"
+
         for i, o in enumerate(self._indices_xy[1:]):
             self.params[i] = ptp*(np.random.rand() - 0.5) / (np.prod(o)+1) / 2
 
