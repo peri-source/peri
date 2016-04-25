@@ -51,7 +51,8 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=0.0,
             nkpts=None, cutoffval=None, measurement_iterations=None,
             k_dist='gaussian', use_J1=True, sph6_ab=None, scale_fix=True,
-            cutbyval=True, cutfallrate=0.25, cutedgeval=1e-12, *args, **kwargs):
+            cutbyval=True, cutfallrate=0.25, cutedgeval=1e-12, use_laggauss=True, 
+            pinhole_width=None, do_pinhole=False, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
         cbamf framework.  Calculates the spatially varying point spread
@@ -152,6 +153,18 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         cutedgeval : float
             The value with which to determine the edge of the psf, typically
             taken around floating point, 1e-12
+            
+        use_laggauss : Bool
+            Whether to use the old/inaccurate Gauss-Hermite quadrature for
+            the line integral, or a x=sinh(a*t) rule and Gauss-Laguerre
+            quadrature (more accurate). Default is True. 
+
+        pinhole_width : Float
+            The width of the line illumination, in 1/k units. Default is 1.0.
+
+        do_pinhole : Bool
+            Whether or not to include pinhole line width in the sampling. 
+            Default is False. 
 
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
@@ -177,6 +190,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.k_dist = k_dist
         self.use_J1 = use_J1
 
+        self.use_laggauss = use_laggauss
+        self.do_pinhole = do_pinhole
+
         if self.sigkf is not None:
             self.nkpts = self.nkpts or 3
             self.polychromatic = True
@@ -191,6 +207,12 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self.use_sph6_ab = True #necessary? FIXME
         else:
             self.use_sph6_ab = False
+            
+        if (pinhole_width is not None) or do_pinhole:
+            self.num_line_pts = 3
+        else:
+            self.num_line_pts = 1
+        pinhole_width = pinhole_width if (pinhole_width is not None) else 1.0
 
         # FIXME -- zrange can't be none right now -- need to fix boundary calculations
         if zrange is None:
@@ -198,16 +220,20 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.zrange = zrange
 
         # text location of parameters for ease of extraction
-        self.param_order = ['kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser_wavelength', 'sigkf', 'sph6_ab']
-        params = np.array( [ kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength,   sigkf, sph6_ab ])
+        self.param_order = ['kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser_wavelength', 'sigkf', 'sph6_ab', 'pinhole_width']
+        params = np.array( [ kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength,   sigkf, sph6_ab, pinhole_width ])
 
         # the next statements must occur in the correct order so that
         # other parameters are not deleted by mistake
         if not self.polychromatic:
-            self.param_order.pop(-2)
-            params = np.delete(params, -2)
+            self.param_order.pop(-3)
+            params = np.delete(params, -3)
 
         if not self.use_sph6_ab:
+            self.param_order.pop(-2)
+            params = np.delete(params, -2)
+            
+        if not self.do_pinhole:
             self.param_order.pop(-1)
             params = np.delete(params, -1)
 
@@ -330,6 +356,12 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             d.pop('sigkf')
         if not self.use_sph6_ab and d.has_key('sph6_ab'):
             d.pop('sph6_ab')
+            
+        if self.do_pinhole:
+            d.update({'nlpts':self.num_line_pts})
+        
+        if self.use_laggauss:
+            d.update({'use_laggauss':self.use_laggauss})
 
         return d
 
@@ -349,6 +381,10 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.use_J1 = self.__dict__.get('use_J1', True)
         self.use_sph6_ab = self.__dict__.get('use_sph6_ab', False)
         self.scale_fix = self.__dict__.get('scale_fix', False)
+        self.use_laggauss = self.__dict__.get('use_laggauss', False)
+        self.do_pinhole = self.__dict__.get('do_pinhole', False)
+        self.num_line_pts = self.__dict__.get('num_line_pts', 1)
+        
 
     def _p2k(self, v):
         """ Convert from pixel to 1/k_incoming (laser_wavelength/(2\pi)) units """

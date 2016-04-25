@@ -22,9 +22,27 @@ points for large z,zint (large compared to 100).
 """
 NPTS = 20
 PTS,WTS = np.polynomial.legendre.leggauss(NPTS)
+#This was the old way for the line scans:
 PTS_HG,WTS_HG = np.polynomial.hermite.hermgauss(NPTS*2)
 PTS_HG = PTS_HG[NPTS:]
 WTS_HG = WTS_HG[NPTS:]*np.exp(PTS_HG*PTS_HG)
+
+#This is the new way:
+def calc_pts_lag(npts=20, scl=0.051532):
+    """
+    Acceptable pts/scls/approximate line integral scan error:
+    (pts,   scl  )      :         ERR
+    ------------------------------------
+    (15, 0.072144)      :       0.002193
+    (20, 0.051532)      :       0.001498
+    (25, 0.043266)      :       0.001209
+    
+    The previous HG(20) error was ~0.13ish
+    """
+    pts0, wts0 = np.polynomial.laguerre.laggauss(npts)
+    pts = np.sinh(pts0*scl)
+    wts = scl*wts0*np.cosh(pts0*scl)*np.exp(pts0)
+    return pts, wts
 
 def f_theta(cos_theta, zint, z, n2n1=0.95, sph6_ab=None, **kwargs):
     """
@@ -325,7 +343,7 @@ def get_psf_scalar(x, y, z, kfki=1., zint=100.0, normalize=False, **kwargs):
     return psf
 
 def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
-        pinhole_width=1, **kwargs):
+        pinhole_width=1, use_laggauss=False, **kwargs):
     """
     Calculates the illumination PSF for a line-scanning confocal with the
     confocal line oriented along the x direction.
@@ -340,6 +358,10 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
         - nlpts: The number of points to use for Hermite-gauss quadrature over
             the line's width. Default is 1, corresponding to an infinitesmally
             thin line.
+        - use_laggauss:     Bool 
+            Set to True to use a more-accurate sinh'd Laguerre-Gauss quadrature
+            for integration over the line's length (more accurate in the 
+            same amount of time). Default is False for backwards compatibility.
         - **kwargs: Paramters such as alpha, n2n1 that are passed to
             get_hsym_hasym
     Outputs:
@@ -347,7 +369,10 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
             as y and z.
     """
 
-    x_vals = PTS_HG
+    if use_laggauss:
+        x_vals, wts = calc_pts_lag()
+    else:
+        x_vals, wts = PTS_HG, WTS_HG
 
     #I'm assuming that y,z are already some sort of meshgrid
     xg, yg, zg = [np.zeros( list(y.shape) + [x_vals.size] ) for a in xrange(3)]
@@ -372,7 +397,7 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
 
     #Now line hermgauss
     for a in xrange(x_vals.size):
-        hilm[...,a] *= WTS_HG[a]
+        hilm[...,a] *= wts[a]
 
     return hilm.sum(axis=-1)*2.
 
