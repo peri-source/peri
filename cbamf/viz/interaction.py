@@ -6,7 +6,11 @@ from matplotlib.gridspec import GridSpec
 from cbamf import runner
 
 class OrthoManipulator(object):
-    def __init__(self, state, cmap_abs='bone', cmap_diff='RdBu', incsize=18.0):
+    def __init__(self, state, size=8, cmap_abs='bone', cmap_diff='RdBu',
+            incsize=18.0, orientation=None):
+        """
+        An interactive viewer for states with a model in 3D.
+        """
         self.incsize = incsize
         self.modes = ['view', 'add', 'remove', 'grab', 'optimize']
         self.mode = self.modes[0]
@@ -24,26 +28,37 @@ class OrthoManipulator(object):
         self.cmap_abs = cmap_abs
         self.cmap_diff = cmap_diff
 
-        sh = self.state.image.shape
-        q = float(sh[1]) / (sh[0]+sh[1])
+        z,y,x = [float(i) for i in self.state.image.shape]
+        w = float(x + z)
+        h = float(y + z)
 
-        tooltip = mpl.rcParams['toolbar']
-        mpl.rcParams['toolbar'] = 'None'
-        self.fig = pl.figure(figsize=(16,8))
-        mpl.rcParams['toolbar'] = tooltip
+        #tooltip = mpl.rcParams['toolbar']
+        #mpl.rcParams['toolbar'] = 'None'
 
-        h = 0.5
+        orientation = orientation or ('horizontal' if w/h < 1.4 else 'vertical')
+        if orientation == 'horizontal':
+            self.fig = pl.figure(figsize=(2*size*w/h,size))
+            Sx, Sy, xoff, yoff = 0.5, 1.0, 0.5, 0.0
+        elif orientation == 'vertical':
+            self.fig = pl.figure(figsize=(size,2*size*h/w))
+            Sx, Sy, xoff, yoff = 1.0, 0.5, 0.0, 0.5
+        else:
+            raise AttributeError("orientation must be one of 'horizontal', 'vertical'")
+
+        #mpl.rcParams['toolbar'] = tooltip
+
         self.gl = {}
-        self.gl['xy'] = self.fig.add_axes((h*0.0, 1-q, h*q,     q))
-        self.gl['yz'] = self.fig.add_axes((h*q,   1-q, h*(1-q), q))
-        self.gl['xz'] = self.fig.add_axes((h*0.0, 0.0, h*q,     1-q))
-        self.gl['in'] = self.fig.add_axes((h*q,   0.0, h*(1-q), 1-q))
+        # rect = l,b,w,h
+        self.gl['xy'] = self.fig.add_axes((Sx*0.0, yoff+Sy*(1-y/h), Sx*x/w,     Sy*y/h))
+        self.gl['yz'] = self.fig.add_axes((Sx*0.0, yoff+Sy*0.0,     Sx*x/w,     Sy*(1-y/h)))
+        self.gl['xz'] = self.fig.add_axes((Sx*x/w, yoff+Sy*(1-y/h), Sx*(1-x/w), Sy*y/h))
+        self.gl['in'] = self.fig.add_axes((Sx*x/w, yoff+Sy*0.0,     Sx*(1-x/w), Sy*(1-y/h)))
 
         self.gr = {}
-        self.gr['xy'] = self.fig.add_axes((h+h*0.0, 1-q, h*q,     q))
-        self.gr['yz'] = self.fig.add_axes((h+h*q,   1-q, h*(1-q), q))
-        self.gr['xz'] = self.fig.add_axes((h+h*0.0, 0.0, h*q,     1-q))
-        self.gr['in'] = self.fig.add_axes((h+h*q,   0.0, h*(1-q), 1-q))
+        self.gr['xy'] = self.fig.add_axes((xoff+Sx*0.0, Sy*(1-y/h), Sx*x/w,     Sy*y/h))
+        self.gr['yz'] = self.fig.add_axes((xoff+Sx*0.0, Sy*0.0,     Sx*x/w,     Sy*(1-y/h)))
+        self.gr['xz'] = self.fig.add_axes((xoff+Sx*x/w, Sy*(1-y/h), Sx*(1-x/w), Sy*y/h))
+        self.gr['in'] = self.fig.add_axes((xoff+Sx*x/w, Sy*0.0,     Sx*(1-x/w), Sy*(1-y/h)))
 
         self.slices = (np.array(self.state.image.shape)/2).astype('int')
 
@@ -102,14 +117,14 @@ class OrthoManipulator(object):
         g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
         self._format_ax(g['xy'])
 
-        g['yz'].imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
-        g['yz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
-        g['yz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
+        g['yz'].imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
+        g['yz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
+        g['yz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
         self._format_ax(g['yz'])
 
-        g['xz'].imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
-        g['xz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
-        g['xz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        g['xz'].imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
+        g['xz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        g['xz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
         self._format_ax(g['xz'])
 
         if self.inset == 'exposure':
@@ -189,19 +204,19 @@ class OrthoManipulator(object):
         f = False
         for g in [self.gl, self.gr]:
             if event.inaxes == g['xy']:
-                z = self.slices[0]
                 x = x0
                 y = y0
+                z = self.slices[0]
                 f = True
             if event.inaxes == g['yz']:
-                z = x0
-                x = self.slices[2]
-                y = y0
-                f = True
-            if event.inaxes == g['xz']:
+                x = x0
                 y = self.slices[1]
                 z = y0
-                x = x0
+                f = True
+            if event.inaxes == g['xz']:
+                x = self.slices[2]
+                y = y0
+                z = x0
                 f = True
 
         if f:
@@ -303,19 +318,21 @@ class OrthoViewer(object):
         else:
             self.cmap = 'bone' if self.onesided else 'RdBu_r'
 
-        sh = self.field.shape
-        q = float(sh[1]) / (sh[0]+sh[1])
+        z,y,x = [float(i) for i in self.field.shape]
+        w = float(x + z)
+        h = float(y + z)
 
         tooltip = mpl.rcParams['toolbar']
         mpl.rcParams['toolbar'] = 'None'
-        self.fig = pl.figure(figsize=(14,14))
+        self.fig = pl.figure(figsize=(10*w/h,10))
         mpl.rcParams['toolbar'] = tooltip
 
         self.g = {}
-        self.g['xy'] = self.fig.add_axes((0.0, 1-q, q,     q))
-        self.g['yz'] = self.fig.add_axes((q,   1-q, (1-q), q))
-        self.g['xz'] = self.fig.add_axes((0.0, 0.0, q,     1-q))
-        self.g['in'] = self.fig.add_axes((q,   0.0, (1-q), 1-q))
+        # rect = l,b,w,h
+        self.g['xy'] = self.fig.add_axes((0.0, 1-y/h, x/w,   y/h))
+        self.g['yz'] = self.fig.add_axes((0.0, 0.0,   x/w,   1-y/h))
+        self.g['xz'] = self.fig.add_axes((x/w, 1-y/h, 1-x/w, y/h))
+        self.g['in'] = self.fig.add_axes((x/w, 0.0,   1-x/w, 1-y/h))
 
         self.slices = (np.array(self.field.shape)/2).astype('int')
 
@@ -351,14 +368,14 @@ class OrthoViewer(object):
         g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
         self._format_ax(g['xy'])
 
-        g['yz'].imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
-        g['yz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
-        g['yz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
+        g['yz'].imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
+        g['yz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
+        g['yz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
         self._format_ax(g['yz'])
 
-        g['xz'].imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
-        g['xz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
-        g['xz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        g['xz'].imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
+        g['xz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        g['xz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
         self._format_ax(g['xz'])
         self._format_ax(g['in'])
         pl.draw()
@@ -373,19 +390,19 @@ class OrthoViewer(object):
 
         f = False
         if event.inaxes == self.g['xy']:
-            z = self.slices[0]
             x = x0
             y = y0
+            z = self.slices[0]
             f = True
         if event.inaxes == self.g['yz']:
-            z = x0
-            x = self.slices[2]
-            y = y0
-            f = True
-        if event.inaxes == self.g['xz']:
+            x = x0
             y = self.slices[1]
             z = y0
-            x = x0
+            f = True
+        if event.inaxes == self.g['xz']:
+            x = self.slices[2]
+            y = y0
+            z = x0
             f = True
 
         if f:
