@@ -64,15 +64,29 @@ def load_tiff_iter_libtiff(filename, iter_slice_size):
 #=======================================================================
 # Featuring functions
 #=======================================================================
-def normalize(im, invert=False):
+def normalize(im, invert=False, scale=None):
+    """
+
+    Normalize a field to either [0,1] or to a set scale range given by a tuple
+    (min, max) exposure values. If scale is not provided, then the default is
+    [0,1]. Invert the image if requested. If scale if provided then the image
+    is scaled to those exposure values.
+    """
     out = im.astype('float').copy()
 
-    if out.ptp() != 0 and out.max() != 0:
-        out -= 1.0*out.min()
-        out /= 1.0*out.max()
+    # FIXME -- scale = scale or (0.0, 255.0)
+    if scale is not None:
+        l, u = (float(i) for i in scale)
+        out = (out - l) / (u - l)
+        if invert:
+            out = -out + (out.max() + out.min())
+    else:
+        if out.ptp() != 0 and out.max() != 0:
+            out -= 1.0*out.min()
+            out /= 1.0*out.max()
 
-    if invert:
-        out = 1 - out
+        if invert:
+            out = 1 - out
     return out
 
 def generate_sphere(radius):

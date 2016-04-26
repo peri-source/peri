@@ -277,7 +277,7 @@ class Tile(object):
 
 class RawImage():
     def __init__(self, filename, tile=None, zstart=None, zstop=None,
-            xysize=None, invert=False):
+            xysize=None, invert=False, exposure=None):
         """
         An image object which stores information about desired region and padding,
         etc.  There are number of ways to create an image object:
@@ -286,12 +286,20 @@ class RawImage():
             path of the image file.  recommended that you supply a relative path
             so that transfer between computers is possible
 
+        exposure : tuple of floats (min, max) | None
+            If set, it is the values used to normalize the image instead of setting
+            min to 0 and max to 1 (which depends on noise, exposure). Setting this
+            values allows a series of images to be initialized with the same
+            ILM, PSF etc. Should be the bit value of the camera.
+
         tile : `cbamf.util.Tile`
+            the region of the image to crop out to use for the actual featuring, etc
 
         """
         self.filename = filename
         self.invert = invert
         self.filters = None
+        self.exposure = exposure
 
         self.load_image()
 
@@ -308,7 +316,9 @@ class RawImage():
     def load_image(self):
         try:
             self.image = initializers.load_tiff(self.filename)
-            self.image = initializers.normalize(self.image, invert=self.invert)
+            self.image = initializers.normalize(
+                self.image, invert=self.invert, scale=self.exposure
+            )
         except IOError as e:
             print "Could not find image '%s'" % self.filename
             raise e
@@ -332,6 +342,18 @@ class RawImage():
     def set_filter(self, slices, values):
         self.filters = [[sl,values[sl]] for sl in slices]
 
+    def get_scale(self):
+        raw = initializers.load_tiff(self.filename)
+        scaled = initializers.normalize(
+            self.image, invert=self.invert, scale=self.exposure
+        )
+        t0, t1 = scaled.min(), scaled.max()
+        r0, r1 = float(raw.min()), float(raw.max())
+
+        rmin = (t1*r0 - t0*r1) / (t1 - t0)
+        rmax = (r1 - r0) / (t1 - t0) + rmin
+        return (rmin, rmax)
+
     def __getstate__(self):
         d = self.__dict__.copy()
         cdd(d, ['image'])
@@ -339,6 +361,7 @@ class RawImage():
 
     def __setstate__(self, idct):
         self.__dict__.update(idct)
+        self.exposure = self.__dict__.get('exposure', None) # FIXME -- remove later
         self.load_image()
 
     #def __getinitargs__(self):
