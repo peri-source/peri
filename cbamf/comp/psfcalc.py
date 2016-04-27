@@ -402,7 +402,7 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
     return hilm.sum(axis=-1)*2.
 
 def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
-        polar_angle=0., **kwargs):
+        polar_angle=0., wrap=True, **kwargs):
     """
     Make x,y,z  __1D__ numpy.arrays, with x the direction along the
     scan line. (to make the calculation faster since I dont' need the line
@@ -417,7 +417,11 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
         - kfki: The ratio of the final light's wavevector to the incoming.
             Default is 0.889
         - zint: The position of the optical interface, in units of 1/k_incoming
-    Other **kwargs
+        - wrap : Bool
+            Wraps the psf calculation for speed, assuming that the input x,y
+            are regularly-spaced points. Default is True. If x,y are not
+            regularly spaced then set wrap=False.
+        Other **kwargs
         - polar_angle: Float scalar of the polarization angle of the light with
             respect to the line direction (x). From calculate_linescan_ilm_psf;
             default is 0.
@@ -430,27 +434,51 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
             psf[x,y,z].
     """
 
-    #~~~Things I'd rather not have in this code.
-    x3,y3,z3 = np.meshgrid(x, y, z, indexing='ij')
-    y2,z2 = np.meshgrid(y, z, indexing='ij')
-
+    #0. Set up vecs
+    if wrap:
+        xpts = vec_to_halfvec(x)
+        ypts = vec_to_halfvec(y)
+        x3, y3, z3 = np.meshgrid(xpts, ypts, z, indexing='ij')
+    else:
+        x3,y3,z3 = np.meshgrid(x, y, z, indexing='ij')        
     rho3 = np.sqrt(x3*x3 + y3*y3)
-    #~~~~
+    
+    #1. Hilm
+    if wrap:
+        y2,z2 = np.meshgrid(ypts, z, indexing='ij')
+        hilm0 = calculate_linescan_ilm_psf(y2, z2, zint=zint, 
+                polar_angle=polar_angle, **kwargs)
+        if ypts[0] == 0:
+            hilm = np.append(hilm0[-1:0:-1], hilm0, axis=0)
+        else:
+            hilm = np.append(hilm0[::-1], hilm0, axis=0)
+    else:
+        y2,z2 = np.meshgrid(y, z, indexing='ij')
+        hilm = calculate_linescan_ilm_psf(y2, z2, zint=zint, 
+                polar_angle=polar_angle, **kwargs)
 
-    hilm = calculate_linescan_ilm_psf(y2, z2, zint=zint, polar_angle=polar_angle, **kwargs)
-    hdet, toss = get_hsym_asym(rho3*kfki, z3*kfki, zint=kfki*zint, get_hdet=True, **kwargs)
-
+    #2. Hdet
+    if wrap:
+        #Lambda function that ignores its args but still returns correct values
+        func = lambda *args: get_hsym_asym(rho3*kfki, z3*kfki, zint=kfki*zint, 
+                    get_hdet=True, **kwargs)[0]
+        hdet = wrap_and_calc_psf(xpts, ypts, z, func)
+    else:
+        hdet, toss = get_hsym_asym(rho3*kfki, z3*kfki, zint=kfki*zint, 
+                get_hdet=True, **kwargs)
+    
     if normalize:
         hilm /= hilm.sum()
         hdet /= hdet.sum()
 
     for a in xrange(x.size):
-        hdet[a,...] *= hilm
+        hdet[a] *= hilm
 
     return hdet if normalize else hdet / hdet.sum()
 
 def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
-        sigkf=0.1, zint=100., nkpts=3, dist_type='gaussian', **kwargs):
+        sigkf=0.1, zint=100., nkpts=3, dist_type='gaussian', wrap=True, 
+        **kwargs):
     """
     Calculates the full PSF for a line-scanning confocal with a polydisperse
     emission spectrum of the dye. The dye's emission spectrum is assumed to be
@@ -469,6 +497,10 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
             Can be one of 'laguerre'/'gamma' or 'gaussian.' If 'gaussian'
             the resulting k-values are taken in absolute value. Default
             is 'gaussian.'
+        - wrap : Bool
+            Wraps the psf calculation for speed, assuming that the input x,y
+            are regularly-spaced points. Default is True. If x,y are not
+            regularly spaced then set wrap=False.
     Other **kwargs
         - polar_angle: Float scalar of the polarization angle of the light with
             respect to the line direction (x). From calculate_linescan_ilm_psf;
@@ -501,33 +533,47 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
         kfkipts *= k_scale
     else:
         raise ValueError('dist_type must be either gaussian or laguerre')
-    
     wts /= wts.sum() #normalizing integral
 
-    #~~~Things I'd rather not have in this code.
-    x3,y3,z3 = np.meshgrid(x,y,z,indexing='ij')
-    y2,z2 = np.meshgrid(y,z,indexing='ij')
+    #0. Set up vecs
+    if wrap:
+        xpts = vec_to_halfvec(x)
+        ypts = vec_to_halfvec(y)
+        x3, y3, z3 = np.meshgrid(xpts, ypts, z, indexing='ij')
+    else:
+        x3,y3,z3 = np.meshgrid(x, y, z, indexing='ij')        
+    rho3 = np.sqrt(x3*x3 + y3*y3)
 
-    rho3 = np.sqrt(x3*x3+y3*y3)
-    #~~~~
+    #1. Hilm
+    if wrap:
+        y2,z2 = np.meshgrid(ypts, z, indexing='ij')
+        hilm0 = calculate_linescan_ilm_psf(y2, z2, zint=zint, **kwargs)
+        if ypts[0] == 0:
+            hilm = np.append(hilm0[-1:0:-1], hilm0, axis=0)
+        else:
+            hilm = np.append(hilm0[::-1], hilm0, axis=0)
+    else:
+        y2,z2 = np.meshgrid(y, z, indexing='ij')
+        hilm = calculate_linescan_ilm_psf(y2, z2, zint=zint, **kwargs)
 
-    hilm = calculate_linescan_ilm_psf(y2, z2, zint=zint, **kwargs)
-
-    inner = [
-        wts[a] * get_hsym_asym(
-            rho3*kfkipts[a], z3*kfkipts[a], zint=kfkipts[a]*zint,
-            get_hdet=True, **kwargs
-        )[0]
-        for a in xrange(nkpts)
-    ]
+    #2. Hdet
+    if wrap:
+        #Lambda function that ignores its args but still returns correct values
+        func = lambda x,y,z, kfki=1.: get_hsym_asym(rho3*kfki, z3*kfki, 
+                zint=kfki*zint, get_hdet=True, **kwargs)[0]
+        hdet_func = lambda kfki: wrap_and_calc_psf(xpts,ypts,z, func, kfki=kfki)
+    else:
+        hdet_func = lambda kfki: get_hsym_asym(rho3*kfki, z3*kfki, 
+                zint=kfki*zint, get_hdet=True, **kwargs)[0]
+    #####
+    inner = [wts[a] * hdet_func(kfkipts[a]) for a in xrange(nkpts)]
     hdet = np.sum(inner, axis=0)
 
     if normalize:
         hilm /= hilm.sum()
         hdet /= hdet.sum()
-
     for a in xrange(x.size):
-        hdet[a,...] *= hilm
+        hdet[a] *= hilm
 
     return hdet if normalize else hdet / hdet.sum()
 
@@ -577,9 +623,10 @@ def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
     Speeds up psf calculations by a factor of 4 for free / some broadcasting.
     Doesn't work for linescan psf because of the hdet bit...
     Inputs:
-        - xpts: 1D N-element numpy.array of the x-points to
-        - ypts:
-        - zpts:
+        - xpts: 1D N-element numpy.array of the x-points to evaluate func at. 
+        - ypts: "   "           "   "     "  "  y-points  "     "      "   "
+        - zpts: "   "           "   "     "  "  y-points  "     "      "   "
+        - func: function to evaluate. 
     """
 
     #1. Checking that everything is hunky-dory:
@@ -587,21 +634,44 @@ def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
         if len(t.shape) != 1:
             raise ValueError('xpts,ypts,zpts must be 1D.')
 
-    for t in [xpts,ypts]:
-        if t[0] != 0:
-            raise ValueError('xpts[0],ypts[0] = 0 required.')
+    dx = 1 if xpts[0]==0 else 0
+    dy = 1 if ypts[0]==0 else 0
 
     xg,yg,zg = np.meshgrid(xpts,ypts,zpts, indexing='ij')
     xs, ys, zs = [ pts.size for pts in [xpts,ypts,zpts] ]
-    to_return = np.zeros([2*xs-1, 2*ys-1, zs])
+    to_return = np.zeros([2*xs-dx, 2*ys-dy, zs])
 
     #2. Calculate:
     up_corner_psf = func(xg,yg,zg, **kwargs)
 
-    to_return[xs-1:,ys-1:,:] = up_corner_psf.copy()                 #x>0, y>0
-    to_return[:xs-1,ys-1:,:] = up_corner_psf[-1:0:-1,:,:].copy()    #x<0, y>0
-    to_return[xs-1:,:ys-1,:] = up_corner_psf[:,-1:0:-1,:].copy()    #x>0, y<0
-    to_return[:xs-1,:ys-1,:] = up_corner_psf[-1:0:-1,-1:0:-1,:].copy()#x<0,y<0
+    to_return[xs-dx:,ys-dy:,:] = up_corner_psf.copy()                     #x>0, y>0
+    if dx == 0:
+        to_return[:xs-dx,ys-dy:,:] = up_corner_psf[::-1,:,:].copy()       #x<0, y>0
+    else:
+        to_return[:xs-dx,ys-dy:,:] = up_corner_psf[-1:0:-1,:,:].copy()    #x<0, y>0
+    if dy == 0:
+        to_return[xs-dx:,:ys-dy,:] = up_corner_psf[:,::-1,:].copy()       #x>0, y<0
+    else:
+        to_return[xs-dx:,:ys-dy,:] = up_corner_psf[:,-1:0:-1,:].copy()    #x>0, y<0
+    if (dx == 0) and (dy == 0):
+        to_return[:xs-dx,:ys-dy,:] = up_corner_psf[::-1,::-1,:].copy()    #x<0,y<0
+    elif (dx == 0) and (dy != 0):
+        to_return[:xs-dx,:ys-dy,:] = up_corner_psf[::-1,-1:0:-1,:].copy() #x<0,y<0
+    elif (dy == 0) and (dx != 0):
+        to_return[:xs-dx,:ys-dy,:] = up_corner_psf[-1:0:-1,::-1,:].copy() #x<0,y<0
+    else: #dx==1 and dy==1
+        to_return[:xs-dx,:ys-dy,:] = up_corner_psf[-1:0:-1,-1:0:-1,:].copy()#x<0,y<0
 
     return to_return
+    
+def vec_to_halfvec(vec):
+    """Transforms a vector np.arange(-N, M, dx) to np.arange(min(|vec|), max(N,M),dx)]"""
+    d = vec[1:] - vec[:-1]
+    if (d.std() > 1e-14) or (d.mean() < 0):
+        raise ValueError('vec must be np.arange() in increasing order')
+    dx = d.mean()
+    lowest = np.abs(vec).min()
+    highest = np.abs(vec).max()
+    return np.arange(lowest, highest + 0.1*dx, dx).astype(vec.dtype)
+    
 
