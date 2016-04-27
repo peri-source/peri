@@ -36,14 +36,14 @@ class OrthoManipulator(object):
         #mpl.rcParams['toolbar'] = 'None'
 
         orientation = orientation or ('horizontal' if w/h < 1.4 else 'vertical')
-        if orientation == 'horizontal':
+        if orientation == 'horizontal' or orientation == 'h':
             self.fig = pl.figure(figsize=(2*size*w/h,size))
             Sx, Sy, xoff, yoff = 0.5, 1.0, 0.5, 0.0
-        elif orientation == 'vertical':
+        elif orientation == 'vertical' or orientation == 'v':
             self.fig = pl.figure(figsize=(size,2*size*h/w))
             Sx, Sy, xoff, yoff = 1.0, 0.5, 0.0, 0.5
         else:
-            raise AttributeError("orientation must be one of 'horizontal', 'vertical'")
+            raise AttributeError("orientation must be one of '(h)orizontal', '(v)ertical'")
 
         #mpl.rcParams['toolbar'] = tooltip
 
