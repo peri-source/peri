@@ -4,7 +4,6 @@ import pickle
 import tempfile
 import numpy as np
 import scipy as sp
-from collections import OrderedDict
 
 import matplotlib.pyplot as pl
 from mpl_toolkits.axes_grid1 import ImageGrid
@@ -51,12 +50,12 @@ def optimize(s):
     lm0 = opt.LMGlobals(s, blocks, **args)
     lm1 = opt.LMParticles(s, particles=np.arange(s.N), **args)
 
-    for i in xrange(3):
+    for i in xrange(5):
         lm0.do_run_2()
-        lm0.reset(0.5)
+        lm0.reset(3e-2)
 
         lm1.do_run_2()
-        lm1.reset(0.5)
+        lm1.reset(3e-2)
 
 def table(s, datas, names, vary_func):
     p0 = s.obj.pos.copy()
@@ -65,8 +64,8 @@ def table(s, datas, names, vary_func):
     slicer = np.s_[s.image[s.inner].shape[0]/2]
     model_image = s.image[s.inner][slicer].copy()
 
-    results = OrderedDict()
-    results['Reference'] = (model_image, p0, r0)
+    results = [0]*(len(names)+1)
+    results[0] = ('Refernce', model_image, p0, r0)
 
     filename = tempfile.NamedTemporaryFile().name
     states.save(s, filename=filename)
@@ -80,7 +79,8 @@ def table(s, datas, names, vary_func):
 
         optimize(state)
 
-        results[name] = (
+        results[i+1] = (
+            name,
             state.get_difference_image()[slicer].copy(),
             state.obj.pos.copy(),
             state.obj.rad.copy()
@@ -184,20 +184,18 @@ def gogogo():
     return r0, r1, r2
 
 def scores(results):
-    tmp = copy.copy(results)
-
     scores = []
-    for result in tmp:
-        ref = result.pop('Reference')
+    for result in results:
+        ref = result[0]
 
-        errors = OrderedDict()
-        for k,v in result.iteritems():
-            errors[k] = (
-                np.sqrt(((ref[1] - v[1])**2).sum(axis=-1)).mean(),
-                np.sqrt((ref[2] - v[2])**2).mean(),
-            )
+        errors = []
+        for val in result[1:]:
+            errors.append([
+                val[0],
+                np.sqrt(((ref[2] - val[2])**2).sum(axis=-1)).mean(),
+                np.sqrt((ref[3] - val[3])**2).mean(),
+            ])
 
-        result['Reference'] = ref
         scores.append(errors)
     return scores
 
@@ -209,17 +207,17 @@ def numform(x):
 def numform2(x):
     return "{:0.5f}".format(x)
 
-def print_table(tables, sections=['Platonic form', 'Illumination', 'PSF'],
+def print_table(tables, sections=['Platonic', 'Illumination', 'PSF'],
         fulldocument=False):
 
     outstr = ''
 
     if fulldocument:
         outstr = (
-            '\\documentclass[]{revtex4}'
-            '\\usepackage{graphicx}'
-            '\\usepackage{multirow}'
-            '\\begin{document}'
+            '\\documentclass[preprint]{revtex4}\n'
+            '\\usepackage{graphicx}\n'
+            '\\usepackage{multirow}\n'
+            '\\begin{document}\n'
         )
 
     outstr += (
@@ -233,17 +231,17 @@ def print_table(tables, sections=['Platonic form', 'Illumination', 'PSF'],
     )
 
     for sec, table in zip(sections, tables):
-        strsize = max([len(i) for i in table.keys()]) + 3
+        ss = max([len(i[0]) for i in table]) + 3
 
         outstr += '\\multirow{5}{*}{\\rotatebox{90}{\\textbf{%s}}}\n' % sec
-        for k,v in table.iteritems():
-            v = [numform2(i) for i in v]
-            outstr += "& {:<{}s} & ${:s}$ & ${:s}$ \\\\ \\cline{{2-4}}\n".format(k, strsize, *v)
+        for row in table:
+            v = [numform2(i) for i in row[1:]]
+            outstr += "& {:<{}s} & ${:s}$ & ${:s}$ \\\\ \\cline{{2-4}}\n".format(row[0], ss, *v)
         outstr += '\\hline\n'
 
     outstr += (
         '\\end{tabular}\n'
-        '\\caption{\\textbf{Title} Some text}\n'
+        '\\caption{\\textbf{Position and radii errors by model complexity}}\n'
         '\\label{table:model_complexity}\n'
         '\\end{table}\n'
         '\\end{center}\n'
@@ -281,42 +279,32 @@ def make_plots(results, img=None, label='', sidelabel=''):
 
     # get a common color bar scale for all images
     mins, maxs = [], []
-    for i, (k,v) in enumerate(results.iteritems()):
-        if k == 'Reference':
+    for i, v in enumerate(results):
+        if v[0] == 'Reference':
             continue
-        mins.append(v[0].min())
-        maxs.append(v[0].max())
+        mins.append(v[1].min())
+        maxs.append(v[1].max())
     mins = min(mins)
     maxs = max(maxs)
 
     mins = -0.5*max(np.abs([mins, maxs]))
     maxs = -mins
 
-    # make sure that the reference is on the left, apparently
-    # it is last in our ordered dict
-    for i, (k,v) in enumerate(results.iteritems()):
-        if k == 'Reference':
-            img[0].imshow(v[0], vmin=0, vmax=1, cmap='bone')
-            img[0].set_title(k, fontsize=17)
-            img[0].set_xticks([])
-            img[0].set_yticks([])
+    for i, v in enumerate(results):
+        if v[0] == 'Reference':
+            img[i].imshow(v[1], vmin=0, vmax=1, cmap='bone')
+        else:
+            img[i].imshow(v[1], vmin=mins, vmax=maxs)
 
-            if label:
-                lbl(img[0], label+str(1), 18)
+        img[i].set_title(v[0], fontsize=17)
+        img[i].set_xticks([])
+        img[i].set_yticks([])
 
-            if sidelabel:
-                img[0].set_ylabel(sidelabel)
+        if label:
+            lbl(img[i], label+str(i+1), 18)
 
-    # then all of the comparison plots following that
-    for i, (k,v) in enumerate(results.iteritems()):
-        if k != 'Reference':
-            img[i+1].imshow(v[0], vmin=mins, vmax=maxs)
-            img[i+1].set_title(k, fontsize=17)
-            img[i+1].set_xticks([])
-            img[i+1].set_yticks([])
-
-            if label:
-                lbl(img[i+1], label+str(i+2), 18)
+        if i == 0 and sidelabel:
+            img[i].set_ylabel(sidelabel)
 
 def error_level(state, particle):
     f = state.fisher_information(state.blocks_particle(particle))
