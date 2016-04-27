@@ -9,20 +9,12 @@ from cbamf import states
 
 """
 To add:
-1. Engine instantiation for groups of particles. I'd like it to be a list
-    of individual engine instantiations for particle groups, so they
-    can keep their own damping etc.... but that means it won't work
-    because you'll run out of memory.
-2. Augmented state
-3. Engine instantiation for augmented state.
 6. With opt using big regions for particles, globals, it makes sense to
     put stuff back on the card again....
 
 To fix:
 1. In the engine, make do_run_1() and do_run_2() play nicer with each other.
-2. Maybe make an augmented state class that lets you update things like
-    rscale(z)? (e.g. instead of updating all r's equally, you could update
-    the r's in proportion to LegPoly(x,y,z) etc. Similar for their x,y,z pos's?
+2. ftol for burn()
 
 Algorithm is:
 1. Evaluate J_ia = df(xi,mu)/dmu_a
@@ -1327,6 +1319,40 @@ def fit_ilm(new_ilm, old_ilm, use_engine=True, run_engine=True, **kwargs):
 #         ~~~~~        Class/Engine LM minimization Stuff     ~~~~~
 #=============================================================================#
 class LMEngine(object):
+    """
+    The engine for running levenberg-marquardt optimization on anything. 
+    There are 3 different options for optimizing:
+        do_run_1(): 
+            Checks to calculate full, Broyden, and eigen J, then tries a step.
+            If the step is accepted, decreases damping; if not, increases.
+            Checks for full, Broyden, and eigen J updates.     
+        do_run_2(): 
+            Checks to calculate full, Broyden, and eigen J, then tries a 
+            step with the current damping and with a decreased damping, 
+            accepting whichever is lower. Decreases damping iff the lower 
+            damping is better. It then calls do_internal_run() (see below).
+            Rejected steps result in increased damping until a step is 
+            accepted. Checks for full, Broyden, and eigen J updates. 
+        do_internal_run():
+            Checks for Broyden and eigen J updates only, then uses 
+            pre-calculated J, JTJ, etc to evaluate LM steps. Does
+            not change damping during the run. Does not check do update
+            the full J, but does check for Broyden, eigen updates. 
+            Does not work if J has not been evaluated yet. 
+    Whether to update the full J is controlled by update_J_frequency only, 
+    which only counts iterations of do_run_1() and do_run_2(). 
+    Both partial updates are controlled by partial_update_frequency, which
+    counts internal runs in do_internal_run and full runs in do_run_1. 
+    
+    So, if you want a partial update every other run, full J the remaining, 
+    this would be:
+        do_run_1(): update_J_frequency=2, partial_update_frequency=1
+        do_run_2(): update_J_frequency=1, partial_update_frequency=1, run_length=2
+    I would like to make this either a little more consistent or totally 
+    incompatible to be less confusing, especially since do_run_2() with 
+    update_J_frequency=2 just checks to decrease the damping without either 
+    partial updates. 
+    """
     def __init__(self, damping=1., increase_damp_factor=3., decrease_damp_factor=8.,
                 min_eigval=1e-12, marquardt_damping=True, transtrum_damping=None,
                 use_accel=False, max_accel_correction=1., ptol=1e-6,
@@ -2266,7 +2292,7 @@ class LMAugmentedState(LMEngine):
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
 
-def burn(s, n_loop=6, collect_stats=True, desc='burning', use_aug=False):
+def burn(s, n_loop=6, collect_stats=True, desc='burning', use_aug=False, ftol=None):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
@@ -2301,7 +2327,7 @@ def burn(s, n_loop=6, collect_stats=True, desc='burning', use_aug=False):
         glbl_blk = block_globals(s, include_rscale=False, include_off=True,
                 include_sigma=False)
         aug = AugmentedState(s, glbl_blk, rz_order=3)
-        lm = LMAugmentedState(aug, max_mem=3e9, max_iter=2, run_length=6,
+        lm = LMAugmentedState(aug, max_mem=3e9, max_iter=1, run_length=6,
                 eig_update=True, num_eig_dirs=10, partial_update_frequency=3,
                 damping=0.3, decrease_damp_factor=10., quiet=True)
     else:
@@ -2317,6 +2343,7 @@ def burn(s, n_loop=6, collect_stats=True, desc='burning', use_aug=False):
 
     #2. Burn.
     for a in xrange(n_loop):
+        start_err = get_err(s)
         lm.do_run_2(); lm.reset(new_damping=3e-2)
         if desc is not None:
             states.save(s, desc=desc)
@@ -2325,6 +2352,11 @@ def burn(s, n_loop=6, collect_stats=True, desc='burning', use_aug=False):
             states.save(s, desc=desc)
         if collect_stats:
             all_lp_stats.append(lp.stats)
+            all_lm_stats.append(lm.get_termination_stats())
+        if ftol is not None:
+            new_err = get_err(s)
+            if (start_err - new_err) < ftol:
+                break
 
     #I'm returning the stats & the optimizers in case you want to check something
     if collect_stats:
