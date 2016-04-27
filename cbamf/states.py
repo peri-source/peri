@@ -246,7 +246,7 @@ class ConfocalImagePython(State):
             sigma=0.04, doprior=False, constoff=False,
             varyn=False, allowdimers=False, nlogs=True, difference=True,
             pad=const.PAD, sigmapad=False, slab=None, newconst=True, bkg=None,
-            method=None, *args, **kwargs):
+            method=1, *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
