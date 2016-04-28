@@ -343,6 +343,9 @@ class RawImage():
         self.filters = [[sl,values[sl]] for sl in slices]
 
     def get_scale(self):
+        if self.exposure is not None:
+            return self.exposure
+
         raw = initializers.load_tiff(self.filename)
         scaled = initializers.normalize(
             self.image, invert=self.invert, scale=self.exposure
