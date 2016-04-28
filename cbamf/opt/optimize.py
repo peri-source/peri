@@ -162,14 +162,16 @@ def update_state_global(s, block, data, keep_time=False, **kwargs):
     updated = {'pos', 'rad', 'typ', 'psf', 'ilm', 'bkg', 'off', 'slab', \
         'zscale', 'sigma', 'rscale'}
     if updated != set(s.param_order):
-        raise RuntimeError('This state has parameters that arent supported!')
+        raise RuntimeError('This state has parameters that are not supported!')
 
     #Since zscale affects obj, it needs to be first:
     #zscale:
     bz = s.create_block('zscale')
     if (bz & block).sum() > 0:
         new_zscale = new_state[bz].copy()
-        s.update(bz, new_zscale)
+        # s.update(bz, new_zscale)
+        s.zscale = new_zscale[0]
+        s.obj.initialize(s.zscale)
 
     #obj:
     #pos:
@@ -216,25 +218,28 @@ def update_state_global(s, block, data, keep_time=False, **kwargs):
         new_slab_params = new_state[bs].copy()
         s.slab.update(new_slab_params)
 
-    #and I think the psf support size, ffts aren't updated after updating psf
-    #which is why....
-
     #off:
     bo = s.create_block('off')
     if (bo & block).sum() > 0:
         new_off = new_state[bo].copy()
-        s.update(bo, new_off)
+        # s.update(bo, new_off)
+        s.offset = new_off
 
     #rscale:
     brscl = s.create_block('rscale')
     if (brscl & block).sum() > 0:
-        new_rscale = new_state[brscl].copy()
-        s.update(brscl, new_rscale)
+        new_rscale = new_state[brscl].copy()[0]
+        # s.update(brscl, new_rscale)
+        f = new_rscale / s.rscale
+        s.obj.rad *= f
+        s.obj.initialize(s.zscale)
+        s.rscale = new_rscale
 
     #sigma:
     bsig = s.create_block('sigma')
     if (bsig & block).sum() > 0:
         new_sig = new_state[bsig].copy()
+        #leaving this since I don't use it for opt FIXME
         s.update(bsig, new_sig)
 
     #Now we need to reset the state and return:
