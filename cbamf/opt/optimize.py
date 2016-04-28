@@ -2381,7 +2381,7 @@ class LMAugmentedState(LMEngine):
 #=============================================================================#
 
 def burn(s, n_loop=6, collect_stats=True, desc='', use_aug=False, 
-        ftol=None, mode='burn'):
+        ftol=None, mode='burn', max_mem=6e9):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
@@ -2411,7 +2411,7 @@ def burn(s, n_loop=6, collect_stats=True, desc='', use_aug=False,
         ftol : Float or None. 
             If not None, the change in error at which to terminate.
             
-        mode : 'burn', 'polish', or 'translate'
+        mode : 'burn', 'polish', or 'do_positions'
             What mode to optimize with. 
                 'burn'   : Your state is far from the minimum. 
                 'polish' : Both your positions and globals are near the minimum. 
@@ -2419,6 +2419,11 @@ def burn(s, n_loop=6, collect_stats=True, desc='', use_aug=False,
                     well-fit. 
             'burn' is the default and will optimize any scenario, but the 
             others will be faster for their specific scenarios. 
+            
+        max_mem : Numeric
+            The maximum amount of memory allowed for the optimizers' J's,
+            split equally between particles & globals. Default is 6e9, 
+            i.e. 3GB per optimizer. 
     
     Comments
     --------
@@ -2442,24 +2447,25 @@ def burn(s, n_loop=6, collect_stats=True, desc='', use_aug=False,
     eig_update = mode != 'polish'
     glbl_run_length = 6 if mode != 'polish' else 3
     save_J, do_calc_size = [mode == 'polish']*2
-    when_stop = {'errtol':1e-5} if mode == 'polish' else {'errtol':3e-3}
+    kwargs = {'errtol':1e-5} if mode == 'polish' else {'errtol':3e-3}
+    kwargs.update({'max_mem':max_mem/2})
 
     lp = LMParticleGroupCollection(s, region_size=40, do_calc_size=do_calc_size,
             get_cos=collect_stats, save_J=save_J, run_length=4, 
-            max_iter=1, quiet=True, damping=prtl_dmp, **when_stop)
+            max_iter=1, quiet=True, damping=prtl_dmp, **kwargs)
     if use_aug:
         glbl_blk = block_globals(s, include_rscale=False, include_off=True,
                 include_sigma=False)
         aug = AugmentedState(s, glbl_blk, rz_order=3)
-        lm = LMAugmentedState(aug, max_mem=3e9, max_iter=1, run_length=glbl_run_length,
+        lm = LMAugmentedState(aug, max_iter=1, run_length=glbl_run_length,
                 eig_update=eig_update, num_eig_dirs=10, partial_update_frequency=3,
-                damping=glbl_dmp, decrease_damp_factor=10., quiet=True, **when_stop)
+                damping=glbl_dmp, decrease_damp_factor=10., quiet=True, **kwargs)
     else:
         glbl_blk = block_globals(s, include_rscale=True, include_off=True,
                 include_sigma=False)
-        lm = LMGlobals(s, glbl_blk, max_mem=3e9, max_iter=1, run_length=glbl_run_length,
+        lm = LMGlobals(s, glbl_blk, max_iter=1, run_length=glbl_run_length,
                 eig_update=eig_update, num_eig_dirs=10, partial_update_frequency=3,
-                damping=glbl_dmp, decrease_damp_factor=10., quiet=True, **when_stop)
+                damping=glbl_dmp, decrease_damp_factor=10., quiet=True, **kwargs)
     if collect_stats:
         all_lp_stats = []
         all_lm_stats = []
