@@ -2092,7 +2092,7 @@ class LMParticleGroupCollection(object):
         do_run_1: Run do_run_1 for every group of particles
         do_run_2: Run do_run_2 for every group of particles
     """
-    def __init__(self, state, region_size=40, do_calc_size=True,
+    def __init__(self, state, region_size=40, do_calc_size=True, max_mem=2e9,
             get_cos=False, save_J=False, **kwargs):
         """
         Parameters
@@ -2128,16 +2128,20 @@ class LMParticleGroupCollection(object):
         self.region_size = region_size
         self.get_cos = get_cos
         self.save_J = save_J
+        self.max_mem = max_mem
         
         self.reset(do_calc_size=do_calc_size)
 
-    def reset(self, new_region_size=None, do_calc_size=True, new_damping=None):
+    def reset(self, new_region_size=None, do_calc_size=True, new_damping=None, 
+            new_max_mem=None):
         """Resets the particle groups and optionally the region size and damping."""
         if new_region_size is not None:
             self.region_size = new_region_size
+        if new_max_mem == None:
+            self.max_mem = new_max_mem
         if do_calc_size:
             self.region_size = calc_particle_group_region_size(self.state,
-                    self.region_size, **self._kwargs)
+                    self.region_size, max_mem=self.max_mem, **self._kwargs)
         self.stats = []
         self.particle_groups = separate_particles_into_groups(self.state,
                 self.region_size)
