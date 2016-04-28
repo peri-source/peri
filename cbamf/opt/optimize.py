@@ -1,4 +1,4 @@
-import os, sys, time, warnings
+import os, sys, time, warnings, tempfile, pickle
 import numpy as np
 from numpy.random import randint
 from scipy.optimize import newton, minimize_scalar
@@ -8,13 +8,31 @@ from cbamf.comp import psfs, ilms, objs
 from cbamf import states
 
 """
+To fix: 
+1. update_state_global:
+    s.reset() ~= s.update(..) is slow. But you are calling it for updating 
+    (1) zscale, (2) rscale, (3) off, (4) sigma. 
+    So if you just call block_globals() then update_state_global() and the 
+    optimizers are 3x slower than it needs to be (not including sigma). 
 To add:
+1. AugmentedState: ILM scale options? You'd need a way to get an overall scale
+    block, which would probably need to come from the ILM itself. 
 6. With opt using big regions for particles, globals, it makes sense to
     put stuff back on the card again....
 
 To fix:
 1. In the engine, make do_run_1() and do_run_2() play nicer with each other.
-2. ftol for burn()
+2. opt.burn() hacks:
+    a.  Once the state is mostly optimized, LMGlobals.J doesn't change much
+        so you could lmglobals.do_internal_run(); lmparticles.do_internal_run()
+        in a loop without recalculating J's (or maybe an eigen update). 
+        It would be way faster if you could store all the J's for the 
+        particle group collections. Save LMPartilceGroupCollection's lp's J's 
+        with numpy.save and a tmp file (standard library). 
+    b. 
+3. do_conjgrad_jtj is terrible / wrong / doesn't use JTJ for anything except
+    eigendirections. 
+    
 
 Algorithm is:
 1. Evaluate J_ia = df(xi,mu)/dmu_a
@@ -1358,7 +1376,7 @@ class LMEngine(object):
                 use_accel=False, max_accel_correction=1., ptol=1e-6,
                 errtol=1e-5, costol=None, max_iter=5, run_length=5,
                 update_J_frequency=1, broyden_update=False, eig_update=False,
-                partial_update_frequency=3, num_eig_dirs=4, quiet=True):
+                partial_update_frequency=3, num_eig_dirs=8, quiet=True):
         """
         Levenberg-Marquardt engine with all the options from the
         M. Transtrum J. Sethna 2012 ArXiV paper.
@@ -1825,15 +1843,17 @@ class LMEngine(object):
         #And we've updated, so JTJ is no longer valid:
         self._fresh_JTJ = False
 
-    def get_termination_stats(self):
+    def get_termination_stats(self, get_cos=True):
         """
         Returns a dict of termination statistics
         """
         delta_params = self._last_params - self.params
         delta_err = self._last_error - self.error
-        model_cosine = self.calc_model_cosine()
         to_return = {'delta_params':delta_params, 'delta_err':delta_err,
-                    'model_cosine':model_cosine, 'num_iter':1*self._num_iter}
+                'num_iter':1*self._num_iter}
+        if get_cos:
+            model_cosine = self.calc_model_cosine()
+            to_return.update({'model_cosine':model_cosine})
         return to_return
 
     def check_completion(self):
@@ -1870,7 +1890,7 @@ class LMEngine(object):
             terminate = self.check_completion()
 
             #4. too many iterations??
-            terminate |= (self._num_iter > self.max_iter)
+            terminate |= (self._num_iter >= self.max_iter)
             return terminate
 
     def check_update_J(self):
@@ -2057,6 +2077,10 @@ class LMParticleGroupCollection(object):
     for the particle groups each time and optimizes with that, since storing
     J for the particles is too large.
 
+    Try implementing a way to save the J's via tempfile's. lp.update_J()
+    only updates J, JTJ, so you'd only have to save those (or get JTJ from J).
+    
+
     Methods
     -------
         reset: Re-calculate all the groups
@@ -2064,7 +2088,7 @@ class LMParticleGroupCollection(object):
         do_run_2: Run do_run_2 for every group of particles
     """
     def __init__(self, state, region_size=40, do_calc_size=True,
-            collect_stats=False, **kwargs):
+            get_cos=False, save_J=False, **kwargs):
         """
         Parameters
         ----------
@@ -2075,19 +2099,31 @@ class LMParticleGroupCollection(object):
             do_calc_size: Bool
                 If True, calculates the region size internally based on
                 the maximum allowed memory. Default is True
-            collect_stats: Bool
-                If True, collects statistics on each individual group's run,
-                using LMEngine.get_termination_stats(), stored in self.stats.
+            get_cos : Bool
+                Set to True to include the model cosine in the statistics 
+                on each individual group's run, using 
+                LMEngine.get_termination_stats(), stored in self.stats.
                 Default is False
+            save_J : Bool
+                Set to True to create a series of temp files that save J
+                for each group of particles. Needed for do_internal_run().
+                Default is False.
             **kwargs:
                 Pass any kwargs that would be passed to LMParticles.
                 Stored in self._kwargs for reference.
+                
+        Attributes
+        ----------
+            stats : List
+            
         """
 
         self.state = state
         self._kwargs = kwargs
         self.region_size = region_size
-        self.collect_stats = collect_stats
+        self.get_cos = get_cos
+        self.save_J = save_J
+        
         self.reset(do_calc_size=do_calc_size)
 
     def reset(self, new_region_size=None, do_calc_size=True, new_damping=None):
@@ -2097,26 +2133,73 @@ class LMParticleGroupCollection(object):
         if do_calc_size:
             self.region_size = calc_particle_group_region_size(self.state,
                     self.region_size, **self._kwargs)
-        self.stats = [] if self.collect_stats else None
+        self.stats = []
         self.particle_groups = separate_particles_into_groups(self.state,
                 self.region_size)
         if new_damping is not None:
             self._kwargs.update({'damping':new_damping})
+        if self.save_J:
+            if len(self.particle_groups) > 90:
+                warnings.warn('Attempting to create many open files. Consider increasing max_mem and/or region_size to avoid crashes.')
+            self._tempfiles = []
+            self._has_saved_J = []
+            for a in xrange(len(self.particle_groups)):
+                #TemporaryFile is automatically deleted
+                for _ in ['j','tile']:
+                    self._tempfiles.append(tempfile.TemporaryFile(dir=os.getcwd()))
+                self._has_saved_J.append(False)
+    
+    def _get_tmpfiles(self, group_index):
+        j_file = self._tempfiles[2*group_index]
+        tile_file = self._tempfiles[2*group_index+1]
+        #And we rewind before we return:
+        j_file.seek(0)
+        tile_file.seek(0)
+        return j_file, tile_file
+    
+    def _dump_j_diftile(self, group_index, j, tile):
+        j_file, tile_file = self._get_tmpfiles(group_index)
+        np.save(j_file, j)
+        pickle.dump(tile, tile_file)
+        
+    def _load_j_diftile(self, group_index):
+        j_file, tile_file = self._get_tmpfiles(group_index)
+        J = np.load(j_file)
+        tile = pickle.load(tile_file)
+        JTJ = j_to_jtj(J)
+        return J, JTJ, tile
 
-
-    def do_run_1(self):
-        for group in self.particle_groups:
+    def _do_run(self, mode='1'):
+        for a in xrange(len(self.particle_groups)):
+            group = self.particle_groups[a]
             lp = LMParticles(self.state, group, **self._kwargs)
-            lp.do_run_1()
-            if self.collect_stats:
-                self.stats.append(lp.get_termination_stats())
+            if mode == 'internal':
+                lp.J, lp.JTJ, lp._dif_tile = self._load_j_diftile(a)
+            
+            if mode == '1':
+                lp.do_run_1()
+            if mode == '2':
+                lp.do_run_2()
+            if mode == 'internal':
+                lp.do_internal_run()
+
+            self.stats.append(lp.get_termination_stats(get_cos=self.get_cos))
+            if self.save_J and (mode != 'internal'):
+                self._dump_j_diftile(a, lp.J, lp._dif_tile)
+                self._has_saved_J[a] = True
+            
+    def do_run_1(self):
+        self._do_run(mode='1')
 
     def do_run_2(self):
-        for group in self.particle_groups:
-            lp = LMParticles(self.state, group, **self._kwargs)
-            lp.do_run_2()
-            if self.collect_stats:
-                self.stats.append(lp.get_termination_stats())
+        self._do_run(mode='2')
+        
+    def do_internal_run(self):
+        if not self.save_J:
+            raise RuntimeError('self.save_J=True required for do_internal_run()')
+        if not np.all(self._has_saved_J):
+            raise RuntimeError('J, JTJ have not been pre-computed. Call do_run_1 or do_run_2')
+        self._do_run(mode='internal')
 
 class AugmentedState(object):
     """
@@ -2292,7 +2375,8 @@ class LMAugmentedState(LMEngine):
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
 
-def burn(s, n_loop=6, collect_stats=True, desc='burning', use_aug=False, ftol=None):
+def burn(s, n_loop=6, collect_stats=True, desc='', use_aug=False, 
+        ftol=None, mode='burn'):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
@@ -2311,32 +2395,66 @@ def burn(s, n_loop=6, collect_stats=True, desc='burning', use_aug=False, ftol=No
 
         desc : string
             Description to append to the states.save() call every loop.
-            Set to None to avoid saving. Default is 'burning'.
+            Set to None to avoid saving. Default is '', which selects 
+            one of 'burning', 'polishing', 'doing_positions'
 
         use_aug: Bool
             Set to True to optimize with an augmented state (R(z) as a
             global parameter) vs. with the normal global parameters.
             Default is False (no augmented).
+            
+        ftol : Float or None. 
+            If not None, the change in error at which to terminate.
+            
+        mode : 'burn', 'polish', or 'translate'
+            What mode to optimize with. 
+                'burn'   : Your state is far from the minimum. 
+                'polish' : Both your positions and globals are near the minimum. 
+                'do_positions': Positions are far from the minimum, globals are
+                    well-fit. 
+            'burn' is the default and will optimize any scenario, but the 
+            others will be faster for their specific scenarios. 
+    
+    Comments
+    --------
+        - It would be nice if some of these magic #'s (region size, num_eig_dirs,
+            etc) were calculated in a good way. 
+            
+    burn      : lm.do_run_2(), lp.do_run_2()
+    polish    : lm.calc_J(), lm.do_internal_run(), lp.do_internal_run() but must calc J's first
+    translate : lp.do_run_2() only, maybe an aug'd with ilm scale if it gets implemented.
     """
+    mode = mode.lower()
+    if mode not in {'burn', 'polish', 'do_positions'}:
+        raise ValueError('mode must be one of burn, polish, do_positions')
+    if desc is '':
+        desc = mode + 'ing' if mode != 'do_positions' else 'doing_positions'
+        
     #1. Set up particle, globals engines. We use a low # of max_iter because
     #   the particles and globals are coupled
-    lp = LMParticleGroupCollection(s, region_size=40, do_calc_size=False,
-            collect_stats=collect_stats, run_length=4, max_iter=1, ptol=1e-5,
-            errtol=2e-4, quiet=True, damping=0.5)
+    prtl_dmp = 1e-2 if mode == 'polish' else 1.0
+    glbl_dmp = 1e-3 if mode == 'polish' else 0.3
+    eig_update = mode != 'polish'
+    glbl_run_length = 6 if mode != 'polish' else 3
+    save_J, do_calc_size = [mode == 'polish']*2
+    when_stop = {'errtol':1e-5} if mode == 'polish' else {'errtol':3e-3}
+
+    lp = LMParticleGroupCollection(s, region_size=40, do_calc_size=do_calc_size,
+            get_cos=collect_stats, save_J=save_J, run_length=4, 
+            max_iter=1, quiet=True, damping=prtl_dmp, **when_stop)
     if use_aug:
         glbl_blk = block_globals(s, include_rscale=False, include_off=True,
                 include_sigma=False)
         aug = AugmentedState(s, glbl_blk, rz_order=3)
-        lm = LMAugmentedState(aug, max_mem=3e9, max_iter=1, run_length=6,
-                eig_update=True, num_eig_dirs=10, partial_update_frequency=3,
-                damping=0.3, decrease_damp_factor=10., quiet=True)
+        lm = LMAugmentedState(aug, max_mem=3e9, max_iter=1, run_length=glbl_run_length,
+                eig_update=eig_update, num_eig_dirs=10, partial_update_frequency=3,
+                damping=glbl_dmp, decrease_damp_factor=10., quiet=True, **when_stop)
     else:
         glbl_blk = block_globals(s, include_rscale=True, include_off=True,
                 include_sigma=False)
-        lm = LMGlobals(s, glbl_blk, max_mem=3e9, max_iter=1, run_length=6,
-                eig_update=True, num_eig_dirs=10, partial_update_frequency=3,
-                damping=0.3, decrease_damp_factor=10., quiet=True)
-
+        lm = LMGlobals(s, glbl_blk, max_mem=3e9, max_iter=1, run_length=glbl_run_length,
+                eig_update=eig_update, num_eig_dirs=10, partial_update_frequency=3,
+                damping=glbl_dmp, decrease_damp_factor=10., quiet=True, **when_stop)
     if collect_stats:
         all_lp_stats = []
         all_lm_stats = []
@@ -2344,22 +2462,64 @@ def burn(s, n_loop=6, collect_stats=True, desc='burning', use_aug=False, ftol=No
     #2. Burn.
     for a in xrange(n_loop):
         start_err = get_err(s)
-        lm.do_run_2(); lm.reset(new_damping=3e-2)
+        #2a. Globals
+        print 'Beginning of loop %d:\t%f' % (a, get_err(s)) #FIXME
+        if mode == 'polish':
+            if a == 0:
+                lm.do_run_2()
+            # else:
+                # lm.update_eig_J() #necessary?
+            lm.reset(); lm.do_internal_run()
+            #Checking if we got stuck:
+            delta_err = lm.get_termination_stats(get_cos=False)['delta_err']
+            if delta_err < 1e-15:
+                for _ in xrange(lm._max_inner_loop):
+                    lm.increase_damping()
+                    lm.reset(); lm.do_internal_run()
+                    delta_err = lm.get_termination_stats(get_cos=False)['delta_err']
+                    if delta_err > 1e-15:
+                        break
+                else: #for-break-else
+                    warnings.warn('Globals Stuck! Try using mode=burn or re-calling polish')
+            else: #delta_err > 1e-15
+                lm.decrease_damping()
+
+        elif mode == 'burn':
+            lm.do_run_2(); lm.reset(new_damping=3e-2)
+        else:
+            pass
+            #We don't optimize the globals for translating 
         if desc is not None:
             states.save(s, desc=desc)
-        lp.do_run_2(); lp.reset(new_damping=1e-2)
+        print 'Globals, loop %d:\t%f' % (a, get_err(s)) #FIXME
+
+        #2b. Particles
+        if mode == 'polish':
+            if a == 0:
+                lp.do_run_2()
+            else:
+                lp.do_internal_run()
+            #Then I want a way to check if the optimizer is stuck:
+            p_err = map(lambda d: d['delta_err'], lp.stats)
+            if np.median(p_err) < 1e-15:
+                warnings.warn('Particles Stuck! Try using mode=burn or re-calling polish')
+        else:
+            lp.do_run_2(); lp.reset(new_damping=1e-2)
         if desc is not None:
             states.save(s, desc=desc)
+
+        print 'Particles, loop %d:\t%f' % (a, get_err(s)) #FIXME
+        #2c. Stats on iteration, whether to terminate
         if collect_stats:
             all_lp_stats.append(lp.stats)
-            all_lm_stats.append(lm.get_termination_stats())
+            if mode != 'do_positions':
+                all_lm_stats.append(lm.get_termination_stats())
         if ftol is not None:
             new_err = get_err(s)
             if (start_err - new_err) < ftol:
                 break
 
-    #I'm returning the stats & the optimizers in case you want to check something
+    #I can't return the optimizers because the lp has a bunch of open temp
+    #files which it closes by exiting. 
     if collect_stats:
-        return lm, lp, all_lp_stats, all_lm_stats
-    else:
-        return lm, lp
+        return all_lp_stats, all_lm_stats
