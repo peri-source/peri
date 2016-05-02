@@ -5,12 +5,13 @@ import numpy as np
 import trackpy as tp
 from pandas import DataFrame
 
-def track(pos, rad):
+def track(pos, rad, maxdisp=2., threshold=None):
     """
     Accepts positions and radii as a list of frames in the shape [N, D] where
     N in the number of particles (can vary by frame) and D the number of
     dimensions.
     """
+    threshold = threshold or len(pos)
     z,y,x,a,f = [],[],[],[],[]
 
     for i,(p,r) in enumerate(zip(pos, rad)):
@@ -20,8 +21,12 @@ def track(pos, rad):
         a.extend(r.tolist())
         f.extend([i]*r.shape[0])
 
-    return DataFrame({'x': x, 'y': y, 'z': z, 'rad': a,'frame': f})
-
+    df = DataFrame({'x': x, 'y': y, 'z': z, 'rad': a,'frame': f})
+    linked = tp.filter_stubs(
+        tp.link_df(df, maxdisp, pos_columns=['x','y','z']),
+        threshold=threshold
+    )
+    return linked
 
 def get_xyzr_t(df, particle_ind):
     
@@ -34,7 +39,12 @@ def get_xyzr_t(df, particle_ind):
     
     return x,y,z,rads
     
-    
+def msd(df, maxlag, pxsize=0.126, scantime=0.1):
+    drift = tp.compute_drift(df)
+    tm = tp.subtract_drift(df, drift)
+    em = tp.emsd(tm, pxsize, scantime, max_lagtime=maxlag, pos_columns=['x','y','z'])
+    return em
+
 """    
 df = make_big_df()
 linked = tp.filter_stubs( tp.link_df( df, 6, pos_columns = ['x','y','z'] ), 30 )

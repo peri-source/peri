@@ -123,12 +123,15 @@ def gofr_surfaces(pos, rad, zscale):
     return np.array(seps)
 
 def gofr(pos, rad, zscale, resolution=3e-2, rmax=10, method='normal',
-        mask_start=None, phi_method='const', phi=None, state=None):
+        normalize=None, mask_start=None, phi_method='const', phi=None, state=None):
     """
     Pair correlation function calculation from 0 to rmax particle diameters
 
     method : str ['normal', 'surface']
         represents the gofr calculation method
+
+    normalize : boolean
+        if None, determined by method, otherwise 1/r^2 norm
 
     phi_method : str ['pos', 'obj', 'state']
         which data to use to calculate the packing_fraction. 
@@ -155,9 +158,11 @@ def gofr(pos, rad, zscale, resolution=3e-2, rmax=10, method='normal',
     num_density = phi / vol_particle
 
     if method == 'normal':
+        normalize = normalize or True
         o = gofr_normal(pos, rad, zscale)
         rmin = 0
     if method == 'surface':
+        normalize = normalize or False
         o = d*gofr_surfaces(pos, rad, zscale)
         rmin = -1
 
@@ -170,7 +175,9 @@ def gofr(pos, rad, zscale, resolution=3e-2, rmax=10, method='normal',
         x = x[mask]
         y = y[mask]
 
-    return x/d, y/(4*np.pi*(x+d)**2*resolution) / num_density / float(len(rad))
+    if normalize:
+        y = y/(4*np.pi*x**2)
+    return x/d, y/(resolution * num_density * float(len(rad)))
 
 def packing_fraction_obj(pos, rad, shape, inner, zscale=1):
     obj = SphereCollectionRealSpace(pos, rad, shape=shape)
