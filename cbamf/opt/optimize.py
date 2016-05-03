@@ -2137,7 +2137,7 @@ class LMParticleGroupCollection(object):
         """Resets the particle groups and optionally the region size and damping."""
         if new_region_size is not None:
             self.region_size = new_region_size
-        if new_max_mem == None:
+        if new_max_mem != None:
             self.max_mem = new_max_mem
         if do_calc_size:
             self.region_size = calc_particle_group_region_size(self.state,
@@ -2384,7 +2384,7 @@ class LMAugmentedState(LMEngine):
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
 
-def burn(s, n_loop=6, collect_stats=True, desc='', use_aug=False, 
+def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False, 
         ftol=None, mode='burn', max_mem=6e9):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
@@ -2400,7 +2400,8 @@ def burn(s, n_loop=6, collect_stats=True, desc='', use_aug=False,
 
         collect_stats : Bool
             Whether or not to collect information on the optimizer's
-            performance.
+            performance. Default is False, because True tends to increase
+            the memory usage above max_mem.
 
         desc : string
             Description to append to the states.save() call every loop.
@@ -2438,6 +2439,11 @@ def burn(s, n_loop=6, collect_stats=True, desc='', use_aug=False,
     polish    : lm.calc_J(), lm.do_internal_run(), lp.do_internal_run() but must calc J's first
     translate : lp.do_run_2() only, maybe an aug'd with ilm scale if it gets implemented.
     """
+    if mode == 'polish':
+        message = 'mode=polish is basically useless; deprecating'
+        # raise DeprecationWarning(message)
+        warnings.warn(message, RuntimeWarning)
+    
     mode = mode.lower()
     if mode not in {'burn', 'polish', 'do_positions'}:
         raise ValueError('mode must be one of burn, polish, do_positions')
