@@ -82,15 +82,25 @@ def trim_box(state, p, rad=None):
         return ((p > state.pad) & (p < np.array(state.image.shape) - state.pad)).all(axis=-1)
     return ((p+rad[:,None] > state.pad) & (p-rad[:,None] < np.array(state.image.shape) - state.pad)).all(axis=-1)
 
-def nearest(p0, p1):
+def nearest(p0, p1, cutoff=None):
     """
-    Correlate closest particles with eachother.  Returns p0 close to p1[ind]
+    Correlate closest particles with each other (within cutoff).
+    Returns ind0, ind1 so that p0[ind0] is close to p1[ind1].
     """
-    ind = []
+    ind0, ind1 = [], []
     for i in xrange(len(p0)):
         dist = np.sqrt(((p0[i] - p1)**2).sum(axis=-1))
-        ind.append(dist.argmin())
-    return ind
+
+        if cutoff is None:
+            ind1.append(dist.argmin())
+
+        elif dist.min() < cutoff:
+            ind0.append(i)
+            ind1.append(dist.argmin())
+
+    if cutoff is None:
+        return ind1
+    return ind0, ind1
 
 def iter_pos_rad(state, samples):
     for sample in samples:
@@ -123,7 +133,7 @@ def gofr_surfaces(pos, rad, zscale):
         seps.extend(diff[diff != 0])
     return np.array(seps)
 
-def gofr(pos, rad, zscale, resolution=3e-2, rmax=10, method='normal',
+def gofr(pos, rad, zscale, diameter=None, resolution=3e-2, rmax=10, method='normal',
         normalize=None, mask_start=None, phi_method='const', phi=None, state=None):
     """
     Pair correlation function calculation from 0 to rmax particle diameters
@@ -146,8 +156,8 @@ def gofr(pos, rad, zscale, resolution=3e-2, rmax=10, method='normal',
                 image of a given state. must provide argument state
     """
 
-    d = 2*rad.mean()
-    vol_particle = 4./3*np.pi*(d)**3
+    diameter = diameter or 2*rad.mean()
+    vol_particle = 4./3*np.pi*(diameter)**3
 
     if phi_method == 'pos':
         phi = packing_fraction(pos, rad)
@@ -164,10 +174,10 @@ def gofr(pos, rad, zscale, resolution=3e-2, rmax=10, method='normal',
         rmin = 0
     if method == 'surface':
         normalize = normalize or False
-        o = d*gofr_surfaces(pos, rad, zscale)
+        o = diameter*gofr_surfaces(pos, rad, zscale)
         rmin = -1
 
-    bins = np.linspace(rmin, d*rmax, d*rmax/resolution, endpoint=False)
+    bins = np.linspace(rmin, diameter*rmax, diameter*rmax/resolution, endpoint=False)
     y,x = np.histogram(o, bins=bins)
     x = (x[1:] + x[:-1])/2
 
@@ -178,7 +188,7 @@ def gofr(pos, rad, zscale, resolution=3e-2, rmax=10, method='normal',
 
     if normalize:
         y = y/(4*np.pi*x**2)
-    return x/d, y/(resolution * num_density * float(len(rad)))
+    return x/diameter, y/(resolution * num_density * float(len(rad)))
 
 def packing_fraction_obj(pos, rad, shape, inner, zscale=1):
     obj = SphereCollectionRealSpace(pos, rad, shape=shape)
