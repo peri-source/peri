@@ -470,3 +470,68 @@ class Slab(object):
 
     def __repr__(self):
         return "{} <{}, {}>".format(str(self.__class__.__name__), self.zpos, list(self.normal))
+        
+class SlabSandwich(object):
+    def __init__(self, shape, slab1, slab2):
+        """
+        Image of 2 slabs. 
+        slab1, slab2 are cbamf.comp.objs.Slab instances.
+        """
+        self.slab1 = slab1
+        self.slab2 = slab2
+        
+        mask1 = np.zeros(slab1.get_params().size + slab2.get_params().size).astype('bool')
+        mask1[:slab1.get_params().size] = True
+        self._mask1 = mask1
+        self._mask2 = -mask1
+        
+        self.shape = shape
+        self._setup()
+        self.initialize() #necessary?
+    
+    #Same as slab...
+    def _setup(self):
+        self.rvecs = Tile(self.shape).coords(form='vector')
+        self.image = np.zeros(self.shape)
+
+    def set_tile(self, tile):
+        self.tile = tile
+
+    def get_field(self):
+        return self.image[self.tile.slicer]
+
+    def get_support_size(self, p=None):
+        return np.zeros(3), np.array(self.shape)
+
+    #...end same as slab
+    def initialize(self):
+        self.image = np.zeros(self.shape)
+        self.update(self.get_params()) 
+        self._slab()
+    
+    def get_params(self):
+        p1 = self.slab1.get_params()
+        p2 = self.slab2.get_params()
+        return np.hstack([p1, p2])
+        
+    def update(self, params):
+        self.slab1.update(params[self._mask1])
+        self.slab2.update(params[self._mask2])
+        self._slab()
+        #Stupid bit for compatibility with states.ConfocalImagePython:
+        self.params = self.get_params()
+
+    def _slab(self):
+        #Updates self.image
+        im1 = self.slab1.image
+        im2 = self.slab2.image
+        self.image = im1 + im2
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        for_format = lambda l: map(lambda x: '{:.3f}'.format(x), l)
+        return "{} <{:.3f}, {}; {:.3f}, {}>".format(str(self.__class__.__name__), 
+                self.slab1.zpos, for_format(self.slab1.normal), 
+                self.slab2.zpos, for_format(self.slab2.normal))
