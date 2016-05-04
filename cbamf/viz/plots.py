@@ -302,7 +302,7 @@ def generative_model(s,x,y,z,r):
     ax_fake.set_xticks([])
     ax_fake.set_yticks([])
     ax_fake.set_title("Model image", fontsize=24)
-    ax_diff.imshow(diff[slicer1], cmap=pl.cm.RdBu, vmin=-1.0, vmax=1.0)
+    ax_diff.imshow(diff[slicer1], cmap=pl.cm.RdBu, vmin=-0.1, vmax=0.1)
     ax_diff.set_xticks([])
     ax_diff.set_yticks([])
     ax_diff.set_title("Difference", fontsize=24)
@@ -318,37 +318,51 @@ def generative_model(s,x,y,z,r):
     ax_psf1 = fig.add_subplot(gs2[4])
     ax_psf2 = fig.add_subplot(gs2[5])
 
-    h = s.image.shape[2]/2 - s.image.shape[0]/2
-    slicer3 = np.s_[slicez, s.pad+h:-s.pad-h, s.pad:-s.pad]
-    ax_plt1.imshow(1-s.obj.get_field()[slicer3], cmap=pl.cm.bone_r, vmin=0, vmax=1)
+    c = int(z.mean()), int(y.mean())+s.pad, int(x.mean())+s.pad
+    if s.image.shape[0] > 2*s.image.shape[1]/3:
+        w = s.image.shape[2] - 2*s.pad
+        h = 2*w/3
+    else:
+        h = s.image.shape[0] - 2*s.pad
+        w = 3*h/2
+
+    w,h = w/2, h/2
+    xyslice = np.s_[slicez, c[1]-h:c[1]+h, c[2]-w:c[2]+w]
+    yzslice = np.s_[c[0]-h:c[0]+h, c[1]-w:c[1]+w, slicex]
+
+    #h = s.image.shape[2]/2 - s.image.shape[0]/2
+    #slicer2 = np.s_[s.pad:-s.pad, s.pad:-s.pad, slicex]
+    #slicer3 = np.s_[slicez, s.pad+h:-s.pad-h, s.pad:-s.pad]
+
+    ax_plt1.imshow(1-s.obj.get_field()[xyslice], cmap=pl.cm.bone_r, vmin=0, vmax=1)
     ax_plt1.set_xticks([])
     ax_plt1.set_yticks([])
     ax_plt1.set_ylabel("Platonic", fontsize=22)
     ax_plt1.set_title("x-y", fontsize=24)
-    ax_plt2.imshow(1-s.obj.get_field()[slicer2], cmap=pl.cm.bone_r, vmin=0, vmax=1)
+    ax_plt2.imshow(1-s._platonic_image()[yzslice], cmap=pl.cm.bone_r, vmin=0, vmax=1)
     ax_plt2.set_xticks([])
     ax_plt2.set_yticks([])
     ax_plt2.set_title("y-z", fontsize=24)
 
-    ax_ilm1.imshow(s.ilm.get_field()[slicer3], cmap=pl.cm.bone_r)
+    ax_ilm1.imshow(s.ilm.get_field()[xyslice], cmap=pl.cm.bone_r)
     ax_ilm1.set_xticks([])
     ax_ilm1.set_yticks([])
     ax_ilm1.set_ylabel("ILM", fontsize=22)
-    ax_ilm2.imshow(s.ilm.get_field()[slicer2], cmap=pl.cm.bone_r)
+    ax_ilm2.imshow(s.ilm.get_field()[yzslice], cmap=pl.cm.bone_r)
     ax_ilm2.set_xticks([])
     ax_ilm2.set_yticks([])
 
     t = s.ilm.get_field().copy()
     t *= 0
-    t[center] = 1
+    t[c] = 1
     s.psf.set_tile(util.Tile(t.shape))
-    psf = s.psf.execute(t)
+    psf = (s.psf.execute(t)+5e-5)**0.1
 
-    ax_psf1.imshow(psf[slicer3], cmap=pl.cm.bone)
+    ax_psf1.imshow(psf[xyslice], cmap=pl.cm.bone)
     ax_psf1.set_xticks([])
     ax_psf1.set_yticks([])
     ax_psf1.set_ylabel("PSF", fontsize=22)
-    ax_psf2.imshow(psf[slicer2], cmap=pl.cm.bone)
+    ax_psf2.imshow(psf[yzslice], cmap=pl.cm.bone)
     ax_psf2.set_xticks([])
     ax_psf2.set_yticks([])
 
