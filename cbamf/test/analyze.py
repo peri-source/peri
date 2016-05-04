@@ -63,10 +63,11 @@ def get_good_pos_rad(state, samples, depth=-10, return_err=False):
     # m = good_particles(state, inbox=True, inboxrad=False)
     m = (r > 0) & trim_box(state, p)
     
+    p -= state.pad
     if return_err:
         return p[m].copy(), r[m].copy(), er_p[m].copy(), er_r[m].copy()
     else:
-        return p[m].copy() - state.pad, r[m].copy()
+        return p[m].copy(), r[m].copy()
 
 def states_to_DataFrame(state_list):
     #FIXME
