@@ -35,7 +35,7 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False):
     return guess[inds].copy(), npart
 
 def check_add_particles(st, guess, rad='calc', im_change_frac=0.2, 
-        do_opt=True, opt_box_scale=2.5, quiet=False):
+        do_opt=True, opt_box_scale=2.5, quiet=True):
     """
     comments
     st = state
@@ -99,7 +99,8 @@ def sample_n_add(st, rad='calc', tries=20, quiet=True, do_opt=True,
     tries = np.min([tries, npart])
     
     accepts, new_inds = check_add_particles(st, guess[:tries], rad=rad, 
-            im_change_frac=0.2, do_opt=do_opt, opt_box_scale=opt_box_scale)
+            im_change_frac=0.2, do_opt=do_opt, opt_box_scale=opt_box_scale, 
+            quiet=quiet)
     return accepts, new_inds
 
 def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0, 

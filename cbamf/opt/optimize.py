@@ -118,10 +118,8 @@ def get_rand_Japprox(s, blocks, num_inds=1000, quiet=False, **kwargs):
     """
     if not quiet:
         start_time = time.time()
-    #You need a better way to select indices to minimize over.
     tot_pix = s.image[s.inner].size
     if num_inds < tot_pix:
-        # inds = [randint(v, size=num_inds) for v in s.image[s.inner].shape]
         inds = list(np.unravel_index(np.random.choice(tot_pix, size=num_inds,
                 replace=False), s.image[s.inner].shape))
     else:
@@ -614,7 +612,9 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
         (outer, inner, slice)
     """
     #the closest a particle can get to an edge, > any reasonable dl
-    MIN_DIST=3e-3
+    MIN_DIST= 3e-3
+    #We also need a maximum radius, > any reasonable radius:
+    MAX_RAD = 2e2
 
     if type(particle) != np.ndarray:
         particle = np.array([particle])
@@ -628,7 +628,7 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
         t0 = np.ones(particle.size)
 
     is_bad_update = lambda p, r: np.any(p < 0) or np.any(p > \
-            np.array(s.image.shape)) or np.any(r < 0)
+            np.array(s.image.shape)) or np.any(r < 0) or np.any(r > MAX_RAD)
     if fix_errors:
         #Instead of ignoring errors, we modify pos, rad in place
         #so that they are the best possible updates.
@@ -636,11 +636,11 @@ def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
             if is_bad_update(p0+pos, r0+rad):
                 pos[:] = np.clip(pos, MIN_DIST-p0, np.array(s.image.shape)-
                         MIN_DIST-p0)
-                rad[:] = np.clip(rad, MIN_DIST-r0, np.inf)
+                rad[:] = np.clip(rad, MIN_DIST-r0, MAX_RAD-r0)
         else:
             if is_bad_update(pos, rad):
                 pos[:] = np.clip(pos, MIN_DIST, np.array(s.image.shape)-MIN_DIST)
-                rad[:] = np.clip(rad, MIN_DIST, np.inf)
+                rad[:] = np.clip(rad, MIN_DIST, MAX_RAD)
 
     if typ is None:
         t1 = t0.copy()
@@ -1469,7 +1469,8 @@ class LMEngine(object):
             do_run_2: Function
 
         """
-        self.damping = float(damping)
+        # self.damping = float(damping)
+        self.damping = np.array(damping).astype('float')
         self.increase_damp_factor = float(increase_damp_factor)
         self.decrease_damp_factor = float(decrease_damp_factor)
         self.min_eigval = min_eigval
@@ -1516,7 +1517,7 @@ class LMEngine(object):
         self._fresh_JTJ = False
         self._has_run = False
         if new_damping is not None:
-            self.damping = new_damping
+            self.damping = np.array(new_damping).astype('float')
         self._set_err_params()
 
     def _set_err_params(self):
@@ -2506,7 +2507,11 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
                 lm.decrease_damping()
 
         elif mode == 'burn':
-            lm.do_run_2(); lm.reset(new_damping=3e-2)
+            if a != 0:
+                #I need to reset before the call because moving the particles
+                #messes up the aug state
+                lm.reset(new_damping=3e-2)
+            lm.do_run_2()
         else:
             pass
             #We don't optimize the globals for translating 
