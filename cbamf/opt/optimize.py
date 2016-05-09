@@ -28,6 +28,7 @@ To fix:
         It would be way faster if you could store all the J's for the 
         particle group collections. Save LMPartilceGroupCollection's lp's J's 
         with numpy.save and a tmp file (standard library). 
+        -- this is implemented, but it doesn't work too well. 
     b. 
 3. do_conjgrad_jtj is terrible / wrong / doesn't use JTJ for anything except
     eigendirections. 
@@ -275,7 +276,7 @@ def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwar
     return num_px
 
 def do_levmarq(s, block, damping=0.1, decrease_damp_factor=10., run_length=6, 
-        eig_update=True, collect_stats=False, **kwargs):
+        eig_update=True, collect_stats=False, use_aug=False, **kwargs):
     """
     Convenience wrapper for LMGlobals. Same keyword args, but I've set 
     the defaults to what I've found to be useful values for optimizing globals.
@@ -292,9 +293,15 @@ def do_levmarq(s, block, damping=0.1, decrease_damp_factor=10., run_length=6,
         max_iter = kwargs.pop('num_iter')
         kwargs.update({'max_iter':max_iter})
     
-    lm = LMGlobals(s, block, damping=damping, run_length=run_length, 
-            decrease_damp_factor=decrease_damp_factor, eig_update=eig_update,
-            **kwargs)
+    if use_aug:
+        aug = AugmentedState(s, block, rz_order=3)
+        lm = LMAugmentedState(aug, damping=damping, run_length=run_length, 
+                decrease_damp_factor=decrease_damp_factor, eig_update=
+                eig_update, **kwargs)
+    else:
+        lm = LMGlobals(s, block, damping=damping, run_length=run_length, 
+                decrease_damp_factor=decrease_damp_factor, eig_update=
+                eig_update, **kwargs)
     lm.do_run_2()
     if collect_stats:
         return lm.get_termination_stats()
@@ -2068,7 +2075,7 @@ class LMAugmentedState(LMEngine):
 #=============================================================================#
 
 def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False, 
-        ftol=1e-3, mode='burn', max_mem=6e9):
+        ftol=1e-3, mode='burn', max_mem=3e9):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
@@ -2099,18 +2106,17 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         ftol : Float or None. 
             If not None, the change in error at which to terminate.
             
-        mode : 'burn', 'polish', or 'do_positions'
+        mode : 'burn' or 'do_positions'
             What mode to optimize with. 
-                'burn'   : Your state is far from the minimum. 
-                'polish' : Both your positions and globals are near the minimum. 
-                'do_positions': Positions are far from the minimum, globals are
-                    well-fit. 
+                'burn'          : Your state is far from the minimum. 
+                'do_positions'  : Positions are far from the minimum, 
+                                  globals are well-fit. 
             'burn' is the default and will optimize any scenario, but the 
             others will be faster for their specific scenarios. 
             
         max_mem : Numeric
             The maximum amount of memory allowed for the optimizers' J's,
-            split equally between particles & globals. Default is 6e9, 
+            split equally between particles & globals. Default is 3e9,
             i.e. 3GB per optimizer. 
     
     Comments
@@ -2122,110 +2128,60 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     polish    : lm.calc_J(), lm.do_internal_run(), lp.do_internal_run() but must calc J's first
     translate : lp.do_run_2() only, maybe an aug'd with ilm scale if it gets implemented.
     """
-    if mode == 'polish':
-        message = 'mode=polish is basically useless; deprecating'
-        # raise DeprecationWarning(message)
-        warnings.warn(message, RuntimeWarning)
-    
     mode = mode.lower()
-    if mode not in {'burn', 'polish', 'do_positions'}:
-        raise ValueError('mode must be one of burn, polish, do_positions')
+    if mode not in {'burn', 'do_positions'}:
+        raise ValueError('mode must be one of burn, do_positions')
     if desc is '':
         desc = mode + 'ing' if mode != 'do_positions' else 'doing_positions'
         
-    #1. Set up particle, globals engines. We use a low # of max_iter because
-    #   the particles and globals are coupled
-    prtl_dmp = 1e-2 if mode == 'polish' else 1.0
-    glbl_dmp = 1e-3 if mode == 'polish' else 0.3
-    eig_update = mode != 'polish'
-    glbl_run_length = 6 if mode != 'polish' else 3
-    save_J, do_calc_size = [mode == 'polish']*2
-    kwargs = {'errtol':1e-5} if mode == 'polish' else {'errtol':3e-3}
-    kwargs.update({'max_mem':max_mem/2})
+    #For now, I'm calculating the region size. This might be a bad idea
+    #because 1 bad particle can spoil the whole group. 
+    region_size = 40 #until we calculate it
+    do_calc_size = True
+        
+    glbl_dmp = 0.3
+    eig_update = mode != 'do_positions'
+    glbl_run_length = 6 if mode != 'do_positions' else 3
 
-    lp = LMParticleGroupCollection(s, region_size=40, do_calc_size=do_calc_size,
-            get_cos=collect_stats, save_J=save_J, run_length=4, 
-            max_iter=1, quiet=True, damping=prtl_dmp, **kwargs)
-    glbl_blk = block_globals(s, include_rscale=False, include_off=True,
-            include_sigma=False) if mode != 'do_positions' else (s.explode(
-            s.create_block('ilm'))[0] | s.explode(s.create_block('bkg'))[0])
-    if use_aug:
-        aug = AugmentedState(s, glbl_blk, rz_order=3)
-        lm = LMAugmentedState(aug, max_iter=1, run_length=glbl_run_length,
-                eig_update=eig_update, num_eig_dirs=10, partial_update_frequency=3,
-                damping=glbl_dmp, decrease_damp_factor=10., quiet=True, **kwargs)
+    if mode == 'do_positions':
+        glbl_blk = (s.explode(s.create_block('ilm'))[0] |
+                    s.explode(s.create_block('bkg'))[0])
     else:
-        lm = LMGlobals(s, glbl_blk, max_iter=1, run_length=glbl_run_length,
-                eig_update=eig_update, num_eig_dirs=10, partial_update_frequency=3,
-                damping=glbl_dmp, decrease_damp_factor=10., quiet=True, **kwargs)
-    if collect_stats:
-        all_lp_stats = []
-        all_lm_stats = []
+        glbl_blk = block_globals(s, include_rscale=(not use_aug),
+                include_off=True, include_sigma=False)
+    all_lp_stats = []
+    all_lm_stats = []
 
     #2. Burn.
     for a in xrange(n_loop):
         start_err = get_err(s)
         #2a. Globals
         print 'Beginning of loop %d:\t%f' % (a, get_err(s)) #FIXME
-        if mode == 'polish':
-            if a == 0:
-                lm.do_run_2()
-            # else:
-                # lm.update_eig_J() #necessary?
-            lm.reset(); lm.do_internal_run()
-            #Checking if we got stuck:
-            delta_err = lm.get_termination_stats(get_cos=False)['delta_err']
-            if delta_err < 1e-15:
-                for _ in xrange(lm._max_inner_loop):
-                    lm.increase_damping()
-                    lm.reset(); lm.do_internal_run()
-                    delta_err = lm.get_termination_stats(get_cos=False)['delta_err']
-                    if delta_err > 1e-15:
-                        break
-                else: #for-break-else
-                    warnings.warn('Globals Stuck! Try using mode=burn or re-calling polish')
-            else: #delta_err > 1e-15
-                lm.decrease_damping()
-
-        else:
-            if a != 0:
-                #I need to reset before the call because moving the particles
-                #messes up the aug state
-                lm.reset(new_damping=3e-2)
-            if mode != 'do_positions' or a != 0: 
-                #I want to do particles first only for do_positions
-                lm.do_run_2()
+        glbl_dmp = 0.3 if a ==0 else 3e-2
+        if a != 0 or mode != 'do_positions':
+            all_lm_stats.append(do_levmarq(s, glbl_blk, max_iter=1, run_length=
+                    glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
+                    partial_update_frequency=3, damping=glbl_dmp, 
+                    decrease_damp_factor=10., quiet=True, use_aug=use_aug, 
+                    collect_stats=collect_stats, errtol=1e-3, max_mem=max_mem))
         if desc is not None:
             states.save(s, desc=desc)
         print 'Globals, loop %d:\t%f' % (a, get_err(s)) #FIXME
 
         #2b. Particles
-        if mode == 'polish':
-            if a == 0:
-                lp.do_run_2()
-            else:
-                lp.do_internal_run()
-            #Then I want a way to check if the optimizer is stuck:
-            p_err = map(lambda d: d['delta_err'], lp.stats)
-            if np.median(p_err) < 1e-15:
-                warnings.warn('Particles Stuck! Try using mode=burn or re-calling polish')
-        else:
-            lp.do_run_2(); lp.reset(new_damping=1e-2)
+        prtl_dmp = 1.0 if a==0 else 1e-2
+        all_lp_stats.append(do_levmarq_all_particle_groups(s, region_size=
+                region_size, max_iter=1, do_calc_size=do_calc_size, run_length=4,
+                eig_update=False, damping=prtl_dmp, quiet=True, collect_stats=
+                collect_stats, errtol=1e-3, max_mem=max_mem))
         if desc is not None:
             states.save(s, desc=desc)
-
         print 'Particles, loop %d:\t%f' % (a, get_err(s)) #FIXME
-        #2c. Stats on iteration, whether to terminate
-        if collect_stats:
-            all_lp_stats.append(lp.stats)
-            if mode != 'do_positions':
-                all_lm_stats.append(lm.get_termination_stats())
+        #2c. terminate?
         if ftol is not None:
             new_err = get_err(s)
             if (start_err - new_err) < ftol:
                 break
 
-    #I can't return the optimizers because the lp has a bunch of open temp
-    #files which it closes by exiting. 
     if collect_stats:
         return all_lp_stats, all_lm_stats
