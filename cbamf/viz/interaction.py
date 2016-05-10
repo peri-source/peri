@@ -7,7 +7,7 @@ from cbamf import runner
 
 class OrthoManipulator(object):
     def __init__(self, state, size=8, cmap_abs='bone', cmap_diff='RdBu',
-            incsize=18.0, orientation=None):
+            incsize=18.0, orientation=None, vrange_img=1.0, vrange_diff=0.1):
         """
         An interactive viewer for states with a model in 3D.
         """
@@ -27,6 +27,8 @@ class OrthoManipulator(object):
         self.state = state
         self.cmap_abs = cmap_abs
         self.cmap_diff = cmap_diff
+        self.vrange_img = vrange_img
+        self.vrange_diff = vrange_diff
 
         z,y,x = [float(i) for i in self.state.image.shape]
         w = float(x + z)
@@ -74,17 +76,17 @@ class OrthoManipulator(object):
     def set_field(self):
         if self.view == 'field':
             out = self.state.model_image
-            vmin, vmax = 0.0, 1.0
+            vmin, vmax = 0.0, self.vrange_img
             cmap = self.cmap_abs
 
         if self.view == 'diff':
             out = (self.state.image - self.state.get_model_image())
-            vmin, vmax = -0.2, 0.2
+            vmin, vmax = -self.vrange_diff, self.vrange_diff
             cmap = self.cmap_diff
 
         if self.view == 'cropped':
             out = self.state.get_model_image()
-            vmin, vmax = 0.0, 1.0
+            vmin, vmax = 0.0, self.vrange_img
             cmap = self.cmap_abs
 
         if self.modifier == 'fft':
@@ -101,7 +103,7 @@ class OrthoManipulator(object):
         self.cmap = cmap
 
     def draw(self):
-        self.draw_ortho(self.state.image, self.gl, cmap=self.cmap_abs, vmin=0.0, vmax=1.0)
+        self.draw_ortho(self.state.image, self.gl, cmap=self.cmap_abs, vmin=0.0, vmax=self.vrange_img)
         self.draw_ortho(self.field, self.gr, cmap=self.cmap, vmin=self.vmin, vmax=self.vmax)
 
     def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
@@ -306,12 +308,15 @@ class OrthoManipulator(object):
 # A simpler version for a single 3D field viewer
 #=============================================================================
 class OrthoViewer(object):
-    def __init__(self, field, onesided=True, vmin=None, vmax=None, cmap='bone'):
+    def __init__(self, field, onesided=True, vmin=None, vmax=None, cmap='bone',
+            dohist=False, fourier=False):
         """ Easy interactive viewing of 3D ndarray with view selection """
         self.vmin = vmin
         self.vmax = vmax
         self.field = field
         self.onesided = onesided
+        self.dohist = dohist
+        self.fourier = fourier
 
         if self.onesided is None:
             self.cmap = cmap
@@ -336,6 +341,9 @@ class OrthoViewer(object):
 
         self.slices = (np.array(self.field.shape)/2).astype('int')
 
+        if self.fourier:
+            self.field = np.fft.fftshift(np.fft.fftn(self.field))
+
         self.draw()
         self.register_events()
 
@@ -347,6 +355,11 @@ class OrthoViewer(object):
         self.draw_ortho(self.field, self.g, cmap=self.cmap, vmin=self.vmin, vmax=self.vmax)
 
     def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
+        im, vmin, vmax, cmap = self.field, self.vmin, self.vmax, self.cmap
+
+        if self.fourier:
+            im = np.abs(im)
+
         slices = self.slices
         if vmin is None:
             vmin = im.min()
@@ -358,26 +371,41 @@ class OrthoViewer(object):
             vmin = -val
             vmax = val
 
-        g['xy'].cla()
-        g['yz'].cla()
-        g['xz'].cla()
-        g['in'].cla()
+        self.g['xy'].cla()
+        self.g['yz'].cla()
+        self.g['xz'].cla()
+        self.g['in'].cla()
 
-        g['xy'].imshow(im[slices[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
-        g['xy'].hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
-        g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(g['xy'])
+        self.g['xy'].imshow(im[slices[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
+        self.g['xy'].hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
+        self.g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(self.g['xy'])
 
-        g['yz'].imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
-        g['yz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
-        g['yz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(g['yz'])
+        self.g['yz'].imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
+        self.g['yz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
+        self.g['yz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(self.g['yz'])
 
-        g['xz'].imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
-        g['xz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
-        g['xz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(g['xz'])
-        self._format_ax(g['in'])
+        self.g['xz'].imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
+        self.g['xz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        self.g['xz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(self.g['xz'])
+
+        if self.dohist:
+            tt = np.real(self.field).ravel()
+            c, s = tt.mean(), 5*tt.std()
+            y,x = np.histogram(tt, bins=np.linspace(c-s, c+s, 700), normed=True)
+            x = (x[1:] + x[:-1])/2
+
+            self.g['in'].plot(x, y, 'k-', lw=1)
+            self.g['in'].fill_between(x, y, 1e-10, alpha=0.5)
+            self.g['in'].set_yscale('log', nonposy='clip')
+
+            self.g['in'].set_xlim(c-s, c+s)
+            self.g['in'].set_ylim(1e-3*y.max(), 1.4*y.max())
+
+        self._format_ax(self.g['in'])
+
         pl.draw()
 
     def register_events(self):
