@@ -75,7 +75,7 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
             new_inds.append(ind)
             if not quiet:
                 # print '%d:\t%f\t%f' % (a, old_err, opt.get_err(st))
-                print '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f\t\t%4.3f' % (
+                print '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
                         st.obj.rad[ind], st.obj.pos[ind,0], st.obj.pos[ind,1], 
                         st.obj.pos[ind,2], old_err, opt.get_err(st))
     return accepts, new_inds
@@ -199,7 +199,7 @@ def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
         p, r = s.remove_particle(ind)
         er1 = opt.get_err(s)
         if not quiet:
-            print '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%5.3f\t\t%5.3f' % (
+            print '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
                     s.obj.rad[ind], s.obj.pos[ind,0], s.obj.pos[ind,1], 
                     s.obj.pos[ind,2], er0, er1)
         removed += 1
@@ -227,7 +227,7 @@ def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
             delete_inds.append(ind)
             er1 = opt.get_err(s)
             if not quiet:
-                print '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%5.3f\t%5.3f' % (
+                print '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
                         s.obj.rad[ind], s.obj.pos[ind,0], s.obj.pos[ind,1], 
                         s.obj.pos[ind,2], er0, er1)
     return removed, delete_inds

@@ -860,122 +860,6 @@ def do_levmarq_all_particle_groups(s, region_size=40, damping=1.0,
     if collect_stats:
         return lp.stats
         
-#=============================================================================#
-#               ~~~~~        Linear fit stuff    ~~~~~
-#=============================================================================#
-
-def do_linear_fit(s, block, min_eigval=1e-11, relative=False, num_iter=5, **kwargs):
-    """
-    Linear-least-squares fit minimization on linear sub-blocks of the
-    state. Iterates the solution several times to fix float roundoff
-    errors and improve the answer, and uses a random subset of pixels in
-    the image to reduce memory. Doesn't return anything, only updates
-    the state.
-
-    Parameters:
-    -----------
-    s : State
-        The cbamf state to optimize.
-    block: Boolean numpy.array
-        The desired blocks of the state s to minimize over. Do NOT explode it.
-        The blocks must correspond to a _linear_ fit in the state.
-    min_eigval: Float scalar, <<1.
-        The minimum eigenvalue to use in solving the matrix equation, to
-        avoid degeneracies in the parameter space (i.e. 'rcond' in
-        np.linalg.lstsq). Default is 1e-11.
-    relative: Bool
-        Set to True to do linear least-squares with the updated parameters
-        relative to the current values. Useful if the state is already
-        highly optimized. Default is False.
-    num_iter: Int
-        The number of times the matrix solution is iterated, to reduce
-        float errors. The more the merrier, but slower by num_iter
-        update_state_global calls. Default is 5.
-    decimate: Float scalar, >1
-        The desired amount to decimate the pixels by for a random image (e.g.
-        decimate of 10 takes  1/10 of the pixels). However, the actual amount
-        of pixels is determined by max_mem and min_redundant as well. If < 1,
-        the attempts to use all the pixels in the image. Default is 1, i.e.
-        uses the max amount of memory allowed.
-    max_mem: Float scalar.
-        The maximum memory (in bytes) that the fit matrix should occupy.
-        Default is 2GB.
-    min_redundant: Float scalar.
-        Enforces a minimum amount of pixels to include in the fit matrix,
-        such that the min # of pixels is at least min_redundant * number
-        of parameters. If max_mem and min_redundant result in an
-        incompatible size an error is raised. Default is 20.
-
-    See Also
-    --------
-    do_levmarq: Runs Levenberg-Marquardt minimization using a random
-        subset of the image pixels. Works for any fit blocks.
-    do_levmarq_particles: Exact (not random-block) Levenberg-Marquardt
-        specially designed for optimizing particle positions.
-    do_levmarq_all_particle_groups: Wrapper for do_levmarq_particles
-        which blocks particles by distance and iterates over all
-        the particles in the state.
-    do_conj_grad_jtj: Conjugate gradient minimization with a random-block
-        approximation to J.
-
-    Comments
-    --------
-    This is sort of pointless, since it's (almost) the exact same as
-    do_levmarq with damp=0. There are a few differences in how its
-    implemented though...
-    """
-    #1. Getting the raveled indices for comparison:
-    tot_pix = s.image[s.inner].size
-    num_params = block.sum()
-    num_px = np.min([get_num_px_jtj(s, num_params, **kwargs), tot_pix])
-    inds = np.random.choice(tot_pix, size=num_px, replace=False)
-
-    #2. Getting the old state, model, error for comparison:
-    old_err = get_err(s)
-    old_params = s.state[block].copy()
-    mdl_0 = s.get_model_image()[s.inner].ravel()[inds].copy()
-
-    #3. Getting the fitting matrix:
-    fit_matrix = np.zeros([num_px, num_params])
-    cur_state = np.zeros([num_params])
-    delta_params = np.zeros([num_params])
-    for a in xrange(num_params):
-        delta_params *= 0
-        delta_params[a] = 1.0
-        update_state_global(s, block, delta_params)
-        fit_matrix[:,a] = s.get_model_image()[s.inner].ravel()[inds].copy()
-
-    #4. Getting the 'b' vector in Ax=b for leastsq, and the '0' vector:
-    if relative:
-        b_vec = s.image[s.inner].ravel()[inds] - mdl_0
-    else:
-        b_vec = s.image[s.inner].ravel()[inds].copy()
-
-    #5. Solving:
-    stuff = np.linalg.lstsq(fit_matrix, b_vec, rcond=min_eigval)
-    if relative:
-        best_params = old_params + stuff[0]
-    else:
-        best_params = stuff[0]
-    update_state_global(s, block, best_params)
-    new_err = get_err(s)
-
-    print old_err, '\t', new_err
-
-    #6. Running to fix float errors:
-    for _ in xrange(num_iter):
-        mdl_1 = s.get_model_image()[s.inner].ravel()[inds].copy()
-        b_vec1 = s.image[s.inner].ravel()[inds] - mdl_1
-        mo_stuff = np.linalg.lstsq(fit_matrix, b_vec1, rcond=min_eigval)
-        best_params += mo_stuff[0]
-        update_state_global(s, block, best_params)
-        new_err = get_err(s)
-        print old_err, '\t', new_err
-
-    if new_err > old_err:
-        print 'No improvement via linear fit, reverting.'
-        update_state_global(s, block, old_params)
-
 def fit_ilm(new_ilm, old_ilm, use_engine=True, run_engine=True, **kwargs):
     """
     Fits a new cbamf.comp.ilms instance to (mostly) match the get_field
@@ -1002,15 +886,7 @@ def fit_ilm(new_ilm, old_ilm, use_engine=True, run_engine=True, **kwargs):
     do_levmarq: Runs Levenberg-Marquardt minimization using a random
         subset of the image pixels. Works for any fit blocks.
     LMGlobals: Same, but with a cleaner engine instantiation.
-
-    Comments
-    --------
-    The ILMs are not necessarily linear fits. If they are linear fits,
-    call this with a low damping, low decrease damping. If they are not,
-    start with a high damping.
-
     """
-    #The ILM isn't a linear fit necessarily so we just do *.do_levmarq:
     psf = psfs.IdentityPSF(params=np.zeros(1), shape=old_ilm.bkg.shape)
     obj = objs.SphereCollectionRealSpace(np.zeros([1,3]), np.zeros(1), shape=
             old_ilm.bkg.shape, typ=np.zeros(1))
@@ -1018,14 +894,8 @@ def fit_ilm(new_ilm, old_ilm, use_engine=True, run_engine=True, **kwargs):
             varyn=True, pad=1)
 
     blk = fake_s.create_block('ilm')
-    if use_engine:
-        lm = LMGlobals(fake_s, blk, **kwargs)
-        if run_engine:
-            lm.do_run_2()
-        return fake_s.ilm, lm
-    else:
-        do_levmarq(fake_s, blk, **kwargs)
-        return fake_s.ilm
+    do_levmarq(fake_s, blk, **kwargs)
+    return fake_s.ilm
 
 #=============================================================================#
 #         ~~~~~        Class/Engine LM minimization Stuff     ~~~~~
