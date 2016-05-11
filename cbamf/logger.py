@@ -3,10 +3,10 @@ A simple but pretty logging interface for configurable logs across all packages.
 To use, simply import the base log and (maybe) tack on a child context:
 
     from cbamf.logger import log
-    log = log.getChild("<child name>") # optional
+    clog = log.getChild("<child name>") # optional
 
     The possible options are:
-    log.{info,debug,warn,error,fatal}(...)
+    clog.{info,debug,warn,error,fatal}(...)
 
 Call with:
 
@@ -25,18 +25,28 @@ from contextlib import contextmanager
 from cbamf import conf
 
 class Logger(object):
-    def __init__(self, verbosity='vvv', colorlogs=False, logtofile=False):
+    def __init__(self, verbosity='vvv', colorlogs=False, logtofile=False,
+            logfilename=''):
+        """
+        Create a new logger class. Since the logging interface is actually global,
+        any new logs will create even more clutter on the screen. Therefore,
+        only create one! (as is created at the bottom of this file)
+        """
         self.log = logging.getLogger('cbamf')
         self.log.setLevel(1)
         self.handlers = {}
 
         self.verbosity = sanitize(verbosity)
+        self.logfilename = logfilename
         level = v2l.get(verbosity, 'info')
         form  = v2f.get(verbosity, 'standard')
         color = 'console-color' if colorlogs else 'console-bw'
 
         if logtofile:
-            self.add_handler(name='rotating-log', level=level, formatter=form)
+            self.add_handler(
+                name='rotating-log', level=level, formatter=form,
+                filename=self.logfilename
+            )
         self.add_handler(name=color, level=level, formatter=form)
 
     def get_handler(self, name='console-color'):
@@ -49,22 +59,47 @@ class Logger(object):
         return [self.get_handler(name) for name in names]
 
     def set_level(self, level='info', handlers=None):
+        """
+        Set the logging level (which types of logs are actually printed / recorded)
+        to one of ['debug', 'info', 'warn', 'error', 'fatal'] in that order
+        of severity
+        """
         for h in self.get_handlers(handlers):
             h.setLevel(levels[level])
 
     def set_formatter(self, formatter='standard', handlers=None):
+        """
+        Set the text format of messages to one of the pre-determined forms,
+        one of ['quiet', 'minimal', 'standard', 'verbose']
+        """
         for h in self.get_handlers(handlers):
             h.setFormatter(logging.Formatter(formatters[formatter]))
 
     def add_handler(self, name='console-color', level='info', formatter='standard', **kwargs):
+        """
+        Add another handler to the logging system if not present already.
+        Available handlers are currently: ['console-bw', 'console-color', 'rotating-log']
+        """
         if self.handlers.has_key(name):
             return
+
+        # make sure the the log file has a name
+        if name == 'rotating-log' and not kwargs.has_key('filename'):
+            kwargs.update({'filename': self.logfilename})
 
         handler = types[name](**kwargs)
         handler.setLevel(levels[level])
         handler.setFormatter(logging.Formatter(formatters[formatter]))
         self.log.addHandler(handler)
         self.handlers[name] = handler
+
+    def remove_handler(self, name):
+        """
+        Remove handler from the logging system if present already.
+        Available handlers are currently: ['console-bw', 'console-color', 'rotating-log']
+        """
+        if self.handlers.has_key(name):
+            self.log.removeHandler(self.handlers[name])
 
     @contextmanager
     def noformat(self):
@@ -119,6 +154,9 @@ class Logger(object):
 
     def fatal(self, *args, **kwargs):
         self.log.fatal(*args, **kwargs)
+
+    def getChild(self, name):
+        return self.log.getChild(name)
 
 BWHandler = logging.StreamHandler
 LogHandler = logging.handlers.RotatingFileHandler
@@ -178,4 +216,7 @@ def sanitize(v):
     return 'v'*num
 
 cf = conf.load_conf()
-log = Logger(cf.get('verbosity'), cf.get('log-colors'), cf.get('log-to-file'))
+log = Logger(
+    cf.get('verbosity'), cf.get('log-colors'),
+    cf.get('log-to-file'), cf.get('log-filename')
+)
