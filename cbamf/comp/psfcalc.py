@@ -667,7 +667,7 @@ def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
 def vec_to_halfvec(vec):
     """Transforms a vector np.arange(-N, M, dx) to np.arange(min(|vec|), max(N,M),dx)]"""
     d = vec[1:] - vec[:-1]
-    if (d.std() > 1e-14) or (d.mean() < 0):
+    if ((d/d.mean()).std() > 1e-14) or (d.mean() < 0):
         raise ValueError('vec must be np.arange() in increasing order')
     dx = d.mean()
     lowest = np.abs(vec).min()
