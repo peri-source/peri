@@ -8,14 +8,14 @@ from cbamf.comp import psfs, ilms, objs
 from cbamf import states
 
 """
-To fix: 
+To fix:
 1. opt.burn() -- right now it seems that the globals aren't fully optimized
     but the particles are after a few loops. So you might want to spend 1 more
     iteration updating the globals. Another eig update? More run length?
-    
+
 To add:
 1. AugmentedState: ILM scale options? You'd need a way to get an overall scale
-    block, which would probably need to come from the ILM itself. 
+    block, which would probably need to come from the ILM itself.
 6. With opt using big regions for particles, globals, it makes sense to
     put stuff back on the card again....
 
@@ -24,15 +24,15 @@ To fix:
 2. opt.burn() hacks:
     a.  Once the state is mostly optimized, LMGlobals.J doesn't change much
         so you could lmglobals.do_internal_run(); lmparticles.do_internal_run()
-        in a loop without recalculating J's (or maybe an eigen update). 
-        It would be way faster if you could store all the J's for the 
-        particle group collections. Save LMPartilceGroupCollection's lp's J's 
-        with numpy.save and a tmp file (standard library). 
-        -- this is implemented, but it doesn't work too well. 
-    b. 
+        in a loop without recalculating J's (or maybe an eigen update).
+        It would be way faster if you could store all the J's for the
+        particle group collections. Save LMPartilceGroupCollection's lp's J's
+        with numpy.save and a tmp file (standard library).
+        -- this is implemented, but it doesn't work too well.
+    b.
 3. do_conjgrad_jtj is terrible / wrong / doesn't use JTJ for anything except
-    eigendirections. 
-    
+    eigendirections.
+
 
 Algorithm is:
 1. Evaluate J_ia = df(xi,mu)/dmu_a
@@ -275,12 +275,13 @@ def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwar
     num_px = np.clip(px_dec, px_red, px_mem)
     return num_px
 
-def do_levmarq(s, block, damping=0.1, decrease_damp_factor=10., run_length=6, 
-        eig_update=True, collect_stats=False, use_aug=False, **kwargs):
+def do_levmarq(s, block, damping=0.1, decrease_damp_factor=10., run_length=6,
+        eig_update=True, collect_stats=False, use_aug=False, run_type=2,
+        **kwargs):
     """
-    Convenience wrapper for LMGlobals. Same keyword args, but I've set 
+    Convenience wrapper for LMGlobals. Same keyword args, but I've set
     the defaults to what I've found to be useful values for optimizing globals.
-    See LMGlobals and LMEngine for documentation. 
+    See LMGlobals and LMEngine for documentation.
     """
     #Backwards compatibility stuff:
     if 'damp' in kwargs.keys():
@@ -292,17 +293,22 @@ def do_levmarq(s, block, damping=0.1, decrease_damp_factor=10., run_length=6,
     if 'num_iter' in kwargs.keys():
         max_iter = kwargs.pop('num_iter')
         kwargs.update({'max_iter':max_iter})
-    
+
     if use_aug:
         aug = AugmentedState(s, block, rz_order=3)
-        lm = LMAugmentedState(aug, damping=damping, run_length=run_length, 
+        lm = LMAugmentedState(aug, damping=damping, run_length=run_length,
                 decrease_damp_factor=decrease_damp_factor, eig_update=
                 eig_update, **kwargs)
     else:
-        lm = LMGlobals(s, block, damping=damping, run_length=run_length, 
+        lm = LMGlobals(s, block, damping=damping, run_length=run_length,
                 decrease_damp_factor=decrease_damp_factor, eig_update=
                 eig_update, **kwargs)
-    lm.do_run_2()
+    if run_type == 2:
+        lm.do_run_2()
+    elif run_type == 1:
+        lm.do_run_1()
+    else:
+        raise ValueError('run_type=1,2 only')
     if collect_stats:
         return lm.get_termination_stats()
 
@@ -723,15 +729,15 @@ def update_particles(s, particles, params, include_rad=True, **kwargs):
     s._update_tile(outer_tile, inner_tile, ioslice, difference=s.difference)
     return outer_tile, inner_tile, ioslice
 
-def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10., 
+def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
         run_length=4, collect_stats=False, **kwargs):
     """
-    Convenience wrapper for LMParticles. Same keyword args, but I've set 
-    the defaults to what I've found to be useful values for optimizing 
-    particles. See LMParticles and LMEngine for documentation. 
+    Convenience wrapper for LMParticles. Same keyword args, but I've set
+    the defaults to what I've found to be useful values for optimizing
+    particles. See LMParticles and LMEngine for documentation.
     """
     #Backwards compatibility stuff:
-    #(although right now I'm not including 
+    #(although right now I'm not including
     if 'damp' in kwargs.keys():
         damping = kwargs.pop('damp')
         kwargs.update({'damping':damping})
@@ -741,8 +747,8 @@ def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
     if 'num_iter' in kwargs.keys():
         max_iter = kwargs.pop('num_iter')
         kwargs.update({'max_iter':max_iter})
-    
-    lp = LMParticles(s, particles, damping=damping, run_length=run_length, 
+
+    lp = LMParticles(s, particles, damping=damping, run_length=run_length,
             decrease_damp_factor=decrease_damp_factor, **kwargs)
     lp.do_run_2()
     if collect_stats:
@@ -831,15 +837,15 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
 
     return region_size
 
-def do_levmarq_all_particle_groups(s, region_size=40, damping=1.0, 
+def do_levmarq_all_particle_groups(s, region_size=40, damping=1.0,
         decrease_damp_factor=10., run_length=4, collect_stats=False, **kwargs):
     """
-    Convenience wrapper for LMParticleGroupCollection. Same keyword args, 
-    but I've set the defaults to what I've found to be useful values for 
+    Convenience wrapper for LMParticleGroupCollection. Same keyword args,
+    but I've set the defaults to what I've found to be useful values for
     optimizing particles. See LMParticleGroupCollection for documentation.
     """
     #Backwards compatibility stuff:
-    #(although right now I'm not including 
+    #(although right now I'm not including
     if 'damp' in kwargs.keys():
         damping = kwargs.pop('damp')
         kwargs.update({'damping':damping})
@@ -852,15 +858,15 @@ def do_levmarq_all_particle_groups(s, region_size=40, damping=1.0,
     if 'calc_region_size' in kwargs.keys():
         do_calc_size = kwargs.pop('calc_region_size')
         kwargs.update({'do_calc_size':do_calc_size})
-    
+
     lp = LMParticleGroupCollection(s, region_size=region_size, damping=damping,
-            run_length=run_length, decrease_damp_factor=decrease_damp_factor, 
+            run_length=run_length, decrease_damp_factor=decrease_damp_factor,
             get_cos=collect_stats, **kwargs)
     lp.do_run_2()
     if collect_stats:
         return lp.stats
-        
-def fit_ilm(new_ilm, old_ilm, use_engine=True, run_engine=True, **kwargs):
+
+def fit_ilm(new_ilm, old_ilm, **kwargs):
     """
     Fits a new cbamf.comp.ilms instance to (mostly) match the get_field
     of the old ilm, by creating a fake state with no particles and an
@@ -872,14 +878,8 @@ def fit_ilm(new_ilm, old_ilm, use_engine=True, run_engine=True, **kwargs):
         The new ilm.
     old_ilm : cbamf.comp.ilms instance
         The old ilm to match to.
-    use_engine: Bool
-        Whether to use the LMEngine instances or call *.do_levmarq().
-        Default is True (engine)s.
-    run_engine: Bool
-        If use_engine, whether to use the LMEngine instances or call *.do_levmarq().
-        Default is True (engine).
-    **kwargs: The keyword args passed to either of the optimizers.
-
+    **kwargs: The keyword args passed to the optimizers (LMGlobals through
+        do_levmarq).
 
     See Also
     --------
@@ -887,11 +887,14 @@ def fit_ilm(new_ilm, old_ilm, use_engine=True, run_engine=True, **kwargs):
         subset of the image pixels. Works for any fit blocks.
     LMGlobals: Same, but with a cleaner engine instantiation.
     """
-    psf = psfs.IdentityPSF(params=np.zeros(1), shape=old_ilm.bkg.shape)
+    shape = old_ilm.bkg.shape
+    psf = psfs.IdentityPSF(params=np.zeros(1), shape=shape)
     obj = objs.SphereCollectionRealSpace(np.zeros([1,3]), np.zeros(1), shape=
-            old_ilm.bkg.shape, typ=np.zeros(1))
+            shape, typ=np.zeros(1))
+    bkg = ilms.LegendrePoly2P1D(shape=shape, order=(1,1,1))
+    bkg.update(bkg.block, np.zeros(bkg.block.size))
     fake_s = states.ConfocalImagePython(old_ilm.bkg.copy(), obj, psf, new_ilm,
-            varyn=True, pad=1)
+            varyn=True, pad=1, bkg=bkg  )
 
     blk = fake_s.create_block('ilm')
     do_levmarq(fake_s, blk, **kwargs)
@@ -902,38 +905,38 @@ def fit_ilm(new_ilm, old_ilm, use_engine=True, run_engine=True, **kwargs):
 #=============================================================================#
 class LMEngine(object):
     """
-    The engine for running levenberg-marquardt optimization on anything. 
+    The engine for running levenberg-marquardt optimization on anything.
     There are 3 different options for optimizing:
-        do_run_1(): 
+        do_run_1():
             Checks to calculate full, Broyden, and eigen J, then tries a step.
             If the step is accepted, decreases damping; if not, increases.
-            Checks for full, Broyden, and eigen J updates.     
-        do_run_2(): 
-            Checks to calculate full, Broyden, and eigen J, then tries a 
-            step with the current damping and with a decreased damping, 
-            accepting whichever is lower. Decreases damping iff the lower 
+            Checks for full, Broyden, and eigen J updates.
+        do_run_2():
+            Checks to calculate full, Broyden, and eigen J, then tries a
+            step with the current damping and with a decreased damping,
+            accepting whichever is lower. Decreases damping iff the lower
             damping is better. It then calls do_internal_run() (see below).
-            Rejected steps result in increased damping until a step is 
-            accepted. Checks for full, Broyden, and eigen J updates. 
+            Rejected steps result in increased damping until a step is
+            accepted. Checks for full, Broyden, and eigen J updates.
         do_internal_run():
-            Checks for Broyden and eigen J updates only, then uses 
+            Checks for Broyden and eigen J updates only, then uses
             pre-calculated J, JTJ, etc to evaluate LM steps. Does
             not change damping during the run. Does not check do update
-            the full J, but does check for Broyden, eigen updates. 
-            Does not work if J has not been evaluated yet. 
-    Whether to update the full J is controlled by update_J_frequency only, 
-    which only counts iterations of do_run_1() and do_run_2(). 
+            the full J, but does check for Broyden, eigen updates.
+            Does not work if J has not been evaluated yet.
+    Whether to update the full J is controlled by update_J_frequency only,
+    which only counts iterations of do_run_1() and do_run_2().
     Both partial updates are controlled by partial_update_frequency, which
-    counts internal runs in do_internal_run and full runs in do_run_1. 
-    
-    So, if you want a partial update every other run, full J the remaining, 
+    counts internal runs in do_internal_run and full runs in do_run_1.
+
+    So, if you want a partial update every other run, full J the remaining,
     this would be:
         do_run_1(): update_J_frequency=2, partial_update_frequency=1
         do_run_2(): update_J_frequency=1, partial_update_frequency=1, run_length=2
-    I would like to make this either a little more consistent or totally 
-    incompatible to be less confusing, especially since do_run_2() with 
-    update_J_frequency=2 just checks to decrease the damping without either 
-    partial updates. 
+    I would like to make this either a little more consistent or totally
+    incompatible to be less confusing, especially since do_run_2() with
+    update_J_frequency=2 just checks to decrease the damping without either
+    partial updates.
     """
     def __init__(self, damping=1., increase_damp_factor=3., decrease_damp_factor=8.,
                 min_eigval=1e-13, marquardt_damping=True, transtrum_damping=None,
@@ -1136,19 +1139,35 @@ class LMEngine(object):
             delta_params = self.find_LM_updates(self.calc_grad())
 
             #2. Increase damping until we get a good step:
-            good_step = self.eval_n_check_step(self.params + delta_params,
-                    put_back=False)
+            er1 = self.update_function(self.params + delta_params)
+            good_step = er1 < self.error
+            if not good_step:
+                er0 = self.update_function(self.params)
+                if np.abs(er0 -self.error) > 1e-7:
+                    raise RuntimeError('ARG!!!') #FIXME
             _try = 0
+            if (not good_step) and (not self.quiet):
+                print 'Bad step, increasing damping\t%f\t%f' % (self.error, er1)
             while (_try < self._max_inner_loop) and (not good_step):
                 _try += 1
                 self.increase_damping()
                 delta_params = self.find_LM_updates(self.calc_grad())
-                good_step = self.eval_n_check_step(self.params + delta_params,
-                        put_back=False)
+                er1 = self.update_function(self.params + delta_params)
+                good_step = er1 < self.error
+                if not good_step:
+                    er0 = self.update_function(self.params)
+                    if np.abs(er0 -self.error) > 1e-7:
+                        raise RuntimeError('ARG!!!') #FIXME
             if _try == (self._max_inner_loop-1):
                 warnings.warn('Stuck!', RuntimeWarning)
 
             #state is updated, now params:
+            if good_step:
+                self._last_error = self.error
+                self.error = er1
+                if not self.quiet:
+                    print 'Good step\t%f\t%f' % (self._last_error, self.error)
+
             self.update_params(delta_params, incremental=True)
             self.decrease_damping()
             self._num_iter += 1; self._inner_run_counter += 1
@@ -1278,8 +1297,6 @@ class LMEngine(object):
             delta_params = self.find_LM_updates(grad, do_correct_damping=False)
             er1 = self.update_function(self.params + delta_params)
             good_step = er1 < er0
-            # good_step = self.eval_n_check_step(self.params + delta_params,
-                    # put_back=False)
 
             if good_step:
                 if not self.quiet:
@@ -1303,46 +1320,6 @@ class LMEngine(object):
                     raise RuntimeError('GODDAMMIT!') #FIXME
 
             self._inner_run_counter += 1
-
-    def eval_n_check_step(self, new_params, put_back=False):
-        """
-        What does this need to do?
-        It needs to:
-            1. Check if a step is good by updating the function/state
-            2. update the following
-                    self.error
-                    self._last_error
-                    self._last_residuals
-                    self._last_params????
-
-        Of these really only self._last_error, self._last_residuals
-        need to be done during the update.
-
-        Doesn't update back to the old params ONLY IF the step is good
-        If the step is bad, you HAVE to go back to the original params
-        """
-        _last_error = self.error*1
-        _last_residuals = self.calc_residuals().copy()
-        _last_params = self.params.copy()
-        new_error = self.update_function(new_params)
-        # good_step = self.error <= _last_error
-        #There are issues with resetting to float precision, so
-        ok_step_tol = max([1e-7, self.errtol*0.1])
-        good_step = self.error <= (_last_error + ok_step_tol)
-
-        #something for cosine options...
-        if (not good_step) or put_back:
-            _ = self.update_function(self.params)
-        else:
-            if not self.quiet:
-                pass
-                # print 'Good step:\t%f\t->\t%f' % (self._last_error, self.error)
-            self.error = new_error
-            self._last_error = _last_error
-            self._last_residuals = _last_residuals
-        if self._last_error < (self.error-ok_step_tol):
-            raise RuntimeError('ARG!!!!') #FIXME
-        return good_step
 
     def update_function(self, params):
         """Takes an array params, updates function, returns the new error"""
@@ -1644,7 +1621,7 @@ class LMParticleGroupCollection(object):
 
     Try implementing a way to save the J's via tempfile's. lp.update_J()
     only updates J, JTJ, so you'd only have to save those (or get JTJ from J).
-    
+
 
     Methods
     -------
@@ -1665,8 +1642,8 @@ class LMParticleGroupCollection(object):
                 If True, calculates the region size internally based on
                 the maximum allowed memory. Default is True
             get_cos : Bool
-                Set to True to include the model cosine in the statistics 
-                on each individual group's run, using 
+                Set to True to include the model cosine in the statistics
+                on each individual group's run, using
                 LMEngine.get_termination_stats(), stored in self.stats.
                 Default is False
             save_J : Bool
@@ -1676,11 +1653,11 @@ class LMParticleGroupCollection(object):
             **kwargs:
                 Pass any kwargs that would be passed to LMParticles.
                 Stored in self._kwargs for reference.
-                
+
         Attributes
         ----------
             stats : List
-            
+
         """
 
         self.state = state
@@ -1689,10 +1666,10 @@ class LMParticleGroupCollection(object):
         self.get_cos = get_cos
         self.save_J = save_J
         self.max_mem = max_mem
-        
+
         self.reset(do_calc_size=do_calc_size)
 
-    def reset(self, new_region_size=None, do_calc_size=True, new_damping=None, 
+    def reset(self, new_region_size=None, do_calc_size=True, new_damping=None,
             new_max_mem=None):
         """Resets the particle groups and optionally the region size and damping."""
         if new_region_size is not None:
@@ -1717,7 +1694,7 @@ class LMParticleGroupCollection(object):
                 for _ in ['j','tile']:
                     self._tempfiles.append(tempfile.TemporaryFile(dir=os.getcwd()))
                 self._has_saved_J.append(False)
-    
+
     def _get_tmpfiles(self, group_index):
         j_file = self._tempfiles[2*group_index]
         tile_file = self._tempfiles[2*group_index+1]
@@ -1725,12 +1702,12 @@ class LMParticleGroupCollection(object):
         j_file.seek(0)
         tile_file.seek(0)
         return j_file, tile_file
-    
+
     def _dump_j_diftile(self, group_index, j, tile):
         j_file, tile_file = self._get_tmpfiles(group_index)
         np.save(j_file, j)
         pickle.dump(tile, tile_file)
-        
+
     def _load_j_diftile(self, group_index):
         j_file, tile_file = self._get_tmpfiles(group_index)
         J = np.load(j_file)
@@ -1744,7 +1721,7 @@ class LMParticleGroupCollection(object):
             lp = LMParticles(self.state, group, **self._kwargs)
             if mode == 'internal':
                 lp.J, lp.JTJ, lp._dif_tile = self._load_j_diftile(a)
-            
+
             if mode == '1':
                 lp.do_run_1()
             if mode == '2':
@@ -1756,13 +1733,13 @@ class LMParticleGroupCollection(object):
             if self.save_J and (mode != 'internal'):
                 self._dump_j_diftile(a, lp.J, lp._dif_tile)
                 self._has_saved_J[a] = True
-            
+
     def do_run_1(self):
         self._do_run(mode='1')
 
     def do_run_2(self):
         self._do_run(mode='2')
-        
+
     def do_internal_run(self):
         if not self.save_J:
             raise RuntimeError('self.save_J=True required for do_internal_run()')
@@ -1944,7 +1921,7 @@ class LMAugmentedState(LMEngine):
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
 
-def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False, 
+def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         ftol=1e-3, mode='burn', max_mem=3e9):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
@@ -1965,35 +1942,35 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
         desc : string
             Description to append to the states.save() call every loop.
-            Set to None to avoid saving. Default is '', which selects 
+            Set to None to avoid saving. Default is '', which selects
             one of 'burning', 'polishing', 'doing_positions'
 
         use_aug: Bool
             Set to True to optimize with an augmented state (R(z) as a
             global parameter) vs. with the normal global parameters.
             Default is False (no augmented).
-            
-        ftol : Float or None. 
+
+        ftol : Float or None.
             If not None, the change in error at which to terminate.
-            
+
         mode : 'burn' or 'do_positions'
-            What mode to optimize with. 
-                'burn'          : Your state is far from the minimum. 
-                'do_positions'  : Positions are far from the minimum, 
-                                  globals are well-fit. 
-            'burn' is the default and will optimize any scenario, but the 
-            others will be faster for their specific scenarios. 
-            
+            What mode to optimize with.
+                'burn'          : Your state is far from the minimum.
+                'do_positions'  : Positions are far from the minimum,
+                                  globals are well-fit.
+            'burn' is the default and will optimize any scenario, but the
+            others will be faster for their specific scenarios.
+
         max_mem : Numeric
             The maximum amount of memory allowed for the optimizers' J's,
             split equally between particles & globals. Default is 3e9,
-            i.e. 3GB per optimizer. 
-    
+            i.e. 3GB per optimizer.
+
     Comments
     --------
         - It would be nice if some of these magic #'s (region size, num_eig_dirs,
-            etc) were calculated in a good way. 
-            
+            etc) were calculated in a good way.
+
     burn      : lm.do_run_2(), lp.do_run_2()
     polish    : lm.calc_J(), lm.do_internal_run(), lp.do_internal_run() but must calc J's first
     translate : lp.do_run_2() only, maybe an aug'd with ilm scale if it gets implemented.
@@ -2003,19 +1980,21 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         raise ValueError('mode must be one of burn, do_positions')
     if desc is '':
         desc = mode + 'ing' if mode != 'do_positions' else 'doing_positions'
-        
+
     #For now, I'm calculating the region size. This might be a bad idea
-    #because 1 bad particle can spoil the whole group. 
+    #because 1 bad particle can spoil the whole group.
     region_size = 40 #until we calculate it
     do_calc_size = True
-        
+
     glbl_dmp = 0.3
     eig_update = mode != 'do_positions'
     glbl_run_length = 6 if mode != 'do_positions' else 3
 
     if mode == 'do_positions':
         glbl_blk = (s.explode(s.create_block('ilm'))[0] |
-                    s.explode(s.create_block('bkg'))[0])
+                    s.explode(s.create_block('off'))[0])
+        if s.bkg is not None:
+            glbl_blk |= s.create_block('off')
     else:
         glbl_blk = block_globals(s, include_rscale=(not use_aug),
                 include_off=True, include_sigma=False)
@@ -2031,8 +2010,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         if a != 0 or mode != 'do_positions':
             all_lm_stats.append(do_levmarq(s, glbl_blk, max_iter=1, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
-                    partial_update_frequency=3, damping=glbl_dmp, 
-                    decrease_damp_factor=10., quiet=True, use_aug=use_aug, 
+                    partial_update_frequency=3, damping=glbl_dmp,
+                    decrease_damp_factor=10., quiet=True, use_aug=use_aug,
                     collect_stats=collect_stats, errtol=1e-3, max_mem=max_mem))
         if desc is not None:
             states.save(s, desc=desc)
