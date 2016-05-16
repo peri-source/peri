@@ -268,7 +268,7 @@ def sample_compare(N, samples, truestate, burn=0):
     pl.show()
 
 
-def generative_model(s,x,y,z,r):
+def generative_model(s,x,y,z,r, factor=1.1):
     """
     Samples x,y,z,r are created by:
     b = s.blocks_particle(#)
@@ -283,7 +283,7 @@ def generative_model(s,x,y,z,r):
     slicer2 = np.s_[s.pad:-s.pad,s.pad:-s.pad,slicex]
     center = (slicez, s.image.shape[1]/2, slicex)
 
-    fig = pl.figure(figsize=(13,10))
+    fig = pl.figure(figsize=(factor*13,factor*10))
 
     #=========================================================================
     #=========================================================================
@@ -394,7 +394,7 @@ def generative_model(s,x,y,z,r):
     zoom1.set_yticks([])
     zoom1.hlines(cy-1.0/6 + 1.0/32, cx-1.0/6+5e-2, cx-1.0/6+5e-2+1e-1, lw=3)
     zoom1.text(cx-1.0/6 + 1.0/24, cy-1.0/6+5e-2, '0.1px')
-    mark_inset(ax_zoom, zoom1, loc1=2, loc2=4, fc="none", ec="0.5")
+    mark_inset(ax_zoom, zoom1, loc1=2, loc2=4, fc="none", ec="0.0")
 
     #zoom2 = zoomed_inset_axes(ax_zoom, 10, loc=4)
     #zoom2.imshow(im, extent=extent, cmap=pl.cm.bone_r)
@@ -751,8 +751,9 @@ def twoslice(field, pad=const.PAD, zlayer=None, xlayer=None, size=6.0,
     show(ax2, slicer2)
 
 def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
-        cmap='bone_r', vmin=0, vmax=1, showimage=False):
-    trim = (np.s_[s.pad:-s.pad],)*3
+        cmap='bone_r', vmin=0, vmax=1, showimage=False, solid=False, pad=None):
+    pad = pad or s.pad
+    trim = (np.s_[pad:-pad],)*3
     field = s.image[trim]
 
     slicez = zlayer or field.shape[0]/2
@@ -786,6 +787,7 @@ def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
         # get the index of the particles we want to include
         talpha = 1.0 if not showimage else 0.8
         cedge = 'white' if not showimage else 'black'
+        cface = 'white' if solid else 'none'
         particles = np.arange(len(pos))[np.abs(pos[:,axis] - layer) < rad]
 
         # for each of these particles display the effective radius
@@ -794,16 +796,16 @@ def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
             p = pos[i].copy()
             r = 2*np.sqrt(rad[i]**2 - (p[axis] - layer)**2)
             if axis==0:
-                c = Circle((p[2]-s.pad,p[1]-s.pad), radius=r/2, fc='none', ec=cedge, alpha=talpha)
+                c = Circle((p[2]-pad,p[1]-pad), radius=r/2, fc=cface, ec=cedge, alpha=talpha)
             if axis==2:
-                c = Circle((p[1]-s.pad,p[0]-s.pad), radius=r/2, fc='none', ec=cedge, alpha=talpha)
+                c = Circle((p[1]-pad,p[0]-pad), radius=r/2, fc=cface, ec=cedge, alpha=talpha)
             ax.add_patch(c)
 
     show(ax1, slicer1)
     show(ax2, slicer2)
 
-    circles(ax1, slicez+s.pad, 0) 
-    circles(ax2, slicex+s.pad, 2) 
+    circles(ax1, slicez+pad, 0) 
+    circles(ax2, slicex+pad, 2) 
 
 def deconstruction(s):
     s.model_to_true_image()
