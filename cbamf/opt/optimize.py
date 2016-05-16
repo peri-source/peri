@@ -1,4 +1,11 @@
-import os, sys, time, warnings, tempfile, pickle
+import os
+import sys
+import time
+import warnings
+import tempfile
+import pickle
+import gc
+
 import numpy as np
 from numpy.random import randint
 from scipy.optimize import newton, minimize_scalar
@@ -1443,7 +1450,7 @@ class LMEngine(object):
         self._J_update_counter += 1
         update = self._J_update_counter >= self.update_J_frequency
         return update & (not self._fresh_JTJ)
-
+    
     def update_J(self):
         self.calc_J()
         self.JTJ = np.dot(self.J, self.J.T)
@@ -1920,7 +1927,6 @@ class LMAugmentedState(LMEngine):
 #=============================================================================#
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
-
 def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         ftol=1e-3, mode='burn', max_mem=3e9):
     """
@@ -2031,6 +2037,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
             new_err = get_err(s)
             if (start_err - new_err) < ftol:
                 break
+
+        gc.collect()
 
     if collect_stats:
         return all_lp_stats, all_lm_stats
