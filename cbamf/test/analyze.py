@@ -1,9 +1,41 @@
+import re
+import glob
 import numpy as np
 import scipy as sp
 
 from cbamf.priors import overlap
 from cbamf.util import Tile
 from cbamf.comp.objs import SphereCollectionRealSpace
+
+def sorted_files(globber, num_sort=True, num_indices=None, return_num=False):
+    """
+    Give a globbing expression of files to find. They will be sorted upon return.
+    This function is most useful when sorting does not provide numerical order,
+    e.g.:
+        9 -> 12 returned as 10 11 12 9 by string sort
+
+    In this case use num_sort=True, and it will be sorted by numbers whose index
+    is given by num_indices (possibly None for all numbers) then by string.
+    """
+    files = glob.glob(globber)
+    files.sort()
+
+    if not num_sort:
+        return files
+
+    # sort by numbers if desired
+    num_indices = num_indices or np.s_[:]
+    allfiles = []
+
+    for fn in files:
+        nums = re.findall(r'\d+', fn)
+        data = [int(n) for n in nums[num_indices]] + [fn]
+        allfiles.append(data)
+
+    allfiles = sorted(allfiles)
+    if return_num:
+        return allfiles
+    return [f[-1] for f in allfiles]
 
 def pr(state, samples, depth=-10):
     """
