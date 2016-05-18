@@ -1461,6 +1461,16 @@ class LMEngine(object):
         residuals = self.calc_residuals()
         return np.dot(self.J, residuals)
 
+    def _rank_1_J_update(self, direction, values):
+        """
+        Does J += np.outer(direction, new_values - old_values) without
+        using lots of memory
+        """
+        vals_to_sub = np.dot(direction, self.J)
+        delta_vals = values - vals_to_sub
+        for a in xrange(direction.size):
+            self.J[a] += direction[a] * delta_vals
+
     def check_Broyden_J(self):
         do_update = (self.broyden_update & (not self._fresh_JTJ) &
                 ((self._inner_run_counter % self.partial_update_frequency) == 0))
@@ -1472,9 +1482,13 @@ class LMEngine(object):
         """
         delta_params = self.params - self._last_params
         delta_residuals = self.calc_residuals() - self._last_residuals
-        broyden_update = np.outer(delta_params, (delta_residuals -\
-                np.dot(self.J.T, delta_params))) / np.sum(delta_params**2)
-        self.J += broyden_update
+        # broyden_update = np.outer(delta_params, (delta_residuals -\
+                # np.dot(self.J.T, delta_params))) / np.sum(delta_params**2)
+        # self.J += broyden_update
+        nrm = np.sqrt(delta_params*delta_params)
+        direction = delta_params / nrm
+        vals = delta_residuals / nrm
+        self._rank_1_J_update(direction, vals)
         self.JTJ = np.dot(self.J, self.J.T)
 
     def check_update_eig_J(self):
@@ -1496,10 +1510,9 @@ class LMEngine(object):
 
             #3. Updating
             grad_stif = (res1-res0)/dl
-            update = np.outer(stif_dir, grad_stif - np.dot(self.J.T, stif_dir))
-            self.J += update
-            self.JTJ = np.dot(self.J, self.J.T)
+            self._rank_1_J_update(stif_dir, grad_stif)
 
+        self.JTJ = np.dot(self.J, self.J.T)
         #Putting the parameters back:
         _ = self.update_function(self.params)
 
