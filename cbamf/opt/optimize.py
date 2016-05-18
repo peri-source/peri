@@ -293,10 +293,8 @@ def do_levmarq(s, block, damping=0.1, decrease_damp_factor=10., run_length=6,
     #Backwards compatibility stuff:
     if 'damp' in kwargs.keys():
         damping = kwargs.pop('damp')
-        kwargs.update({'damping':damping})
     if 'ddamp' in kwargs.keys():
         decrease_damp_factor = kwargs.pop('ddamp')
-        kwargs.update({'decrease_damp_factor':decrease_damp_factor})
     if 'num_iter' in kwargs.keys():
         max_iter = kwargs.pop('num_iter')
         kwargs.update({'max_iter':max_iter})
@@ -1066,6 +1064,8 @@ class LMEngine(object):
         self._num_iter = 0
 
         #We want to start updating JTJ
+        self.J = None
+        self._inds = None
         self._J_update_counter = update_J_frequency
         self._fresh_JTJ = False
 
@@ -1544,7 +1544,9 @@ class LMGlobals(LMEngine):
         """
         self.state = state
         self.kwargs = opt_kwargs
-        self.num_pix = get_num_px_jtj(state, block.sum(), **self.kwargs)
+        self.max_mem = max_mem
+        self.num_pix = get_num_px_jtj(state, block.sum(), max_mem=max_mem, 
+                **self.kwargs)
         self.blocks = state.explode(block)
         self.block = block
         super(LMGlobals, self).__init__(**kwargs)
@@ -1556,10 +1558,13 @@ class LMGlobals(LMEngine):
         self._last_params = self.params.copy()
 
     def calc_J(self):
-        J, inds = get_rand_Japprox(self.state, self.blocks,
+        # J, inds = get_rand_Japprox(self.state, self.blocks,
+                # num_inds=self.num_pix, **self.kwargs)
+        # self._inds = inds
+        # self.J = J
+        del self.J, self._inds
+        self.J, self._inds = get_rand_Japprox(self.state, self.blocks,
                 num_inds=self.num_pix, **self.kwargs)
-        self._inds = inds
-        self.J = J
 
     def calc_residuals(self):
         return self.state.get_difference_image()[self._inds].ravel()
@@ -1601,6 +1606,7 @@ class LMParticles(LMEngine):
     def calc_J(self):
         self._dif_tile = get_tile_from_multiple_particle_change(self.state,
                 self.particles)
+        del self.J
         self.J = eval_many_particle_grad(self.state, self.particles,
                 slicer=self._dif_tile.slicer, **self.particle_kwargs)
 
@@ -1873,8 +1879,9 @@ class LMAugmentedState(LMEngine):
         """
         self.aug_state = aug_state
         self.kwargs = opt_kwargs
+        self.max_mem = max_mem
         self.num_pix = get_num_px_jtj(aug_state.state, aug_state.block.sum() +
-                aug_state.rz_order, **self.kwargs)
+                aug_state.rz_order, max_mem=max_mem, **self.kwargs)
         super(LMAugmentedState, self).__init__(**kwargs)
 
     def _set_err_params(self):
@@ -1884,6 +1891,9 @@ class LMAugmentedState(LMEngine):
         self._last_params = self.params.copy()
 
     def calc_J(self):
+        #0. 
+        del self.J, self._inds
+
         #1. J for the state:
         s = self.aug_state.state
         sa = self.aug_state
@@ -2014,24 +2024,27 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         print 'Beginning of loop %d:\t%f' % (a, get_err(s)) #FIXME
         glbl_dmp = 0.3 if a ==0 else 3e-2
         if a != 0 or mode != 'do_positions':
-            all_lm_stats.append(do_levmarq(s, glbl_blk, max_iter=1, run_length=
+            gstats = do_levmarq(s, glbl_blk, max_iter=1, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
                     partial_update_frequency=3, damping=glbl_dmp,
                     decrease_damp_factor=10., quiet=True, use_aug=use_aug,
-                    collect_stats=collect_stats, errtol=1e-3, max_mem=max_mem))
+                    collect_stats=collect_stats, errtol=1e-3, max_mem=max_mem)
+            all_lm_stats.append(gstats)
         if desc is not None:
             states.save(s, desc=desc)
         print 'Globals, loop %d:\t%f' % (a, get_err(s)) #FIXME
 
         #2b. Particles
         prtl_dmp = 1.0 if a==0 else 1e-2
-        all_lp_stats.append(do_levmarq_all_particle_groups(s, region_size=
+        pstats = do_levmarq_all_particle_groups(s, region_size=
                 region_size, max_iter=1, do_calc_size=do_calc_size, run_length=4,
                 eig_update=False, damping=prtl_dmp, quiet=True, collect_stats=
-                collect_stats, errtol=1e-3, max_mem=max_mem))
+                collect_stats, errtol=1e-3, max_mem=max_mem)
+        all_lp_stats.append(pstats)
         if desc is not None:
             states.save(s, desc=desc)
         print 'Particles, loop %d:\t%f' % (a, get_err(s)) #FIXME
+
         #2c. terminate?
         if ftol is not None:
             new_err = get_err(s)
