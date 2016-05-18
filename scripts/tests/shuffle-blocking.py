@@ -3,9 +3,9 @@ mpl.use('Agg')
 import numpy as np
 import pylab as pl
 
-from cbamf import states, runner, initializers
-from cbamf.comp import psfs, ilms, objs
-from cbamf.viz import plots
+from peri import states, runner, initializers
+from peri.comp import psfs, ilms, objs
+from peri.viz import plots
 import pickle
 import time
 

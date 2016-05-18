@@ -3,10 +3,10 @@ import scipy as sp
 import pylab as pl
 import itertools
 
-from cbamf import initializers, runner
-from cbamf import runner, const
-from cbamf.test import init, bench
-from cbamf.viz.util import COLORS, MARKERS
+from peri import initializers, runner
+from peri import runner, const
+from peri.test import init, bench
+from peri.viz.util import COLORS, MARKERS
 
 def fit_edge(separation, radius=5.0, samples=100, imsize=64, sigma=0.05, axis='z'):
     """

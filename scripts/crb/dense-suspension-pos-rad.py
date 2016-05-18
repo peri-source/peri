@@ -1,7 +1,7 @@
 import numpy as np
 import pylab as pl
 
-from cbamf.test import init
+from peri.test import init
 
 s = init.create_state_random_packing(imsize=36, radius=5.0, sigma=0.05, seed=10)
 bl_pos = s.explode(s.create_block('pos'))

@@ -5,10 +5,10 @@ import numpy as np
 import matplotlib.pyplot as pl
 from mpl_toolkits.axes_grid1 import ImageGrid
 
-from cbamf import const, runner
-from cbamf.test import init
-from cbamf.viz.base import COLORS
-from cbamf.viz.plots import lbl
+from peri import const, runner
+from peri.test import init
+from peri.viz.base import COLORS
+from peri.viz.plots import lbl
 
 def pad(image, size, val=0):
     return np.pad(image, size, mode='constant', constant_values=val)

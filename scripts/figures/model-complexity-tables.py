@@ -8,11 +8,11 @@ import scipy as sp
 import matplotlib.pyplot as pl
 from mpl_toolkits.axes_grid1 import ImageGrid
 
-from cbamf import util, runner, states
-from cbamf.test import nbody
-from cbamf.comp import ilms, objs, psfs, exactpsf
-from cbamf.opt import optimize as opt
-from cbamf.viz.plots import lbl
+from peri import util, runner, states
+from peri.test import nbody
+from peri.comp import ilms, objs, psfs, exactpsf
+from peri.opt import optimize as opt
+from peri.viz.plots import lbl
 
 FIXEDSS = [31,17,29]
 

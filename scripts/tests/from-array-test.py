@@ -1,6 +1,6 @@
 import numpy as np
 
-from cbamf.comp.psfs import FromArray
+from peri.comp.psfs import FromArray
 N = 17
 
 # get the proper r-vector from fftshift

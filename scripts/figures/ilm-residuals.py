@@ -2,9 +2,9 @@ import pickle
 import numpy as np
 import scipy as sp
 
-from cbamf.viz.plots import lbl
-from cbamf.comp import ilms
-from cbamf.initializers import load_tiff, normalize
+from peri.viz.plots import lbl
+from peri.comp import ilms
+from peri.initializers import load_tiff, normalize
 
 import matplotlib.pyplot as pl
 from matplotlib.gridspec import GridSpec

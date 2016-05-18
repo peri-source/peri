@@ -4,10 +4,10 @@ import numpy as np
 from trackpy import locate
 from collections import OrderedDict
 
-from cbamf import util, runner, states, initializers
-from cbamf.test import nbody
-from cbamf.comp import ilms, objs, psfs, exactpsf
-from cbamf.test import analyze
+from peri import util, runner, states, initializers
+from peri.test import nbody
+from peri.comp import ilms, objs, psfs, exactpsf
+from peri.test import analyze
 
 FIXEDSS = [31,17,29]
 

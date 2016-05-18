@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 
-from cbamf.util import Tile
+from peri.util import Tile
 
 def entropy(s):
     t = Tile(s.pad, np.array(s.image.shape)-s.pad)

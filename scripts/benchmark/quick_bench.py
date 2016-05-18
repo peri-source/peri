@@ -3,9 +3,9 @@ import scipy as sp
 import pylab as pl
 import itertools
 
-from cbamf import initializers, runner
-from cbamf.test import init, analyze, bench
-from cbamf.viz.util import COLORS
+from peri import initializers, runner
+from peri.test import init, analyze, bench
+from peri.viz.util import COLORS
 from trackpy import locate
 
 def fit_single_particle_rad(radii, samples=100, imsize=64, sigma=0.05):
@@ -94,7 +94,7 @@ def fit_two_particle_separation(separation, radius=5.0, samples=100, imsize=64, 
 
     return np.array(crbs), np.array(terrors), np.array(berrors)
 
-def plot_errors_single(rad, crb, errors, labels=['trackpy', 'cbamf']):
+def plot_errors_single(rad, crb, errors, labels=['trackpy', 'peri']):
     fig = pl.figure()
     comps = ['z', 'y', 'x']
     markers = ['o', '^', '*']
@@ -128,7 +128,7 @@ def plot_errors_single(rad, crb, errors, labels=['trackpy', 'cbamf']):
     ax.grid('off')
     """
 
-def plot_errors_two(rad, crb, errors, labels=['trackpy', 'cbamf']):
+def plot_errors_two(rad, crb, errors, labels=['trackpy', 'peri']):
     fig = pl.figure()
     comps = ['z', 'y', 'x']
     colors = ['r', 'g', 'b']
@@ -150,7 +150,7 @@ def plot_errors_two(rad, crb, errors, labels=['trackpy', 'cbamf']):
     pl.xlabel(r"$\Delta z$ (pixels)")
     pl.ylabel(r"CRB / $\Delta$ (pixels)")
 
-def plot_errors_psf(rad, crb, errors, labels=['trackpy', 'cbamf']):
+def plot_errors_psf(rad, crb, errors, labels=['trackpy', 'peri']):
     fig = pl.figure()
     comps = ['z', 'y', 'x']
     colors = ['r', 'g', 'b']

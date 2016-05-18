@@ -1,7 +1,7 @@
 import numpy as np
 import pylab as pl
 
-from cbamf.test import init
+from peri.test import init
 
 radius = 5.0
 sigma = 0.05

@@ -4,8 +4,8 @@ import scipy as sp
 import scipy.ndimage as nd
 
 import common
-from cbamf import const, runner
-from cbamf.test import init
+from peri import const, runner
+from peri.test import init
 
 def create_comparison_state(image, position, radius=5.0, snr=20,
         method='constrained-cubic', extrapad=2, zscale=1.0):

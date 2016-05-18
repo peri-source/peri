@@ -2,7 +2,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 import numpy as np
 import pylab as pl
-from cbamf import runner, initializers
+from peri import runner, initializers
 import pickle
 
 imsize = 64

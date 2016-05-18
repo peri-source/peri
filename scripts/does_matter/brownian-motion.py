@@ -5,8 +5,8 @@ import matplotlib.pyplot as pl
 from mpl_toolkits.axes_grid1 import ImageGrid
 
 import common
-from cbamf import const, runner, initializers
-from cbamf.test import init, nbody
+from peri import const, runner, initializers
+from peri.test import init, nbody
 
 def diffusion(diffusion_constant=0.2, exposure_time=0.05, samples=200):
     """

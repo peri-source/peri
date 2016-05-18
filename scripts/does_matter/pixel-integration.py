@@ -5,8 +5,8 @@ import scipy.ndimage as nd
 import scipy.interpolate as intr
 
 import common
-from cbamf import const, runner
-from cbamf.test import init
+from peri import const, runner
+from peri.test import init
 
 def pxint(radius=8, factor=8, dx=np.array([0,0,0])):
     # the factor of coarse-graining, goal particle size, and larger size

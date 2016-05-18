@@ -3,9 +3,9 @@ mpl.use('Agg')
 import numpy as np
 import pylab as pl
 
-from cbamf import runner
-from cbamf.test import init
-from cbamf.viz import plots
+from peri import runner
+from peri.test import init
+from peri.viz import plots
 import pickle
 import time
 

@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
-from cbamf import runner, util
-from cbamf.viz.plots import generative_model
+from peri import runner, util
+from peri.viz.plots import generative_model
 import pickle
 
 import matplotlib.pyplot as pl
