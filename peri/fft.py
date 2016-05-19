@@ -169,3 +169,4 @@ class FFTW(FFTBase):
         return (self.shape, self.real, self.plan, self.threads)
 
 fft = FFTW() if hasfftw else FFTNPY()
+rfft = FFTW(real=True) if hasfftw else FFTNPY(real=True)
