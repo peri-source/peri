@@ -2,7 +2,8 @@ import numpy as np
 from scipy.special import erf
 from scipy.weave import inline
 
-from peri.util import Tile, cdd, amin, amax
+from peri.comp import Component
+from peri.util import Tile, cdd, amin, amax, listify, delistify
 
 # maximum number of iterations to get an exact volume
 MAX_VOLUME_ITERATIONS = 10
@@ -140,7 +141,7 @@ def sphere_analytical_gaussian_fast(dr, a, alpha=0.2765, cut=1.20):
 
     shape = r.shape
     r = r.flatten()
-    N = r.shape[0]
+    N = self.N
     ans = r*0
     pi = np.pi
 
@@ -167,7 +168,7 @@ except Exception as e:
     sphere_analytical_gaussian_fast = sphere_analytical_gaussian_trim
 
 def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
-        function=sphere_analytical_gaussian, max_radius_change=1e-2, **kwargs):
+        function=sphere_analytical_gaussian, max_radius_change=1e-2, args=()):
     """
     Perform an iterative method to calculate the effective sphere that perfectly
     (up to the volume_error) conserves volume.  Return the resulting image
@@ -176,7 +177,7 @@ def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
     rprime = radius
 
     dr = inner(rvec, pos, rprime, zscale=zscale)
-    t = function(dr, rprime, **kwargs)
+    t = function(dr, rprime, *args)
     for i in xrange(MAX_VOLUME_ITERATIONS):
         vol_curr = np.abs(t.sum())
         if np.abs(vol_goal - vol_curr)/vol_goal < volume_error:
@@ -188,29 +189,61 @@ def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
             break
 
         dr = inner(rvec, pos, rprime, zscale=zscale)
-        t = function(dr, rprime, **kwargs)
+        t = function(dr, rprime, *args)
 
     return t
 
 #=============================================================================
 # Actual sphere collection (and slab)
 #=============================================================================
-class SphereCollectionRealSpace(object):
-    def __init__(self, pos, rad, shape, support_size=4, typ=None, pad=None,
-                 method='exact-gaussian-fast', alpha=None, method_function=None,
-                 exact_volume=True, volume_error=1e-5, max_radius_change=1e-2):
+class SphereCollectionRealSpace(Component):
+    category = 'obj'
+
+    def __init__(self, pos, rad, shape, zscale=1.0, support_pad=2,
+            method='exact-gaussian-fast', alpha=None, user_method=None,
+            exact_volume=True, volume_error=1e-5, max_radius_change=1e-2):
         """
-        method can be one of:
+        A collection of spheres in real-space with positions and radii, drawn
+        not necessarily on a uniform grid (i.e. scale factor associated with
+        z-direction).  There are many ways to draw the sphere, currently
+        supported  methods can be one of:
             [
                 'bool', 'lerp', 'logistic', 'triangle', 'constrained-cubic',
-                'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast'
+                'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast',
+                'user-method'
             ]
 
         Parameters:
         -----------
-        method_function : function
-            [not implemented] placeholder for providing your own sphere
-            generation function
+        pos : ndarray [N,3]
+            Initial positions of the spheres
+
+        rad : ndarray [N]
+            Initial radii of the spheres
+
+        shape : tuple
+            Shape of the field over which to draw the platonic spheres
+
+        zscale : float
+            scaling of z-pixels in the platonic image
+
+        support_pad : int
+            how much to pad the boundary of particles when calculating
+            support so that there is not more contribution
+
+        method : string
+            The sphere drawing function to use, see above.
+
+        alpha : float
+            Parameter supplied to sphere drawing function, set to value to
+            override default value
+
+        user_method : tuple (function, parameters)
+            Provide your own sphere function to the drawing method. First
+            element of tuple is function with call signature func(dr, a, *args)
+            where the second element is the *args that are not the distance
+            to edge (dr) or particles radius (a). `method` must be set to
+            'user-method'.
 
         exact_volume : boolean
             whether to iterate effective particle size until exact volume
@@ -223,39 +256,137 @@ class SphereCollectionRealSpace(object):
             maximum relative radius change allowed during iteration (due to
             edge particles and other confounding factors)
         """
-        self.support_size = support_size
+        self.support_pad = support_pad
         self.pos = pos.astype('float')
         self.rad = rad.astype('float')
-        self.N = rad.shape[0]
+        self.zscale = zscale
         self.exact_volume = exact_volume
         self.volume_error = volume_error
         self.max_radius_change = max_radius_change
+        self.user_method = user_method
 
-        # set the aliasing method and coefficient
-        # FIXME -- check if function for method and set to that instead
-        # method='user-defined' and pass method_function
-        self.set_draw_method(method=method, alpha=alpha)
-
-        if typ is None:
-            self.typ = np.ones(self.N)
-            if pad is not None and pad <= self.N:
-                self.typ[-pad:] = 0
-        else:
-            self.typ = typ.astype('float')
+        self.set_draw_method(method=method, alpha=alpha, user_method=user_method)
 
         self.shape = shape
-        self._setup()
+        self.initialize()
+
+    def initialize(self):
+        if len(self.pos.shape) != 2:
+            raise AttributeError("Position array needs to be (-1,3) shaped, (z,y,x) order")
+
+        self.rvecs = Tile(self.shape).coords(form='vector')
+        self.particles = np.zeros(self.shape)
+
+        self._params = []
+        for i, (p0, r0) in enumerate(zip(self.pos, self.rad)):
+            self._draw_particle(p0, r0)
+            self._params.extend([self._i2p(i, c) for c in ['x','y','z','a']])
+        self._params += ['zscale']
+
+    def update(self, params, values):
+        """
+        Update the platonic image of spheres given new parameter values
+        """
+        # figure out which particles are going to be updated, or if the
+        # zscale needs to be updated
+        dozscale, particles = self._update_type(params)
+
+        # if we are updating the zscale, everything must change, so just start
+        # fresh will be faster instead of add subtract
+        if dozscale:
+            self.set_values(params, values)
+            self.initialize()
+            return
+
+        # otherwise, update individual particles. delete the current versions
+        # of the particles update the particles, and redraw them anew at the
+        # places given by (params, values)
+        for n in particles:
+            self._draw_particle(self.pos[n], self.rad[n], -1)
+
+        self.set_values(params, values)
+
+        for n in particles:
+            self._draw_particle(self.pos[n], self.rad[n], +1)
+
+    def get_values(self, params):
+        values = []
+        for p in listify(params):
+            typ, ind = self._p2i(p)
+            if typ == 'zscale':
+                values.append(self.zscale)
+            if typ == 'x':
+                values.append(self.pos[ind][2])
+            if typ == 'y':
+                values.append(self.pos[ind][1])
+            if typ == 'z':
+                values.append(self.pos[ind][0])
+            if typ == 'a':
+                values.append(self.rad[ind])
+        print values
+        return delistify(values)
+
+    def set_values(self, params, values):
+        for p,v in zip(listify(params), listify(values)):
+            typ, ind = self._p2i(p)
+            if typ == 'zscale':
+                self.zscale = v
+            elif typ == 'x':
+                self.pos[ind][2] = v
+            elif typ == 'y':
+                self.pos[ind][1] = v
+            elif typ == 'z':
+                self.pos[ind][0] = v
+            elif typ == 'a':
+                self.rad[ind] = v
+
+    @property
+    def params(self):
+        return self._params
+
+    @property
+    def values(self):
+        return self.get_values(self._params)
+
+    def get_support_size(self, params, values):
+        """ Get the amount of support size required for a particular update. """
+        dozscale, particles = self._update_type(params)
+
+        # if we are updating the zscale then really everything should change
+        if dozscale:
+            return Tile(self.shape)
+
+        # 1) calculate the current tileset
+        # 2) store the current parameters of interest
+        # 3) update to newer parameters and calculate tileset
+        # 4) revert parameters & return union of all tiles
+        values0 = self.get_values(params)
+
+        tiles0 = [self._tile(n) for n in particles]
+        self.set_values(params, values)
+
+        tiles1 = [self._tile(n) for n in particles]
+        self.set_values(params, values0)
+
+        return Tile.boundingtile(tiles0 + tiles1)
+
+    def get_padding_size(self, params, values):
+        return Tile(0)
+
+    @property
+    def N(self):
+        return self.rad.shape[0]
 
     def set_pos_rad(self, pos, rad):
         self.pos = pos.astype('float')
         self.rad = rad.astype('float')
-        self.typ = 1.*np.ones_like(rad)
-        self.N = rad.shape[0]
+        self.initialize()
 
-    def set_draw_method(self, method, alpha=None):
+    def set_draw_method(self, method, alpha=None, user_method=None):
         self.methods = [
             'lerp', 'logistic', 'triangle', 'constrained-cubic',
-            'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast'
+            'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast',
+            'user-defined'
         ]
 
         self.sphere_functions = {
@@ -280,135 +411,87 @@ class SphereCollectionRealSpace(object):
             'constrained-cubic': 0.84990,
         }
 
+        if user_method:
+            self.sphere_functions['user-defined'] = user_method[0]
+            self.alpha_defaults['user-defined'] = user_method[1]
+
         self.method = method
-        self.alpha = alpha if alpha is not None else self.alpha_defaults[self.method]
+        if alpha is not None:
+            self.alpha = tuple(listify(alpha))
+        else:
+            self.alpha = tuple(listify(self.alpha_defaults[self.method]))
 
-    def _setup(self):
-        self.rvecs = Tile(self.shape).coords(form='vector')
-        self.particles = np.zeros(self.shape)
-        self._diff_field = np.zeros(self.shape)
-
-    def _particle(self, pos, rad, zscale, sign=1, dodiff=False):
+    def _draw_particle(self, pos, rad, sign=1):
         p = np.round(pos)
-        r = np.round(np.array([1.0/zscale,1,1])*np.ceil(rad)+self.support_size)
+        r = np.round(np.array([1.0/self.zscale,1,1])*np.ceil(rad)+self.support_pad)
 
         tile = Tile(p-r, p+r, 0, self.shape)
         rvec = self.rvecs[tile.slicer + (np.s_[:],)]
-
-        # keep backwards compatibility for save files with older logistic coefficient
-        # FIXME -- this is a nasty hack which should be fazed out when older save
-        # files are deleted
-        if not hasattr(self, 'exact_volume'):
-            self.exact_volume = False
-            self.volume_error = 1e-6
-        if not hasattr(self, 'method'):
-            self.set_draw_method('logistic', 5.0)
-        if not hasattr(self, 'alpha'):
-            self.set_draw_method(self.method)
-        if not hasattr(self, 'max_radius_change'):
-            self.max_radius_change = 1e-2
 
         # if required, do an iteration to find the best radius to produce
         # the goal volume as given by the particular goal radius
         if self.exact_volume:
             t = sign*exact_volume_sphere(
-                    rvec, pos, rad, zscale=zscale, volume_error=self.volume_error,
-                    function=self.sphere_functions[self.method], alpha=self.alpha,
-                    max_radius_change=self.max_radius_change
-                )
+                rvec, pos, rad, zscale=self.zscale, volume_error=self.volume_error,
+                function=self.sphere_functions[self.method], args=self.alpha,
+                max_radius_change=self.max_radius_change
+            )
         else:
             # calculate the anti-aliasing according to the interpolation type
-            dr = inner(rvec, pos, rad, zscale=zscale)
-            t = sign*self.sphere_functions[self.method](dr, rad, self.alpha)
+            dr = inner(rvec, pos, rad, zscale=self.zscale)
+            t = sign*self.sphere_functions[self.method](dr, rad, *self.alpha)
 
         self.particles[tile.slicer] += t
-
-        if dodiff:
-            self._diff_field[tile.slicer] += t
-
-    def _update_particle(self, n, p, r, t, zscale, dodiff=True):
-        if self.typ[n] == 1:
-            self._particle(self.pos[n], self.rad[n], zscale, -1, dodiff=dodiff)
-
-        self.pos[n] = p
-        self.rad[n] = r
-        self.typ[n] = t
-
-        if self.typ[n] == 1:
-            self._particle(self.pos[n], self.rad[n], zscale, +1, dodiff=dodiff)
-
-    def initialize(self, zscale):
-        if len(self.pos.shape) != 2:
-            raise AttributeError("Position array needs to be (-1,3) shaped, (z,y,x) order")
-
-        self.particles = np.zeros(self.shape)
-        for p0, r0, t0 in zip(self.pos, self.rad, self.typ):
-            if t0 == 1:
-                self._particle(p0, r0, zscale)
 
     def set_tile(self, tile):
         self.tile = tile
 
-    def update(self, ns, pos, rad, typ, zscale, difference=True):
-        for n, p, r, t in zip(ns, pos, rad, typ):
-            self._update_particle(n, p, r, t, zscale, dodiff=difference)
-
     def get_field(self):
         return self.particles[self.tile.slicer]
 
-    def get_diff_field(self):
-        c = self._diff_field[self.tile.slicer].copy()
-        self._diff_field[self.tile.slicer] *= 0
-        return c
+    def _i2p(self, ind, coord):
+        """ Translate index info to parameter name """
+        return '-'.join(['sph', str(ind), coord])
 
-    def get_support_size(self, p0, r0, t0, p1, r1, t1, zscale):
-        rsc = self.support_size
+    def _p2i(self, param):
+        """
+        Parameter to indices, returns (type, index, coord). Therefore, for a
+        pos    : (100, 'x')
+        rad    : (100, 'a')
+        zscale : ('zscale, None)
+        """
+        q = {'x': 2, 'y': 1, 'z': 0}
+        g = param.split('-')
+        if len(g) == 1:
+            return 'zscale', None
+        if len(g) == 3:
+            return g[2], int(g[1])
 
-        zsc = np.array([1.0/zscale, 1, 1])
-        r0, r1 = zsc*r0, zsc*r1
+    def _update_type(self, params):
+        """ Returns dozscale and particle list of update """
+        dozscale = False
+        particles = []
+        for p in listify(params):
+            typ, ind = self._p2i(p)
+            particles.append(ind)
+            dozscale = dozscale or typ == 'zscale'
+        particles = set(particles)
+        return dozscale, particles
 
-        off0 = r0 + rsc
-        off1 = r1 + rsc
-
-        if t0[0] == 1 and t1[0] == 1:
-            pl = amin(p0-off0-1, p1-off1-1)
-            pr = amax(p0+off0+1, p1+off1+1)
-        if t0[0] != 1 and t1[0] == 1:
-            pl = (p1-off1-1)
-            pr = (p1+off1+1)
-        if t0[0] == 1 and t1[0] != 1:
-            pl = (p0-off0-1)
-            pr = (p0+off0+1)
-        if t0[0] != 1 and t1[0] != 1:
-            c = np.array(self.shape)
-            pl = c/2 - c/8
-            pr = c/2 + c/8
-
-        if len(pl.shape) > 1:
-            pl = pl[0]
-            pr = pr[0]
-        return pl, pr
-
-    def get_params(self):
-        return np.hstack([self.pos.ravel(), self.rad])
-
-    def get_params_pos(self):
-        return self.pos.ravel()
-
-    def get_params_rad(self):
-        return self.rad
-
-    def get_params_typ(self):
-        return self.typ
+    def _tile(self, n):
+        """ Get the tile surrounding particle `n` """
+        zsc = np.array([1.0/self.zscale, 1, 1])
+        pos, rad = self.pos[n], self.rad[n]
+        return Tile(pos - zsc*rad, pos + zsc*rad)
 
     def __getstate__(self):
         odict = self.__dict__.copy()
-        cdd(odict, ['rvecs', 'particles', '_diff_field'])
+        cdd(odict, ['rvecs', 'particles', 'param_map'])
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self._setup()
+        self.initialize()
 
 
 class Slab(object):
@@ -470,25 +553,25 @@ class Slab(object):
 
     def __repr__(self):
         return "{} <{}, {}>".format(str(self.__class__.__name__), self.zpos, list(self.normal))
-        
+
 class SlabSandwich(object):
     def __init__(self, shape, slab1, slab2):
         """
-        Image of 2 slabs. 
+        Image of 2 slabs.
         slab1, slab2 are peri.comp.objs.Slab instances.
         """
         self.slab1 = slab1
         self.slab2 = slab2
-        
+
         mask1 = np.zeros(slab1.get_params().size + slab2.get_params().size).astype('bool')
         mask1[:slab1.get_params().size] = True
         self._mask1 = mask1
         self._mask2 = -mask1
-        
+
         self.shape = shape
         self._setup()
         self.initialize() #necessary?
-    
+
     #Same as slab...
     def _setup(self):
         self.rvecs = Tile(self.shape).coords(form='vector')
@@ -506,14 +589,14 @@ class SlabSandwich(object):
     #...end same as slab
     def initialize(self):
         self.image = np.zeros(self.shape)
-        self.update(self.get_params()) 
+        self.update(self.get_params())
         self._slab()
-    
+
     def get_params(self):
         p1 = self.slab1.get_params()
         p2 = self.slab2.get_params()
         return np.hstack([p1, p2])
-        
+
     def update(self, params):
         self.slab1.update(params[self._mask1])
         self.slab2.update(params[self._mask2])
@@ -532,6 +615,7 @@ class SlabSandwich(object):
 
     def __repr__(self):
         for_format = lambda l: map(lambda x: '{:.3f}'.format(x), l)
-        return "{} <{:.3f}, {}; {:.3f}, {}>".format(str(self.__class__.__name__), 
-                self.slab1.zpos, for_format(self.slab1.normal), 
+        return "{} <{:.3f}, {}; {:.3f}, {}>".format(str(self.__class__.__name__),
+                self.slab1.zpos, for_format(self.slab1.normal),
                 self.slab2.zpos, for_format(self.slab2.normal))
+

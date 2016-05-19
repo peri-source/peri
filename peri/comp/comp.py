@@ -1,5 +1,7 @@
 from collections import OrderedDict
 
+from peri.util import listify, delistify
+
 class ParameterGroup(object):
     category = 'param'
 
@@ -14,9 +16,7 @@ class ParameterGroup(object):
             for p,v in zip(params, values):
                 self._params[p] = v
         elif params is not None and values is None:
-            self._params = OrderedDict()
-            for p in params:
-                self._params[p] = 0
+            self._params = params
         else:
             self._params = OrderedDict()
 
@@ -25,25 +25,22 @@ class ParameterGroup(object):
         Update the a single (param, value) combination, or a list or tuple of
         params and corresponding values for the object.
         """
-        self.set_param(params, values)
+        self.set_values(params, values)
 
     def get_values(self, params):
         """ Get the value of a list or single parameter """
-        if isinstance(params, (tuple, list)):
-            return [self._params[p] for p in params]
-        return self._params[params]
+        values = delistify([self._params[p] for p in listify(params)])
+        return values
 
     def set_values(self, params, values):
         """
         Directly set a single (param, value) combination, or a list or tuple of
         params and corresponding values for the object.
         """
-        if isinstance(params, (tuple, list)):
-            for p, v in zip(params, values):
-                self._params[p] = v
-        self._params[params] = values
+        for p, v in zip(listify(params), listify(values)):
+            self._params[p] = v
 
-    @propery
+    @property
     def params(self):
         return self._params.keys()
 
