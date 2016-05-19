@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.special import erf
 from scipy.weave import inline
+from scipy.linalg import expm3
 
 from peri.comp import Component
 from peri.util import Tile, cdd, amin, amax, listify, delistify
@@ -271,6 +272,7 @@ class SphereCollectionRealSpace(Component):
         self.initialize()
 
     def initialize(self):
+        """ Start from scratch and initialize all objects """
         if len(self.pos.shape) != 2:
             raise AttributeError("Position array needs to be (-1,3) shaped, (z,y,x) order")
 
@@ -315,13 +317,13 @@ class SphereCollectionRealSpace(Component):
             typ, ind = self._p2i(p)
             if typ == 'zscale':
                 values.append(self.zscale)
-            if typ == 'x':
+            elif typ == 'x':
                 values.append(self.pos[ind][2])
-            if typ == 'y':
+            elif typ == 'y':
                 values.append(self.pos[ind][1])
-            if typ == 'z':
+            elif typ == 'z':
                 values.append(self.pos[ind][0])
-            if typ == 'a':
+            elif typ == 'a':
                 values.append(self.rad[ind])
         print values
         return delistify(values)
@@ -482,62 +484,91 @@ class SphereCollectionRealSpace(Component):
         """ Get the tile surrounding particle `n` """
         zsc = np.array([1.0/self.zscale, 1, 1])
         pos, rad = self.pos[n], self.rad[n]
-        return Tile(pos - zsc*rad, pos + zsc*rad)
+        return Tile(pos - zsc*rad, pos + zsc*rad).pad(self.support_pad)
 
     def __getstate__(self):
         odict = self.__dict__.copy()
-        cdd(odict, ['rvecs', 'particles', 'param_map'])
+        cdd(odict, ['rvecs', 'particles', '_params'])
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
         self.initialize()
 
+#=============================================================================
+# Coverslip half plane class
+#=============================================================================
+class Slab(Component):
+    def __init__(self, shape, zpos=0, angles=(0,0)):
+        """
+        A half plane corresponding to a cover-slip.
 
-class Slab(object):
-    def __init__(self, zpos, shape, normal=(1,0,0)):
-        self.zpos = float(zpos)
-        self.normal = np.array(normal).astype('float')
-        self.normal /= np.sqrt(self.normal.dot(self.normal))
+        Parameters:
+        -----------
+        shape : tuple
+            field shape over which to calculate
+
+        zpos : float
+            position of the center of the slab in pixels
+
+        angles : tuple of float (2,)
+            angles of rotation of the normal wrt to z
+        """
+        self.lbl_zpos = 'slab-z'
+        self.lbl_theta = 'slab-theta'
+        self.lbl_phi = 'slab-phi'
 
         self.shape = shape
+        self.set_tile(Tile(self.shape))
+        params = [self.lbl_zpos, self.lbl_theta, self.lbl_phi]
+        values = [zpos, angles[0], angles[1]]
+        super(Slab, self).__init__(params, values)
+
         self._setup()
+
+    def rmatrix(self):
+        a0 = np.array([0,0,1])
+        r0 = expm3(np.cross(np.eye(3), a0*self._params[self.lbl_theta]))
+
+        a1 = np.array([1,0,0])
+        r1 = expm3(np.cross(np.eye(3), a1*self._params[self.lbl_phi]))
+        return np.dot(r1, r0)
+
+    def normal(self):
+        return np.dot(self.rmatrix(), np.array([1,0,0]))
 
     def _setup(self):
         self.rvecs = Tile(self.shape).coords(form='vector')
         self.image = np.zeros(self.shape)
 
-    def _slab(self, zpos, norm, sign=1):
+    def _draw_slab(self):
         # for the position at zpos, and the center in the x-y plane
-        pos = np.array([zpos, self.shape[1]/2, self.shape[2]/2])
+        pos = np.array([
+            self._params[self.lbl_zpos], self.shape[1]/2, self.shape[2]/2
+        ])
 
-        p = (self.rvecs - pos).dot(norm)
+        p = (self.rvecs - pos).dot(self.normal())
         self.image = 1.0/(1.0 + np.exp(7*p))
 
     def initialize(self):
         self.image = np.zeros(self.shape)
-        self._slab(self.zpos, self.normal)
+        self._draw_slab()
 
     def set_tile(self, tile):
         self.tile = tile
 
-    def update(self, params):
-        zpos, norm = params[0], params[1:]
-        norm = norm / np.sqrt(norm.dot(norm))
-
-        self.zpos = zpos
-        self.normal = norm
-
-        self._slab(self.zpos, self.normal, +1)
+    def update(self, params, values):
+        super(Slab, self).update(params, values)
+        self._draw_slab()
 
     def get_field(self):
         return self.image[self.tile.slicer]
 
-    def get_support_size(self, p=None):
-        return np.zeros(3), np.array(self.shape)
+    def get_support_size(self, params, values):
+        return Tile(self.shape)
 
-    def get_params(self):
-        return np.hstack([self.zpos, self.normal.ravel()])
+    def get_padding_size(self, params, values):
+        return Tile(0)
 
     def __getstate__(self):
         odict = self.__dict__.copy()
@@ -552,70 +583,7 @@ class Slab(object):
         return self.__repr__()
 
     def __repr__(self):
-        return "{} <{}, {}>".format(str(self.__class__.__name__), self.zpos, list(self.normal))
-
-class SlabSandwich(object):
-    def __init__(self, shape, slab1, slab2):
-        """
-        Image of 2 slabs.
-        slab1, slab2 are peri.comp.objs.Slab instances.
-        """
-        self.slab1 = slab1
-        self.slab2 = slab2
-
-        mask1 = np.zeros(slab1.get_params().size + slab2.get_params().size).astype('bool')
-        mask1[:slab1.get_params().size] = True
-        self._mask1 = mask1
-        self._mask2 = -mask1
-
-        self.shape = shape
-        self._setup()
-        self.initialize() #necessary?
-
-    #Same as slab...
-    def _setup(self):
-        self.rvecs = Tile(self.shape).coords(form='vector')
-        self.image = np.zeros(self.shape)
-
-    def set_tile(self, tile):
-        self.tile = tile
-
-    def get_field(self):
-        return self.image[self.tile.slicer]
-
-    def get_support_size(self, p=None):
-        return np.zeros(3), np.array(self.shape)
-
-    #...end same as slab
-    def initialize(self):
-        self.image = np.zeros(self.shape)
-        self.update(self.get_params())
-        self._slab()
-
-    def get_params(self):
-        p1 = self.slab1.get_params()
-        p2 = self.slab2.get_params()
-        return np.hstack([p1, p2])
-
-    def update(self, params):
-        self.slab1.update(params[self._mask1])
-        self.slab2.update(params[self._mask2])
-        self._slab()
-        #Stupid bit for compatibility with states.ConfocalImagePython:
-        self.params = self.get_params()
-
-    def _slab(self):
-        #Updates self.image
-        im1 = self.slab1.image
-        im2 = self.slab2.image
-        self.image = im1 + im2
-
-    def __str__(self):
-        return self.__repr__()
-
-    def __repr__(self):
-        for_format = lambda l: map(lambda x: '{:.3f}'.format(x), l)
-        return "{} <{:.3f}, {}; {:.3f}, {}>".format(str(self.__class__.__name__),
-                self.slab1.zpos, for_format(self.slab1.normal),
-                self.slab2.zpos, for_format(self.slab2.normal))
+        return "{} <{}>".format(
+            str(self.__class__.__name__), self._params
+        )
 

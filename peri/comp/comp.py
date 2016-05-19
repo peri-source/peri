@@ -51,8 +51,8 @@ class ParameterGroup(object):
 
 class Component(ParameterGroup):
     # TODO make all components serializable via _getinitargs_
-    def __init__(self, params):
-        pass
+    def __init__(self, params, values):
+        super(Component, self).__init__(params, values)
 
     def get_support_size(self, params, values):
         """
