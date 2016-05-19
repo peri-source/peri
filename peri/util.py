@@ -17,9 +17,14 @@ def oddify(a):
 def listify(a):
     if a is None:
         return []
-    elif not isinstance(a, (tuple, list)) and not hasattr(a, '__iter__'):
+    elif not isinstance(a, (tuple, list)):
         return [a]
     return list(a)
+
+def delistify(a):
+    if isinstance(a, (tuple, list)) and len(a) == 1:
+        return a[0]
+    return a
 
 def amin(a, b):
     return np.vstack([a3(a), a3(b)]).min(axis=0)
