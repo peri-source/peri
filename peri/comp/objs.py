@@ -531,7 +531,7 @@ class Slab(Component):
         a0 = np.array([0,0,1])
         r0 = expm3(np.cross(np.eye(3), a0*self._params[self.lbl_theta]))
 
-        a1 = np.array([1,0,0])
+        a1 = np.array([0,1,0])
         r1 = expm3(np.cross(np.eye(3), a1*self._params[self.lbl_phi]))
         return np.dot(r1, r0)
 
