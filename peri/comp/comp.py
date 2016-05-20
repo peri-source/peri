@@ -16,13 +16,13 @@ class ParameterGroup(object):
         strictly enforced for all ParameterGroup subclasses.
         """
         if params is not None and values is not None:
-            self._params = OrderedDict()
+            self.param_dict = OrderedDict()
             for p,v in zip(params, values):
-                self._params[p] = v
+                self.param_dict[p] = v
         elif params is not None and values is None:
-            self._params = params
+            self.param_dict = params
         else:
-            self._params = OrderedDict()
+            self.param_dict = OrderedDict()
 
     def update(self, params, values):
         """
@@ -33,7 +33,7 @@ class ParameterGroup(object):
 
     def get_values(self, params):
         """ Get the value of a list or single parameter """
-        values = delistify([self._params[p] for p in listify(params)])
+        values = delistify([self.param_dict[p] for p in listify(params)])
         return values
 
     def set_values(self, params, values):
@@ -42,15 +42,15 @@ class ParameterGroup(object):
         params and corresponding values for the object.
         """
         for p, v in zip(listify(params), listify(values)):
-            self._params[p] = v
+            self.param_dict[p] = v
 
     @property
     def params(self):
-        return self._params.keys()
+        return self.param_dict.keys()
 
     @property
     def values(self):
-        return self._params.values()
+        return self.param_dict.values()
 
 
 #=============================================================================

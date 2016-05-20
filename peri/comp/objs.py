@@ -529,10 +529,10 @@ class Slab(Component):
 
     def rmatrix(self):
         a0 = np.array([0,0,1])
-        r0 = expm3(np.cross(np.eye(3), a0*self._params[self.lbl_theta]))
+        r0 = expm3(np.cross(np.eye(3), a0*self.param_dict[self.lbl_theta]))
 
         a1 = np.array([0,1,0])
-        r1 = expm3(np.cross(np.eye(3), a1*self._params[self.lbl_phi]))
+        r1 = expm3(np.cross(np.eye(3), a1*self.param_dict[self.lbl_phi]))
         return np.dot(r1, r0)
 
     def normal(self):
@@ -545,7 +545,7 @@ class Slab(Component):
     def _draw_slab(self):
         # for the position at zpos, and the center in the x-y plane
         pos = np.array([
-            self._params[self.lbl_zpos], self.shape[1]/2, self.shape[2]/2
+            self.param_dict[self.lbl_zpos], self.shape[1]/2, self.shape[2]/2
         ])
 
         p = (self.rvecs - pos).dot(self.normal())
@@ -585,6 +585,6 @@ class Slab(Component):
 
     def __repr__(self):
         return "{} <{}>".format(
-            str(self.__class__.__name__), self._params
+            str(self.__class__.__name__), self.param_dict
         )
 

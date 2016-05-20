@@ -3,6 +3,8 @@ from numpy.polynomial.polynomial import polyval3d
 from numpy.polynomial.legendre import legval
 from numpy.polynomial.chebyshev import chebval
 import scipy.optimize as opt
+
+from operator import add, mul
 from itertools import product, chain
 
 from peri.util import Tile, cdd
