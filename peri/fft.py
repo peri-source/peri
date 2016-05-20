@@ -2,12 +2,19 @@ import pickle
 import numpy as np
 
 from multiprocessing import cpu_count
+
 from peri.util import Tile
+from peri.logger import log
+log = log.getChild('fft')
 
 try:
     import pyfftw
     hasfftw = True
 except ImportError as e:
+    log.warning(
+        'FFTW not found, which can improve speed by 20x. '
+        'Try `pip install pyfftw`.'
+    )
     hasfftw = False
     
 FFTW_PLAN_FAST = 'FFTW_ESTIMATE'
@@ -39,7 +46,7 @@ class FFTBase(object):
 
 class FFTNPY(FFTBase):
     def __init__(self, shape=None, real=False):
-        super(self, FFTNPY).__init__(shape=shape, real=real)
+        super(FFTNPY, self).__init__(shape=shape, real=real)
 
     def fft2(self, a):
         if self.real:
