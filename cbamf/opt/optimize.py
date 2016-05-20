@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-import warnings
 import tempfile
 import pickle
 import gc
@@ -13,6 +12,8 @@ from scipy.optimize import newton, minimize_scalar
 from cbamf.util import Tile
 from cbamf.comp import psfs, ilms, objs
 from cbamf import states
+from cbamf.logger import log
+CLOG = log.getChild('opt')
 
 """
 To fix:
@@ -97,11 +98,10 @@ def eval_deriv(s, block, dl=1e-8, be_nice=False, threept=False, **kwargs):
        s.update(block, p0)
     return deriv
 
-def get_rand_Japprox(s, blocks, num_inds=1000, quiet=False, **kwargs):
+def get_rand_Japprox(s, blocks, num_inds=1000, **kwargs):
     """
     """
-    if not quiet:
-        start_time = time.time()
+    start_time = time.time()
     tot_pix = s.image[s.inner].size
     if num_inds < tot_pix:
         inds = list(np.unravel_index(np.random.choice(tot_pix, size=num_inds,
@@ -109,8 +109,7 @@ def get_rand_Japprox(s, blocks, num_inds=1000, quiet=False, **kwargs):
     else:
         inds = [slice(0,None), slice(0,None), slice(0,None)]
     J = calculate_J_approx(s, blocks, inds, **kwargs)
-    if not quiet:
-        print 'JTJ:\t%f' % (time.time()-start_time)
+    CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
     return J, inds
 
 def j_to_jtj(J):
@@ -120,13 +119,12 @@ def calc_im_grad(s, J, inds):
     err = calculate_err_approx(s, inds)
     return np.dot(J, err)
 
-def update_state_global(s, block, data, keep_time=False, **kwargs):
+def update_state_global(s, block, data, **kwargs):
     """
     """
     #We need to update:
     #obj, psf, ilm, bkg, off, slab, zscale, rscale, sigma
-    if keep_time:
-        start_time = time.time()
+    start_time = time.time()
 
     old_state = s.state
     new_state = old_state.copy(); new_state[block] = data.copy()
@@ -217,8 +215,7 @@ def update_state_global(s, block, data, keep_time=False, **kwargs):
     #Now we need to reset the state and return:
     s._build_state()
     s._update_global()
-    if keep_time:
-        print 'update_state_global:\t%f' % (time.time()-start_time)
+    CLOG.debug('Update_state_global:\t%f' % (time.time()-start_time))
 
 def get_err(s):
     d = s.get_difference_image()
@@ -280,9 +277,6 @@ def do_conj_grad_jtj(s, block, min_eigval=1e-12, num_sweeps=2, **kwargs):
         min # of pixels is at least min_redundant * number of parameters.
         If max_mem and min_redundant result in an incompatible size an
         error is raised. Default is 20.
-    keep_time: Bool
-        Set to True to print messages about how long each step of the
-        algorithm took. Default is False.
     be_nice: Bool.
         If True, evaluating the derivative doesn't change the state. If
         False, when the derivative is evaluated the state isn't changed
@@ -826,7 +820,7 @@ class LMEngine(object):
                 use_accel=False, max_accel_correction=1., ptol=1e-6,
                 errtol=1e-5, costol=None, max_iter=5, run_length=5,
                 update_J_frequency=1, broyden_update=False, eig_update=False,
-                partial_update_frequency=3, num_eig_dirs=8, quiet=True):
+                partial_update_frequency=3, num_eig_dirs=8):
         """
         Levenberg-Marquardt engine with all the options from the
         M. Transtrum J. Sethna 2012 ArXiV paper.
@@ -900,9 +894,6 @@ class LMEngine(object):
                 If broyden_update or eig_update, the frequency to do
                 either/both of those partial updates. Default is 3.
 
-            quiet: Bool
-                Set to False to print messages about convergence.
-
         Relevant attributes
         -------------------
             do_run_1: Function
@@ -919,7 +910,6 @@ class LMEngine(object):
         self.increase_damp_factor = float(increase_damp_factor)
         self.decrease_damp_factor = float(decrease_damp_factor)
         self.min_eigval = min_eigval
-        self.quiet = quiet #maybe multiple quiets? one for algorithm speed, one for option speed/efficacy?
         self.marquardt_damping = marquardt_damping
         self.transtrum_damping = transtrum_damping
 
@@ -1031,8 +1021,9 @@ class LMEngine(object):
                 if np.abs(er0 -self.error) > 1e-7:
                     raise RuntimeError('ARG!!!') #FIXME
             _try = 0
-            if (not good_step) and (not self.quiet):
-                print 'Bad step, increasing damping\t%f\t%f' % (self.error, er1)
+            if (not good_step):
+                CLOG.debug('Bad step, increasing damping\t%f\t%f' % 
+                        (self.error, er1))
             while (_try < self._max_inner_loop) and (not good_step):
                 _try += 1
                 self.increase_damping()
@@ -1044,14 +1035,13 @@ class LMEngine(object):
                     if np.abs(er0 -self.error) > 1e-7:
                         raise RuntimeError('ARG!!!') #FIXME
             if _try == (self._max_inner_loop-1):
-                warnings.warn('Stuck!', RuntimeWarning)
+                CLOG.warn('Stuck!')
 
             #state is updated, now params:
             if good_step:
                 self._last_error = self.error
                 self.error = er1
-                if not self.quiet:
-                    print 'Good step\t%f\t%f' % (self._last_error, self.error)
+                CLOG.debug('Good step\t%f\t%f' % (self._last_error, self.error))
 
             self.update_params(delta_params, incremental=True)
             self.decrease_damping()
@@ -1097,8 +1087,7 @@ class LMEngine(object):
                 _ = self.update_function(self.params.copy())
                 _try = 0
                 good_step = False
-                if not self.quiet:
-                    print 'Bad step, increasing damping\t%f\t%f\t%f' % triplet
+                CLOG.debug('Bad step, increasing damping\t%f\t%f\t%f' % triplet)
                 while (_try < self._max_inner_loop) and (not good_step):
                     self.increase_damping()
                     delta_params = self.find_LM_updates(self.calc_grad())
@@ -1107,20 +1096,18 @@ class LMEngine(object):
                     _try += 1
                 if not good_step:
                     #Throw a warning, put back the parameters
-                    warnings.warn('Stuck!', RuntimeWarning)
+                    CLOG.warn('Stuck!')
                     self.error = self.update_function(self.params.copy())
                 else:
                     #Good step => Update params, error:
                     self.update_params(delta_params, incremental=True)
                     self.error = er_new
-                    if not self.quiet:
-                        print 'Sufficiently increased damping\t%f\t%f' % (
-                                triplet[0], self.error)
+                    CLOG.debug('Sufficiently increased damping\t%f\t%f' % 
+                            (triplet[0], self.error))
 
             elif er1 <= er2:
                 good_step = True
-                if not self.quiet:
-                    print 'Good step, same damping\t%f\t%f\t%f' % triplet
+                CLOG.debug('Good step, same damping\t%f\t%f\t%f' % triplet)
                 #Update to er1 params:
                 er1_1 = self.update_function(self.params + delta_params_1)
                 self.update_params(delta_params_1, incremental=True)
@@ -1131,8 +1118,7 @@ class LMEngine(object):
             else: #er2 < er1
                 good_step = True
                 self.error = er2
-                if not self.quiet:
-                    print 'Good step, decreasing damping\t%f\t%f\t%f' % triplet
+                CLOG.debug('Good step, decreasing damping\t%f\t%f\t%f' % triplet)
                 #-we're already at the correct parameters
                 self.update_params(delta_params_2, incremental=True)
                 self.decrease_damping()
@@ -1161,8 +1147,7 @@ class LMEngine(object):
             self.error
         """
         self._inner_run_counter = 0; good_step = True
-        if not self.quiet:
-            print 'Running...'
+        CLOG.debug('Running...')
 
         #Things we need defined in the loop:
         grad = self.calc_grad()
@@ -1184,9 +1169,7 @@ class LMEngine(object):
             good_step = er1 < er0
 
             if good_step:
-                if not self.quiet:
-                    # print '%f\t%f' % (self._last_error, self.error)
-                    print '%f\t%f' % (_last_error, er1)
+                CLOG.debug('%f\t%f' % (_last_error, er1))
                 #Updating:
                 self.update_params(delta_params, incremental=True)
                 self._last_residuals = _last_residuals.copy()
@@ -1199,8 +1182,7 @@ class LMEngine(object):
                 _last_error = 1*self.error
             else:
                 er0_0 = self.update_function(self.params)
-                if not self.quiet:
-                    print 'Bad step!' #right now thru eval_n_check doesn't give bad step
+                CLOG.debug('Bad step!')
                 if np.abs(er0 - er0_0) > 1e-6:
                     raise RuntimeError('GODDAMMIT!') #FIXME
 
@@ -1231,24 +1213,22 @@ class LMEngine(object):
         """
         damped_JTJ = self._calc_damped_jtj()
         delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, -grad, rcond=self.min_eigval)
-        if (not self.quiet) & self._fresh_JTJ:
-            print '%d degenerate of %d total directions' % (delta0.size-rank, delta0.size)
+        if self._fresh_JTJ:
+            CLOG.debug('%d degenerate of %d total directions' % (delta0.size-rank, delta0.size))
 
         if self.use_accel:
             accel_correction = self.calc_accel_correction(damped_JTJ, delta0)
             nrm_d0 = np.sqrt(np.sum(delta0**2))
             nrm_corr = np.sqrt(np.sum(accel_correction**2))
-            if not self.quiet:
-                print '|correction term| / |initial vector|\t%e' % (nrm_corr/nrm_d0)
+            CLOG.debug('|correction term| / |initial vector|\t%e' % (nrm_corr/nrm_d0))
             if nrm_corr/nrm_d0 < self.max_accel_correction:
                 delta0 += accel_correction
             elif do_correct_damping:
-                if not self.quiet:
-                    print 'Untrustworthy step! Increasing damping...'
-                    self.increase_damping()
-                    damped_JTJ = self._calc_damped_jtj()
-                    delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, -grad, \
-                            rcond=self.min_eigval)
+                CLOG.debug('Untrustworthy step! Increasing damping...')
+                self.increase_damping()
+                damped_JTJ = self._calc_damped_jtj()
+                delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, -grad, \
+                        rcond=self.min_eigval)
 
         return delta0
 
@@ -1590,7 +1570,7 @@ class LMParticleGroupCollection(object):
             self._kwargs.update({'damping':new_damping})
         if self.save_J:
             if len(self.particle_groups) > 90:
-                warnings.warn('Attempting to create many open files. Consider increasing max_mem and/or region_size to avoid crashes.')
+                CLOG.warn('Attempting to create many open files. Consider increasing max_mem and/or region_size to avoid crashes.')
             self._tempfiles = []
             self._has_saved_J = []
             for a in xrange(len(self.particle_groups)):
@@ -2001,30 +1981,30 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     for a in xrange(n_loop):
         start_err = get_err(s)
         #2a. Globals
-        print 'Beginning of loop %d:\t%f' % (a, get_err(s)) #FIXME
+        CLOG.info('Beginning of loop %d:\t%f' % (a, get_err(s)))
         glbl_dmp = 0.3 if a ==0 else 3e-2
         if a != 0 or mode != 'do_positions':
             gstats = do_levmarq(s, glbl_blk, max_iter=1, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
                     partial_update_frequency=3, damping=glbl_dmp,
-                    decrease_damp_factor=10., quiet=True, use_aug=use_aug,
+                    decrease_damp_factor=10., use_aug=use_aug,
                     collect_stats=collect_stats, errtol=1e-3, max_mem=max_mem)
             all_lm_stats.append(gstats)
         if desc is not None:
             states.save(s, desc=desc)
-        print 'Globals, loop %d:\t%f' % (a, get_err(s)) #FIXME
+        CLOG.info('Globals, loop %d:\t%f' % (a, get_err(s)))
 
         #2b. Particles
         prtl_dmp = 1.0 if a==0 else 1e-2
         pstats = do_levmarq_all_particle_groups(s, region_size=
                 region_size, max_iter=1, do_calc_size=do_calc_size, run_length=4,
-                eig_update=False, damping=prtl_dmp, quiet=True, errtol=1e-3, 
+                eig_update=False, damping=prtl_dmp, errtol=1e-3, 
                 collect_stats=collect_stats, max_mem=max_mem, 
                 particle_kwargs=particle_kwargs)
         all_lp_stats.append(pstats)
         if desc is not None:
             states.save(s, desc=desc)
-        print 'Particles, loop %d:\t%f' % (a, get_err(s)) #FIXME
+        CLOG.info('Particles, loop %d:\t%f' % (a, get_err(s)))
 
         #2c. terminate?
         if ftol is not None:

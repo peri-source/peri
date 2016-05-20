@@ -1,7 +1,9 @@
 import numpy as np
 from cbamf import initializers
-import trackpy as tp
+# import trackpy as tp
 import cbamf.opt.optimize as opt
+from cbamf.logger import log
+CLOG = log.getChild('addsub')
 
 def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
     if minmass == None:
@@ -35,7 +37,7 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
     return guess[inds].copy(), npart
 
 def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
-        quiet=True, **kwargs):
+        **kwargs):
     """
     comments
     st = state
@@ -49,35 +51,26 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
     new_inds = []
     if rad == 'calc':
         rad = np.median(st.obj.rad[st.obj.typ==1])
-    if not quiet:
-        print '-'*30 + 'ADDING' + '-'*30
-        print '  R\t  Z\t  Y\t  X\t|\t ERR0\t\t ERR1'
+    message = '-'*30 + 'ADDING' + '-'*30 + '\n  R\t  Z\t  Y\t  X\t|\t ERR0\t\t ERR1'
+    with log.noformat():
+        CLOG.info(message)
     for a in xrange(guess.shape[0]):
         p = guess[a]
-        if not quiet:
-            old_err = opt.get_err(st)
+        old_err = opt.get_err(st)
         ind = st.add_particle(p, rad)
         if do_opt:
-            # db = opt_box_scale * np.ones(p.shape) * rad
-            # bounds = [(p-db).tolist(), (p+db).tolist()]
-            # inds = opt.find_particles_in_box(st, bounds)
-            lp = opt.LMParticles(st, np.array([ind],dtype='int'), damping=1.0, 
-                    max_iter=2, run_length=3, particle_kwargs={'include_rad':False})
-            lp.do_run_2()
-            # opt.do_levmarq_particles(st, np.array([ind],dtype='int'), damp=1.0, 
-                    # num_iter=1, run_length=3, quiet=True, include_rad=False)
-            # opt.do_levmarq_particles(st, inds, damp=1.0, 
-                    # num_iter=1, run_length=3, quiet=True)
-            #ok... but still doesn't get the clusters well
+            opt.do_levmarq_particles(st, np.array([ind],dtype='int'), 
+                    damping=1.0, max_iter=2, run_length=3, eig_update=False, 
+                    particle_kwargs={'include_rad':False})
         did_kill = check_remove_particle(st, ind, **kwargs)
         if not did_kill:
             accepts += 1
             new_inds.append(ind)
-            if not quiet:
-                # print '%d:\t%f\t%f' % (a, old_err, opt.get_err(st))
-                print '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
-                        st.obj.rad[ind], st.obj.pos[ind,0], st.obj.pos[ind,1], 
-                        st.obj.pos[ind,2], old_err, opt.get_err(st))
+            part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
+                    st.obj.rad[ind], st.obj.pos[ind,0], st.obj.pos[ind,1], 
+                    st.obj.pos[ind,2], old_err, opt.get_err(st))
+            with log.noformat():
+                CLOG.info(part_msg)
     return accepts, new_inds
     
 def check_remove_particle(st, n, im_change_frac=0.2, min_derr='3sig', **kwargs):
@@ -102,7 +95,7 @@ def check_remove_particle(st, n, im_change_frac=0.2, min_derr='3sig', **kwargs):
 
 def sample_n_add(st, rad='calc', tries=20, **kwargs):
     """
-    quiet=True, do_opt=True, im_change_frac=0.2, opt_box_scale=3,
+    do_opt=True, im_change_frac=0.2, opt_box_scale=3,
     """
     if rad == 'calc':
         rad = np.median(st.obj.rad[st.obj.typ==1])
@@ -115,7 +108,7 @@ def sample_n_add(st, rad='calc', tries=20, **kwargs):
 
 def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0, 
         check_rad_cutoff=[3.5,15], check_outside_im=True, tries=100, 
-        im_change_frac=0.2, quiet=True, **kwargs):
+        im_change_frac=0.2, **kwargs):
     """
     Same syntax as before, but here I'm just trying to kill the smallest particles...
     I don't think this is good because you only check the same particles each time
@@ -155,10 +148,6 @@ def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
         If removing a particle decreases the error less than im_change_frac*
         the change in the image, the particle is deleted. Default is 0.2. 
 
-    quiet : Bool
-        Set to False to print out details about the particles that are 
-        checked to remove. 
-        
     Returns
     -----------
     removed: Int
@@ -190,18 +179,19 @@ def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
             (s.obj.rad > max_rad)) & typ)[0]
     near_im_edge = np.nonzero(is_near_im_edge(s.obj.pos, min_edge_dist) & typ)[0]
     delete_inds = np.unique(np.append(rad_wrong_size, near_im_edge)).tolist()
-    if not quiet:
-        print '-'*27 + 'SUBTRACTING' + '-'*28
-        print '  R\t  Z\t  Y\t  X\t|\t ERR0\t\t ERR1'
+    message = '-'*27 + 'SUBTRACTING' + '-'*28 + '\n  R\t  Z\t  Y\t  X\t|\t ERR0\t\t ERR1'
+    with log.noformat():
+        CLOG.info(message)
 
     for ind in delete_inds:
         er0 = opt.get_err(s)
         p, r = s.remove_particle(ind)
         er1 = opt.get_err(s)
-        if not quiet:
-            print '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
-                    s.obj.rad[ind], s.obj.pos[ind,0], s.obj.pos[ind,1], 
-                    s.obj.pos[ind,2], er0, er1)
+        prt_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
+                s.obj.rad[ind], s.obj.pos[ind,0], s.obj.pos[ind,1], 
+                s.obj.pos[ind,2], er0, er1)
+        with log.noformat():
+            CLOG.info(prt_msg)
         removed += 1
     
     #2. Conditional deletion:
@@ -226,10 +216,11 @@ def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
             removed += 1
             delete_inds.append(ind)
             er1 = opt.get_err(s)
-            if not quiet:
-                print '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
-                        s.obj.rad[ind], s.obj.pos[ind,0], s.obj.pos[ind,1], 
-                        s.obj.pos[ind,2], er0, er1)
+            prt_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
+                    s.obj.rad[ind], s.obj.pos[ind,0], s.obj.pos[ind,1], 
+                    s.obj.pos[ind,2], er0, er1)
+            with log.noformat():
+                CLOG.info(prt_msg)
     return removed, delete_inds
 
 def add_subtract(st, max_iter=5, **kwargs):
@@ -247,9 +238,6 @@ def add_subtract(st, max_iter=5, **kwargs):
         
     **kwargs Parameters
     -------------------
-        quiet : Bool
-            Set to False to print out information about add/subtract
-            particles and change in fit error. 
         invert : Bool
             True if the particles are dark on a bright background, False
             if they are bright on a dark background. Default is True. 
