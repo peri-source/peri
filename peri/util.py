@@ -17,7 +17,7 @@ def oddify(a):
 def listify(a):
     if a is None:
         return []
-    elif not isinstance(a, (tuple, list)):
+    elif not isinstance(a, (tuple, list, np.ndarray)):
         return [a]
     return list(a)
 
@@ -25,6 +25,18 @@ def delistify(a):
     if isinstance(a, (tuple, list)) and len(a) == 1:
         return a[0]
     return a
+
+def imin(a, b):
+    return np.vstack([i3(a), i3(b)]).min(axis=0)
+
+def imax(a, b):
+    return np.vstack([i3(a), i3(b)]).max(axis=0)
+
+def i3(a):
+    """ Convert an integer or iterable list to numpy 3 array """
+    if not hasattr(a, '__iter__'):
+        return np.array([a]*3, dtype='float')
+    return np.array(a).astype('float')
 
 def amin(a, b):
     return np.vstack([a3(a), a3(b)]).min(axis=0)
@@ -98,9 +110,18 @@ class Tile(object):
     def bounds(self):
         return (self.l, self.r)
 
-    def center(self, norm=1.0):
+    @property
+    def center(self):
         """ Return the center of the tile """
-        return (self.r + self.l)/2.0 / norm
+        return (self.r + self.l)/2.0
+
+    @property
+    def kcenter(self):
+        """ Return the frequency center of the tile (says fftshift) """
+        return np.array([
+            np.abs(np.fft.fftshift(np.fft.fftfreq(q))).argmin()
+            for q in self.shape
+        ]).astype('float')
 
     def _format_vector(self, z, y, x, form='broadcast'):
         """
@@ -146,12 +167,12 @@ class Tile(object):
             norm = 1
         if norm is True:
             norm = np.array(self.shape)
-        norm = a3(norm).astype('float')
+        norm = i3(norm)
 
         v = list(np.arange(self.l[i], self.r[i]) / norm[i] for i in [0,1,2])
         return self._format_vector(*v, form=form)
 
-    def kvectors(self, norm=False, form='broadcast', real=False):
+    def kvectors(self, norm=False, form='broadcast', real=False, shift=False):
         """
         Return the kvectors associated with this tile, given the standard form
         of -0.5 to 0.5. `norm` and `form` arguments arethe same as that passed to
@@ -166,9 +187,13 @@ class Tile(object):
             norm = 1
         if norm is True:
             norm = np.array(self.shape)
-        norm = a3(norm).astype('float')
+        norm = i3(norm)
 
-        v = list(np.fft.fftfreq(i) for i in self.shape)
+        v = list(np.fft.fftfreq(self.shape[i])/norm[i] for i in [0,1,2])
+
+        if shift:
+            v = list(np.fft.fftshift(t) for t in v)
+
         if real:
             v[-1] = v[-1][:(self.shape[-1]+1)/2]
 
