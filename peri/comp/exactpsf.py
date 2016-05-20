@@ -2,38 +2,10 @@ import warnings
 import numpy as np
 import scipy.ndimage as nd
 
-from peri import util
-from peri import interpolation
+from collections import OrderedDict
+
+from peri import util, interpolation, fft
 from peri.comp import psfs, psfcalc
-
-def calc_quintile(p, quintile, axis=0):
-    """p = rho, v = xyz"""
-    inds = [0,1,2]
-    inds.remove(axis)
-    partial_int = np.array([0] + p.sum(axis=tuple(inds)).tolist() + [0])
-    lut = 0*partial_int
-    for a in xrange(lut.size):
-        lut[a] = np.trapz(partial_int[:a+1])
-    just_above = np.nonzero(lut > quintile)[0][0]
-    just_below = just_above - 1
-    slope = lut[just_above] - lut[just_below]
-    delta = (quintile-lut[just_below]) / slope
-    ans_px = just_below + delta - 1 #-1 for the [0] + ... + [0] at the ends
-    ans_coord = ans_px - p.shape[axis]/2
-    return ans_coord
-
-def median_width(p, axis=0, order=1):
-    """
-    Rather than calculating a moment, calculates a median (order=1)
-    and the max distance to the upper or lower quartiles (order=2)
-    """
-    if order == 1:
-        return calc_quintile(p, 0.5, axis=axis)
-    elif order == 2:
-        med = calc_quintile(p, 0.50, axis=axis)
-        low = calc_quintile(p, 0.25, axis=axis)
-        hih = calc_quintile(p, 0.75, axis=axis)
-        return np.max([hih-med, med-low])
 
 def moment(p, v, order=1):
     """ Calculates the moments of the probability distribution p with vector v """
@@ -46,12 +18,12 @@ def moment(p, v, order=1):
 # The actual interfaces that can be used in the peri system
 #=============================================================================
 class ExactLineScanConfocalPSF(psfs.PSF):
-    def __init__(self, shape, zrange, laser_wavelength=0.488, zslab=0.,
+    def __init__(self, shape, zrange=None, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
-            pxsize=0.125, method='fftn', support_factor=2, normalize=False, sigkf=0.0,
+            pxsize=0.125, support_factor=2, normalize=False, sigkf=0.0,
             nkpts=None, cutoffval=None, measurement_iterations=None,
-            k_dist='gaussian', use_J1=True, sph6_ab=None, scale_fix=True,
-            cutbyval=True, cutfallrate=0.25, cutedgeval=1e-12, use_laggauss=True, 
+            k_dist='gaussian', use_J1=True, sph6_ab=None,
+            cutbyval=False, cutfallrate=0.25, cutedgeval=1e-12,
             pinhole_width=None, do_pinhole=False, *args, **kwargs):
         """
         PSF for line-scanning confocal microscopes that can be used with the
@@ -99,11 +71,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         pxsize : float
             the size of a xy pixel in um, defaults to cohen group size 0.125 um
 
-        method : str
-            Either ['fftn', 'fft2'] which represent the way the convolution is
-            performed.  Currently 'fftn' is recommended - while slower is more
-            accurate
-
         support_factor : integer
             size of the support
 
@@ -138,10 +105,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             J1 term corresponding to a large-NA focusing lens, False to
             exclude it. Default is True
             
-        scale_fix : boolean
-            fix previous issue with zscale no coupled to actual calculation
-            besides through zint
-
         cutbyval : boolean
             If True, cuts the PSF based on the actual value instead of the
             position associated with the nearest value.
@@ -154,11 +117,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             The value with which to determine the edge of the psf, typically
             taken around floating point, 1e-12
             
-        use_laggauss : Bool
-            Whether to use the old/inaccurate Gauss-Hermite quadrature for
-            the line integral, or a x=sinh(a*t) rule and Gauss-Laguerre
-            quadrature (more accurate). Default is True. 
-
         pinhole_width : Float
             The width of the line illumination, in 1/k units. Default is 1.0.
 
@@ -172,7 +130,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             imshow((psf*r**4)[:,:,25], cmap='bone')
         """
         self.pxsize = pxsize
-        self.method = method
         self.polar_angle = polar_angle
         self.support_factor = support_factor
         self.normalize = normalize
@@ -182,7 +139,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.sigkf = sigkf
         self.nkpts = nkpts
         self.cutoffval = cutoffval
-        self.scale_fix = scale_fix
         self.cutbyval = cutbyval
         self.cutfallrate = cutfallrate
         self.cutedgeval = cutedgeval
@@ -190,7 +146,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.k_dist = k_dist
         self.use_J1 = use_J1
 
-        self.use_laggauss = use_laggauss
         self.do_pinhole = do_pinhole
 
         if self.sigkf is not None:
@@ -214,33 +169,43 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self.num_line_pts = 1
         pinhole_width = pinhole_width if (pinhole_width is not None) else 1.0
 
-        # FIXME -- zrange can't be none right now -- need to fix boundary calculations
         if zrange is None:
             zrange = (0, shape[0])
         self.zrange = zrange
 
         # text location of parameters for ease of extraction
-        self.param_order = ['kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser_wavelength', 'sigkf', 'sph6_ab', 'pinhole_width']
-        params = np.array( [ kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength,   sigkf, sph6_ab, pinhole_width ])
+        params = [
+            'kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser-wavelength',
+            'sigkf', 'sph6-ab', 'pinhole-width'
+        ]
+        values = np.array([
+            kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength,
+            sigkf,    sph6_ab,   pinhole_width
+        ])
 
         # the next statements must occur in the correct order so that
         # other parameters are not deleted by mistake
         if not self.polychromatic:
-            self.param_order.pop(-3)
-            params = np.delete(params, -3)
+            ind = params.index('sigkf')
+            params.pop(ind)
+            values = np.delete(values, ind)
 
         if not self.use_sph6_ab:
-            self.param_order.pop(-2)
-            params = np.delete(params, -2)
+            ind = params.index('sph6-ab')
+            params.pop(ind)
+            values = np.delete(values, ind)
             
         if not self.do_pinhole:
-            self.param_order.pop(-1)
-            params = np.delete(params, -1)
+            ind = params.index('pinhole-width')
+            params.pop(ind)
+            values = np.delete(values, ind)
 
-        self.param_dict = {k:params[i] for i,k in enumerate(self.param_order)}
+        for i in xrange(len(params)):
+            params[i] = 'psf-' + params[i]
 
-        super(ExactLineScanConfocalPSF, self).__init__(*args, params=params,
-                                                        shape=shape, **kwargs)
+        super(ExactLineScanConfocalPSF, self).__init__(
+            *args, shape=shape, params=params, values=values, **kwargs
+        )
 
     def psf_slice(self, zint, size=11, zoffset=0., getextent=False):
         """
@@ -270,11 +235,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         # calculate the current pixel value in 1/k, making sure we are above the slab
         zint = max(self._p2k(self._tz(zint)), 0)
         offset = np.array([zoffset*(zint>0), 0, 0])
-        
-        if self.scale_fix:
-            scale = [self.param_dict['zscale'], 1.0, 1.0]
-        else:
-            scale = [1.0]*3
+        scale = [self.param_dict['psf-zscale'], 1.0, 1.0]
 
         # create the coordinate vectors for where to actually calculate the 
         tile = util.Tile(left=0, size=size, centered=True)
@@ -336,63 +297,52 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         return psf, vec
 
     def todict(self):
-        return {k:self.params[i] for i,k in enumerate(self.param_order)}
+        return {k:self.params[i] for i,k in enumerate(self.params)}
 
     def args(self):
         """
         Pack the parameters into the form necessary for the integration
         routines above.  For example, packs for calculate_linescan_psf
         """
-        d = self.todict()
-        d.update({'polar_angle': self.polar_angle, 'normalize': self.normalize,
-                'include_K3_det':self.use_J1}) 
+        mapper = {
+            'psf-kfki': 'kfki',
+            'psf-alpha': 'alpha',
+            'psf-n2n1': 'n2n1',
+            'psf-sigkf': 'sigkf',
+            'psf-sph6-ab': 'sph6_ab',
+            'psf-laser-wavelength': 'laser_wavelength',
+            'psf-pinhole-width': 'pinhole_width'
+        }
+        bads = ['psf-zscale', 'psf-zslab']
+
+        d = {}
+        for k,v in mapper.iteritems():
+            if self.param_dict.has_key(k):
+                d[v] = self.param_dict[k]
+
+        d.update({
+            'polar_angle': self.polar_angle,
+            'normalize': self.normalize,
+            'include_K3_det':self.use_J1
+        }) 
+
         if self.polychromatic:
-            d.update({'k_dist':self.k_dist})
-        d.pop('laser_wavelength')
-        d.pop('zslab')
-        d.pop('zscale')
+            d.update({'nkpts': self.nkpts})
+            d.update({'k_dist': self.k_dist})
 
-        if not self.polychromatic and d.has_key('sigkf'):
-            d.pop('sigkf')
-        if not self.use_sph6_ab and d.has_key('sph6_ab'):
-            d.pop('sph6_ab')
-            
         if self.do_pinhole:
-            d.update({'nlpts':self.num_line_pts})
-        
-        if self.use_laggauss:
-            d.update({'use_laggauss':self.use_laggauss})
+            d.update({'nlpts': self.num_line_pts})
 
+        d.update({'use_laggauss': True})
         return d
-
-    def _compatibility_patch(self):
-        # FIXME -- why this function with __dict__.get? backwards compatibility
-        # each of these parameters were added after the original class was made
-        self.normalize = self.__dict__.get('normalize', False)
-        self.cutoffval = self.__dict__.get('cutoffval', None)
-        self.cutbyval = self.__dict__.get('cutbyval', False)
-        self.cutfallrate = self.__dict__.get('cutfallrate', 0.25)
-        self.cutedgeval = self.__dict__.get('cutedgeval', 1e-12)
-        self.sigkf = self.__dict__.get('sigkf', None)
-        self.nkpts = self.__dict__.get('nkpts', None)
-        self.polychromatic = self.sigkf is not None or self.nkpts is not None
-        self.measurement_iterations = self.__dict__.get('measurement_iterations', 1)
-        self.k_dist = self.__dict__.get('k_dist', 'gaussian')
-        self.use_J1 = self.__dict__.get('use_J1', True)
-        self.use_sph6_ab = self.__dict__.get('use_sph6_ab', False)
-        self.scale_fix = self.__dict__.get('scale_fix', False)
-        self.use_laggauss = self.__dict__.get('use_laggauss', False)
-        self.do_pinhole = self.__dict__.get('do_pinhole', False)
-        self.num_line_pts = self.__dict__.get('num_line_pts', 1)
-        
 
     def _p2k(self, v):
         """ Convert from pixel to 1/k_incoming (laser_wavelength/(2\pi)) units """
-        return 2*np.pi*self.pxsize*v/self.param_dict['laser_wavelength']
+        return 2*np.pi*self.pxsize*v/self.param_dict['psf-laser-wavelength']
 
     def _tz(self, z):
         """ Transform z to real-space coordinates from tile coordinates """
-        return (z-self.param_dict['zslab'])*self.param_dict['zscale']
+        return (z-self.param_dict['psf-zslab'])*self.param_dict['psf-zscale']
 
     def drift(self, z):
         """ Give the pixel offset at a given z value for the current parameters """
@@ -411,7 +361,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
     def characterize_psf(self):
         """ Get support size and drift polynomial for current set of params """
-        l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1]
+        l,u = max(self.zrange[0], self.param_dict['psf-zslab']), self.zrange[1]
 
         size_l, drift_l = self.measure_size_drift(l)
         size_u, drift_u = self.measure_size_drift(u)
@@ -427,27 +377,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             ss = [np.abs(i).sum(axis=-1) for i in [size_l, size_u]]
             self.support = util.oddify(util.amax(*ss))
 
-    def get_params(self):
-        return self.params
-
-    def get_support_size(self, z=None):
+    def get_padding_size(self, z=None):
         return self.support
 
-    def update(self, params):
-        #Clipping params to computable values:
-        alpha_ind = self.param_order.index('alpha')
-        zscal_ind = self.param_order.index('zscale')
-        max_alpha = np.pi*0.5
-        max_zscle = 100
-        if params[alpha_ind] < 1e-3 or params[alpha_ind] > max_alpha:
-            warnings.warn('Invalid alpha, clipping', RuntimeWarning)
-            params[alpha_ind] = np.clip(params[alpha_ind], 1e-3, max_alpha-1e-3)
-        if params[zscal_ind] < 1e-3 or params[zscal_ind] > max_zscle:
-            warnings.warn('Invalid zscale, clipping', RuntimeWarning)
-            params[zscal_ind] = np.clip(params[zscal_ind], 1e-3, max_zscle-1e-3)
-        
-        self.params[:] = params[:]
-        self.param_dict = self.todict()
+    def update(self, params, values):
+        self.update_values(params, values)
         self.characterize_psf()
 
         self.slices = []
@@ -458,12 +392,26 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
         self.slices = np.array(self.slices)
 
+    def update_values(self, params, values):
+        #Clipping params to computable values:
+        alpha = self.param_dict['psf-alpha']
+        zscale = self.param_dict['psf-zscale']
+        max_alpha, max_zscale = np.pi/2, 100.
+
+        if alpha < 1e-3 or alpha > max_alpha:
+            warnings.warn('Invalid alpha, clipping', RuntimeWarning)
+            self.param_dict['psf-alpha'] = np.clip(alpha, 1e-3, max_alpha-1e-3)
+        if zscale < 1e-3 or zscale > max_zscale:
+            warnings.warn('Invalid zscale, clipping', RuntimeWarning)
+            self.param_dict['psf-zscale'] = np.clip(zscale, 1e-3, max_zscale-1e-3)
+
+        self.set_values(params, values)
+
     def set_tile(self, tile):
         if (self.tile.shape != tile.shape).any():
             self.tile = tile
-            self._setup_ffts()
 
-    def _kpad(self, field, finalshape, method='fftn', zpad=False, norm=True):
+    def _kpad(self, field, finalshape, zpad=False, norm=True):
         """
         fftshift and pad the field with zeros until it has size finalshape.
         if zpad is off, then no padding is put on the z direction. returns
@@ -483,11 +431,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         if not zpad:
             o[0] = 0
 
-        axes = None if method == 'fftn' else (1,2)
+        axes = None
         pad = tuple((d[i]+o[i],d[i]) for i in [0,1,2])
         rpsf = np.pad(field, pad, mode='constant', constant_values=0)
         rpsf = np.fft.ifftshift(rpsf, axes=axes)
-        kpsf = self.fftn(rpsf)
+        kpsf = fft.rfft.fftn(rpsf)
 
         if norm:
             kpsf[0,0,0] = 1.0
@@ -515,52 +463,19 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             zslice = int(np.clip(z, *self.zrange) - self.zrange[0])
             middle = field.shape[0]/2
 
-            subpsf = self._kpad(self.slices[zslice], fs, method=self.method, norm=True)
+            subpsf = self._kpad(self.slices[zslice], fs, norm=True)
             subfield = np.roll(field, middle - i, axis=0)
             subfield = subfield[middle-fs[0]/2:middle+fs[0]/2+1]
 
-            kfield = self.fftn(subfield)
+            kfield = fft.rfft.fftn(subfield)
 
-            if self.method == 'fftn':
-                outfield[i] = np.real(self.ifftn(kfield * subpsf))[self.support[0]/2]
-            else:
-                outfield[i] = np.real(self.ifftn(kfield * subpsf)).sum(axis=0)
+            outfield[i] = np.real(fft.rfft.ifftn(kfield * subpsf))[self.support[0]/2]
 
         return outfield
 
-    def _setup_ffts(self):
-        if psfs.hasfftw and self.method == 'fftn':
-            # adjust the shape for the transforms we are really doing
-            shape = self.tile.shape.copy()
-            shape[0] = self.support[0]
-
-            self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
-            self._fftn = psfs.rfftn(self._fftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level, s=shape)
-
-            oshape = self.fftn(np.zeros(shape)).shape
-            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
-            self._ifftn = psfs.irfftn(self._ifftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level, s=shape)
-
-        elif psfs.hasfftw and self.method == 'fft2':
-            shape = self.tile.shape.copy()
-            shape[0] = self.support[0]
-
-            self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
-            self._fftn = psfs.rfft2(self._fftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level, s=shape)
-
-            oshape = self.fftn(np.zeros(shape)).shape
-            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
-            self._ifftn = psfs.irfft2(self._ifftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level, s=shape)
-
     def __getstate__(self):
         odict = self.__dict__.copy()
-        util.cdd(odict, ['_rx', '_ry', '_rz', '_rvecs', '_rlen'])
-        util.cdd(odict, ['_kx', '_ky', '_kz', '_kvecs', '_klen'])
-        util.cdd(odict, ['_fftn', '_ifftn', '_fftn_data', '_ifftn_data'])
+        util.cdd(odict, ['_rx', '_ry', '_rz', '_rlen'])
         util.cdd(odict, ['_memoize_clear', '_memoize_caches'])
         util.cdd(odict, ['rpsf', 'kpsf'])
         util.cdd(odict, ['cheb', 'slices'])
@@ -568,8 +483,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self._compatibility_patch()
-        self._setup_ffts()
 
 class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
     def __init__(self, cheb_degree=6, cheb_evals=8, *args, **kwargs):
@@ -590,25 +503,10 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
         self.cheb_degree = cheb_degree
         self.cheb_evals = cheb_evals
 
-        # make sure that we are use the parent class 'fftn' method
-        kwargs.setdefault('method', 'fftn')
         super(ChebyshevLineScanConfocalPSF, self).__init__(*args, **kwargs)
 
-    def update(self, params):
-        #Clipping params to computable values:
-        alpha_ind = self.param_order.index('alpha')
-        zscal_ind = self.param_order.index('zscale')
-        max_alpha = np.pi*0.5
-        max_zscle = 100
-        if params[alpha_ind] < 1e-3 or params[alpha_ind] > max_alpha:
-            warnings.warn('Invalid alpha, clipping', RuntimeWarning)
-            params[alpha_ind] = np.clip(params[alpha_ind], 1e-3, max_alpha-1e-3)
-        if params[zscal_ind] < 1e-3 or params[zscal_ind] > max_zscle:
-            warnings.warn('Invalid zscale, clipping', RuntimeWarning)
-            params[zscal_ind] = np.clip(params[zscal_ind], 1e-3, max_zscle-1e-3)
-        
-        self.params[:] = params[:]
-        self.param_dict = self.todict()
+    def update(self, params, values):
+        self.update_values(params, values)
         self.characterize_psf()
 
         self.cheb = interpolation.ChebyshevInterpolation1D(self.psf, window=self.zrange,
@@ -628,32 +526,18 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
         outfield = np.zeros_like(field, dtype='float')
         zc,yc,xc = self.tile.coords(form='flat')
 
-        kfield = self.fftn(field)
+        kfield = fft.rfft.fftn(field)
         for k,c in enumerate(self.cheb.coefficients):
             pad = self._kpad(c, finalshape=self.tile.shape, zpad=True, norm=False)
-            cov = np.real(self.ifftn(kfield * pad))
+            cov = np.real(fft.rfft.ifftn(kfield * pad))
 
             outfield += self.cheb.tk(k, zc)[:,None,None] * cov
 
         return outfield
 
-    def _setup_ffts(self):
-        if psfs.hasfftw:
-            shape = self.tile.shape.copy()
-            self._fftn_data = psfs.pyfftw.n_byte_align_empty(shape, 16, dtype='double')
-            self._fftn = psfs.rfftn(self._fftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level, s=shape)
-
-            oshape = self.fftn(np.zeros(shape)).shape
-            self._ifftn_data = psfs.pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
-            self._ifftn = psfs.irfftn(self._ifftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level, s=shape)
-
     def __getstate__(self):
         odict = self.__dict__.copy()
-        util.cdd(odict, ['_rx', '_ry', '_rz', '_rvecs', '_rlen'])
-        util.cdd(odict, ['_kx', '_ky', '_kz', '_kvecs', '_klen'])
-        util.cdd(odict, ['_fftn', '_ifftn', '_fftn_data', '_ifftn_data'])
+        util.cdd(odict, ['_rx', '_ry', '_rz', '_rlen'])
         util.cdd(odict, ['_memoize_clear', '_memoize_caches'])
         util.cdd(odict, ['rpsf', 'kpsf'])
         util.cdd(odict, ['cheb'])
@@ -661,8 +545,6 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self._compatibility_patch()
-        self._setup_ffts()
 
 class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
     def __init__(self, support_size=[35,17,25], *args, **kwargs):
@@ -672,26 +554,20 @@ class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
         
     def characterize_psf(self):
         """ Get support size and drift polynomial for current set of params """
-        l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1]
+        l,u = max(self.zrange[0], self.param_dict['psf-zslab']), self.zrange[1]
 
         size_l, drift_l = self.measure_size_drift(l)
         size_u, drift_u = self.measure_size_drift(u)
 
-        # FIXME -- must be odd for now or have a better system for getting the center
-        # self.support = util.oddify(2*self.support_factor*size_u.astype('int'))
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
         
-    def _compatibility_patch(self):
-        self.support = self.__dict__.get('support', np.array([35,17,25]))
-        super(FixedSSChebLinePSF, self)._compatibility_patch()
-
 class FixedBigSSChebLinePSF(FixedSSChebLinePSF):
     """
     PSF with a bigger fixed global support size of [61, 25, 33]
     """
     def characterize_psf(self):
         """ Get support size and drift polynomial for current set of params """
-        l,u = max(self.zrange[0], self.param_dict['zslab']), self.zrange[1]
+        l,u = max(self.zrange[0], self.param_dict['psf-zslab']), self.zrange[1]
 
         size_l, drift_l = self.measure_size_drift(l)
         size_u, drift_u = self.measure_size_drift(u)
