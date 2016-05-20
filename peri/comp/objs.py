@@ -327,7 +327,6 @@ class SphereCollectionRealSpace(Component):
                 values.append(self.pos[ind][0])
             elif typ == 'a':
                 values.append(self.rad[ind])
-        print values
         return delistify(values)
 
     def set_values(self, params, values):

@@ -97,13 +97,16 @@ class ComponentCollection(Component):
     def __init__(self, comps):
         comps = comps
         pmap = defaultdict(set)
+        lmap = defaultdict(list)
 
         for c in comps:
             for p in c.params:
                 pmap[p].update([c])
+                lmap[p].extend([c])
 
         self.comps = comps
         self.pmap = pmap
+        self.lmap = lmap
 
     def split_params(self, params, values=None):
         pc, vc = [], []
@@ -129,33 +132,57 @@ class ComponentCollection(Component):
     def update(self, params, values):
         plist, vlist = self.split_params(params, values)
         for c, p, v in zip(self.comps, plist, vlist):
-            c.update(plist, vlist)
+            c.update(p, v)
 
     def get_values(self, params):
-        values = delistify([self._params[p] for p in listify(params)])
-        return values
+        vals = []
+        for p in listify(params):
+            vals.append(self.lmap[p][0].get_values(p))
+        return vals
 
     def set_values(self, params, values):
-        for p, v in zip(listify(params), listify(values)):
-            self._params[p] = v
+        plist, vlist = self.split_params(params, values)
+        for c, p, v in zip(self.comps, plist, vlist):
+            c.set_values(p, v)
 
     @property
     def params(self):
-        return self._params.keys()
+        pv = OrderedDict()
+        for c in self.comps:
+            for p,v in zip(c.params, c.values):
+                pv[p] = v
+        return pv.keys()
 
     @property
     def values(self):
-        return self._params.values()
+        pv = OrderedDict()
+        for c in self.comps:
+            for p,v in zip(c.params, c.values):
+                pv[p] = v
+        return pv.values()
 
     def get_support_size(self, params, values):
-        raise NotImplementedError("get_support_size required for components")
+        sizes = []
+
+        plist, vlist = self.split_params(params, values)
+        for c, p, v in zip(self.comps, plist, vlist):
+            sizes.append(c.get_support_size(p, v))
+
+        return Tile.boundingtile(sizes)
 
     def get_padding_size(self, params, values):
-        raise NotImplementedError("get_padding_size required for components")
+        sizes = []
+
+        plist, vlist = self.split_params(params, values)
+        for c, p, v in zip(self.comps, plist, vlist):
+            sizes.append(c.get_padding_size(p, v))
+
+        return Tile.boundingtile(sizes)
 
     def get_field(self):
         raise NotImplementedError("get_field required for components")
 
     def set_tile(self, tile):
-        raise NotImplementedError("set_tile required for components")
+        for c in self.comps:
+            c.set_tile(tile)
 
