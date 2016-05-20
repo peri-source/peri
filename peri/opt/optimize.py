@@ -74,19 +74,6 @@ def calculate_J_approx(s, blocks, inds, **kwargs):
         to_return.append(a_der[inds[0], inds[1], inds[2]].ravel().copy())
     return np.array(to_return)
 
-def calculate_J_exact(s, blocks, **kwargs): #delete me
-    """
-    Calculates an exact J for levenberg-marquardt
-    Inputs:
-        - s: state to minimize
-        - blocks: List of the blocks to optimize over
-    """
-    to_return = []
-    for b in blocks:
-        a_der = eval_deriv(s, b, **kwargs)
-        to_return.append(a_der.ravel())
-    return np.array(to_return)
-
 def calculate_err_approx(s, inds):
     return s.get_difference_image()[inds[0], inds[1], inds[2]].ravel().copy()
 
@@ -110,16 +97,6 @@ def eval_deriv(s, block, dl=1e-8, be_nice=False, threept=False, **kwargs):
        s.update(block, p0)
     return deriv
 
-def calculate_JTJ_grad_approx(s, blocks, num_inds=1000, **kwargs):
-    if num_inds < s.image[s.inner].size:
-        inds = [randint(v, size=num_inds) for v in s.image[s.inner].shape]
-    else:
-        inds = [slice(0,None), slice(0,None), slice(0,None)]
-    J = calculate_J_approx(s, blocks, inds, **kwargs)
-    JTJ = np.dot(J, J.T)
-    err = calculate_err_approx(s, inds)
-    return JTJ, np.dot(J,err)
-
 def get_rand_Japprox(s, blocks, num_inds=1000, quiet=False, **kwargs):
     """
     """
@@ -142,16 +119,6 @@ def j_to_jtj(J):
 def calc_im_grad(s, J, inds):
     err = calculate_err_approx(s, inds)
     return np.dot(J, err)
-
-def find_LM_updates(JTJ, grad, damp=1.0, min_eigval=1e-12, quiet=True, **kwargs):
-    diag = np.diagflat(np.diag(JTJ))
-
-    A0 = JTJ + damp*diag
-    delta0, res, rank, s = np.linalg.lstsq(A0, -grad, rcond=min_eigval)
-    if not quiet:
-        print '%d degenerate of %d total directions' % (delta0.size-rank, delta0.size)
-
-    return delta0
 
 def update_state_global(s, block, data, keep_time=False, **kwargs):
     """
@@ -281,41 +248,6 @@ def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwar
         raise RuntimeError('Insufficient max_mem for desired redundancy.')
     num_px = np.clip(px_dec, px_red, px_mem)
     return num_px
-
-def do_levmarq(s, block, damping=0.1, decrease_damp_factor=10., run_length=6,
-        eig_update=True, collect_stats=False, use_aug=False, run_type=2,
-        **kwargs):
-    """
-    Convenience wrapper for LMGlobals. Same keyword args, but I've set
-    the defaults to what I've found to be useful values for optimizing globals.
-    See LMGlobals and LMEngine for documentation.
-    """
-    #Backwards compatibility stuff:
-    if 'damp' in kwargs.keys():
-        damping = kwargs.pop('damp')
-    if 'ddamp' in kwargs.keys():
-        decrease_damp_factor = kwargs.pop('ddamp')
-    if 'num_iter' in kwargs.keys():
-        max_iter = kwargs.pop('num_iter')
-        kwargs.update({'max_iter':max_iter})
-
-    if use_aug:
-        aug = AugmentedState(s, block, rz_order=3)
-        lm = LMAugmentedState(aug, damping=damping, run_length=run_length,
-                decrease_damp_factor=decrease_damp_factor, eig_update=
-                eig_update, **kwargs)
-    else:
-        lm = LMGlobals(s, block, damping=damping, run_length=run_length,
-                decrease_damp_factor=decrease_damp_factor, eig_update=
-                eig_update, **kwargs)
-    if run_type == 2:
-        lm.do_run_2()
-    elif run_type == 1:
-        lm.do_run_1()
-    else:
-        raise ValueError('run_type=1,2 only')
-    if collect_stats:
-        return lm.get_termination_stats()
 
 def do_conj_grad_jtj(s, block, min_eigval=1e-12, num_sweeps=2, **kwargs):
     """
@@ -734,31 +666,6 @@ def update_particles(s, particles, params, include_rad=True, **kwargs):
     s._update_tile(outer_tile, inner_tile, ioslice, difference=s.difference)
     return outer_tile, inner_tile, ioslice
 
-def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
-        run_length=4, collect_stats=False, **kwargs):
-    """
-    Convenience wrapper for LMParticles. Same keyword args, but I've set
-    the defaults to what I've found to be useful values for optimizing
-    particles. See LMParticles and LMEngine for documentation.
-    """
-    #Backwards compatibility stuff:
-    #(although right now I'm not including
-    if 'damp' in kwargs.keys():
-        damping = kwargs.pop('damp')
-        kwargs.update({'damping':damping})
-    if 'ddamp' in kwargs.keys():
-        decrease_damp_factor = kwargs.pop('ddamp')
-        kwargs.update({'decrease_damp_factor':decrease_damp_factor})
-    if 'num_iter' in kwargs.keys():
-        max_iter = kwargs.pop('num_iter')
-        kwargs.update({'max_iter':max_iter})
-
-    lp = LMParticles(s, particles, damping=damping, run_length=run_length,
-            decrease_damp_factor=decrease_damp_factor, **kwargs)
-    lp.do_run_2()
-    if collect_stats:
-        return lp.get_termination_stats()
-
 def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
     """
     Given a state, returns a list of groups of particles. Each group of
@@ -841,35 +748,6 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
         region_size -= 1 #need to be < memory, so we undo 1 iteration
 
     return region_size
-
-def do_levmarq_all_particle_groups(s, region_size=40, damping=1.0,
-        decrease_damp_factor=10., run_length=4, collect_stats=False, **kwargs):
-    """
-    Convenience wrapper for LMParticleGroupCollection. Same keyword args,
-    but I've set the defaults to what I've found to be useful values for
-    optimizing particles. See LMParticleGroupCollection for documentation.
-    """
-    #Backwards compatibility stuff:
-    #(although right now I'm not including
-    if 'damp' in kwargs.keys():
-        damping = kwargs.pop('damp')
-        kwargs.update({'damping':damping})
-    if 'ddamp' in kwargs.keys():
-        decrease_damp_factor = kwargs.pop('ddamp')
-        kwargs.update({'decrease_damp_factor':decrease_damp_factor})
-    if 'num_iter' in kwargs.keys():
-        max_iter = kwargs.pop('num_iter')
-        kwargs.update({'max_iter':max_iter})
-    if 'calc_region_size' in kwargs.keys():
-        do_calc_size = kwargs.pop('calc_region_size')
-        kwargs.update({'do_calc_size':do_calc_size})
-
-    lp = LMParticleGroupCollection(s, region_size=region_size, damping=damping,
-            run_length=run_length, decrease_damp_factor=decrease_damp_factor,
-            get_cos=collect_stats, **kwargs)
-    lp.do_run_2()
-    if collect_stats:
-        return lp.stats
 
 def fit_ilm(new_ilm, old_ilm, **kwargs):
     """
@@ -1950,8 +1828,96 @@ class LMAugmentedState(LMEngine):
 #=============================================================================#
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
+def do_levmarq(s, block, damping=0.1, decrease_damp_factor=10., run_length=6,
+        eig_update=True, collect_stats=False, use_aug=False, run_type=2,
+        **kwargs):
+    """
+    Convenience wrapper for LMGlobals. Same keyword args, but I've set
+    the defaults to what I've found to be useful values for optimizing globals.
+    See LMGlobals and LMEngine for documentation.
+    """
+    #Backwards compatibility stuff:
+    if 'damp' in kwargs.keys():
+        damping = kwargs.pop('damp')
+    if 'ddamp' in kwargs.keys():
+        decrease_damp_factor = kwargs.pop('ddamp')
+    if 'num_iter' in kwargs.keys():
+        max_iter = kwargs.pop('num_iter')
+        kwargs.update({'max_iter':max_iter})
+
+    if use_aug:
+        aug = AugmentedState(s, block, rz_order=3)
+        lm = LMAugmentedState(aug, damping=damping, run_length=run_length,
+                decrease_damp_factor=decrease_damp_factor, eig_update=
+                eig_update, **kwargs)
+    else:
+        lm = LMGlobals(s, block, damping=damping, run_length=run_length,
+                decrease_damp_factor=decrease_damp_factor, eig_update=
+                eig_update, **kwargs)
+    if run_type == 2:
+        lm.do_run_2()
+    elif run_type == 1:
+        lm.do_run_1()
+    else:
+        raise ValueError('run_type=1,2 only')
+    if collect_stats:
+        return lm.get_termination_stats()
+
+def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
+        run_length=4, collect_stats=False, **kwargs):
+    """
+    Convenience wrapper for LMParticles. Same keyword args, but I've set
+    the defaults to what I've found to be useful values for optimizing
+    particles. See LMParticles and LMEngine for documentation.
+    """
+    #Backwards compatibility stuff:
+    #(although right now I'm not including
+    if 'damp' in kwargs.keys():
+        damping = kwargs.pop('damp')
+        kwargs.update({'damping':damping})
+    if 'ddamp' in kwargs.keys():
+        decrease_damp_factor = kwargs.pop('ddamp')
+        kwargs.update({'decrease_damp_factor':decrease_damp_factor})
+    if 'num_iter' in kwargs.keys():
+        max_iter = kwargs.pop('num_iter')
+        kwargs.update({'max_iter':max_iter})
+
+    lp = LMParticles(s, particles, damping=damping, run_length=run_length,
+            decrease_damp_factor=decrease_damp_factor, **kwargs)
+    lp.do_run_2()
+    if collect_stats:
+        return lp.get_termination_stats()
+
+def do_levmarq_all_particle_groups(s, region_size=40, damping=1.0,
+        decrease_damp_factor=10., run_length=4, collect_stats=False, **kwargs):
+    """
+    Convenience wrapper for LMParticleGroupCollection. Same keyword args,
+    but I've set the defaults to what I've found to be useful values for
+    optimizing particles. See LMParticleGroupCollection for documentation.
+    """
+    #Backwards compatibility stuff:
+    if 'damp' in kwargs.keys():
+        damping = kwargs.pop('damp')
+        kwargs.update({'damping':damping})
+    if 'ddamp' in kwargs.keys():
+        decrease_damp_factor = kwargs.pop('ddamp')
+        kwargs.update({'decrease_damp_factor':decrease_damp_factor})
+    if 'num_iter' in kwargs.keys():
+        max_iter = kwargs.pop('num_iter')
+        kwargs.update({'max_iter':max_iter})
+    if 'calc_region_size' in kwargs.keys():
+        do_calc_size = kwargs.pop('calc_region_size')
+        kwargs.update({'do_calc_size':do_calc_size})
+
+    lp = LMParticleGroupCollection(s, region_size=region_size, damping=damping,
+            run_length=run_length, decrease_damp_factor=decrease_damp_factor,
+            get_cos=collect_stats, **kwargs)
+    lp.do_run_2()
+    if collect_stats:
+        return lp.stats
+
 def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
-        ftol=1e-3, mode='burn', max_mem=3e9):
+        ftol=1e-3, mode='burn', max_mem=3e9, include_rad=True):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
@@ -2014,6 +1980,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     #because 1 bad particle can spoil the whole group.
     region_size = 40 #until we calculate it
     do_calc_size = True
+    particle_kwargs = {'include_rad':include_rad}
 
     glbl_dmp = 0.3
     eig_update = mode != 'do_positions'
@@ -2051,8 +2018,9 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         prtl_dmp = 1.0 if a==0 else 1e-2
         pstats = do_levmarq_all_particle_groups(s, region_size=
                 region_size, max_iter=1, do_calc_size=do_calc_size, run_length=4,
-                eig_update=False, damping=prtl_dmp, quiet=True, collect_stats=
-                collect_stats, errtol=1e-3, max_mem=max_mem)
+                eig_update=False, damping=prtl_dmp, quiet=True, errtol=1e-3, 
+                collect_stats=collect_stats, max_mem=max_mem, 
+                particle_kwargs=particle_kwargs)
         all_lp_stats.append(pstats)
         if desc is not None:
             states.save(s, desc=desc)
