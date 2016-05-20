@@ -3,6 +3,7 @@ import numpy as np
 
 from multiprocessing import cpu_count
 
+from peri.conf import get_wisdom
 from peri.util import Tile
 from peri.logger import log
 log = log.getChild('fft')
@@ -175,5 +176,13 @@ class FFTW(FFTBase):
     def __getinitargs__(self):
         return (self.shape, self.real, self.plan, self.threads)
 
-fft = FFTW() if hasfftw else FFTNPY()
-rfft = FFTW(real=True) if hasfftw else FFTNPY(real=True)
+if hasfftw:
+    fft = FFTW()
+    rfft = FFTW(real=True)
+
+    wisdom = get_wisdom()
+    fft.load_wisdom(wisdom)
+    rfft.load_wisdom(wisdom)
+else:
+    fft = FFTNPY()
+    rfft = FFTNPY(real=True)
