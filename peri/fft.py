@@ -1,3 +1,4 @@
+import atexit
 import pickle
 import numpy as np
 
@@ -98,22 +99,22 @@ class FFTW(FFTBase):
         self.shape = shape
         if self.real:
             self._fftn_data = pyfftw.n_byte_align_empty(self.shape, 16, dtype='double')
-            self._fftn = pyfftw.builders.rfftn(self._fftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level, s=self.shape)
+            self._fftn_func = pyfftw.builders.rfftn(self._fftn_data, threads=self.threads,
+                    planner_effort=self.plan, s=self.shape)
 
             oshape = self.fftn(np.zeros(shape)).shape
             self._ifftn_data = pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
-            self._ifftn = pyfftw.builders.irfftn(self._ifftn_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level, s=shape)
+            self._ifftn_func = pyfftw.builders.irfftn(self._ifftn_data, threads=self.threads,
+                    planner_effort=self.plan, s=self.shape)
 
             self._fft2_data = pyfftw.n_byte_align_empty(self.shape, 16, dtype='double')
-            self._fft2 = pyfftw.builders.rfft2(self._fft2_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level, s=self.shape)
+            self._fft2_func = pyfftw.builders.rfft2(self._fft2_data, threads=self.threads,
+                    planner_effort=self.plan, s=self.shape)
 
             oshape = self.fft2(np.zeros(shape)).shape
             self._ifft2_data = pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
-            self._ifft2 = pyfftw.builders.irfftn(self._ifft2_data, threads=self.threads,
-                    planner_effort=self.fftw_planning_level, s=shape)
+            self._ifft2_func = pyfftw.builders.irfftn(self._ifft2_data, threads=self.threads,
+                    planner_effort=self.plan, s=self.shape)
         else:
             self._fftn_data = pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
             self._fftn_func = pyfftw.builders.fftn(self._fftn_data, overwrite_input=False,
@@ -148,30 +149,28 @@ class FFTW(FFTBase):
         return self._exec('fft2', a)
 
     def ifft2(self, a, shape=None):
-        normalization = 1.0/a.shape
+        normalization = 1.0/a.size
         return normalization * self._exec('ifft2', a)
 
     def fftn(self, a):
         return self._exec('fftn', a)
 
     def ifftn(self, a, shape=None):
-        normalization = 1.0/a.shape
+        normalization = 1.0/a.size
         return normalization * self._exec('ifftn', a)
 
     def load_wisdom(self, wisdomfile):
         try:
             pyfftw.import_wisdom(pickle.load(open(wisdomfile)))
         except IOError as e:
+            log.warn("No wisdom present, generating some at %r" % wisdomfile)
             self.save_wisdom(wisdomfile)
         self.wisdomfile = wisdomfile
 
-    def save_wisdom(self, wisdomfile):
-        pickle.dump(pyfftw.export_wisdom(), open(wisdomfile, 'wb'), protocol=-1)
-
-    def __del__(self):
+    def save_wisdom(self):
         wisdomfile = self.__dict__.get('wisdomfile')
         if wisdomfile:
-            self.save_wisdom(wisdomfile)
+            pickle.dump(pyfftw.export_wisdom(), open(self.wisdomfile, 'wb'), protocol=-1)
 
     def __getinitargs__(self):
         return (self.shape, self.real, self.plan, self.threads)
@@ -183,6 +182,10 @@ if hasfftw:
     wisdom = get_wisdom()
     fft.load_wisdom(wisdom)
     rfft.load_wisdom(wisdom)
+
+    @atexit.register
+    def goodbye():
+        fft.save_wisdom()
 else:
     fft = FFTNPY()
     rfft = FFTNPY(real=True)
