@@ -202,7 +202,8 @@ class SphereCollectionRealSpace(Component):
 
     def __init__(self, pos, rad, shape, zscale=1.0, support_pad=2,
             method='exact-gaussian-fast', alpha=None, user_method=None,
-            exact_volume=True, volume_error=1e-5, max_radius_change=1e-2):
+            exact_volume=True, volume_error=1e-5, max_radius_change=1e-2,
+            param_prefix='sph'):
         """
         A collection of spheres in real-space with positions and radii, drawn
         not necessarily on a uniform grid (i.e. scale factor associated with
@@ -265,6 +266,7 @@ class SphereCollectionRealSpace(Component):
         self.volume_error = volume_error
         self.max_radius_change = max_radius_change
         self.user_method = user_method
+        self.param_prefix = param_prefix
 
         self.set_draw_method(method=method, alpha=alpha, user_method=user_method)
 
@@ -453,7 +455,7 @@ class SphereCollectionRealSpace(Component):
 
     def _i2p(self, ind, coord):
         """ Translate index info to parameter name """
-        return '-'.join(['sph', str(ind), coord])
+        return '-'.join([self.param_prefix, str(ind), coord])
 
     def _p2i(self, param):
         """
@@ -499,7 +501,7 @@ class SphereCollectionRealSpace(Component):
 # Coverslip half plane class
 #=============================================================================
 class Slab(Component):
-    def __init__(self, shape, zpos=0, angles=(0,0)):
+    def __init__(self, shape, zpos=0, angles=(0,0), param_prefix='slab'):
         """
         A half plane corresponding to a cover-slip.
 
@@ -514,9 +516,9 @@ class Slab(Component):
         angles : tuple of float (2,)
             angles of rotation of the normal wrt to z
         """
-        self.lbl_zpos = 'slab-z'
-        self.lbl_theta = 'slab-theta'
-        self.lbl_phi = 'slab-phi'
+        self.lbl_zpos = param_prefix+'-zpos'
+        self.lbl_theta = param_prefix+'-theta'
+        self.lbl_phi = param_prefix+'-phi'
 
         self.shape = shape
         self.set_tile(Tile(self.shape))
