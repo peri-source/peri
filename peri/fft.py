@@ -113,7 +113,7 @@ class FFTW(FFTBase):
 
             oshape = self.fft2(np.zeros(shape)).shape
             self._ifft2_data = pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
-            self._ifft2_func = pyfftw.builders.irfftn(self._ifft2_data, threads=self.threads,
+            self._ifft2_func = pyfftw.builders.irfft2(self._ifft2_data, threads=self.threads,
                     planner_effort=self.plan, s=self.shape)
         else:
             self._fftn_data = pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
@@ -125,7 +125,7 @@ class FFTW(FFTBase):
                     planner_effort=self.plan, threads=self.threads)
 
             self._fft2_data = pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
-            self._fft2_func = pyfftw.builders.fft2(self._fftn_data, overwrite_input=False,
+            self._fft2_func = pyfftw.builders.fft2(self._fft2_data, overwrite_input=False,
                     planner_effort=self.plan, threads=self.threads)
 
             self._ifft2_data = pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
@@ -149,7 +149,7 @@ class FFTW(FFTBase):
         return self._exec('fft2', a)
 
     def ifft2(self, a, shape=None):
-        normalization = 1.0/np.prod(self.shape)
+        normalization = 1.0/np.prod(self.shape[1:])
         return normalization * self._exec('ifft2', a)
 
     def fftn(self, a):
