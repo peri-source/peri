@@ -7,207 +7,213 @@ import scipy.optimize as opt
 from operator import add, mul
 from itertools import product, chain
 
+from peri.comp import Component
 from peri.util import Tile, cdd
 from peri.interpolation import BarnesInterpolation1D
 
 #=============================================================================
 # Pure 3d functional representations of ILMs
 #=============================================================================
-class Polynomial3D(object):
-    def __init__(self, shape, coeffs=None, order=(1,1,1), partial_update=True, cache=False):
+class Polynomial3D(Component):
+    def __init__(self, shape, order=(1,1,1), tileinfo=None, constval=None):
+        """
+        A polynomial 3D class for updating large fields of polys.
+
+        Parameters:
+        -----------
+        shape : tuple
+            shape of the field (z,y,x)
+
+        order : tuple
+            number of terms in each direction
+
+        tileinfo : tuple of 2 `peri.util.Tile`
+            These objects help in the transfer of fields from different
+            sections of the same image to new fields. `tileinfo` is a tuple
+            containing the Tile representing the entire image as well as the
+            Tile representing this particular section of field. (typically
+            given by `peri.rawimage.tile`)
+
+        constval : float
+            The initial value of the entire field, if a constant.
+        """
         self.shape = shape
         self.order = order
-        self.cache = cache
-        self.partial_update = partial_update
-        self.nparams = len(list(self._poly_orders()))
+        self.tileinfo = tileinfo
 
-        if coeffs is None:
-            self.params = np.zeros(self.nparams, dtype='float')
-            self.params[0] = 1
-        else:
-            self.params = coeffs.astype('float')
+        # set up the parameter mappings and values
+        params, values = [], []
+        self.param_term = {}
+        for order in product(*(xrange(o) for o in self.order)):
+            p = 'ilm-%i-%i-%i' % order
+            self.param_term[p] = order
 
-        self._setup_rvecs()
-        self._setup_cache()
-        self.tile = Tile(self.shape)
-        self.set_tile(Tile(self.shape))
+            params.append(p)
+            values.append(0.0)
 
-        self.block = np.ones(self.nparams).astype('bool')
-        self.update(self.block, self.params)
+        if constval:
+            values[0] = constval
 
-    def _poly_orders(self):
-        return product(*(xrange(o) for o in self.order))
-
-    def _setup_rvecs(self):
-        # normalize all sizes to a strict upper bound on image size
-        # so we can transfer ILM between different images
-        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024.)
-
-    def _setup_cache(self):
-        self._last_index = None
-
-        #if not hasattr(self, 'cache'):
-        #    self.cache = True
-
-        #if self.cache:
-        #    self._poly = []
-        #    for index in self._poly_orders():
-        #        self._poly.append( self._term(index) )
-        #    self._poly = np.rollaxis( np.array(self._poly), 0, len(self.shape)+1 )
-        #else:
-        self._indices = list(self._poly_orders())
-
-    def from_data(self, f, mask=None, dopriors=False, multiplier=1):
-        if self.cache:
-            self._from_data_cache(f, mask=mask, dopriors=dopriors, multiplier=multiplier)
-        else:
-            self._from_data(f, mask=mask, dopriors=dopriors, multiplier=multiplier)
-
-    def _score(self, coeffs, f, mask):
-        self.params = coeffs
-        test = self._bkg()
-        out = (f[mask] - test[mask]).flatten()
-        return out
-
-    def _from_data(self, f, mask=None, dopriors=False, multiplier=1, maxcalls=200):
-        if mask is None:
-            mask = np.s_[:]
-        res = opt.leastsq(self._score, x0=self.params, args=(f, mask), maxfev=maxcalls*(self.nparams+1))
-        self.update(self.block, res[0])
-
-    def _from_data_cache(self, f, mask=None, dopriors=False, multiplier=1):
-        if mask is None:
-            mask = np.s_[:]
-        fit, _, _, _ = np.linalg.lstsq(self._poly[mask].reshape(-1, self.params.shape[0]), f[mask].ravel())
-        self.update(self.block, fit)
-
-    def _bkg(self):
-        self.bkg = np.zeros(self.shape)
-
-        for order in self._poly_orders():
-            ind = self._indices.index(order)
-            self.bkg += self.params[ind] * self._term(order)
-
-        return self.bkg
-
-    def _term_ijk(self, index):
-        i,j,k = index
-        return self.rx**i * self.ry**j * self.rz**k
-
-    def _term(self, index):
-        # per index cache, so if called multiple times in a row, keep the answer
-        if self._last_index == index:
-            return self._last_term
-
-        # otherwise, just calculate this one term
-        self._last_index = index
-        self._last_term = self._term_ijk(index)
-        return self._last_term
+        super(Polynomial3D, self).__init__(params=params, values=values)
+        self.initialize()
 
     def initialize(self):
-        self.update(self.block, self.params)
+        self.r = self.rvecs()
+        self.set_tile(Tile(self.shape))
+        self.field = np.zeros(self.shape)
+        self.update(self.params, self.values)
+
+    def rvecs(self):
+        # normalize all sizes to a strict upper bound on image size
+        # so we can transfer ILM between different images
+        if self.tileinfo:
+            img, inner = self.tileinfo
+            vecs = img.coords(norm=img.shape)
+            vecs = [v[inner.slicer] for v in vecs]
+        else:
+            vecs = Tile(self.shape).coords(norm=self.shape)
+        return vecs
+
+    def term_ijk(self, index):
+        i,j,k = index
+        return self.r[0]**i * self.r[1]**j * self.r[2]**k
+
+    def term(self, index):
+        if self.__dict__.get('_last_index') and index == self._last_index:
+            return self._last_term
+        else:
+            term = self.term_ijk(index)
+            self._last_term = term
+            self._last_index = index
+            return self._last_term
 
     def set_tile(self, tile):
         self.tile = tile
 
-    def update(self, blocks, params):
-        if self.partial_update and blocks.sum() < self.block.sum()/2:
-            for b in np.arange(len(blocks))[blocks]:
-                self.bkg -= self.params[b] * self._term(self._indices[b])
-                self.params[b] = params[b]
-                self.bkg += self.params[b] * self._term(self._indices[b])
+    def update(self, params, values):
+        if len(params) < len(self.params)/2:
+            for p,v1 in zip(params, values):
+                v0 = self.get_values(p)
+
+                self.field -= v0 * self.term(self.param_term[p])
+                self.set_values(p, v1)
+                self.field += v1 * self.term(self.param_term[p])
         else:
-            self.params = params
-            self._bkg()
+            self.field = np.zeros(self.shape)
+            for p,v in zip(self.params, self.values):
+                self.field += v * self.term(self.param_term[p])
 
     def get_field(self):
-        return self.bkg[self.tile.slicer]
+        return self.field[self.tile.slicer]
 
     def get_params(self):
         return self.params
 
+    def get_support_size(self, params, values):
+        return Tile(self.shape)
+
     def __getstate__(self):
         odict = self.__dict__.copy()
-        cdd(odict, ['_poly', 'rx', 'ry', 'rz', 'bkg', '_last_term', '_last_index'])
+        cdd(odict, ['r', 'field', '_last_term', '_last_index'])
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self._setup_rvecs()
-        self._setup_cache()
-        self.tile = Tile(self.shape)
-        self.set_tile(Tile(self.shape))
-        self.update(self.block, self.params)
+        self.initialize()
 
 class LegendrePoly3D(Polynomial3D):
-    def __init__(self, shape, coeffs=None, order=(1,1,1), *args, **kwargs):
-        super(LegendrePoly3D, self).__init__(*args, shape=shape, coeffs=coeffs, order=order, **kwargs)
+    def __init__(self, shape, *args, **kwargs):
+        """ Same arguments are Polynomial3D """
+        super(LegendrePoly3D, self).__init__(shape, *args, **kwargs)
 
-    def _setup_rvecs(self):
-        o = self.shape
-        self.rz, self.ry, self.rx = [np.linspace(-1, 1, i) for i in o]
-        self.rz = self.rz[:,None,None]
-        self.ry = self.ry[None,:,None]
-        self.rx = self.rx[None,None,:]
+    def rvecs(self):
+        vecs = super(LegendrePoly3D, self).rvecs()
+        vecs = [2*v - 1 for v in vecs]
+        return vecs
 
-    def _term_ijk(self, index):
+    def term_ijk(self, index):
         i,j,k = index
         ci = np.zeros(i+1)
         cj = np.zeros(j+1)
         ck = np.zeros(k+1)
-        ci[-1] = 1
-        cj[-1] = 1
-        ck[-1] = 1
-        return legval(self.rx, ci) * legval(self.ry, cj) * legval(self.rz, ck)
+        ci[-1] = cj[-1] = ck[-1] = 1
+        return legval(self.r[0], ci) * legval(self.r[1], cj) * legval(self.r[2], ck)
 
 #=============================================================================
 # 2+1d functional representations of ILMs, p(x,y)+q(z)
 #=============================================================================
-class Polynomial2P1D(object):
-    def __init__(self, shape, order=(1,1,1), operation='*'):
+class Polynomial2P1D(Polynomial3D):
+    def __init__(self, shape, order=(1,1,1), tileinfo=None, constval=None,
+            operation='*'):
         """
-        Polynomial of the form p(x,y) & q(z) where & can either be * or +
-        depending on the argument `operation`.
+        A polynomial 2+1D class for updating large fields of polys.  The form
+        of these polynomials if P(x,y) () Q(z), separated in the z-direction.
+
+        Parameters:
+        -----------
+        shape : tuple
+            shape of the field (z,y,x)
+
+        order : tuple
+            number of terms in each direction
+
+        tileinfo : tuple of 2 `peri.util.Tile`
+            These objects help in the transfer of fields from different
+            sections of the same image to new fields. `tileinfo` is a tuple
+            containing the Tile representing the entire image as well as the
+            Tile representing this particular section of field. (typically
+            given by `peri.rawimage.tile`)
+
+        constval : float
+            The initial value of the entire field, if a constant.
+
+        operation : string
+            Type of joining operation between the (x,y) and (z) poly. Can be
+            either '*' or '+'
         """
+        ops = {'*': mul, '+': add}
+
         self.shape = shape
         self.operation = operation
-        self.xyorder = order[:2]
-        self.zorder = order[-1]
-
         self.order = order
-        self.nparams = len(list(self._poly_orders()))
 
-        self.params = np.zeros(self.nparams, dtype='float')
-        self.params[0] = 1
-        self.params[len(list(self._poly_orders_xy()))] = 1
+        # set up the parameter mappings and values
+        params, values = [], []
+        self.xy_param = {}
+        self.z_param = {}
 
-        self._setup()
-        self.tile = Tile(self.shape)
-        self.set_tile(Tile(self.shape))
+        for order in product(*(xrange(o) for o in self.order[1::-1])):
+            p = 'ilm-xy-%i-%i' % order
+            self.xy_param[p] = order
 
-        self.block = np.ones(self.nparams).astype('bool')
+            params.append(p)
+            values.append(0.0)
+
+        for order in xrange(self.order[0]):
+            p = 'ilm-z-%i' % order
+            self.z_param[p] = order
+
+            params.append(p)
+            values.append(0.0)
+
+        # setup the basics of the component now
+        Component.__init__(self, params, values)
+
+        # set up the appropriate zero terms for the supplied constant value
+        # parameter if there.
+        if constval:
+            if operation == '*':
+                self.set_values('ilm-xy-0-0', constval)
+                self.set_values('ilm-z-0', 1.0)
+            else:
+                self.set_values('ilm-xy-0-0', constval)
+
         self.initialize()
 
-    def _poly_orders_xy(self):
-        return product(*(xrange(o) for o in self.order[:2]))
-
-    def _poly_orders_z(self):
-        return product(xrange(self.order[-1]))
-
-    def _poly_orders(self):
-        return chain(self._poly_orders_xy(), self._poly_orders_z())
-
-    def _setup_rvecs(self):
-        # normalize all sizes to a strict upper bound on image size
-        # so we can transfer ILM between different images
-        self.rz, self.ry, self.rx = Tile(self.shape).coords(norm=1024.)
-
-    def _setup(self):
-        self._setup_rvecs()
-        self._last_index = None
-        self._indices = list(self._poly_orders())
-        self._indices_xy = list(self._poly_orders_xy())
-        self._indices_z = list(self._poly_orders_z())
+    def initialize(self):
+        self.field_xy = 0*self.term_xy(0,0)
+        self.field_z = 0*self.term_z(0)
+        super(Polynomial2P1D, self).initialize()
 
     def _bkg(self):
         self.bkg = np.zeros(self.shape)
@@ -229,57 +235,27 @@ class Polynomial2P1D(object):
 
         return self.bkg
 
-    def from_ilm(self, ilm):
-        orders = list(self._poly_orders())
-
-        for i,o in enumerate(ilm._poly_orders()):
-            try:
-                ind = orders.index(o)
-                self.params[ind] = ilm.params[i]
-            except ValueError as e:
-                continue
-
-    def from_data(self, f, mask=None, dopriors=False, multiplier=1, maxcalls=200):
-        if mask is None:
-            mask = np.s_[:]
-        res = opt.leastsq(self._score, x0=self.params, args=(f, mask), maxfev=maxcalls*(self.nparams+1))
-        self.update(self.block, res[0])
-
-    def _score(self, coeffs, f, mask):
-        self.params = coeffs
-        test = self._bkg()
-        out = (f[mask] - test[mask]).flatten()
-        #print np.abs(out).mean()
-        return out
-
-    def _term_xy(self, index):
+    def term_xy(self, index):
         i,j = index
         return self.rx**i * self.ry**j
 
-    def _term_z(self, index):
-        k = index[0]
+    def term_z(self, index):
         return self.rz**k
 
-    def _term(self, index):
+    def term(self, index):
         # per index cache, so if called multiple times in a row, keep the answer
-        if self._last_index == index:
+        if self.__dict__.get('_last_index') and self._last_index == index:
             return self._last_term
 
         # otherwise, just calculate this one term
         self._last_index = index
         if len(index) == 2:
-            self._last_term = self._term_xy(index)
+            self._last_term = self.term_xy(index)
         if len(index) == 1:
-            self._last_term = self._term_z(index)
+            self._last_term = self.term_z(index)
         return self._last_term
 
-    def initialize(self):
-        self.update(self.block, self.params)
-
-    def set_tile(self, tile):
-        self.tile = tile
-
-    def update(self, blocks, params):
+    def update(self, params, values):
         if blocks.sum() < self.block.sum()/2:
             for b in np.arange(len(blocks))[blocks]:
                 order = self._indices[b]
@@ -298,27 +274,20 @@ class Polynomial2P1D(object):
                 else:
                     self.bkg = self._polyxy + self._polyz
         else:
-            self.params = params
-            self._bkg()
+            self.set_values(params, values)
+            self.field = self.calc_field()
 
     def get_field(self):
-        return self.bkg[self.tile.slicer]
-
-    def get_params(self):
-        return self.params
+        return self.field[self.tile.slicer]
 
     def __getstate__(self):
         odict = self.__dict__.copy()
-        cdd(odict, ['_poly', 'rx', 'ry', 'rz', 'bkg', '_last_term', '_last_index'])
-        cdd(odict, ['_polyxy', '_polyz'])
+        cdd(odict, ['r', 'field', 'field_xy', 'field_z'])
+        cdd(odict, ['_last_term', '_last_index'])
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self.operation = self.__dict__.get('operation', '*')
-        self._setup()
-        self.tile = Tile(self.shape)
-        self.set_tile(Tile(self.shape))
         self.initialize()
 
 class LegendrePoly2P1D(Polynomial2P1D):

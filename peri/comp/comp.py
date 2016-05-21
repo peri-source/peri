@@ -52,6 +52,12 @@ class ParameterGroup(object):
     def values(self):
         return self.param_dict.values()
 
+    # Functions that begin with block_ will be passed through to the states and
+    # other functions so that nice interfaces are present
+    # def block_particle_positions(self):
+    #   return parameters
+    #
+    # Also, functions that start with (unknown) will get passed through too
 
 #=============================================================================
 # Component class == model components for an image
