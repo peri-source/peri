@@ -394,11 +394,7 @@ class RawImage():
 
     def __setstate__(self, idct):
         self.__dict__.update(idct)
-        self.exposure = self.__dict__.get('exposure', None) # FIXME -- remove later
         self.load_image()
-
-    #def __getinitargs__(self):
-    #    return (self.filename, self.tile, None, None, None, self.invert, self.filters)
 
 def cdd(d, k):
     """ Conditionally delete key (or list of keys) 'k' from dict 'd' """

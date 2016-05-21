@@ -1,14 +1,9 @@
-import scipy.ndimage as nd
-import numpy as np
-import scipy as sp
-import pylab as pl
-from scipy.misc import imread
-from scipy import signal
-import matplotlib as mpl
-import time
 import glob
 import itertools
 from PIL import Image
+
+import numpy as np
+import scipy.ndimage as nd
 
 from peri import const
 
@@ -66,27 +61,16 @@ def load_tiff_iter_libtiff(filename, iter_slice_size):
 #=======================================================================
 def normalize(im, invert=False, scale=None):
     """
-
-    Normalize a field to either [0,1] or to a set scale range given by a tuple
-    (min, max) exposure values. If scale is not provided, then the default is
-    [0,1]. Invert the image if requested. If scale if provided then the image
-    is scaled to those exposure values.
+    Normalize a field to a (min, max) exposure range, default is (0, 255). 
+    (min, max) exposure values. Invert the image if requested.
     """
     out = im.astype('float').copy()
 
-    # FIXME -- scale = scale or (0.0, 255.0)
-    if scale is not None:
-        l, u = (float(i) for i in scale)
-        out = (out - l) / (u - l)
-        if invert:
-            out = -out + (out.max() + out.min())
-    else:
-        if out.ptp() != 0 and out.max() != 0:
-            out -= 1.0*out.min()
-            out /= 1.0*out.max()
-
-        if invert:
-            out = 1 - out
+    scale = scale or (0.0, 255.0)
+    l, u = (float(i) for i in scale)
+    out = (out - l) / (u - l)
+    if invert:
+        out = -out + (out.max() + out.min())
     return out
 
 def generate_sphere(radius):
