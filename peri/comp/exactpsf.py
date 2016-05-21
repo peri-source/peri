@@ -560,17 +560,4 @@ class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
         size_u, drift_u = self.measure_size_drift(u)
 
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
-        
-class FixedBigSSChebLinePSF(FixedSSChebLinePSF):
-    """
-    PSF with a bigger fixed global support size of [61, 25, 33]
-    """
-    def characterize_psf(self):
-        """ Get support size and drift polynomial for current set of params """
-        l,u = max(self.zrange[0], self.param_dict['psf-zslab']), self.zrange[1]
 
-        size_l, drift_l = self.measure_size_drift(l)
-        size_u, drift_u = self.measure_size_drift(u)
-
-        self.support = np.array([61, 25, 33])
-        self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
