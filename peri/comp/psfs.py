@@ -7,13 +7,15 @@ from numpy.polynomial.legendre import legval
 from numpy.polynomial.chebyshev import chebval
 
 from peri.comp import Component
-from peri.util import Tile, cdd, memoize
+from peri.util import Tile, cdd, memoize, listify
 from peri.fft import fft, rfft
 
 #=============================================================================
 # Begin 3-dimensional point spread functions
 #=============================================================================
 class PSF(Component):
+    category = 'psf'
+
     def __init__(self, shape, params, values):
         """
         Point spread function classes must contain the following classes in order
@@ -108,10 +110,13 @@ class PSF(Component):
         return str(self.__class__.__name__)+" {} ".format(self.values)
 
 class IdentityPSF(PSF):
-    """
-    Delta-function PSF; returns the field passed to execute identically. 
-    Params is an N-element numpy.ndarray, doesn't do anything. 
-    """
+    def __init__(self):
+        """
+        Delta-function PSF; returns the field passed to execute identically. 
+        Params is an N-element numpy.ndarray, doesn't do anything. 
+        """
+        super(IdentityPSF, self).__init__(shape=(1,)*3, params=['psf'], values=[0])
+
     def execute(self, field):
         return field
     
@@ -177,60 +182,57 @@ class AnisotropicGaussianXYZ(PSF):
 # Begin 4-dimensional point spread functions
 #=============================================================================
 class PSF4D(PSF):
-    """
-    4-dimensional Point-Spread-Function (PSF) is implemented by assuming that
-    the there is only z-dependence of parameters (so that it can be separated
-    into x-y and z parts).  Therefore, we keep track of 2D FFTs and X-Y psf
-    functions that get convolved with FFTs.  Then, we manually convolve in the
-    z direction
+    def __init__(self, shape, params, values):
+        """
+        4-dimensional Point-Spread-Function (PSF) is implemented by assuming
+        that the there is only z-dependence of parameters (so that it can be
+        separated into x-y and z parts).  Therefore, we keep track of 2D FFTs
+        and X-Y psf functions that get convolved with FFTs.  Then, we manually
+        convolve in the z direction
 
-    The key variables are rpsf (2d) and kpsf (2d) which are used for the x-y
-    convolution.  The z-convolution cannot be cached.
-    """
-    def __init__(self, params, shape, *args, **kwargs):
-        super(PSF4D, self).__init__(*args, params=params, shape=shape, **kwargs)
+        The key variables are rpsf (2d) and kpsf (2d) which are used for the
+        x-y convolution.  The z-convolution cannot be cached.
+        """
+        super(PSF4D, self).__init__(shape=shape, params=params, values=values)
 
-    def _setup_rvecs(self, shape, centered=False):
-        sp = shape
-        mx = np.max(sp)
+    def rvecs(self, tile):
+        rz, ry, rx = tile.kvectors(norm=1.0/tile.shape)
+        return rx, ry
 
-        ry = sp[1]*np.fft.fftfreq(sp[1])[:,None]
-        rx = sp[2]*np.fft.fftfreq(sp[2])[None,:]
-
-        self._rx, self._ry = rx, ry
-
-    def _zpos(self):
-        return np.arange(self.tile.l[0], self.tile.r[0]).astype('float')
+    def _zpos(self, tile):
+        return np.arange(tile.l[0], tile.r[0]).astype('float')
 
     @memoize()
     def _calc_tile_2d_psf(self, tile):
-        self.rpsf = np.zeros(shape=self.tile.shape)
-        zs = self._zpos()
+        rpsf = np.zeros(shape=self.tile.shape)
+        kpsf = np.zeros(shape=self.tile.shape, dtype='complex')
+
+        vecs = self.rvecs(tile)
+        zs = self._zpos(tile)
 
         # calculate each slice from the rpsf_xy function
         for i,z in enumerate(zs):
-            self.rpsf[i] = self.rpsf_xy(z)
+            rpsf[i] = self.rpsf_xy(vecs, z)
 
         # calcualte the psf in k-space using 2d ffts
-        self.kpsf = fft.fftn(self.rpsf)
+        kpsf = fft.fft2(rpsf)
 
         # need to normalize each x-y slice individually
         for i,z in enumerate(zs):
-            self.kpsf[i] /= self.kpsf[i,0,0]
+            kpsf[i,0,0] = 1.0
 
-        return self.kpsf
+        return rpsf, kpsf
 
     def set_tile(self, tile):
         if (self.tile.shape != tile.shape).any():
             self.tile = tile
 
-        self._setup_rvecs(self.tile.shape, centered=False)
-        self.kpsf = self._calc_tile_2d_psf(self.tile)
+        self.rpsf, self.kpsf = self._calc_tile_2d_psf(self.tile)
 
-    def update(self, params):
+    def update(self, params, values):
         # what should we update when the parameters are adjusted for
         # the 4d psf?  Well, for simplicity, let's start with nothing.
-        self.params = params
+        self.set_values(params, values)
 
         # clean out the cache since it is no longer useful
         if hasattr(self, '_memoize_clear'):
@@ -240,16 +242,16 @@ class PSF4D(PSF):
         if any(field.shape != self.tile.shape):
             raise AttributeError("Field passed to PSF incorrect shape")
 
-        if not np.iscomplex(field.ravel()[0]):
-            infield = fft.fftn(field)
+        if not np.iscomplexobj(field):
+            infield = fft.fft2(field)
         else:
             infield = field
 
-        cov2d = np.real(fft.ifftn(infield * self.kpsf)) * self.tile.shape[0]
+        cov2d = np.real(fft.ifft2(infield * self.kpsf))
         cov2dT = np.rollaxis(cov2d, 0, 3)
 
         out = np.zeros_like(cov2d)
-        z = self._zpos()
+        z = self._zpos(self.tile)
 
         for i in xrange(len(z)):
             size = self.get_padding_size(z=z[i])
@@ -259,7 +261,7 @@ class PSF4D(PSF):
 
         return out
 
-    def rpsf_xy(self, z):
+    def rpsf_xy(self, vecs, z):
         """
         Returns the x-y plane real space psf function as a function of z values.
         This function does not necessarily have to be normalized, it will be
@@ -267,70 +269,80 @@ class PSF4D(PSF):
         """
         pass
 
-    def rpsf_z(self, z):
+    def rpsf_z(self, z, zp):
         """
         Returns the z dependence of the PSF.  This section needs to be noramlized.
         """
         pass
 
 class Gaussian4D(PSF4D):
-    def __init__(self, shape, params=(1.0,0.5,2.0), order=(1,1,1), error=1.0/255, zrange=128, *args, **kwargs):
+    def __init__(self, shape, sigmas=(2.0,0.5,1.0), order=(1,1,1),
+            error=1.0/255, zrange=128):
         self.order = order
         self.error = error
         self.zrange = float(zrange)
-        params = np.hstack([np.array(params)[:3], np.zeros(np.sum(order))])
-        super(Gaussian4D, self).__init__(params=params, shape=shape, *args, **kwargs)
+
+        self.coeffs = {}
+        params, values = [], []
+        for i, o in enumerate(order):
+            d = ['z', 'y', 'x']
+            tparams = ['psf-%s-%i' % (d[i], j) for j in xrange(o)]
+            tvalues = [sigmas[i]] + [0]*(o-1)
+
+            params.extend(tparams)
+            values.extend(tvalues)
+            self.coeffs[i] = tparams
+
+        super(Gaussian4D, self).__init__(shape=shape, params=params, values=values)
 
     def _sigma_coeffs(self, d=0):
-        s = 3 + np.sum(self.order[:d+0])
-        e = 3 + np.sum(self.order[:d+1])
-        return np.hstack([1, self.params[s:e]])
+        return listify(self.get_values(self.coeffs[d]))
 
     def _poly(self, z, coeffs):
         return np.polyval(coeffs[::-1], z)
 
     @memoize()
     def _sigma(self, z, d=0):
-        return self.params[d]*self._poly(z/self.zrange, self._sigma_coeffs(d=d))
+        return self._poly(z/self.zrange, self._sigma_coeffs(d=d))
 
     @memoize()
     def get_padding_size(self, z):
         if isinstance(z, np.ndarray) and z.shape[0] > 1:
             z = z[0]
         s = np.array([self._sigma(z, 0), self._sigma(z, 1), self._sigma(z, 2)])
-        self.px = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
+        self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
         self.py = np.max([np.sqrt(-2*np.log(self.error)*s[1]**2), 2.1*np.ones_like(s[1])], axis=0)
-        self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[2]**2), 2.1*np.ones_like(s[2])], axis=0)
+        self.px = np.max([np.sqrt(-2*np.log(self.error)*s[2]**2), 2.1*np.ones_like(s[2])], axis=0)
         size = np.array([self.pz, self.py, self.px])
         return size
 
     @memoize()
     def rpsf_z(self, z, zp):
-        s = self._sigma(zp, 2)
+        s = self._sigma(zp, 0)
         size = self.get_padding_size(z=zp)
-        out = 1.0/np.sqrt(2*np.pi*s**2) * np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
+        out = np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
         return out / out.sum()
 
-    def rpsf_xy(self, zp):
+    def rpsf_xy(self, vecs, zp):
+        rx, ry = vecs
         size = self.get_padding_size(z=zp)
-        mask = (np.abs(self._rx) <= size[2]) * (np.abs(self._ry) <= size[1])
+        mask = (np.abs(rx) <= size[2]) * (np.abs(ry) <= size[1])
 
-        sx = self._sigma(zp, 0)
+        sx = self._sigma(zp, 2)
         sy = self._sigma(zp, 1)
-        gauss = np.exp(-(self._rx/sx)**2/2-(self._ry/sy)**2/2)
+        gauss = np.exp(-(rx/sx)**2/2-(ry/sy)**2/2)
 
         return gauss * mask
 
 class Gaussian4DPoly(Gaussian4D):
-    def __init__(self, shape, params=(1.0,0.5,2.0), order=(1,1,1),
-            error=1.0/255, zrange=128, *args, **kwargs):
-        super(Gaussian4DPoly, self).__init__(shape=shape, params=params,
-                order=order, error=error, zrange=zrange, *args, **kwargs)
+    def __init__(self, shape, sigmas=(2.0,0.5,1.0), order=(1,1,1),
+            error=1.0/255, zrange=128):
+        super(Gaussian4DPoly, self).__init__(
+            shape=shape, sigmas=sigmas, order=order, error=error, zrange=zrange
+        )
 
     def _sigma_coeffs(self, d=0):
-        s = 3 + np.sum(self.order[:d+0])
-        e = 3 + np.sum(self.order[:d+1])
-        return np.hstack([self.params[d], self.params[s:e]])
+        return listify(self.get_values(self.coeffs[d]))
 
     def _poly(self, z, coeffs):
         return np.polyval(coeffs[::-1], z)
@@ -340,39 +352,68 @@ class Gaussian4DPoly(Gaussian4D):
         return self._poly(z/self.zrange, self._sigma_coeffs(d=d))
 
 class Gaussian4DLegPoly(Gaussian4DPoly):
-    def __init__(self, shape, params=(1.0,0.5,2.0), order=(1,1,1),
-            error=1.0/255, zrange=128, *args, **kwargs):
-        super(Gaussian4DLegPoly, self).__init__(shape=shape, params=params,
-                order=order, error=error, zrange=zrange, *args, **kwargs)
+    def __init__(self, shape, sigmas=(2.0,0.5,1.0), order=(1,1,1),
+            error=1.0/255, zrange=128):
+        super(Gaussian4DLegPoly, self).__init__(
+            shape=shape, sigmas=sigmas, order=order, error=error, zrange=zrange
+        )
 
     def _poly(self, z, coeffs):
         return legval(z, coeffs)
 
 class GaussianMomentExpansion(PSF4D):
-    def __init__(self, shape, params=(1.0,0.5,2.0), order=(1,1,1),
-            moment_order=(3,3), error=1.0/255, zrange=128, *args, **kwargs):
+    def __init__(self, shape, sigmas=(2.0,0.5,1.0), order=(1,1,1),
+            moment_order=(3,3), error=1.0/255, zrange=128):
         """
-        3+1D PSF that is of the form  (1+a*(3x-x^3) + b*(3-6*x^2+x^4))*exp(-(x/s)^2/2) where s
-        is sigma, the scale factor.  
+        3+1D PSF that is of the form:
+            (1+a*(3x-x^3) + b*(3-6*x^2+x^4))*exp(-(x/s)^2/2)
+        where s is sigma, the scale factor.  
         """
         self.order = order
         self.morder = moment_order
         self.error = error
         self.zrange = float(zrange)
-        params = np.hstack([np.array(params)[:3], np.zeros(np.sum(order)), np.zeros(2*np.sum(moment_order))])
-        super(GaussianMomentExpansion, self).__init__(params=params, shape=shape, *args, **kwargs)
+
+        self.poly_coeffs = {}
+        self.moment_coeffs = {}
+
+        params, values = [], []
+        for i, o in enumerate(order):
+            d = ['z', 'y', 'x']
+            tparams = ['psf-%s-%i' % (d[i], j) for j in xrange(o)]
+            tvalues = [sigmas[i]] + [0]*(o-1)
+
+            params.extend(tparams)
+            values.extend(tvalues)
+            self.poly_coeffs[i] = tparams
+
+        for i, o in enumerate(moment_order):
+            t = ['skew', 'kurt']
+            self.moment_coeffs[t[i]] = {}
+
+            for j, d in enumerate(['z', 'y', 'x']):
+                tparams = [
+                    'psf-%s-%s-%i' % (t[i], d, k) for k in xrange(o)
+                ]
+                tvalues = [0]*(o)
+
+                params.extend(tparams)
+                values.extend(tvalues)
+                self.moment_coeffs[t[i]][j] = tparams
+
+        super(GaussianMomentExpansion, self).__init__(
+            shape=shape, params=params, values=values
+        )
 
     def _sigma_coeffs(self, d=0):
-        s = 3 + np.sum(self.order[:d+0])
-        e = 3 + np.sum(self.order[:d+1])
-        return np.hstack([1, self.params[s:e]])
+        return listify(self.get_values(self.poly_coeffs[d]))
 
     def _poly(self, z, coeffs):
         return np.polyval(coeffs[::-1], z)
 
     @memoize()
     def _sigma(self, z, d=0):
-        return self.params[d]*self._poly(z/self.zrange, self._sigma_coeffs(d=d))
+        return self._poly(z/self.zrange, self._sigma_coeffs(d=d))
 
     @memoize()
     def _moment(self, x, z, d=0):
@@ -380,25 +421,21 @@ class GaussianMomentExpansion(PSF4D):
 
     @memoize()
     def _kurtosis_coeffs(self, d):
-        i0 = 3 + np.sum(self.order) + np.sum(self.morder[:d+0])
-        i1 = 3 + np.sum(self.order) + np.sum(self.morder[:d+1])
-        coeffs = self.params[i0:i1]
-        return coeffs
+        return listify(self.get_values(self.moment_coeffs['kurt'][d]))
 
     @memoize()
     def _skew_coeffs(self, d):
-        o = np.sum(self.morder[:d+1])
-        i0 = 3 + np.sum(self.order) + o + np.sum(self.morder[:d+0])
-        i1 = 3 + np.sum(self.order) + o + np.sum(self.morder[:d+1])
-        coeffs = self.params[i0:i1]
-        return coeffs
+        return listify(self.get_values(self.moment_coeffs['skew'][d]))
 
     @memoize()
     def _skew(self, x, z, d=0):
         """ returns the kurtosis parameter for direction d, d=0 is rho, d=1 is z """
         # get the top bound determined by the kurtosis
         kval = (np.tanh(self._poly(z, self._kurtosis_coeffs(d)))+1)/12.
-        bdpoly = np.array([-1.142468e+04, 3.0939485e+03, -2.0283568e+02, -2.1047846e+01, 3.79808487e+00, 1.19679781e-02])
+        bdpoly = np.array([
+            -1.142468e+04,  3.0939485e+03, -2.0283568e+02,
+            -2.1047846e+01, 3.79808487e+00, 1.19679781e-02
+        ])
         top = np.polyval(bdpoly, kval)
 
         # limit the skewval to be 0 -> top val
@@ -418,27 +455,28 @@ class GaussianMomentExpansion(PSF4D):
         if isinstance(z, np.ndarray) and z.shape[0] > 1:
             z = z[0]
         s = np.array([self._sigma(z, 0), self._sigma(z, 1), self._sigma(z, 2)])
-        self.px = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
+        self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
         self.py = np.max([np.sqrt(-2*np.log(self.error)*s[1]**2), 2.1*np.ones_like(s[1])], axis=0)
-        self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[2]**2), 2.1*np.ones_like(s[2])], axis=0)
+        self.px = np.max([np.sqrt(-2*np.log(self.error)*s[2]**2), 2.1*np.ones_like(s[2])], axis=0)
         size = np.array([self.pz, self.py, self.px])
         return size
 
     @memoize()
     def rpsf_z(self, z, zp):
-        s = self._sigma(zp, 2)
+        s = self._sigma(zp, 0)
         size = self.get_padding_size(z=zp)
         pref = self._moment((z-zp)/s, zp, d=1)
         out = pref*np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
         return out / out.sum()
 
-    def rpsf_xy(self, zp):
+    def rpsf_xy(self, vecs, zp):
+        rx, ry = vecs
         size = self.get_padding_size(z=zp)
-        mask = (np.abs(self._rx) <= size[2]) * (np.abs(self._ry) <= size[1])
+        mask = (np.abs(rx) <= size[2]) * (np.abs(ry) <= size[1])
 
-        sx = self._sigma(zp, 0)
+        sx = self._sigma(zp, 2)
         sy = self._sigma(zp, 1)
-        rho = np.sqrt((self._rx/sx)**2 + (self._ry/sy)**2)
+        rho = np.sqrt((rx/sx)**2 + (ry/sy)**2)
         gauss = self._moment(rho, zp, d=0)*np.exp(-rho**2/2)
 
         return gauss * mask
