@@ -149,17 +149,20 @@ class FFTW(FFTBase):
         return self._exec('fft2', a)
 
     def ifft2(self, a, shape=None):
-        normalization = 1.0/a.size
+        normalization = 1.0/np.prod(self.shape)
         return normalization * self._exec('ifft2', a)
 
     def fftn(self, a):
         return self._exec('fftn', a)
 
     def ifftn(self, a, shape=None):
-        normalization = 1.0/a.size
+        normalization = 1.0/np.prod(self.shape)
         return normalization * self._exec('ifftn', a)
 
     def load_wisdom(self, wisdomfile):
+        if wisdomfile is None:
+            return
+
         try:
             pyfftw.import_wisdom(pickle.load(open(wisdomfile)))
         except IOError as e:
@@ -169,6 +172,10 @@ class FFTW(FFTBase):
 
     def save_wisdom(self):
         wisdomfile = self.__dict__.get('wisdomfile')
+
+        if wisdomfile is None:
+            return
+
         if wisdomfile:
             pickle.dump(pyfftw.export_wisdom(), open(self.wisdomfile, 'wb'), protocol=-1)
 
