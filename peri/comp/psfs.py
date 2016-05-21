@@ -32,58 +32,40 @@ class PSF(Component):
         self.update(params, values)
         self.set_tile(Tile(self.shape))
 
-    def _setup_rvecs(self, shape, centered=True):
-        sp = shape
-        mx = np.max(sp)
-
-        rz = sp[0]*np.fft.fftfreq(sp[0])[:,None,None]
-        ry = sp[1]*np.fft.fftfreq(sp[1])[None,:,None]
-        rx = sp[2]*np.fft.fftfreq(sp[2])[None,None,:]
-
-        if centered:
-            rz = np.fft.fftshift(rz)
-            ry = np.fft.fftshift(ry)
-            rx = np.fft.fftshift(rx)
-
-        self._rx, self._ry, self._rz = rx, ry, rz
-        self._rlen = np.sqrt(rx**2 + ry**2 + rz**2)
-
     @memoize()
     def calculate_kpsf(self, shape):
-        d = ((shape - self._min_support))
+        d = ((shape - self.min_support))
 
         # fix off-by-one issues when going odd to even tile sizes
         o = d % 2
         d /= 2
 
         pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
-        self.rpsf = np.pad(self._min_rpsf, pad, mode='constant', constant_values=0)
+        self.rpsf = np.pad(self.min_rpsf, pad, mode='constant', constant_values=0)
         self.rpsf = np.fft.ifftshift(self.rpsf)
         self.kpsf = fft.fftn(self.rpsf)
         self.kpsf /= (np.real(self.kpsf[0,0,0]) + 1e-15)
         return self.kpsf
 
     def calculate_min_rpsf(self):
-        pass
-
+        # calculate the minimum supported real-space PSF
+        min_support = np.ceil(self.get_padding_size()).astype('int')
+        min_support += min_support % 2
+        min_rpsf = self.rpsf_func(self._rvecs(min_support))
+        return min_rpsf, min_support
 
     def set_tile(self, tile):
-        if any(tile.shape < self._min_support):
+        if any(tile.shape < self.min_support):
             raise IndexError("PSF tile size is less than minimum support size")
 
         if (self.tile.shape != tile.shape).any():
             self.tile = tile
 
-        self.kpsf = self._min_to_tile(self.tile.shape)
+        self.kpsf = self.calculate_kpsf(self.tile.shape)
 
-    def update(self, params):
-        self.params = params
-
-        # calculate the minimum supported real-space PSF
-        self._min_support = np.ceil(self.get_padding_size()).astype('int')
-        self._min_support += self._min_support % 2
-        self._setup_rvecs(self._min_support)
-        self._min_rpsf = self.rpsf_func()
+    def update(self, params, values):
+        self.set_values(params, values)
+        self.min_rpsf, self.min_support = self.calculate_min_rpsf()
 
         # clean out the cache since it is no longer useful
         if hasattr(self, '_memoize_clear'):
@@ -103,17 +85,20 @@ class PSF(Component):
     def get_padding_size(self, z=None):
         raise NotImplemented('subclasses must implement `get_padding_size`')
 
+    def _rvecs(self, shape, centered=True):
+        tile = Tile(shape)
+        return tile.kvectors(norm=1.0/tile.shape, shift=centered)
+
     def __getstate__(self):
         odict = self.__dict__.copy()
-        cdd(odict, ['_rx', '_ry', '_rz', '_rlen'])
         cdd(odict, ['_memoize_clear', '_memoize_caches'])
-        cdd(odict, ['rpsf', 'kpsf'])
+        cdd(odict, ['rpsf', 'kpsf', 'min_rpsf'])
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
         self.tile = Tile((0,0,0))
-        self.update(self.params)
+        self.update(self.params, self.values)
         self.set_tile(Tile(self.shape))
 
     def __str__(self):
@@ -133,45 +118,58 @@ class IdentityPSF(PSF):
     def get_padding_size(self, *args):
         return np.ones(3)
     
-    def update(self, params):
-        self.params = params
+    def update(self, params, values):
+        self.set_values(params, values)
     
     def set_tile(self, tile):
         if (self.tile.shape != tile.shape).any():
             self.tile = tile
 
 class AnisotropicGaussian(PSF):
-    def __init__(self, params, shape, error=1.0/255, *args, **kwargs):
+    def __init__(self, shape, sigmas, error=1.0/255):
         self.error = error
-        super(AnisotropicGaussian, self).__init__(*args, params=params, shape=shape, **kwargs)
+        params = ['psf-sig-z', 'psf-sig-rho'] 
+        super(AnisotropicGaussian, self).__init__(
+            shape=shape, params=params, values=sigmas
+        )
 
-    def rpsf_func(self):
-        params = self.params/2
-        rt2 = np.sqrt(2)
-        rhosq = self._rx**2 + self._ry**2
-        arg = np.exp(-(rhosq)/(rt2*params[0])**2 - (self._rz/(rt2*params[1]))**2)
-        return arg * (rhosq <= self.pr**2) * (np.abs(self._rz) <= self.pz)
+    def rpsf_func(self, vecs):
+        rz, ry, rx = vecs
+        rhosq = rx**2 + ry**2
+
+        vals = np.array(self.values)/2
+        arg = np.exp(-(rhosq/vals[0]**2 + (rz/vals[1])**2)/2)
+        return arg * (rhosq <= self.pr**2) * (np.abs(rz) <= self.pz)
 
     def get_padding_size(self, z=None):
-        self.pr = np.sqrt(-2*np.log(self.error)*self.params[0]**2)
-        self.pz = np.sqrt(-2*np.log(self.error)*self.params[1]**2)
+        self.pr = np.sqrt(-2*np.log(self.error)*self.values[0]**2)
+        self.pz = np.sqrt(-2*np.log(self.error)*self.values[1]**2)
         return np.array([self.pz, self.pr, self.pr])
 
 class AnisotropicGaussianXYZ(PSF):
-    def __init__(self, params, shape, error=1.0/255, *args, **kwargs):
+    def __init__(self, shape, sigmas, error=1.0/255):
         self.error = error
-        super(AnisotropicGaussianXYZ, self).__init__(*args, params=params, shape=shape, **kwargs)
+        params = ['psf-sigz', 'psf-sigy', 'psf-sigx']
+        super(AnisotropicGaussianXYZ, self).__init__(
+            shape=shape, params=params, values=sigmas
+        )
 
-    def rpsf_func(self):
-        params = self.params/2
-        rt2 = np.sqrt(2)
-        arg = np.exp(-(self._rx/(rt2*params[0]))**2 - (self._ry/(rt2*params[1]))**2 - (self._rz/(rt2*params[2]))**2)
-        return arg * (np.abs(self._rx) <= self.px) * (np.abs(self._ry) <= self.py) * (np.abs(self._rz) <= self.pz)
+    def rpsf_func(self, vecs):
+        rz, ry, rx = vecs
+        params = np.array(self.values)/2
+
+        arg = np.exp(-(
+            (rz/params[0])**2 + (ry/params[1])**2 + (rx/params[2])**2
+        )/2)
+        return arg * (
+            (np.abs(rx) <= self.px) * (np.abs(ry) <= self.py) *
+            (np.abs(rz) <= self.pz)
+        )
 
     def get_padding_size(self, z=None):
-        self.px = np.sqrt(-2*np.log(self.error)*self.params[0]**2)
-        self.py = np.sqrt(-2*np.log(self.error)*self.params[1]**2)
-        self.pz = np.sqrt(-2*np.log(self.error)*self.params[2]**2)
+        self.px = np.sqrt(-2*np.log(self.error)*self.values[2]**2)
+        self.py = np.sqrt(-2*np.log(self.error)*self.values[1]**2)
+        self.pz = np.sqrt(-2*np.log(self.error)*self.values[0]**2)
         return np.array([self.pz, self.py, self.px])
 
 
