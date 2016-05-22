@@ -3,9 +3,8 @@ import numpy as np
 import cPickle as pickle
 from contextlib import contextmanager
 
-from peri import const
+from peri import const, util
 from peri.comp import Component
-from peri.util import Tile, RawImage, indir
 
 class State(Component):
     def __init__(self, params, values, logpriors=None):
@@ -23,6 +22,9 @@ class State(Component):
     @property
     def residual(self):
         pass
+
+    def residuals_sample(self, inds):
+        return residual.ravel[inds]
 
     def loglikelihood(self):
         loglike = self.dologlikelihood()
@@ -51,45 +53,49 @@ class State(Component):
     def block_all(self):
         return self.params
 
-    def _grad_single_param(self, func, p, dl=1e-3, **kwargs):
-        self.push_update(p, self.get_values(p)+dl)
-        val1 = np.array(func(**kwargs))
-        self.pop_update()
+    def _grad_one_param(self, func, p, dl=1e-3, f0=None, rts=True, **kwargs):
+        vals = self.get_values(p)
+        f0 = util.callif(func(**kwargs)) if f0 is None else f0
 
-        self.push_update(p, self.get_values(p)-dl)
-        val0 = np.array(func(**kwargs))
-        self.pop_update()
+        self.update(p, vals+dl)
+        f1 = util.callif(func(**kwargs))
 
-        return (val1 - val0) / (2*dl)
+        if rts:
+            self.update(p, vals)
 
-    def _hess_two_param(self, func, p0, p1, dl=1e-3, **kwargs):
-        self.push_update(p0, self.get_values(p0)+dl)
-        self.push_update(p1, self.get_values(p1)+dl)
-        val_01 = np.array(func(**kwargs))
-        self.pop_update()
-        self.pop_update()
+        return (f1 - f0) / dl
 
-        self.push_update(p0, self.get_values(p0)+dl)
-        val_0 = np.array(func(**kwargs))
-        self.pop_update()
+    def _hess_two_param(self, func, p0, p1, dl=1e-3, f0=None, rts=True, **kwargs):
+        vals0 = self.get_values(p0)
+        vals1 = self.get_values(p1)
 
-        self.push_update(p1, self.get_values(p1)+dl)
-        val_1 = np.array(func(**kwargs))
-        self.pop_update()
+        f00 = util.callif(func(**kwargs)) if f0 is None else f0
 
-        val = np.array(func(**kwargs))
+        self.update(p0, vals0+dl)
+        f10 = util.callif(func(**kwargs))
 
-        return (val_01 - val_0 - val_1 + val) / (dl**2)
+        self.update(p1, vals1+dl)
+        f11 = util.callif(func(**kwargs))
+
+        self.update(p0, vals0)
+        f01 = util.callif(func(**kwargs))
+
+        if rts:
+            self.update(p0, vals0)
+            self.update(p1, vals1)
+
+        return (f11 - f10 - f01 + f00) / (dl**2)
 
     def _grad(self, func, ps=None, dl=1e-3, **kwargs):
         if ps is None:
             ps = self.block_all()
 
         ps = listifty(ps)
+        f0 = util.callif(func(**kwargs))
 
         grad = []
         for i, p in enumerate(ps):
-            grad.append(self._grad_single_param(func, p, dl, **kwargs))
+            grad.append(self._grad_one_param(func, p, dl, f0=f0, **kwargs))
         return np.array(grad)
 
     def _jtj(self, func, ps=None, dl=1e-3, **kwargs):
@@ -101,28 +107,29 @@ class State(Component):
             ps = self.block_all()
 
         ps = listifty(ps)
+        f0 = util.callif(func(**kwargs))
 
         hess = [[0]*len(ps)]*len(ps)
         for i, pi in enumerate(ps):
             for j, pj in enumerate(ps[i:]):
                 J = j + i
-                thess = self._hess_two_param(func, bi, bj, dl=dl, **kwargs)
+                thess = self._hess_two_param(func, bi, bj, dl=dl, f0=f0, **kwargs)
                 hess[i,J] = thess
                 hess[J,i] = thess
         return np.array(hess)
 
-    gradloglikelihood = partial(self._grad, func=self.loglikelihood)
-    hessloglikelihood = partial(self._hess, func=self.loglikelihood)
-    J = partial(self._grad, func=self.residuals)
-    JTJ = partial(self._jtj, func=self.residuals)
-    Jp = partial(self._grad, func=self.residuals_sample)
-    JTJp = partial(self._jtj, func=self.residuals_sample)
+    gradloglikelihood = partial(_grad, func=self.loglikelihood)
+    hessloglikelihood = partial(_hess, func=self.loglikelihood)
+    J = partial(_grad, func=self.residuals)
+    JTJ = partial(_jtj, func=self.residuals)
+    Jp = partial(_grad, func=self.residuals_sample)
+    JTJp = partial(_jtj, func=self.residuals_sample)
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=0,
             sigma=0.04, doprior=False, constoff=False,
-            varyn=False, allowdimers=False, nlogs=True, difference=True,
-            pad=const.PAD, sigmapad=False, slab=None, newconst=True, bkg=None,
+            varyn=False, nlogs=True, difference=True,
+            pad=const.PAD, slab=None, newconst=True, bkg=None,
             method=1, *args, **kwargs):
         """
         The state object to create a confocal image.  The model is that of
@@ -169,9 +176,6 @@ class ConfocalImagePython(State):
         varyn: boolean [default: False]
             allow the variation of particle number (only recommended in that case)
 
-        allowdimers: boolean [default: False]
-            allow dimers to be created out of two separate overlapping particles
-
         nlogs: boolean [default: False]
             Include in the Loglikelihood calculate the term:
 
@@ -184,10 +188,6 @@ class ConfocalImagePython(State):
         pad : integer (optional)
             No recommended to set by hand.  The padding level of the raw image needed
             by the PSF support.
-
-        sigmapad : boolean [default: False]
-            If True, varies the sigma values at the edge of the image, changing them
-            slowly to zero over the size of the psf support
 
         slab : `peri.comp.objs.Slab` [default: None]
             If not None, include a slab in the model image and associated analysis.
@@ -223,11 +223,9 @@ class ConfocalImagePython(State):
         self.sigma = sigma
         self.doprior = doprior
         self.constoff = constoff
-        self.allowdimers = allowdimers
         self.nlogs = nlogs
         self.varyn = varyn
         self.difference = difference
-        self.sigmapad = sigmapad
         self.newconst = newconst
         self.method = method
 
@@ -282,7 +280,7 @@ class ConfocalImagePython(State):
         """
         Update the current comparison (real) image
         """
-        if isinstance(image, RawImage):
+        if isinstance(image, util.RawImage):
             self.rawimage = image
             image = image.get_padded_image(self.pad)
         else:
@@ -397,72 +395,8 @@ class ConfocalImagePython(State):
 
     def _build_sigma_field(self):
         self._sigma_field = np.zeros(self.image.shape)
-
-        if not self.sigmapad:
-            self._sigma_field += self.sigma
-        else:
-            top = self.image.shape[0] - self.pad
-
-            p = self.psf.get_support_size(top)/4
-            l = self.pad + p
-            self._sigma_field[:] = 3*self.sigma #FIXME -- this should be 2 ??
-            self._sigma_field[l[0]:-l[0], l[1]:-l[1], l[2]:-l[2]] = self.sigma
-
-            self.psf.set_tile(Tile(self._sigma_field.shape))
-            self._sigma_field = self.psf.execute(self._sigma_field)
-
-        self._sigma_field_log = np.log(self._sigma_field)#*(self._sigma_field > 0) + 1e-16)
-
-    def set_state(self, state, blocks=None):
-        """
-        Update the state globally with new data. If `blocks` is provided, only
-        update the values associated with those particular data points. `state`
-        must be 1D with the same length as blocks.sum() and `blocks` must have
-        the same length as self.state
-        """
-        # if we are only provided some data, duplicate our current values
-        # into a new array to simplify updates
-        if blocks is not None:
-            st = self.state.copy()
-            st[blocks] = state[:]
-            state = st
-
-        self.obj.pos = state[self.b_pos].reshape(-1,3)
-        self.obj.rad = state[self.b_rad]
-        self.obj.typ = state[self.b_typ]
-        self.ilm.params = state[self.b_ilm]
-        self.psf.params = state[self.b_psf]
-
-        if self.bkg:
-            self.bkg.params = state[self.b_bkg]
-
-        if self.slab:
-            self.slab.params = state[self.b_slab]
-
-        self.zscale = state[self.b_zscale]
-        self.offset = state[self.b_off]
-        self.sigma = state[self.b_sigma]
-
-        self._initialize()
-
-    def _initialize(self):
-        if self.doprior:
-            bounds = (np.array([0,0,0]), np.array(self.image.shape))
-            self.nbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad, self.obj.typ,
-                    zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
-            self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
-
-        self.psf.update(self.state[self.b_psf])
-        self.obj.initialize(self.zscale)
-        self.ilm.initialize()
-
-        if self.bkg:
-            self.bkg.initialize()
-
-        if self.slab:
-            self.slab.initialize()
-
-        self._update_global()
+        self._sigma_field += self.sigma
+        self._sigma_field_log = np.log(self._sigma_field)
 
     def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
         # FIXME -- self.difference is ignored in this function
@@ -476,12 +410,12 @@ class ConfocalImagePython(State):
 
         # FIXME -- more ceil functions?
         # get the object's tile and the psf tile size
-        otile = Tile(sl, sr, 0, self.image.shape)
-        ptile = Tile.boundingtile([Tile(np.ceil(i)) for i in [tl, tr]])
+        otile = util.Tile(sl, sr, 0, self.image.shape)
+        ptile = util.Tile.boundingtile([util.Tile(np.ceil(i)) for i in [tl, tr]])
 
         # now remove the part of the tile that is outside the image and
         # pad the interior part with that overhang
-        img = Tile(self.image.shape)
+        img = util.Tile(self.image.shape)
 
         # reflect the necessary padding back into the image itself for
         # the outer slice which we will call outer
@@ -492,8 +426,8 @@ class ConfocalImagePython(State):
         return outer, inner, iotile.slicer
 
     def _tile_global(self):
-        outer = Tile(0, self.image.shape)
-        inner = Tile(0, self.image.shape)
+        outer = util.Tile(0, self.image.shape)
+        inner = util.Tile(0, self.image.shape)
         iotile = inner.translate(outer.l)
         return outer, inner, iotile.slicer
 
@@ -522,32 +456,6 @@ class ConfocalImagePython(State):
 
         newll = self._loglikelihood_field[s].sum()
         self._loglikelihood += newll - oldll
-
-    def _platonic_image(self):
-        """
-        Since platonic is a combination of several different components, return
-        the complete combination for the platonic.
-        """
-        platonic = self.obj.get_field().copy()
-
-        if self.slab:
-            platonic += self.slab.get_field()
-
-        if self.allowdimers:
-            platonic = np.clip(platonic, -1, 1)
-
-        return platonic
-
-    def _set_tiles(self, tile):
-        self.obj.set_tile(tile)
-        self.ilm.set_tile(tile)
-        self.psf.set_tile(tile)
-
-        if self.bkg:
-            self.bkg.set_tile(tile)
-
-        if self.slab:
-            self.slab.set_tile(tile)
 
     def _update_global(self):
         self._update_tile(*self._tile_global(), difference=False)
@@ -675,8 +583,8 @@ class ConfocalImagePython(State):
             otiles.append(otile)
             itiles.append(itile)
 
-        otile = Tile.boundingtile(otiles)
-        itile = Tile.boundingtile(itiles)
+        otile = util.Tile.boundingtile(otiles)
+        itile = util.Tile.boundingtile(itiles)
         iotile = itile.translate(-otile.l)
 
         self._update_tile(otile, itile, iotile.slicer, difference=True)
@@ -1041,8 +949,8 @@ class ConfocalImagePython(State):
         return (im,
             self.obj, self.psf, self.ilm, self.zscale, self.offset,
             self.sigma, self.doprior, self.constoff,
-            self.varyn, self.allowdimers, self.nlogs, self.difference,
-            self.pad, self.sigmapad, self.slab, self.newconst, self.bkg,
+            self.varyn, self.nlogs, self.difference,
+            self.pad, self.slab, self.newconst, self.bkg,
             self.method)
 
     @contextmanager
@@ -1102,5 +1010,5 @@ def load(filename):
     path, name = os.path.split(filename)
     path = path or '.'
 
-    with indir(path):
+    with util.indir(path):
         return pickle.load(open(filename, 'rb'))

@@ -8,6 +8,11 @@ from contextlib import contextmanager
 
 from peri import const, initializers
 
+def callif(f, *args, **kwargs):
+    if hasattr(f, '__call__'):
+        return np.array(f(*args, **kwargs))
+    return np.array(f)
+
 #=============================================================================
 # Tiling utilities
 #=============================================================================
