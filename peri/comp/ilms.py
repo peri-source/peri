@@ -171,11 +171,11 @@ class Polynomial2P1D(Polynomial3D):
             Type of joining operation between the (x,y) and (z) poly. Can be
             either '*' or '+'
         """
-        ops = {'*': mul, '+': add}
 
         self.shape = shape
         self.operation = operation
         self.order = order
+        self.tileinfo = tileinfo
 
         # set up the parameter mappings and values
         params, values = [], []
@@ -191,7 +191,7 @@ class Polynomial2P1D(Polynomial3D):
 
         for order in xrange(self.order[0]):
             p = 'ilm-z-%i' % order
-            self.z_param[p] = order
+            self.z_param[p] = (order,)
 
             params.append(p)
             values.append(0.0)
@@ -211,36 +211,36 @@ class Polynomial2P1D(Polynomial3D):
         self.initialize()
 
     def initialize(self):
-        self.field_xy = 0*self.term_xy(0,0)
-        self.field_z = 0*self.term_z(0)
+        self.r = self.rvecs()
+        self.field_xy = 0*self.term_xy((0,0))
+        self.field_z = 0*self.term_z((0,))
         super(Polynomial2P1D, self).initialize()
 
-    def _bkg(self):
-        self.bkg = np.zeros(self.shape)
-        self._polyxy = 0*self.bkg
-        self._polyz = 0*self.bkg
+    def calc_field(self):
+        self.field_xy = 0*self.term_xy((0,0))
+        self.field_z = 0*self.term_z((0,))
 
-        for order in self._poly_orders_xy():
-            ind = self._indices.index(order)
-            self._polyxy += self.params[ind] * self._term(order)
+        for p,v in zip(self.params, self.values):
+            if p in self.xy_param:
+                order = self.xy_param[p]
+                term = self.field_xy
+            else:
+                order = self.z_param[p]
+                term = self.field_z
 
-        for order in self._poly_orders_z():
-            ind = self._indices.index(order)
-            self._polyz += self.params[ind] * self._term(order)
+            term += v * self.term(order)
 
-        if self.operation == '*':
-            self.bkg = self._polyxy * self._polyz
-        else:
-            self.bkg = self._polyxy + self._polyz
-
-        return self.bkg
+        op = {'*': mul, '+': add}[self.operation]
+        self.field = op(self.field_xy, self.field_z)
+        return self.field
 
     def term_xy(self, index):
         i,j = index
-        return self.rx**i * self.ry**j
+        return self.r[2]**i * self.r[1]**j
 
     def term_z(self, index):
-        return self.rz**k
+        k = index[0]
+        return self.r[0]**k
 
     def term(self, index):
         # per index cache, so if called multiple times in a row, keep the answer
@@ -256,23 +256,22 @@ class Polynomial2P1D(Polynomial3D):
         return self._last_term
 
     def update(self, params, values):
-        if blocks.sum() < self.block.sum()/2:
-            for b in np.arange(len(blocks))[blocks]:
-                order = self._indices[b]
-
-                if order in self._indices_xy:
-                    _term = self._polyxy
+        if len(params) < len(self.params)/2:
+            for p,v1 in zip(params, values):
+                if p in self.xy_param:
+                    order = self.xy_param[p]
+                    term = self.field_xy
                 else:
-                    _term = self._polyz
+                    order = self.z_param[p]
+                    term = self.field_z
 
-                _term -= self.params[b] * self._term(order)
-                self.params[b] = params[b]
-                _term += self.params[b] * self._term(order)
+                v0 = self.get_values(p)
+                term -= v0 * self.term(order)
+                self.set_values(p,v1)
+                term += v1 * self.term(order)
 
-                if self.operation == '*':
-                    self.bkg = self._polyxy * self._polyz
-                else:
-                    self.bkg = self._polyxy + self._polyz
+            op = {'*': mul, '+': add}[self.operation]
+            self.field = op(self.field_xy, self.field_z)
         else:
             self.set_values(params, values)
             self.field = self.calc_field()
@@ -291,8 +290,9 @@ class Polynomial2P1D(Polynomial3D):
         self.initialize()
 
 class LegendrePoly2P1D(Polynomial2P1D):
-    def __init__(self, shape, coeffs=None, order=(1,1,1), *args, **kwargs):
-        super(LegendrePoly2P1D, self).__init__(*args, shape=shape, order=order, **kwargs)
+    def __init__(self, shape, order=(1,1,1), tileinfo=None, constval=None,
+            operation='*'):
+        super(LegendrePoly2P1D, self).__init__(shape=shape, order=order, **kwargs)
 
     def _setup_rvecs(self):
         o = self.shape
@@ -301,14 +301,14 @@ class LegendrePoly2P1D(Polynomial2P1D):
         self.ry = self.ry[None,:,None]
         self.rx = self.rx[None,None,:]
 
-    def _term_xy(self, index):
+    def term_xy(self, index):
         i,j = index
         ci = np.zeros(i+1)
         cj = np.zeros(j+1)
         ci[-1], cj[-1] = 1, 1
         return legval(self.rx, ci) * legval(self.ry, cj)
 
-    def _term_z(self, index):
+    def term_z(self, index):
         k = index[0]
         ck = np.zeros(k+1)
         ck[-1] = 1
@@ -319,14 +319,14 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
         super(ChebyshevPoly2P1D, self).__init__(*args,
                 shape=shape, order=order, **kwargs)
 
-    def _term_xy(self, index):
+    def term_xy(self, index):
         i,j = index
         ci = np.zeros(i+1)
         cj = np.zeros(j+1)
         ci[-1], cj[-1] = 1, 1
         return chebval(self.rx, ci) * chebval(self.ry, cj)
 
-    def _term_z(self, index):
+    def term_z(self, index):
         k = index[0]
         ck = np.zeros(k+1)
         ck[-1] = 1
@@ -336,10 +336,6 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 # a complex hidden variable representation of the ILM
 # something like (p(x,y)+m(x,y))*q(z) where m is determined by local models
 #=============================================================================
-class StreakInterpolator(object):
-    def __init__(self, type='gaussian'):
-        pass
-
 class BarnesStreakLegPoly2P1D(object):
     def __init__(self, shape, order=(1,1,1), nstreakpoints=40, barnes_dist=2.0):
         """
@@ -552,121 +548,7 @@ class BarnesStreakLegPoly2P1D(object):
         self.set_tile(Tile(self.shape))
         self.initialize()
 
-
-class BarnesStreakLegPoly2P1DX(BarnesStreakLegPoly2P1D):
-    def __init__(self, *args, **kwargs):
-        super(BarnesStreakLegPoly2P1DX, self).__init__(*args, **kwargs)
-
-    def _bkg(self):
-        self.bkg = np.zeros(self.shape)
-        self._polyxy = 0*self.bkg
-        self._polyz = 0*self.bkg
-
-        for order in self._poly_orders_xy():
-            ind = self._indices.index(order)
-            self._polyxy += self.params[ind] * self._term(order)
-
-        for order in self._poly_orders_z():
-            ind = self._indices.index(order)
-            self._polyz += self.params[ind] * self._term(order)
-
-        self.bkg = ((1.0+self._barnes_val()) * self._polyxy) * self._polyz
-        return self.bkg
-
-    def update(self, blocks, params):
-        if blocks.sum() < self.block.sum()/2:
-            for b in np.arange(len(blocks))[blocks]:
-                if b < len(self._indices):
-                    order = self._indices[b]
-
-                    if order in self._indices:
-                        if order in self._indices_xy:
-                            _term = self._polyxy
-                        else:
-                            _term = self._polyz
-
-                        _term -= self.params[b] * self._term(order)
-                        self.params[b] = params[b]
-                        _term += self.params[b] * self._term(order)
-
-                self.params[b] = params[b]
-                self.bkg = ((1.0+self._barnes_val()) * self._polyxy) * self._polyz
-        else:
-            self.params = params
-            self._bkg()
-
-class BarnesStreakLegPoly2P1DX2(BarnesStreakLegPoly2P1D):
-    def __init__(self, shape, order=(1,1,1), nstreakpoints=40, bpoly=4):
-        self.shape = shape
-        self.xyorder = order[:2]
-        self.zorder = order[-1]
-
-        self.order = order
-
-        npoly = len(list(self._poly_orders()))
-        self.nparams = npoly + nstreakpoints + bpoly
-
-        # set some parameters for the streak
-        self.bpoly = bpoly
-        self.nstreakpoints = nstreakpoints
-        self.streak_slicer = np.s_[npoly:npoly+nstreakpoints]
-        self.bpoly_slicer = np.s_[npoly+nstreakpoints:npoly+nstreakpoints+bpoly]
-
-        self.params = np.zeros(self.nparams, dtype='float')
-        self.params[0] = 1
-        self.params[len(list(self._poly_orders_xy()))] = 1
-        self.params[npoly+nstreakpoints] = 1
-
-        self._setup()
-        self.tile = Tile(self.shape)
-        self.set_tile(Tile(self.shape))
-
-        self.block = np.ones(self.nparams).astype('bool')
-        self.initialize()
-
-    def _barnes_poly(self):
-        p = self.params[self.bpoly_slicer]
-        return legval(self.ry, p)
-
-    def _bkg(self):
-        self.bkg = np.zeros(self.shape)
-        self._polyxy = 0*self.bkg
-        self._polyz = 0*self.bkg
-
-        for order in self._poly_orders_xy():
-            ind = self._indices.index(order)
-            self._polyxy += self.params[ind] * self._term(order)
-
-        for order in self._poly_orders_z():
-            ind = self._indices.index(order)
-            self._polyz += self.params[ind] * self._term(order)
-
-        self.bkg = ((self._barnes_val()*self._barnes_poly()) + self._polyxy) * self._polyz
-        return self.bkg
-
-    def update(self, blocks, params):
-        if blocks.sum() < self.block.sum()/2:
-            for b in np.arange(len(blocks))[blocks]:
-                if b < len(self._indices):
-                    order = self._indices[b]
-
-                    if order in self._indices:
-                        if order in self._indices_xy:
-                            _term = self._polyxy
-                        else:
-                            _term = self._polyz
-
-                        _term -= self.params[b] * self._term(order)
-                        self.params[b] = params[b]
-                        _term += self.params[b] * self._term(order)
-
-                self.params[b] = params[b]
-                self.bkg = ((self._barnes_val()*self._barnes_poly()) + self._polyxy) * self._polyz
-        else:
-            self.params = params
-            self._bkg()
-
-class BarnesStreakLegPoly2P1DX3(BarnesStreakLegPoly2P1D):
+class BarnesStreakLegPoly2P1D(BarnesStreakLegPoly2P1D):
     def __init__(self, shape, order=(1,1,1), npts=(40,20), barnes_dist=1.75):
         """
         Yet another Barnes interpolant. This one is of the form
