@@ -4,89 +4,25 @@ import cPickle as pickle
 from contextlib import contextmanager
 
 from peri import const
-from peri import initializers
-from peri.util import Tile, amin, amax, ProgressBar, RawImage, indir
-from peri.priors import overlap
+from peri.comp import Component
+from peri.util import Tile, RawImage, indir
 
-class State:
-    def __init__(self, nparams, state=None, logpriors=None):
-        self.nparams = nparams
-        self.state = state if state is not None else np.zeros(self.nparams, dtype='double')
+class State(Component):
+    def __init__(self, params, values, logpriors=None):
         self.stack = []
         self.logpriors = logpriors
 
-    def _update_state(self, block, data):
-        self.state[block] = data.astype(self.state.dtype)
-        return True
+    @property
+    def data(self):
+        pass
 
-    # TODO -- should this be a context manager?
-    # with s.push_update(b, d):
-    #   s.loglikelihood()
-    def push_update(self, block, data):
-        curr = self.state[block].copy()
-        self.stack.append((block, curr))
-        self.update(block, data)
+    @property
+    def model(self):
+        pass
 
-    def pop_update(self):
-        block, data = self.stack.pop()
-        self.update(block, data)
-
-    def update(self, block, data):
-        return self._update_state(block, data)
-
-    def block_all(self):
-        return np.ones(self.nparams, dtype='bool')
-
-    def block_none(self):
-        return np.zeros(self.nparams, dtype='bool')
-
-    def block_range(self, bmin, bmax):
-        block = self.block_none()
-        bmin = max(bmin, 0)
-        bmax = min(bmax, self.nparams)
-        block[bmin:bmax] = True
-        return block
-
-    def explode(self, block):
-        inds = np.arange(block.shape[0])
-        inds = inds[block]
-
-        blocks = []
-        for i in inds:
-            tblock = self.block_none()
-            tblock[i] = True
-            blocks.append(tblock)
-        return blocks
-
-    def _grad_single_param(self, block, dl, action='ll'):
-        self.push_update(block, self.state[block]+dl)
-        loglr = self.loglikelihood()
-        self.pop_update()
-
-        self.push_update(block, self.state[block]-dl)
-        logll = self.loglikelihood()
-        self.pop_update()
-
-        return (loglr - logll) / (2*dl)
-
-    def _hess_two_param(self, b0, b1, dl):
-        self.push_update(b0, self.state[b0]+dl)
-        self.push_update(b1, self.state[b1]+dl)
-        logl_01 = self.loglikelihood()
-        self.pop_update()
-        self.pop_update()
-
-        self.push_update(b0, self.state[b0]+dl)
-        logl_0 = self.loglikelihood()
-        self.pop_update()
-
-        self.push_update(b1, self.state[b1]+dl)
-        logl_1 = self.loglikelihood()
-        self.pop_update()
-
-        logl = self.loglikelihood()
-
-        return (logl_01 - logl_0 - logl_1 + logl) / (dl**2)
+    @property
+    def residual(self):
+        pass
 
     def loglikelihood(self):
         loglike = self.dologlikelihood()
@@ -94,152 +30,93 @@ class State:
             loglike += self.logpriors()
         return loglike
 
-    def gradloglikelihood(self, dl=1e-3, blocks=None, progress=False):
-        if blocks is None:
-            blocks = self.explode(self.block_all())
-        grad = np.zeros(len(blocks))
-
-        p = ProgressBar(len(blocks), display=progress)
-        for i, b in enumerate(blocks):
-            p.increment()
-            grad[i] = self._grad_single_param(b, dl)
-        p.end()
-
-        return grad
-
-    def hessloglikelihood(self, dl=1e-3, blocks=None, progress=False, jtj=False):
-        if jtj:
-            grad = self.gradloglikelihood(dl=dl, blocks=blocks, progress=progress)
-            return grad.T[None,:] * grad[:,None]
-        else:
-            if blocks is None:
-                blocks = self.explode(self.block_all())
-            hess = np.zeros((len(blocks), len(blocks)))
-
-            p = ProgressBar(len(blocks), display=progress)
-            for i, bi in enumerate(blocks):
-                p.increment()
-                for j, bj in enumerate(blocks[i:]):
-                    J = j + i
-                    thess = self._hess_two_param(bi, bj, dl)
-                    hess[i,J] = thess
-                    hess[J,i] = thess
-            p.end()
-            return hess
-
-    def negloglikelihood(self):
-        return -self.loglikelihood()
-
-    def neggradloglikelihood(self):
-        return -self.gradloglikelihood()
-
-"""
-class JointState(State):
-    def __init__(self, states, shared_params):
-        self.states = states
-        self.shared_params = shared_params
-
     def update(self, params, values):
-        for param in params:
-            if param in self.shared_params:
-                pass
-"""
+        super(State, self).update(params, values)
 
-class LinearFit(State):
-    def __init__(self, x, y, sigma=1, *args, **kwargs):
-        State.__init__(self, nparams=3, *args, **kwargs)
-        self.dx, self.dy = (np.array(i) for i in zip(*sorted(zip(x, y))))
+    def push_update(self, params, values):
+        curr = self.get_values(params)
+        self.stack.append((params, curr))
+        self.update(params, values)
 
-        self.b_sigma = self.explode(self.block_all())[-1]
-        self.state[self.b_sigma] = sigma
+    def pop_update(self):
+        params, values = self.stack.pop()
+        self.update(params, values)
 
-    def plot(self, state):
-        import pylab as pl
-        pl.figure()
-        pl.plot(self.dx, self.dy, 'o')
-        pl.plot(self.dx, self.docalculate(state), '-')
-        pl.show()
+    @contextmanager
+    def temp_update(self, params, values):
+        self.push_update(params, values)
+        yield
+        self.pop_update()
 
-    def _calculate(self):
-        return self.state[0]*self.dx + self.state[1]
+    def block_all(self):
+        return self.params
 
-    def dologlikelihood(self):
-        sig = self.state[self.b_sigma]
-        return (-((self._calculate() - self.dy)**2).sum() / (2*sig**2) + 
-                -(np.log(abs(sig)) + np.log(np.sqrt(2*np.pi))))
+    def _grad_single_param(self, func, p, dl=1e-3, **kwargs):
+        self.push_update(p, self.get_values(p)+dl)
+        val1 = np.array(func(**kwargs))
+        self.pop_update()
 
-    def reset(self):
-        self.state *= 0
+        self.push_update(p, self.get_values(p)-dl)
+        val0 = np.array(func(**kwargs))
+        self.pop_update()
 
-def prepare_image(image, imz=(0,None), imsize=None, invert=False, pad=const.PAD, dopad=True):
-    image = initializers.normalize(image[imz[0]:imz[1],:imsize,:imsize], invert)
-    if dopad:
-        image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
-    return image
+        return (val1 - val0) / (2*dl)
 
-def prepare_for_state(image, pos, rad, invert=False, pad=const.PAD, dopad=True,
-        remove_overlaps=False):
-    """
-    Prepares a set of positions, radii, and a test image for use
-    in the ConfocalImagePython object
+    def _hess_two_param(self, func, p0, p1, dl=1e-3, **kwargs):
+        self.push_update(p0, self.get_values(p0)+dl)
+        self.push_update(p1, self.get_values(p1)+dl)
+        val_01 = np.array(func(**kwargs))
+        self.pop_update()
+        self.pop_update()
 
-    Parameters:
-    -----------
-    image : (Nz, Ny, Nx) ndarray
-        the raw image from which to feature pos, rad, etc.
+        self.push_update(p0, self.get_values(p0)+dl)
+        val_0 = np.array(func(**kwargs))
+        self.pop_update()
 
-    pos : (N,3) ndarray
-        list of positions of particles in pixel units, where the positions
-        are listed in the same order as the image, (pz, py, px)
+        self.push_update(p1, self.get_values(p1)+dl)
+        val_1 = np.array(func(**kwargs))
+        self.pop_update()
 
-    rad : (N,) ndarray | float
-        list of particle radii in pixel units if ndarray.  If float, 
-        a list of radii of that value will be returned
+        val = np.array(func(**kwargs))
 
-    invert : boolean (optional)
-        True indicates that the raw image is light particles on dark background,
-        and needs to be inverted, otherwise, False
+        return (val_01 - val_0 - val_1 + val) / (dl**2)
 
-    pad : integer (optional)
-        The amount of padding to add to the raw image, should be at least
-        2 times the PSF size.  Not recommended to set manually
+    def _grad(self, func, ps=None, dl=1e-3, **kwargs):
+        if ps is None:
+            ps = self.block_all()
 
-    remove_overlaps : boolean
-        whether to remove overlaps from the pos, rad given.  not recommended,
-        has bugs
-    """
-    # normalize and pad the image, add the same offset to the positions
-    image = initializers.normalize(image, invert)
-    if dopad:
-        image = np.pad(image, pad, mode='constant', constant_values=const.PADVAL)
-        pos = pos.copy() + pad
+        ps = listifty(ps)
 
-    if not isinstance(rad, np.ndarray):
-        rad = rad*np.ones(pos.shape[0])
+        grad = []
+        for i, p in enumerate(ps):
+            grad.append(self._grad_single_param(func, p, dl, **kwargs))
+        return np.array(grad)
 
-    bound_left = np.zeros(3)
-    bound_right = np.array(image.shape)
+    def _jtj(self, func, ps=None, dl=1e-3, **kwargs):
+        grad = self._grad(func=func, ps=ps, dl=dl, **kwargs)
+        return np.dot(grad.T, grad)
 
-    # clip particles that are outside of the image or have negative radii
-    keeps = np.ones(rad.shape[0]).astype('bool')
-    for i, (p, r) in enumerate(zip(pos, rad)):
-        if (p < bound_left).any() or (p > bound_right).any():
-            print "Particle %i out of bounds at %r, removing..." % (i, p)
-            keeps[i] = False
-        if r < 0:
-            print "Particle %i with negative radius %f, removing..." % (i, r)
-            keeps[i] = False
+    def _hess(self, func, ps=None, dl=1e-3, **kwargs):
+        if ps is None:
+            ps = self.block_all()
 
-    pos = pos[keeps]
-    rad = rad[keeps]
+        ps = listifty(ps)
 
-    # change overlapping particles so that the radii do not coincide
-    if remove_overlaps:
-        initializers.remove_overlaps(pos, rad)
-    return image, pos, rad
+        hess = [[0]*len(ps)]*len(ps)
+        for i, pi in enumerate(ps):
+            for j, pj in enumerate(ps[i:]):
+                J = j + i
+                thess = self._hess_two_param(func, bi, bj, dl=dl, **kwargs)
+                hess[i,J] = thess
+                hess[J,i] = thess
+        return np.array(hess)
 
-# NOTE -- for adding new parameters, add to the end until full rewrite so older states
-# can still be loaded.  this is because of the __getinitargs__ of pickle
+    gradloglikelihood = partial(self._grad, func=self.loglikelihood)
+    hessloglikelihood = partial(self._hess, func=self.loglikelihood)
+    J = partial(self._grad, func=self.residuals)
+    JTJ = partial(self._jtj, func=self.residuals)
+    Jp = partial(self._grad, func=self.residuals_sample)
+    JTJp = partial(self._jtj, func=self.residuals_sample)
 
 class ConfocalImagePython(State):
     def __init__(self, image, obj, psf, ilm, zscale=1, offset=0,
