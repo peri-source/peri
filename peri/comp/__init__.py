@@ -1,1 +1,1 @@
-from peri.comp.comp import ParameterGroup, Component
+from peri.comp.comp import ParameterGroup, Component, ComponentCollection

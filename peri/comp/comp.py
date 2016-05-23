@@ -9,20 +9,22 @@ from peri.util import listify, delistify, Tile
 class ParameterGroup(object):
     category = 'param'
 
-    def __init__(self, params=None, values=None):
+    def __init__(self, params=None, values=None, ordered=True):
         """
         Set up a parameter group, which is essentially an OrderedDict of param
         -> values. However, it is generalized so that this structure is not
         strictly enforced for all ParameterGroup subclasses.
         """
+        gen = OrderedDict if ordered else dict
+
         if params is not None and values is not None:
-            self.param_dict = OrderedDict()
+            self.param_dict = gen()
             for p,v in zip(params, values):
                 self.param_dict[p] = v
         elif params is not None and values is None:
             self.param_dict = params
         else:
-            self.param_dict = OrderedDict()
+            self.param_dict = gen()
 
     def update(self, params, values):
         """
@@ -30,6 +32,7 @@ class ParameterGroup(object):
         params and corresponding values for the object.
         """
         self.set_values(params, values)
+        return True
 
     def get_values(self, params):
         """ Get the value of a list or single parameter """
@@ -177,6 +180,7 @@ class ComponentCollection(Component):
         plist, vlist = self.split_params(params, values)
         for c, p, v in zip(self.comps, plist, vlist):
             c.update(p, v)
+        return True
 
     def get_values(self, params):
         vals = []
