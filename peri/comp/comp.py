@@ -66,6 +66,8 @@ class ParameterGroup(object):
 # Component class == model components for an image
 #=============================================================================
 class Component(ParameterGroup):
+    category = 'comp'
+
     def __init__(self, params, values):
         super(Component, self).__init__(params, values)
 
@@ -93,14 +95,20 @@ class Component(ParameterGroup):
         """
         raise NotImplementedError("get_update_tile required for components")
 
-    def get_padding_size(self, params, values):
-        raise NotImplementedError("get_padding_size required for components")
+    def get_padding_size(self, tile):
+        pass 
 
     def get_field(self):
-        raise NotImplementedError("get_field required for components")
+        return self
 
     def set_tile(self, tile):
-        raise NotImplementedError("set_tile required for components")
+        pass
+
+    def execute(self, field):
+        return field
+
+    def __call__(self, field):
+        return self.execute(field)
 
     # TODO make all components serializable via _getinitargs_
 
@@ -176,10 +184,19 @@ class ComponentCollection(Component):
             return pc, vc
         return pc
 
+    def affected_components(self, params):
+        comps = []
+        plist, vlist = self.split_params(params)
+        for c, p in zip(self.comps, plist):
+            if len(p) > 0:
+                comps.append(c)
+        return comps
+
     def update(self, params, values):
         plist, vlist = self.split_params(params, values)
         for c, p, v in zip(self.comps, plist, vlist):
-            c.update(p, v)
+            if len(p) > 0:
+                c.update(p, v)
         return True
 
     def get_values(self, params):
