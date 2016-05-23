@@ -148,6 +148,7 @@ class State(ParameterGroup):
         return np.array(hess)
 
     def _build_funcs(self):
+        # FIXME -- docstrings
         self.gradloglikelihood = partial(self._grad, func=self.loglikelihood)
         self.hessloglikelihood = partial(self._hess, func=self.loglikelihood)
         self.fisherinformation = partial(self._jtj, func=self.model_sample) #FIXME -- sigma^2
@@ -172,12 +173,21 @@ class State(ParameterGroup):
         return self.__str__()
 
 
-class LinearFitState(State):
-    def __init__(self, x, d, m=0.0, b=0.0, sigma=1.0):
+class PolyFitState(State):
+    def __init__(self, x, y, order=2, coeffs=None, sigma=1.0):
         # FIXME -- add prior for sigma > 0
-        self._data = d
+        self._data = y
         self._xpts = x
-        super(LinearFitState, self).__init__(['m', 'b', 'sigma'], [m, b, sigma], ordered=False)
+
+        params = ['c-%i' %i for i in xrange(order)]
+        values = coeffs if coeffs is not None else [0.0]*order
+
+        params.append('sigma')
+        values.append(1.0)
+
+        super(PolyFitState, self).__init__(
+            params=params, values=values, ordered=False
+        )
 
     @property
     def data(self):
@@ -187,7 +197,7 @@ class LinearFitState(State):
     @property
     def model(self):
         """ Get the current model fit to the data """
-        return self.param_dict['m']*self._xpts + self.param_dict['b']
+        return np.polyval(self.values, self._xpts)
 
     @property
     def residuals(self):
@@ -195,13 +205,15 @@ class LinearFitState(State):
 
     def loglikelihood(self):
         sig = self.param_dict['sigma']
-        return -((self.residuals)**2).sum() / (2*sig**2) - 0.5*np.log(2*np.pi*sig*sig)*self._data.shape[0]
+        return (
+            -(0.5 * (self.residuals/sig)**2).sum()
+            -np.log(np.sqrt(2*np.pi)*sig)*self._data.shape[0]
+        )
 
 
 class ConfocalImageState(State, ComponentCollection):
     def __init__(self, image, comp, zscale=1, offset=0, sigma=0.04, priors=None,
-            constoff=False, nlogs=True, pad=const.PAD, newconst=True, method=1,
-            modelnum=0, catmap=None, modelstr=None):
+            nlogs=True, pad=const.PAD, modelnum=0, catmap=None, modelstr=None):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -217,16 +229,8 @@ class ConfocalImageState(State, ComponentCollection):
             RawImage, paths are used to keep track of the image object to save
             on pickle size.
 
-        obj : component
-            A component object which handles the platonic image creation, e.g., 
-            peri.comp.objs.SphereCollectionRealSpace.  Also, needs to be created
-            after prepare_for_state.
-
-        psf : component
-            The PSF component which has the same image size as padded image.
-
-        ilm : component
-            Illumination field component from peri.comp.ilms
+        comp : list of `peri.comp.Component`s or `peri.comp.ComponentCollection`s
+            Components used to make up the model image
 
         zscale : float, typically (1, 1.5) [default: 1]
             The initial zscaling for the pixel sizes.  Bigger is more compressed.
@@ -237,12 +241,7 @@ class ConfocalImageState(State, ComponentCollection):
         priors: boolean [default: False]
             Whether or not to turn on overlap priors using neighborlists
 
-        constoff: boolean [default: False]
-            Changes the model so to:
-
-                Image = \int PSF(x-x') (ILM(x)*-OFF*SPH(x)) dx'
-
-        nlogs: boolean [default: False]
+        nlogs: boolean [default: True]
             Include in the Loglikelihood calculate the term:
 
                 LL = -(p_i - I_i)^2/(2*\sigma^2) - \log{\sqrt{2\pi} \sigma} 
@@ -251,41 +250,66 @@ class ConfocalImageState(State, ComponentCollection):
             No recommended to set by hand.  The padding level of the raw image needed
             by the PSF support.
 
+        modelnum : integer
+            Use of the supplied models given by an index. Currently there is:
+
+                0 : H(I*(1-P) + C*P) + B
+                1 : H(I*(1-P) + C*P + B)
+
+        catmap : dict
+            (Using a custom model) The mapping of variables in the modelstr
+            equations to actual component types. For example:
+
+                {'P': 'platonic', 'H': 'psf'}
+
+        modelstr : dict of strings
+            (Using a custom model) The actual equations used to defined the model.
+            At least one eq. is required under the key `full`. Other partial
+            update equations can be added where the variable name (e.g. 'dI')
+            denotes a partial update of I, for example:
+
+                {'full': 'H(P)', 'dP': 'H(dP)'}
         """
         self.pad = pad
         self.sigma = sigma
         self.priors = priors
-
         self.dollupdate = True
 
-        self.psf = psf
-        self.ilm = ilm
-        self.bkg = bkg
-        self.obj = obj
-        self.slab = slab
         self.zscale = zscale
         self.rscale = 1.0
         self.offset = offset
-        self.N = self.obj.N
 
         ComponentCollection.__init__(self, comps=comps)
+        self.set_model(modelnum=modelnum, catmap=catmap, modelstr=modelstr)
         self.set_image(image)
-        self.set_model(modelnum, catmap, modelstr)
 
     def set_model(self, modelnum=None, catmap=None, modelstr=None):
-        catmap0 = {
+        """
+        Setup the image model formation equation and corresponding objects into
+        their various objects. See the ConfocalImageState __init__ docstring
+        for information on these parameters.
+        """
+        N = 2
+        catmaps = [0]*N
+        modelstrs = [0]*N
+
+        catmaps[0] = {
             'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'platonic', 'C': 'offset'
         }
-        modelstr0 = {
+        modelstrs[0] = {
             'full' : 'H(I*(1-P)+C*P) + B',
-            'dH' : 'H(I*(1-P)+C*P) + B',
             'dI' : 'H(dI*(1-P))',
             'dP' : 'H((C-I)*dP)',
             'dB' : 'dB'
         }
 
-        catmaps = [catmap0]
-        modelstrs = [modelstr0]
+        catmaps[1] = {
+            'P': 'platonic', 'H': 'psf'
+        }
+        modelstrs[1] = {
+            'full': 'H(P)',
+            'dP': 'H(dP)'
+        }
 
         if catmap is not None and modelstr is not None:
             self.catmap = catmap
@@ -303,15 +327,7 @@ class ConfocalImageState(State, ComponentCollection):
         # are consistent across the many components.
 
     def reset(self):
-        if self.rawimage is not None:
-            self.set_image(self.rawimage)
-        else:
-            self.set_image(self.padded_image())
-
-    def padded_image(self):
-        o = self.image.copy()
-        o[self.image_mask == 0] = const.PADVAL
-        return o
+        self.set_image(self.image)
 
     def set_image(self, image):
         """
@@ -328,7 +344,8 @@ class ConfocalImageState(State, ComponentCollection):
         self.image *= self.image_mask
 
         self.inner = (np.s_[self.pad:-self.pad],)*3
-        self.model_image = np.zeros_like(self.image)
+        self._model = np.zeros_like(self.image)
+        self._residuals = np.zeros_like(self.image)
 
     def model_to_true_image(self):
         """
@@ -343,7 +360,7 @@ class ConfocalImageState(State, ComponentCollection):
 
     @property
     def model(self):
-        return self.model_image * self.image_mask
+        return self._model * self.image_mask
 
     def get_true_image(self):
         return self.image * self.image_mask
@@ -384,12 +401,20 @@ class ConfocalImageState(State, ComponentCollection):
         return out
 
     def update(self, params, values):
+        """
+        Actually perform an image (etc) update based on a set of params and
+        values. These parameter can be any present in the components in any
+        number. If there is only one component affected then difference image
+        updates will be employed.
+        """
         comps = self.affected_components(params)
 
+        # get the affected area of the model image
         otile = self.get_update_tile(params, values)
         ptile = self.get_padding_size(otile)
-
         itile, otile, iotile = self.get_io_tiles(otile, ptile)
+
+        # have all components update their tiles
         self.set_tiles(otile)
 
         # here we diverge depending if there is only one component update
@@ -400,6 +425,8 @@ class ConfocalImageState(State, ComponentCollection):
             compname = self.mapcat[comp.category]
             dcompname = 'd'+compname
 
+            # FIXME -- check that self.modelstr[dcompname] exists first
+
             model0 = comp.get_field()
             super(ConfocalImageState, self).update(params, values)
             model1 = comp.get_field()
@@ -408,7 +435,7 @@ class ConfocalImageState(State, ComponentCollection):
             evar = self._map_vars('get_field', extra={dcompname: diff})
             diff = eval(self.modelstr[dcompname], globals=evar)
 
-            self.model_image[itile.slicer] += diff[iotile.slicer]
+            self._model[itile.slicer] += diff[iotile.slicer]
         else:
             super(ConfocalImageState, self).update(params, values)
 
@@ -416,9 +443,11 @@ class ConfocalImageState(State, ComponentCollection):
             # formulas coming up, B = bkg, I = ilm, C = off
             evar = self._map_vars('get_field')
             diff = eval(self.modelstr['full'], globals=evar)
-            self.model_image[itile.slicer] = diff[iotile.slicer]
+            self._model[itile.slicer] = diff[iotile.slicer]
 
-        self._update_ll_field(self.model_image[islice], islice)
+        # use the model image update to modify other class variables which
+        # are hard to compute globally for small local updates
+        self._update_ll_field(self._model[islice], islice)
 
     def residuals(self, masked=True):
         return self.get_difference_image(doslice=masked)
