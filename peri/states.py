@@ -1,15 +1,22 @@
 import os
+import json
+import types
 import numpy as np
 import cPickle as pickle
+
+from functools import partial
 from contextlib import contextmanager
 
 from peri import const, util
-from peri.comp import ComponentCollection
+from peri.comp import ParameterGroup, ComponentCollection
 
-class State(ComponentCollection):
-    def __init__(self, params, values, logpriors=None):
+class State(ParameterGroup):
+    def __init__(self, params, values, logpriors=None, **kwargs):
         self.stack = []
         self.logpriors = logpriors
+
+        super(State, self).__init__(params, values, **kwargs)
+        self._build_funcs()
 
     @property
     def data(self):
@@ -27,8 +34,13 @@ class State(ComponentCollection):
 
     def residuals_sample(self, inds=None):
         if inds is not None:
-            return self.residuals.ravel[inds]
+            return self.residuals.ravel()[inds]
         return self.residuals
+
+    def model_sample(self, inds=None):
+        if inds is not None:
+            return self.model.ravel()[inds]
+        return self.model
 
     def loglikelihood(self):
         loglike = self.dologlikelihood()
@@ -36,8 +48,11 @@ class State(ComponentCollection):
             loglike += self.logpriors()
         return loglike
 
+    def logprior(self):
+        pass
+
     def update(self, params, values):
-        super(State, self).update(params, values)
+        return super(State, self).update(params, values)
 
     def push_update(self, params, values):
         curr = self.get_values(params)
@@ -94,7 +109,7 @@ class State(ComponentCollection):
         if ps is None:
             ps = self.block_all()
 
-        ps = listifty(ps)
+        ps = util.listify(ps)
         f0 = util.callif(func(**kwargs))
 
         grad = []
@@ -104,34 +119,75 @@ class State(ComponentCollection):
 
     def _jtj(self, func, ps=None, dl=1e-3, **kwargs):
         grad = self._grad(func=func, ps=ps, dl=dl, **kwargs)
-        return np.dot(grad.T, grad)
+        return np.dot(grad, grad.T)
 
     def _hess(self, func, ps=None, dl=1e-3, **kwargs):
         if ps is None:
             ps = self.block_all()
 
-        ps = listifty(ps)
+        ps = util.listify(ps)
         f0 = util.callif(func(**kwargs))
 
-        hess = [[0]*len(ps)]*len(ps)
+        hess = [[0]*len(ps) for i in xrange(len(ps))]
         for i, pi in enumerate(ps):
             for j, pj in enumerate(ps[i:]):
                 J = j + i
-                thess = self._hess_two_param(func, bi, bj, dl=dl, f0=f0, **kwargs)
-                hess[i,J] = thess
-                hess[J,i] = thess
+                thess = self._hess_two_param(func, pi, pj, dl=dl, f0=f0, **kwargs)
+                hess[i][J] = thess
+                hess[J][i] = thess
         return np.array(hess)
 
-    gradloglikelihood = partial(_grad, func=self.loglikelihood)
-    hessloglikelihood = partial(_hess, func=self.loglikelihood)
-    fisherinformation = partial(_jtj, func=self.model_sample) #FIXME -- sigma^2
-    J = partial(_grad, func=self.residuals_sample)
-    JTJ = partial(_jtj, func=self.residuals_sample)
+    def _build_funcs(self):
+        self.gradloglikelihood = partial(self._grad, func=self.loglikelihood)
+        self.hessloglikelihood = partial(self._hess, func=self.loglikelihood)
+        self.fisherinformation = partial(self._jtj, func=self.model_sample) #FIXME -- sigma^2
+        self.J = partial(self._grad, func=self.residuals_sample)
+        self.JTJ = partial(self._jtj, func=self.residuals_sample)
+
+        class _Statewrap(object):
+            def __init__(self, obj):
+                self.obj = obj
+            def __getitem__(self, d):
+                return self.obj.get_values(d)
+
+        self.state = _Statewrap(self)
 
     def crb(self, p):
         pass
 
-class ConfocalImagePython(State):
+    def __str__(self):
+        return "{}\n{}".format(self.__class__.__name__, json.dumps(self.param_dict, indent=2))
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class LinearFitState(State):
+    def __init__(self, x, d, m=0.0, b=0.0, sigma=1.0):
+        self._data = d
+        self._xpts = x
+        super(LinearFitState, self).__init__(['m', 'b', 'sigma'], [m, b, sigma], ordered=False)
+
+    @property
+    def data(self):
+        """ Get the raw data of the model fit """
+        return self._data
+
+    @property
+    def model(self):
+        """ Get the current model fit to the data """
+        return self.param_dict['m']*self._xpts + self.param_dict['b']
+
+    @property
+    def residuals(self):
+        return self.model - self.data
+
+    def loglikelihood(self):
+        sig = self.param_dict['sigma']
+        return -((self.residuals)**2).sum() / (2*sig**2) - 0.5*np.log(2*np.pi*sig)*self._data.shape[0]
+
+
+class ConfocalImagePython(State, ComponentCollection):
     def __init__(self, image, comp, zscale=1, offset=0, sigma=0.04, priors=None,
             constoff=False, nlogs=True, pad=const.PAD, newconst=True, method=1):
         """
@@ -235,7 +291,7 @@ class ConfocalImagePython(State):
         self.offset = offset
         self.N = self.obj.N
 
-        super(ConfocalImagePython, self).__init__(comps=comps)
+        ComponentCollection.__init__(self, comps=comps)
         self.set_image(image)
 
     def reset(self):
@@ -304,21 +360,13 @@ class ConfocalImagePython(State):
         self._sigma_field += self.sigma
         self._sigma_field_log = np.log(self._sigma_field)
 
-    def get_support_size(self, params, values):
-        # FIXME -- self.difference is ignored in this function
+    def get_update_tile(self, params, values):
+        return super(ConfocalImagePython, self).get_update_tile(params, values)
 
-        # FIXME -- this should really be called get_update_tile ??
-        # so that psf really is support size since it does not have translation
-        sl, sr = self.obj.get_support_size(p0, r0, t0, p1, r1, t1, self.zscale)
+    def get_padding_size(self, tile):
+        return super(ConfocalImagePython, self).get_padding_size(tile)
 
-        tl = self.psf.get_support_size(sl)
-        tr = self.psf.get_support_size(sr)
-
-        # FIXME -- more ceil functions?
-        # get the object's tile and the psf tile size
-        otile = util.Tile(sl, sr, 0, self.image.shape)
-        ptile = util.Tile.boundingtile([util.Tile(np.ceil(i)) for i in [tl, tr]])
-
+    def get_io_tiles(self, otile, ptile):
         # now remove the part of the tile that is outside the image and
         # pad the interior part with that overhang
         img = util.Tile(self.image.shape)
@@ -461,11 +509,13 @@ class ConfocalImagePython(State):
     def update(self, params, values):
         model = self.model.copy()
 
+        otile = self.get_update_tile(params, values)
+        ptile = self.get_padding_size(otile)
+
+        itile, otile, iotile = self.get_io_tiles(otile, ptile)
+
         for c in self.comps:
             c.update(params, values)
-
-    def create_block(self, typ='all'):
-        return self.block_range(*self._block_offset_end(typ))
 
     def residuals(self, masked=True):
         return self.get_difference_image(doslice=masked)
@@ -474,10 +524,9 @@ class ConfocalImagePython(State):
         return self._logprior + self._loglikelihood
 
     def __str__(self):
-        return self.__class__.__name__
-
-    def __repr__(self):
-        return self.__str__()
+        return "{} [\n    {}\n]".format(self.__class__.__name__,
+            '\n    '.join([str(c) for c in self.comps])
+        )
 
     def __getstate__(self):
         return {}
