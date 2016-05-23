@@ -109,7 +109,7 @@ class Polynomial3D(Component):
     def get_params(self):
         return self.params
 
-    def get_support_size(self, params, values):
+    def get_update_tile(self, params, values):
         return Tile(self.shape)
 
     def __getstate__(self):

@@ -351,7 +351,7 @@ class SphereCollectionRealSpace(Component):
     def values(self):
         return self.get_values(self._params)
 
-    def get_support_size(self, params, values):
+    def get_update_tile(self, params, values):
         """ Get the amount of support size required for a particular update. """
         dozscale, particles = self._update_type(params)
 
@@ -589,7 +589,7 @@ class Slab(Component):
     def get_field(self):
         return self.image[self.tile.slicer]
 
-    def get_support_size(self, params, values):
+    def get_update_tile(self, params, values):
         return Tile(self.shape)
 
     def get_padding_size(self, params, values):

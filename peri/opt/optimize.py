@@ -715,14 +715,14 @@ def update_particles(s, particles, params, include_rad=True, **kwargs):
         t1 = np.array([s.obj.typ[particles[a]]])
         #We reconstruct the tiles separately to deal with edge-particle
         #overhang pads:
-        left, right = s.obj.get_support_size(p0, r0, t0, p1, r1, t1, s.zscale)
+        left, right = s.obj.get_update_tile(p0, r0, t0, p1, r1, t1, s.zscale)
         all_part_tiles.append(Tile(left, right, mins=0, maxs=s.image.shape))
 
     particle_tile = all_part_tiles[0].boundingtile(all_part_tiles)
 
     #From here down is basically copied from states._tile_from_particle_change
-    psf_pad_l = s.psf.get_support_size(particle_tile.l[0])
-    psf_pad_r = s.psf.get_support_size(particle_tile.r[0])
+    psf_pad_l = s.psf.get_update_tile(particle_tile.l[0])
+    psf_pad_r = s.psf.get_update_tile(particle_tile.r[0])
     psftile = Tile.boundingtile([Tile(np.ceil(i)) for i in [psf_pad_l, psf_pad_r]])
     img = Tile(s.image.shape)
     outer_tile = particle_tile.pad(psftile.shape/2+1)

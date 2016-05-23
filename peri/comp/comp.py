@@ -70,7 +70,7 @@ class Component(ParameterGroup):
         """ Begin anew and initialize the component """
         raise NotImplementedError("initialize required for components")
 
-    def get_support_size(self, params, values):
+    def get_update_tile(self, params, values):
         """
         This method returns a `peri.util.Tile` object defining the region of
         a field that has to be modified by the update of (params, values).
@@ -88,7 +88,7 @@ class Component(ParameterGroup):
         tile : `peri.util.Tile`
             A tile corresponding to the image region
         """
-        raise NotImplementedError("get_support_size required for components")
+        raise NotImplementedError("get_update_tile required for components")
 
     def get_padding_size(self, params, values):
         raise NotImplementedError("get_padding_size required for components")
@@ -109,8 +109,8 @@ class ComponentCollection(Component):
         """
         Group a number of components into a single coherent object which a
         single interface for each function. Obvious reductions are performed in
-        places such as get_support_size which takes the bounding tile of all
-        constituent get_support_size.  The only reduction which is not
+        places such as get_update_tile which takes the bounding tile of all
+        constituent get_update_tile.  The only reduction which is not
         straight-forward is get_field, but by default it adds all fields. This
         class has the same interface as Component itself.
 
@@ -205,12 +205,12 @@ class ComponentCollection(Component):
                 pv[p] = v
         return pv.values()
 
-    def get_support_size(self, params, values):
+    def get_update_tile(self, params, values):
         sizes = []
 
         plist, vlist = self.split_params(params, values)
         for c, p, v in zip(self.comps, plist, vlist):
-            sizes.append(c.get_support_size(p, v))
+            sizes.append(c.get_update_tile(p, v))
 
         return Tile.boundingtile(sizes)
 
