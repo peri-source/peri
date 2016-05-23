@@ -15,6 +15,8 @@ from peri.interpolation import BarnesInterpolation1D
 # Pure 3d functional representations of ILMs
 #=============================================================================
 class Polynomial3D(Component):
+    category = 'ilm'
+
     def __init__(self, shape, order=(1,1,1), tileinfo=None, constval=None):
         """
         A polynomial 3D class for updating large fields of polys.
@@ -337,6 +339,8 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 # something like (p(x,y)+m(x,y))*q(z) where m is determined by local models
 #=============================================================================
 class BarnesStreakLegPoly2P1D(object):
+    category = 'ilm'
+
     def __init__(self, shape, order=(1,1,1), nstreakpoints=40, barnes_dist=2.0):
         """
         An illumination field of the form (b(e) + p(x,y))*q(z) where

@@ -51,7 +51,7 @@ class PSF(Component):
 
     def calculate_min_rpsf(self):
         # calculate the minimum supported real-space PSF
-        min_support = np.ceil(self.get_padding_size()).astype('int')
+        min_support = np.ceil(self.get_padding_size(util.Tile(self.shape))).astype('int')
         min_support += min_support % 2
         min_rpsf = self.rpsf_func(self._rvecs(min_support))
         return min_rpsf, min_support
@@ -84,7 +84,7 @@ class PSF(Component):
 
         return np.real(fft.ifftn(infield * self.kpsf))
 
-    def get_padding_size(self, z=None):
+    def get_padding_size(self, tile):
         raise NotImplemented('subclasses must implement `get_padding_size`')
 
     def _rvecs(self, shape, centered=True):
@@ -120,7 +120,7 @@ class IdentityPSF(PSF):
     def execute(self, field):
         return field
     
-    def get_padding_size(self, *args):
+    def get_padding_size(self, tile):
         return np.ones(3)
     
     def update(self, params, values):
@@ -146,7 +146,7 @@ class AnisotropicGaussian(PSF):
         arg = np.exp(-(rhosq/vals[0]**2 + (rz/vals[1])**2)/2)
         return arg * (rhosq <= self.pr**2) * (np.abs(rz) <= self.pz)
 
-    def get_padding_size(self, z=None):
+    def get_padding_size(self, tile):
         self.pr = np.sqrt(-2*np.log(self.error)*self.values[0]**2)
         self.pz = np.sqrt(-2*np.log(self.error)*self.values[1]**2)
         return np.array([self.pz, self.pr, self.pr])
@@ -171,7 +171,7 @@ class AnisotropicGaussianXYZ(PSF):
             (np.abs(rz) <= self.pz)
         )
 
-    def get_padding_size(self, z=None):
+    def get_padding_size(self, tile):
         self.px = np.sqrt(-2*np.log(self.error)*self.values[2]**2)
         self.py = np.sqrt(-2*np.log(self.error)*self.values[1]**2)
         self.pz = np.sqrt(-2*np.log(self.error)*self.values[0]**2)
