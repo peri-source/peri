@@ -452,6 +452,30 @@ class SphereCollectionRealSpace(Component):
     def get_field(self):
         return self.particles[self.tile.slicer]
 
+    def block_positions(self):
+        return [self._i2p(i, j) for i in xrange(s.N) for j in ['x','y','z']]
+
+    def block_radii(self):
+        return [self._i2p(i, 'a') for i in xrange(s.N)]
+
+    def block_particle(self, ind):
+        return [self._i2p(ind, i) for i in ['x', 'y', 'z', 'a']]
+
+    def block_particle_pos(self, ind):
+        return [self._i2p(ind, i) for i in ['x', 'y', 'z']]
+
+    def block_particle_rad(self, ind):
+        return self._i2p(ind, 'a')
+
+    def add_particle(self, pos, rad):
+        pass
+
+    def remove_particle(self, ind):
+        pass
+
+    def closest_particle(self, x):
+        pass
+
     def _i2p(self, ind, coord):
         """ Translate index info to parameter name """
         return '-'.join([self.param_prefix, str(ind), coord])

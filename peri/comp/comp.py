@@ -224,10 +224,15 @@ class ComponentCollection(Component):
         return Tile.boundingtile(sizes)
 
     def get_field(self):
+        """ Combine the fields from all components """
         fields = [c.get_field() for c in self.comps]
         return self.field_reduce_func(fields)
 
     def set_tile(self, tile):
+        """ Set the current working tile for components """
         for c in self.comps:
             c.set_tile(tile)
 
+    def sync_params(self):
+        """ Ensure that shared parameters are the same value everywhere """
+        pass # FIXME
