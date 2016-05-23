@@ -1,6 +1,6 @@
 import numpy as np
 from cbamf import initializers
-# import trackpy as tp
+import cbamf; tp = cbamf.trackpy
 import cbamf.opt.optimize as opt
 from cbamf.logger import log
 CLOG = log.getChild('addsub')

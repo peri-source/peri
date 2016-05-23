@@ -555,11 +555,17 @@ def eval_one_particle_grad(s, particle, dl=1e-6, threept=False, slicer=None,
 
 def eval_many_particle_grad(s, particles, **kwargs):
     """Wrapper for eval_one_particle_grad. Particles is an iterable"""
-    grad = []
-    for p in particles:
+    grad = eval_one_particle_grad(s, particles[0], **kwargs)[0]
+    #
+    gs = grad.shape
+    ans = np.zeros([len(particles) * gs[0], gs[1]], dtype=grad.dtype)
+    counter = gs[0]; dcounter = gs[0]
+    ans[:counter] = grad.copy() #; del grad
+    for p in particles[1:]:
         #throwing out the slicer info right now...
-        grad.extend(eval_one_particle_grad(s, p, **kwargs)[0].tolist())
-    return np.array(grad)
+        ans[counter:counter+dcounter,:] = eval_one_particle_grad(s, p, **kwargs)[0]
+        counter += dcounter
+    return ans
 
 def find_particles_in_box(s, bounds):
     """
@@ -726,8 +732,18 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
         rs = np.array(region_size)
         particle_groups = separate_particles_into_groups(s, region_size=
                 rs.tolist(), **kwargs)
+        #The actual max_mem is np.max(map(f, p_groups) where 
+        # f = lambda g: get_slicered_difference(s, get_tile_from_multiple-
+        #   particle_change(s, g).slicer, s.image_mask[" " " " .slicer] == 1)
+        #   .nbytes * g.size * 4
+        #However this is _way_ too slow. A better approximation is 
+        # d = s.get_difference_image()
+        # max_mem = np.max(map(lambda g: d[get_tile_from_multiple_particle_change(
+                # s, g).slicer].nbytes * g.size * 4, particle_groups))
+        # return max_mem
+        ##But this is still too slow (like 1 min vs 250 ms). So instead --
         num_particles = np.max(map(np.size, particle_groups))
-        mem_per_part = 32 * np.prod(rs + 2*s.pad*np.ones(3))
+        mem_per_part = 32 * np.prod(rs + (s.psf.support + np.median(s.obj.rad[s.obj.typ==1])))
         return num_particles * mem_per_part
 
     im_shape = np.array(s.image.shape).astype('int')
