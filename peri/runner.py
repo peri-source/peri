@@ -5,23 +5,20 @@ import scipy.ndimage as nd
 import tempfile
 import pickle
 
-from peri import const
+from peri import const, util
 from peri import states, initializers
-from peri.util import RawImage
 from peri.mc import samplers, engines, observers
-from peri.comp import objs, psfs, ilms, exactpsf
+#from peri.comp import objs, psfs, ilms, exactpsf
 
 # Linear fit function, because I can
 def linear_fit(x, y, sigma=1, N=100, burn=1000):
-    from peri.states import LinearFit
+    from peri.states import LinearFitState
     poly = np.polyfit(x,y,1)
 
-    s = LinearFit(x, y, sigma=sigma)
-    s.state[:2] = poly
+    s = LinearFitState(x, y, m=poly[0], b=poly[1], sigma=sigma)
 
-    bl = s.explode(s.block_all())
-    h = sample_state(s, s.explode(s.block_all()), N=burn, doprint=True, procedure='uniform')
-    h = sample_state(s, s.explode(s.block_all()), N=burn, doprint=True, procedure='uniform')
+    h = sample_state(s, s.params, N=burn, doprint=True, procedure='uniform')
+    h = sample_state(s, s.params, N=burn, doprint=True, procedure='uniform')
 
     return s, h.get_histogram()
 
@@ -31,8 +28,8 @@ def linear_fit(x, y, sigma=1, N=100, burn=1000):
 def sample_state(state, blocks, stepout=1, slicing=True, N=1, doprint=False, procedure='uniform'):
     eng = engines.SequentialBlockEngine(state)
     opsay = observers.Printer()
-    ohist = observers.HistogramObserver(block=np.array(blocks).any(axis=0))
-    eng.add_samplers([samplers.SliceSampler1D(stepout, block=b, procedure=procedure) for b in blocks])
+    ohist = observers.HistogramObserver(block=blocks)
+    eng.add_samplers([samplers.SliceSampler1D(stepout, block=b, procedure=procedure) for b in util.listify(blocks)])
 
     eng.add_likelihood_observers(opsay) if doprint else None
     eng.add_state_observers(ohist)
