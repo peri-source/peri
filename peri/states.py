@@ -326,9 +326,6 @@ class ConfocalImageState(State, ComponentCollection):
         # of components supplied by the user. Also check that the parameters
         # are consistent across the many components.
 
-    def reset(self):
-        self.set_image(self.image)
-
     def set_image(self, image):
         """
         Update the current comparison (real) image
@@ -346,6 +343,14 @@ class ConfocalImageState(State, ComponentCollection):
         self.inner = (np.s_[self.pad:-self.pad],)*3
         self._model = np.zeros_like(self.image)
         self._residuals = np.zeros_like(self.image)
+        self._logprior = 0.0
+        self._loglikelihood = 0.0
+
+    def reset(self):
+        # FIXME -- not yet, need model
+        self._model =  self._calc_model()
+        self._loglikelihood = self._calc_loglikelihood()
+        self._logprior = self._calc_logprior()
 
     def model_to_true_image(self):
         """
@@ -353,23 +358,24 @@ class ConfocalImageState(State, ComponentCollection):
         noise to the created image (only for fake data) and rotate
         the model image into the true image
         """
-        im = self.get_model_image()
+        im = self.model.copy()
         im = im + self.image_mask * np.random.normal(0, self.sigma, size=self.image.shape)
         im = im + (1 - self.image_mask) * const.PADVAL
         self.set_image(im)
 
     @property
+    def data(self):
+        """ Get the raw data of the model fit """
+        return self._data
+
+    @property
     def model(self):
-        return self._model * self.image_mask
+        """ Get the current model fit to the data """
+        return self.image.get_image()
 
-    def get_true_image(self):
-        return self.image * self.image_mask
-
-    def get_difference_image(self, doslice=True):
-        o = self.get_true_image() - self.get_model_image()
-        if doslice:
-            return o[self.inner]
-        return o
+    @property
+    def residuals(self):
+        return self._residuals
 
     def get_io_tiles(self, otile, ptile):
         """
@@ -417,6 +423,8 @@ class ConfocalImageState(State, ComponentCollection):
         # have all components update their tiles
         self.set_tiles(otile)
 
+        oldmodel = self.model[itile.slicer].copy()
+
         # here we diverge depending if there is only one component update
         # (so that we may calculate a variation / difference image) or if many
         # parameters are being update (should just update the whole model).
@@ -445,25 +453,32 @@ class ConfocalImageState(State, ComponentCollection):
             diff = eval(self.modelstr['full'], globals=evar)
             self._model[itile.slicer] = diff[iotile.slicer]
 
+        newmodel = self.model[itile.slicer].copy()
+
         # use the model image update to modify other class variables which
         # are hard to compute globally for small local updates
-        self._update_ll_field(self._model[islice], islice)
+        self.update_from_model_change(oldmodel, newmodel, itile)
 
-    def residuals(self, masked=True):
-        return self.get_difference_image(doslice=masked)
+    def _calc_loglikelihood(self, model=None, tile=None):
+        if model is None:
+            res = self.residuals
+        else:
+            res = model - self.data[tile.slicer]
+
+        sig = self.get_value('sigma')
+        return -0.5*((res/sig)**2).sum() - np.log(np.sqrt(2*np.pi)*sig)*res.size
+
+    def update_from_model_change(self, oldmodel, newmodel, tile):
+        """
+        Update various internal variables from a model update from oldmodel to
+        newmodel for the tile `tile`
+        """
+        self._loglikelihood -= self._calc_loglikelihood(oldmodel, tile=tile)
+        self._loglikelihood += self._calc_loglikelihood(newmodel, tile=tile)
+        self._residuals[tile.slicer] = newmodel - self.data[tile.slicer]
 
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
-
-    @contextmanager
-    def no_ll_update(self):
-        try:
-            self.dollupdate = False
-            yield
-        except Exception as e:
-            raise
-        finally:
-            self.dollupdate = True
 
     def __str__(self):
         return "{} [\n    {}\n]".format(self.__class__.__name__,
