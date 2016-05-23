@@ -4,27 +4,31 @@ import cPickle as pickle
 from contextlib import contextmanager
 
 from peri import const, util
-from peri.comp import Component
+from peri.comp import ComponentCollection
 
-class State(Component):
+class State(ComponentCollection):
     def __init__(self, params, values, logpriors=None):
         self.stack = []
         self.logpriors = logpriors
 
     @property
     def data(self):
+        """ Get the raw data of the model fit """
         pass
 
     @property
     def model(self):
+        """ Get the current model fit to the data """
         pass
 
     @property
-    def residual(self):
+    def residuals(self):
         pass
 
-    def residuals_sample(self, inds):
-        return residual.ravel[inds]
+    def residuals_sample(self, inds=None):
+        if inds is not None:
+            return self.residuals.ravel[inds]
+        return self.residuals
 
     def loglikelihood(self):
         loglike = self.dologlikelihood()
@@ -120,17 +124,16 @@ class State(Component):
 
     gradloglikelihood = partial(_grad, func=self.loglikelihood)
     hessloglikelihood = partial(_hess, func=self.loglikelihood)
-    J = partial(_grad, func=self.residuals)
-    JTJ = partial(_jtj, func=self.residuals)
-    Jp = partial(_grad, func=self.residuals_sample)
-    JTJp = partial(_jtj, func=self.residuals_sample)
+    fisherinformation = partial(_jtj, func=self.model_sample) #FIXME -- sigma^2
+    J = partial(_grad, func=self.residuals_sample)
+    JTJ = partial(_jtj, func=self.residuals_sample)
+
+    def crb(self, p):
+        pass
 
 class ConfocalImagePython(State):
-    def __init__(self, image, obj, psf, ilm, zscale=1, offset=0,
-            sigma=0.04, doprior=False, constoff=False,
-            varyn=False, nlogs=True, difference=True,
-            pad=const.PAD, slab=None, newconst=True, bkg=None,
-            method=1, *args, **kwargs):
+    def __init__(self, image, comp, zscale=1, offset=0, sigma=0.04, priors=None,
+            constoff=False, nlogs=True, pad=const.PAD, newconst=True, method=1):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -173,17 +176,10 @@ class ConfocalImagePython(State):
 
                 Image = \int PSF(x-x') (ILM(x)*-OFF*SPH(x)) dx'
 
-        varyn: boolean [default: False]
-            allow the variation of particle number (only recommended in that case)
-
         nlogs: boolean [default: False]
             Include in the Loglikelihood calculate the term:
 
                 LL = -(p_i - I_i)^2/(2*\sigma^2) - \log{\sqrt{2\pi} \sigma} 
-
-        difference : boolean [default: True]
-            To only modify difference images (thanks to linear FTs).  Set True by
-            default because ~8x faster.
 
         pad : integer (optional)
             No recommended to set by hand.  The padding level of the raw image needed
@@ -224,8 +220,6 @@ class ConfocalImagePython(State):
         self.doprior = doprior
         self.constoff = constoff
         self.nlogs = nlogs
-        self.varyn = varyn
-        self.difference = difference
         self.newconst = newconst
         self.method = method
 
@@ -241,35 +235,14 @@ class ConfocalImagePython(State):
         self.offset = offset
         self.N = self.obj.N
 
-        self._build_state()
+        super(ConfocalImagePython, self).__init__(comps=comps)
         self.set_image(image)
 
     def reset(self):
-        self._build_state()
         if self.rawimage is not None:
             self.set_image(self.rawimage)
         else:
             self.set_image(self.padded_image())
-
-    def set_obj(self, obj):
-        self.obj = obj
-        self.reset()
-
-    def set_psf(self, psf):
-        self.psf = psf
-        self.reset()
-
-    def set_ilm(self, ilm):
-        self.ilm = ilm
-        self.reset()
-
-    def set_bkg(self, bkg):
-        self.bkg = bkg
-        self.reset()
-
-    def set_pos_rad(self, pos, rad):
-        self.obj.set_pos_rad(pos, rad)
-        self.reset()
 
     def padded_image(self):
         o = self.image.copy()
@@ -305,7 +278,8 @@ class ConfocalImagePython(State):
         im = im + (1 - self.image_mask) * const.PADVAL
         self.set_image(im)
 
-    def get_model_image(self):
+    @property
+    def model(self):
         return self.model_image * self.image_mask
 
     def get_true_image(self):
@@ -316,74 +290,6 @@ class ConfocalImagePython(State):
         if doslice:
             return o[self.inner]
         return o
-
-    def _build_state(self):
-        self.N = self.obj.N
-
-        self.param_dict = {
-            'pos': 3*self.obj.N,
-            'rad': self.obj.N,
-            'typ': self.obj.N*self.varyn,
-            'psf': len(self.psf.get_params()),
-            'ilm': len(self.ilm.get_params()),
-            'bkg': len(self.bkg.get_params()) if self.bkg else 0,
-            'slab': len(self.slab.get_params()) if self.slab else 0,
-            'off': 1,
-            'rscale': 1,
-            'zscale': 1,
-            'sigma': 1,
-        }
-
-        self.param_order = [
-            'pos', 'rad', 'typ', 'psf', 'ilm', 'bkg', 'off', 'slab',
-            'rscale', 'zscale', 'sigma'
-        ]
-        self.param_lengths = [self.param_dict[k] for k in self.param_order]
-
-        out = []
-        for param in self.param_order:
-            if self.param_dict[param] == 0:
-                continue
-
-            if param == 'pos':
-                out.append(self.obj.get_params_pos())
-            if param == 'rad':
-                out.append(self.obj.get_params_rad())
-            if param == 'typ':
-                out.append(self.obj.get_params_typ())
-            if param == 'psf':
-                out.append(self.psf.get_params())
-            if param == 'ilm':
-                out.append(self.ilm.get_params())
-            if param == 'bkg':
-                out.append(self.bkg.get_params())
-            if param == 'slab':
-                out.append(self.slab.get_params())
-            if param == 'off':
-                out.append(self.offset)
-            if param == 'rscale':
-                out.append(self.rscale)
-            if param == 'zscale':
-                out.append(self.zscale)
-            if param == 'sigma':
-                out.append(self.sigma)
-
-        self.nparams = sum(self.param_lengths)
-        State.__init__(self, nparams=self.nparams)
-
-        self.state = np.hstack(out).astype('float')
-
-        self.b_pos = self.create_block('pos')
-        self.b_rad = self.create_block('rad')
-        self.b_typ = self.create_block('typ')
-        self.b_psf = self.create_block('psf')
-        self.b_ilm = self.create_block('ilm')
-        self.b_bkg = self.create_block('bkg')
-        self.b_off = self.create_block('off')
-        self.b_slab = self.create_block('slab')
-        self.b_rscale = self.create_block('rscale')
-        self.b_zscale = self.create_block('zscale')
-        self.b_sigma = self.create_block('sigma')
 
     def _build_internal_variables(self):
         self.model_image = np.zeros_like(self.image)
@@ -398,7 +304,7 @@ class ConfocalImagePython(State):
         self._sigma_field += self.sigma
         self._sigma_field_log = np.log(self._sigma_field)
 
-    def _tile_from_particle_change(self, p0, r0, t0, p1, r1, t1):
+    def get_support_size(self, params, values):
         # FIXME -- self.difference is ignored in this function
 
         # FIXME -- this should really be called get_update_tile ??
@@ -552,380 +458,20 @@ class ConfocalImagePython(State):
 
         self._update_ll_field(self.model_image[islice], islice)
 
-    def _block_to_particles(self, block):
-        """ Get the particles affected by block `block` by index """
-        pmask = block[self.b_pos].reshape(-1, 3).any(axis=-1)
-        rmask = block[self.b_rad]
-        tmask = block[self.b_typ] if self.varyn else (0*rmask).astype('bool')
-        particles = np.arange(self.obj.N)[pmask | rmask | tmask]
-        return particles
+    def update(self, params, values):
+        model = self.model.copy()
 
-    def update_many(self, blocks, data):
-        """
-        Update many blocks at once by updating locally each parameter then at
-        the very end ask for the convolution of the components.
-
-        Parameters
-        ----------
-        blocks : list, ndarray
-            if list, explodes into a list of ndarrays representing the blocks
-
-        data : ndarray
-            each element corresponding to new values for the blocks
-        """
-        otiles, itiles = [], []
-
-        if not isinstance(blocks, list):
-            bl = s.explode(blocks)
-
-        for b, d in zip(blocks, data):
-            otile, itile, _ = self.update(b, d, update_model=False, return_tiles=True)
-            otiles.append(otile)
-            itiles.append(itile)
-
-        otile = util.Tile.boundingtile(otiles)
-        itile = util.Tile.boundingtile(itiles)
-        iotile = itile.translate(-otile.l)
-
-        self._update_tile(otile, itile, iotile.slicer, difference=True)
-
-    def update(self, block, data, update_model=True, return_tiles=False):
-        if block.sum() > 1:
-            raise AttributeError("Currently we only support 1 variable updates now")
-
-        prev = self.state.copy()
-
-        # TODO, instead, push the change in case we need to pop it
-        self._update_state(block, data)
-        self._logprior = 0
-
-        particles = self._block_to_particles(block)
-
-        # FIXME -- obj.create_diff_field not guaranteed to work for multiple particles
-        # if the particle was changed, update locally
-        if len(particles) > 0:
-            pos0 = prev[self.b_pos].copy().reshape(-1,3)[particles]
-            rad0 = prev[self.b_rad].copy()[particles]
-
-            pos = self.state[self.b_pos].copy().reshape(-1,3)[particles]
-            rad = self.state[self.b_rad].copy()[particles]
-
-            if self.varyn:
-                typ0 = prev[self.b_typ].copy()[particles]
-                typ = self.state[self.b_typ].copy()[particles]
-            else:
-                typ0 = np.ones(len(particles))
-                typ = np.ones(len(particles))
-
-            # Do a bunch of checks to make sure that we can safetly modify
-            # the image since that is costly and we would reject
-            # this state eventually otherwise
-            if (pos < 0).any() or (pos > np.array(self.image.shape)).any():
-                self.state[block] = prev[block]
-                return False
-
-            tiles = self._tile_from_particle_change(pos0, rad0, typ0, pos, rad, typ)
-            #for tile in tiles[:2]:
-            #    top = self.image.shape[0] - self.pad
-            #    if (np.array(tile.shape) < 2*self.psf.get_support_size(top)).any():
-            #        self.state[block] = prev[block]
-            #        return False
-
-            if self.doprior:
-                self.nbl.update(particles, pos, rad, typ)
-                self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
-
-                if self._logprior < const.PRIORCUT:
-                    self.nbl.update(particles, pos0, rad0, typ0)
-                    self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
-
-                    self.state[block] = prev[block]
-                    return False
-
-            if (typ0 == 0).all() and (typ == 0).all():
-                return False
-
-            # Finally, modify the image
-            self.obj.update(particles, pos, rad, typ, self.zscale, difference=self.difference)
-
-            if update_model:
-                self._update_tile(*tiles, difference=self.difference)
-            if return_tiles:
-                return tiles
-        else:
-            docalc = False
-
-            if self.slab and block[self.b_slab].any():
-                self.slab.update(self.state[self.b_slab])
-                docalc = True
-
-            # if the psf was changed, update globally
-            if block[self.b_psf].any():
-                self.psf.update(self.state[self.b_psf])
-                self._build_sigma_field()
-                docalc = True
-
-            # update the background if it has been changed
-            if block[self.b_ilm].any():
-                self.ilm.update(block[self.b_ilm], self.state[self.b_ilm])
-                docalc = True
-
-            # update the background if it has been changed
-            if block[self.b_bkg].any():
-                self.bkg.update(block[self.b_bkg], self.state[self.b_bkg])
-                docalc = True
-
-            # we actually don't have to do anything if the offset is changed
-            if block[self.b_off].any():
-                self.offset = self.state[self.b_off]
-                docalc = True
-
-            if block[self.b_sigma].any():
-                self.sigma = self.state[self.b_sigma]
-
-                if self.sigma <= 0:
-                    self.state[block] = prev[block]
-                    self.sigma = self.state[self.b_sigma]
-                    return False
-
-                self._build_sigma_field()
-                self._update_ll_field()
-
-            if block[self.b_zscale].any():
-                self.zscale = self.state[self.b_zscale][0]
-
-                if self.doprior:
-                    bounds = (np.array([0,0,0]), np.array(self.image.shape))
-                    tnbl = overlap.HardSphereOverlapCell(self.obj.pos, self.obj.rad, self.obj.typ,
-                            zscale=self.zscale, bounds=bounds, cutoff=2.2*self.obj.rad.max())
-
-                    if tnbl.logprior() < const.PRIORCUT:
-                        self.state[block] = prev[block]
-                        return False
-
-                    self.nbl = tnbl
-                    self._logprior = self.nbl.logprior() + const.ZEROLOGPRIOR*(self.state[self.b_rad] < 0).any()
-
-                self.obj.initialize(self.zscale)
-                if update_model:
-                    self._update_global()
-
-            if block[self.b_rscale].any():
-                new_rscale = self.state[self.b_rscale][0]
-                f = new_rscale / self.rscale
-
-                self.obj.rad *= f
-                self.obj.initialize(self.zscale)
-                if update_model:
-                    self._update_global()
-
-                self.rscale = new_rscale
-
-            if docalc and update_model:
-                self._update_global()
-            if return_tiles:
-                return self._tile_global()
-
-        return True
-
-    def add_particle(self, p, r):
-        if not self.varyn:
-            raise AttributeError("Add/remove particles not supported by state, varyn=False")
-
-        n = self.obj.typ.argmin()
-
-        bp = self.block_particle_pos(n)
-        br = self.block_particle_rad(n)
-        bt = self.block_particle_typ(n)
-
-        bps = self.explode(bp)
-        for i in xrange(bp.sum()):
-            self.update(bps[i], np.array([p.ravel()[i]]))
-        self.update(br, np.array([r]))
-        self.update(bt, np.array([1]))
-
-        return n
-
-    def remove_particle(self, n):
-        if not self.varyn:
-            raise AttributeError("Add/remove particles not supported by state, varyn=False")
-
-        bt = self.block_particle_typ(n)
-        self.update(bt, np.array([0]))
-        return self.obj.pos[n], self.obj.rad[n]
-
-    def closest_particle(self, x):
-        return ((self.obj.typ==0)*1e5 + ((self.obj.pos - x)**2).sum(axis=-1)).argmin()
-
-    def remove_closest_particle(self, x):
-        return self.remove_particle(self.closest_particle(x))
-
-    def isactive(self, particle):
-        if self.varyn:
-            return self.state[self.block_particle_typ(particle)] == 1
-        return True
-
-    def active_particles(self):
-        if self.varyn:
-            return np.arange(self.N)[self.state[self.b_typ]==1.]
-        return np.arange(self.N)
-
-    def blocks_particle(self, index):
-        p_ind, r_ind = 3*index, 3*self.obj.N + index
-
-        blocks = []
-        for t in xrange(p_ind, p_ind+3):
-            blocks.append(self.block_range(t, t+1))
-        blocks.append(self.block_range(r_ind, r_ind+1))
-        return blocks
-
-    def block_particle_pos(self, index):
-        a = self.block_none()
-        a[3*index:3*index+3] = True
-        return a
-
-    def block_particle_rad(self, index):
-        a = self.block_none()
-        a[3*self.obj.N + index] = True
-        return a
-
-    def block_particle_typ(self, index):
-        a = self.block_none()
-        a[4*self.obj.N + index] = True
-        return a
+        for c in self.comps:
+            c.update(params, values)
 
     def create_block(self, typ='all'):
         return self.block_range(*self._block_offset_end(typ))
 
-    def _block_offset_end(self, typ='pos'):
-        index = self.param_order.index(typ)
-        off = sum(self.param_lengths[:index])
-        end = off + self.param_lengths[index]
-        return off, end
-
-    """
-    def _grad_func(self, bl, dl=1e-3, func=None, args=(), kwargs={}):
-        self.push_update(bl, self.state[bl]+dl)
-        m1 = func(*args, **kwargs)
-        self.pop_update()
-
-        self.push_update(bl, self.state[bl]-dl)
-        m0 = func(*args, **kwargs)
-        self.pop_update()
-
-        return (m1 - m0) / (2*dl)
-
-    def _build_funcs(self):
-        self._grad_image = partial(self._grad_func, func=self.get_model_image)
-        self._grad_residuals = partial(self._grad_func, func=self.residuals)
-    """
-
-    def _grad_image(self, bl, dl=1e-3):
-        self.push_update(bl, self.state[bl]+dl)
-        m1 = self.get_model_image()
-        self.pop_update()
-
-        self.push_update(bl, self.state[bl]-dl)
-        m0 = self.get_model_image()
-        self.pop_update()
-
-        return (m1 - m0) / (2*dl)
-
-    def _grad_residuals(self, bl, dl=1e-3):
-        self.push_update(bl, self.state[bl]+dl)
-        m1 = self.residuals()
-        self.pop_update()
-
-        self.push_update(bl, self.state[bl]-dl)
-        m0 = self.residuals()
-        self.pop_update()
-
-        return (m1 - m0) / (2*dl)
-
     def residuals(self, masked=True):
         return self.get_difference_image(doslice=masked)
 
-    def fisher_information(self, blocks=None, dl=1e-3):
-        if blocks is None:
-            blocks = self.explode(self.block_all())
-        fish = np.zeros((len(blocks), len(blocks)))
-
-        for i, bi in enumerate(blocks):
-            for j, bj in enumerate(blocks[i:]):
-                J = j + i
-                di = self._grad_image(bi, dl=dl)
-                dj = self._grad_image(bj, dl=dl)
-                tfish = (di*dj).sum()
-                fish[i,J] = tfish
-                fish[J,i] = tfish
-
-        return fish / self.sigma**2
-
-    def jac(self, blocks=None, dl=1e-3, maxmem=1e9, flat=True):
-        if blocks is None:
-            blocks = self.explode(self.block_all())
-
-        if self._loglikelihood_field.nbytes * len(blocks) > maxmem:
-            raise AttributeError("Maximum memory would be violated" +
-                    ", please select fewer blocks")
-
-        J = np.zeros((len(blocks), self._loglikelihood_field.size))
-
-        for i, bi in enumerate(blocks):
-            tJ = self._grad_residuals(bi, dl=dl).flatten()
-            if flat:
-                J[i] = tJ.flatten()
-            else:
-                J[i] = tJ
-        return J
-
-    def jtj(self, blocks=None, dl=1e-3, maxmem=1e9):
-        J = self.jac(blocks=blocks, dl=dl, maxmem=maxmem)
-        return J.dot(J.T)
-
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
-
-    def todict(self, samples=None):
-        """
-        Transform ourselves (state) or a state vector into a dictionary for
-        better storage options.  In the form {block_name: parameters}.
-
-        Essentially the output of this function is of the form
-        {b:samples[...,self.create_block(b)] for b in self.param_order}
-        but we need to special handle some cases, so `for` loop
-        """
-        local = False
-        if samples is None:
-            samples = self.state.copy()
-            local = True
-
-        active = tuple(self.active_particles())
-        nactive = len(active)
-
-        out = {}
-        for b in self.param_order:
-            d = samples[...,self.create_block(b)]
-
-            # reshape positions properly
-            if b == 'pos':
-                if not local:
-                    d = d.reshape(-1,self.N,3)
-                else:
-                    d = d.reshape(self.N, 3)
-                d = d[...,active,:]
-
-            if b == 'rad':
-                d = d[...,active]
-
-            # transform scalars to lists
-            if b in ['off', 'rscale', 'zscale', 'sigma']:
-                if local:
-                    d = np.array([d])
-                d = np.squeeze(d)
-
-            out[b] = d
-        return out
 
     def __str__(self):
         return self.__class__.__name__
@@ -949,7 +495,7 @@ class ConfocalImagePython(State):
         return (im,
             self.obj, self.psf, self.ilm, self.zscale, self.offset,
             self.sigma, self.doprior, self.constoff,
-            self.varyn, self.nlogs, self.difference,
+            self.nlogs, self.difference,
             self.pad, self.slab, self.newconst, self.bkg,
             self.method)
 
