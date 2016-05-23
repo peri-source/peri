@@ -10,6 +10,12 @@ from contextlib import contextmanager
 from peri import const, util
 from peri.comp import ParameterGroup, ComponentCollection
 
+def superdoc(func):
+    def wrapper(func):
+        func.__doc__ = blah
+        return func
+    return wrapper(func)
+
 class State(ParameterGroup):
     def __init__(self, params, values, logpriors=None, **kwargs):
         self.stack = []
@@ -32,14 +38,18 @@ class State(ParameterGroup):
     def residuals(self):
         pass
 
-    def residuals_sample(self, inds=None):
+    def residuals_sample(self, inds=None, slicer=None):
         if inds is not None:
             return self.residuals.ravel()[inds]
+        if slicer is not None:
+            return self.residuals[slicer]
         return self.residuals
 
-    def model_sample(self, inds=None):
+    def model_sample(self, inds=None, slicer=None):
         if inds is not None:
             return self.model.ravel()[inds]
+        if slicer is not None:
+            return self.model[slicer]
         return self.model
 
     def loglikelihood(self):
@@ -164,6 +174,7 @@ class State(ParameterGroup):
 
 class LinearFitState(State):
     def __init__(self, x, d, m=0.0, b=0.0, sigma=1.0):
+        # FIXME -- add prior for sigma > 0
         self._data = d
         self._xpts = x
         super(LinearFitState, self).__init__(['m', 'b', 'sigma'], [m, b, sigma], ordered=False)
@@ -184,23 +195,22 @@ class LinearFitState(State):
 
     def loglikelihood(self):
         sig = self.param_dict['sigma']
-        return -((self.residuals)**2).sum() / (2*sig**2) - 0.5*np.log(2*np.pi*sig)*self._data.shape[0]
+        return -((self.residuals)**2).sum() / (2*sig**2) - 0.5*np.log(2*np.pi*sig*sig)*self._data.shape[0]
 
 
-class ConfocalImagePython(State, ComponentCollection):
+class ConfocalImageState(State, ComponentCollection):
     def __init__(self, image, comp, zscale=1, offset=0, sigma=0.04, priors=None,
-            constoff=False, nlogs=True, pad=const.PAD, newconst=True, method=1):
+            constoff=False, nlogs=True, pad=const.PAD, newconst=True, method=1,
+            modelnum=0, catmap=None, modelstr=None):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
         shapes are subtracted.  This is then spread with a point spread function
-        (PSF).  Summarized as follows:
-
-            Image = \int PSF(x-x') (ILM(x)*(1-SPH(x))) dx'
+        (PSF). 
 
         Parameters:
         -----------
-        image : (Nz, Ny, Nx) ndarray OR `peri.util.RawImage` object
+        image : `peri.util.Image` object
             The raw image with which to compare the model image from this class.
             This image should have been prepared through prepare_for_state, which
             does things such as padding necessary for this class. In the case of the
@@ -224,7 +234,7 @@ class ConfocalImagePython(State, ComponentCollection):
         offset : float, typically (0, 1) [default: 1]
             The level that particles inset into the illumination field
 
-        doprior: boolean [default: False]
+        priors: boolean [default: False]
             Whether or not to turn on overlap priors using neighborlists
 
         constoff: boolean [default: False]
@@ -241,43 +251,10 @@ class ConfocalImagePython(State, ComponentCollection):
             No recommended to set by hand.  The padding level of the raw image needed
             by the PSF support.
 
-        slab : `peri.comp.objs.Slab` [default: None]
-            If not None, include a slab in the model image and associated analysis.
-            This object should be from the platonic components module.
-
-        newconst : boolean [default: True]
-            If True, overrides constoff to implement a image formation of the form:
-
-                Image = \int PSF(x-x') (ILM(x)*(1-SPH(X)) + OFF*SPH(x)) dx'
-                      = \int PSF(x-x') (ILM(x) + (OFF-ILM(x))*SPH(x)) dx'
-
-        bkg : `peri.comp.ilms.*`
-            a polynomial that represents the background field in dark parts of
-            the image
-
-        method : int
-
-            a int that describes the model that we wish to employ (how to
-            combine the components into a model image). Given the following
-            symbols
-
-                I=ILM, B=BKG, c=OFFSET, P=platonic, p=particles, s=slab, H=PSF
-
-            then the following ints correspond to the listed equations (x is
-            convolution)
-
-                1 : [I(1-P)]xH + B
-                2 : [I(1-p)]xH + sxH + B
-                3 : I[(1-p)xH - sxH] + B
         """
         self.pad = pad
-        self.index = None
         self.sigma = sigma
-        self.doprior = doprior
-        self.constoff = constoff
-        self.nlogs = nlogs
-        self.newconst = newconst
-        self.method = method
+        self.priors = priors
 
         self.dollupdate = True
 
@@ -293,6 +270,37 @@ class ConfocalImagePython(State, ComponentCollection):
 
         ComponentCollection.__init__(self, comps=comps)
         self.set_image(image)
+        self.set_model(modelnum, catmap, modelstr)
+
+    def set_model(self, modelnum=None, catmap=None, modelstr=None):
+        catmap0 = {
+            'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'platonic', 'C': 'offset'
+        }
+        modelstr0 = {
+            'full' : 'H(I*(1-P)+C*P) + B',
+            'dH' : 'H(I*(1-P)+C*P) + B',
+            'dI' : 'H(dI*(1-P))',
+            'dP' : 'H((C-I)*dP)',
+            'dB' : 'dB'
+        }
+
+        catmaps = [catmap0]
+        modelstrs = [modelstr0]
+
+        if catmap is not None and modelstr is not None:
+            self.catmap = catmap
+            self.modelstr = modelstr
+        elif catmap is not None or modelstr is not None:
+            raise AttributeError('If catmap or modelstr is supplied, the other must as well')
+        else:
+            self.catmap = catmaps[methodnum]
+            self.modelstr = modelstrs[methodnum]
+
+        self.mapcat = {v:k for k,v in self.catmap.iteritems()}
+
+        # FIXME -- make sure that the required comps are included in the list
+        # of components supplied by the user. Also check that the parameters
+        # are consistent across the many components.
 
     def reset(self):
         if self.rawimage is not None:
@@ -320,8 +328,7 @@ class ConfocalImagePython(State, ComponentCollection):
         self.image *= self.image_mask
 
         self.inner = (np.s_[self.pad:-self.pad],)*3
-        self._build_internal_variables()
-        self._initialize()
+        self.model_image = np.zeros_like(self.image)
 
     def model_to_true_image(self):
         """
@@ -347,181 +354,87 @@ class ConfocalImagePython(State, ComponentCollection):
             return o[self.inner]
         return o
 
-    def _build_internal_variables(self):
-        self.model_image = np.zeros_like(self.image)
-
-        self._logprior = 0
-        self._loglikelihood = 0
-        self._loglikelihood_field = np.zeros(self.image.shape)
-        self._build_sigma_field()
-
-    def _build_sigma_field(self):
-        self._sigma_field = np.zeros(self.image.shape)
-        self._sigma_field += self.sigma
-        self._sigma_field_log = np.log(self._sigma_field)
-
-    def get_update_tile(self, params, values):
-        return super(ConfocalImagePython, self).get_update_tile(params, values)
-
-    def get_padding_size(self, tile):
-        return super(ConfocalImagePython, self).get_padding_size(tile)
-
     def get_io_tiles(self, otile, ptile):
+        """
+        Get the tiles corresponding to a particular section of image needed to
+        be updated. Inputs are the update tile and padding tile. Returned is
+        the padded tile, inner tile, and slicer to go between, but accounting
+        for wrap with the edge of the image as necessary.
+        """
         # now remove the part of the tile that is outside the image and
         # pad the interior part with that overhang
         img = util.Tile(self.image.shape)
 
         # reflect the necessary padding back into the image itself for
         # the outer slice which we will call outer
-        outer = otile.pad(ptile.shape/2+1)
+        outer = otile.pad((ptile.shape+1)/2)
         inner, outer = outer.reflect_overhang(img)
         iotile = inner.translate(-outer.l)
 
         return outer, inner, iotile.slicer
 
-    def _tile_global(self):
-        outer = util.Tile(0, self.image.shape)
-        inner = util.Tile(0, self.image.shape)
-        iotile = inner.translate(outer.l)
-        return outer, inner, iotile.slicer
+    def _map_vars(self, funcname, extra=None, *args, **kwargs):
+        out = {}
 
-    def _update_ll_field(self, data=None, slicer=np.s_[:]):
-        if not self.dollupdate:
-            return
+        for c in self.comps:
+            cat = c.category
+            out[self.mapcat[cat]] = c.__dict__[funcname](*args, **kwargs)
 
-        if data is None:
-            self._loglikelihood = 0
-            self._loglikelihood_field *= 0
-            data = self.get_model_image()
-
-        s = slicer
-        oldll = self._loglikelihood_field[s].sum()
-
-        # make temporary variables since slicing is 'hard'
-        im = self.image[s]
-        sig = self._sigma_field[s]
-        lsig = self._sigma_field_log[s]
-        tmask = self.image_mask[s]
-
-        self._loglikelihood_field[s] = (
-                -tmask * (data - im)**2 / (2*sig**2)
-                -tmask * (lsig + np.log(np.sqrt(2*np.pi)))*self.nlogs
-            )
-
-        newll = self._loglikelihood_field[s].sum()
-        self._loglikelihood += newll - oldll
-
-    def _update_global(self):
-        self._update_tile(*self._tile_global(), difference=False)
-
-    def _update_tile(self, otile, itile, ioslice, difference=False):
-        """
-        Actually calculates the model in a section of image given by the slice.
-        If using difference images, then that is usually for platonic update
-        so calculate replacement differences
-        """
-        self._last_slices = (otile, itile, ioslice)
-        self._set_tiles(otile)
-        islice = itile.slicer
-
-        # unpack a few variables to that this is easier to read, nice compact
-        # formulas coming up, B = bkg, I = ilm, C = off
-        B = self.bkg.get_field() if self.bkg else None
-        I = self.ilm.get_field()
-        C = self.offset
-
-        if not difference:
-            # unpack one more variable, the platonic image (with slab)
-            P = self._platonic_image()
-
-            # Section QUX -- notes on this section:
-            #   * for a formula to be correct it must have a term I(1-P)
-            #   * sometimes C and B are both used to improve compatibility
-            #   * terms B*P are to improve convergence times since it makes them
-            #       independent of I(1-P) terms
-            if self.method == 1:
-                # [I(1-P)]xH + B
-                replacement = I*(1-P) + C*P
-            elif self.method == 2:
-                # [I(1-p)]xH + sxH + B
-                pass
-            elif self.method == 3:
-                # I[(1-p)xH - sxH] + B
-                pass
-            elif self.newconst and self.bkg is None:
-                # 3. the first correct formula, but which sets the illumation to
-                # zero where there are particles and adds a constant there
-                replacement = I*(1-P) + C*P
-            elif self.bkg and self.newconst:
-                # 5. the correct formula with a background field. C, while degenerate,
-                # is kept around so that other rewrites are unnecessary.
-                replacement = I*(1-P) + (C+B)*P
-
-            # TODO -- these last three are incorrect, remove them
-            elif self.bkg and not self.newconst:
-                # 4. the first bkg formula, but based on 1,2 so incorrect
-                replacement = I*(1-C*P) + B*P
-            elif self.constoff:
-                # 2. the second formula, but still has P dependent on I
-                replacement = I - C*P
-            else:
-                # 1. the original formula, but has P dependent on I since it takes out
-                # a fraction of the original illumination, not all of it.
-                replacement = I*(1-C*P)
-
-            replacement = self.psf.execute(replacement)
-
-            if self.method == 1:
-                self.model_image[islice] = replacement[ioslice] + B[ioslice]
-            else:
-                self.model_image[islice] = replacement[ioslice]
-        else:
-            # this section is currently only run for particles
-            # unpack one more variable, the change in the platonic image
-            dP = self.obj.get_diff_field()
-
-            # each of the following formulas are derived from the section marked
-            # QUX (search for it), taking the variation with respect to P, for
-            # example:
-            #       M = I*(1-P) + C*P
-            #      dM = (C-I)dP
-            if self.method == 1:
-                replacement = (C-I)*dP
-            elif self.newconst and self.bkg is None:
-                replacement = (C-I)*dP
-            elif self.bkg and self.newconst:
-                replacement = (C+B-I)*dP
-            elif self.bkg and not self.newconst:
-                replacement = (B-C*I)*dP
-            elif self.constoff:
-                replacement = C*dP
-            else:
-                replacement = -C*I*dP
-
-            # FIXME -- if we move to other local updates, need to fix the last
-            # section here with self.method switches, also with dP changing so
-            # lolz at that
-            replacement = self.psf.execute(replacement)
-            self.model_image[islice] += replacement[ioslice]
-
-        self._update_ll_field(self.model_image[islice], islice)
+        out.update(extra)
+        return out
 
     def update(self, params, values):
-        model = self.model.copy()
+        comps = self.affected_components(params)
 
         otile = self.get_update_tile(params, values)
         ptile = self.get_padding_size(otile)
 
         itile, otile, iotile = self.get_io_tiles(otile, ptile)
+        self.set_tiles(otile)
 
-        for c in self.comps:
-            c.update(params, values)
+        # here we diverge depending if there is only one component update
+        # (so that we may calculate a variation / difference image) or if many
+        # parameters are being update (should just update the whole model).
+        if len(comps) == 1 and len(comps[0].category) == 1:
+            comp = comps[0]
+            compname = self.mapcat[comp.category]
+            dcompname = 'd'+compname
+
+            model0 = comp.get_field()
+            super(ConfocalImageState, self).update(params, values)
+            model1 = comp.get_field()
+
+            diff = model1 - model0
+            evar = self._map_vars('get_field', extra={dcompname: diff})
+            diff = eval(self.modelstr[dcompname], globals=evar)
+
+            self.model_image[itile.slicer] += diff[iotile.slicer]
+        else:
+            super(ConfocalImageState, self).update(params, values)
+
+            # unpack a few variables to that this is easier to read, nice compact
+            # formulas coming up, B = bkg, I = ilm, C = off
+            evar = self._map_vars('get_field')
+            diff = eval(self.modelstr['full'], globals=evar)
+            self.model_image[itile.slicer] = diff[iotile.slicer]
+
+        self._update_ll_field(self.model_image[islice], islice)
 
     def residuals(self, masked=True):
         return self.get_difference_image(doslice=masked)
 
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
+
+    @contextmanager
+    def no_ll_update(self):
+        try:
+            self.dollupdate = False
+            yield
+        except Exception as e:
+            raise
+        finally:
+            self.dollupdate = True
 
     def __str__(self):
         return "{} [\n    {}\n]".format(self.__class__.__name__,
@@ -534,36 +447,13 @@ class ConfocalImagePython(State, ComponentCollection):
     def __setstate__(self, idct):
         pass
 
-    def __getinitargs__(self):
-        # FIXME -- unify interface for RawImage
-        if self.rawimage is not None:
-            im = self.rawimage
-        else:
-            im = self.padded_image()
-
-        return (im,
-            self.obj, self.psf, self.ilm, self.zscale, self.offset,
-            self.sigma, self.doprior, self.constoff,
-            self.nlogs, self.difference,
-            self.pad, self.slab, self.newconst, self.bkg,
-            self.method)
-
-    @contextmanager
-    def no_ll_update(self):
-        try:
-            self.dollupdate = False
-            yield
-        except Exception as e:
-            raise
-        finally:
-            self.dollupdate = True
 
 def save(state, filename=None, desc='', extra=None):
     """
     Save the current state with extra information (for example samples and LL
     from the optimization procedure).
 
-    state : peri.states.ConfocalImagePython
+    state : peri.states.ConfocalImageState
         the state object which to save
 
     filename : string

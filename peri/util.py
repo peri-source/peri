@@ -365,7 +365,7 @@ class RawImage():
             return im
         return self.filtered_image(im)
 
-    def get_padded_image(self, pad=const.PAD, padval=const.PADVAL):
+    def get_padded_image(self, pad=const.PAD, padval=0):
         return np.pad(self.get_image(), pad, mode='constant', constant_values=padval)
 
     def filtered_image(self, im):
