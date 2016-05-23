@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 
 class Observer(object):
@@ -98,7 +99,7 @@ class HistogramObserver(Observer):
         self.dat = []
 
     def update(self, sample):
-        self.dat.append(sample.state[self.s].copy())
+        self.dat.append(copy.copy(sample.state[self.s]))
 
     def get_histogram(self):
         return np.array(self.dat)

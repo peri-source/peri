@@ -279,11 +279,11 @@ class SliceSampler1D(Sampler):
         return p1, x1
 
     def sample(self, state, curloglike=None):
-        size = state.state[self.block].shape
         x = state.state[self.block]
 
-        if size[0] > 1:
-            raise AttributeError("SliceSampler1D cannot have multidimensional blocks")
+        if not isinstance(x, float):
+            if np.array(state.state[self.block]).shape[0] > 1:
+                raise AttributeError("SliceSampler1D cannot have multidimensional blocks")
 
         if not isinstance(x, np.ndarray):
             x = np.array([x])

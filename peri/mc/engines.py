@@ -49,10 +49,10 @@ class SequentialBlockEngine(object):
         for i in xrange(nsteps):
             for sampler in self.samplers:
                 if ll is not None and ll < -1e50:
-                    print 'huh'
+                    pass
                 ll, s = sampler.sample(s, ll)
                 if ll < -1e50:
-                    print 'huh'
+                    pass
 
             if not burnin:
                 for ob in self.state_obs:
