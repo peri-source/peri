@@ -93,10 +93,10 @@ class Component(ParameterGroup):
         tile : `peri.util.Tile`
             A tile corresponding to the image region
         """
-        raise NotImplementedError("get_update_tile required for components")
+        pass
 
     def get_padding_size(self, tile):
-        pass 
+        pass
 
     def get_field(self):
         return self
@@ -105,7 +105,7 @@ class Component(ParameterGroup):
         pass
 
     def execute(self, field):
-        return field
+        pass
 
     def __call__(self, field):
         return self.execute(field)
@@ -231,16 +231,20 @@ class ComponentCollection(Component):
 
         plist, vlist = self.split_params(params, values)
         for c, p, v in zip(self.comps, plist, vlist):
-            sizes.append(c.get_update_tile(p, v))
+            if len(p) > 0:
+                tile = c.get_update_tile(p, v)
+                if tile is not None:
+                    sizes.append(tile)
 
         return Tile.boundingtile(sizes)
 
-    def get_padding_size(self, params, values):
+    def get_padding_size(self, tile):
         sizes = []
 
-        plist, vlist = self.split_params(params, values)
-        for c, p, v in zip(self.comps, plist, vlist):
-            sizes.append(c.get_padding_size(p, v))
+        for c in self.comps:
+            pad = c.get_padding_size(tile)
+            if pad is not None:
+                sizes.append(pad)
 
         return Tile.boundingtile(sizes)
 
