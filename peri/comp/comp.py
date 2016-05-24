@@ -1,8 +1,7 @@
-import json
 from operator import add
 from collections import OrderedDict, defaultdict
 
-from peri.util import listify, delistify, Tile
+from peri.util import listify, delistify, Tile, patch_docs
 
 #=============================================================================
 # A base class for parameter groups (components and priors)
@@ -57,7 +56,7 @@ class ParameterGroup(object):
         return self.param_dict.values()
 
     def __str__(self):
-        return json.dumps(self.param_dict, indent=2)
+        return "{} [{}]".format(self.__class__.__name__, self.param_dict)
 
     def __repr__(self):
         return self.__str__()
@@ -76,12 +75,11 @@ class Component(ParameterGroup):
     category = 'comp'
 
     def __init__(self, params, values):
-        self.shape = None
         super(Component, self).__init__(params, values)
 
     def initialize(self):
         """ Begin anew and initialize the component """
-        raise NotImplementedError("initialize required for components")
+        pass
 
     def get_update_tile(self, params, values):
         """
@@ -150,10 +148,14 @@ class Component(ParameterGroup):
 class GlobalScalarComponent(Component):
     category = 'scalar'
 
-    def __init__(self, name, value):
+    def __init__(self, name, value, shape=None):
+        self.shape = shape
         super(GlobalScalarComponent, self).__init__([name], [value])
 
     def get(self):
+        return self.values[0]
+
+    def get_field(self):
         return self.values[0]
 
     def get_update_tile(self, params, values):
@@ -233,7 +235,7 @@ class ComponentCollection(Component):
 
     def affected_components(self, params):
         comps = []
-        plist, vlist = self.split_params(params)
+        plist = self.split_params(params)
         for c, p in zip(self.comps, plist):
             if len(p) > 0:
                 comps.append(c)
@@ -310,6 +312,6 @@ class ComponentCollection(Component):
         pass # FIXME
 
 
-util.patch_doc(GlobalScalarComponent, Component)
-util.patch_doc(ComponentCollection, Component)
+patch_docs(GlobalScalarComponent, Component)
+patch_docs(ComponentCollection, Component)
 

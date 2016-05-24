@@ -87,6 +87,9 @@ class PSF(Component):
 
         return np.real(fft.ifftn(infield * self.kpsf))
 
+    def get(self):
+        return self
+
     def get_update_tile(self, params, values):
         return Tile(self.shape)
 
