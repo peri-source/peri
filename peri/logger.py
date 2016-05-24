@@ -18,6 +18,7 @@ critical errors. The order is debug, info, warn, error, fatal
 
     log.set_level('info')
 """
+import StringIO
 import logging
 import logging.handlers
 from contextlib import contextmanager
@@ -86,6 +87,10 @@ class Logger(object):
         # make sure the the log file has a name
         if name == 'rotating-log' and not kwargs.has_key('filename'):
             kwargs.update({'filename': self.logfilename})
+
+        # make sure the the log file has a name
+        if name == 'stringio' and not kwargs.has_key('stringio'):
+            kwargs.update({'stringio': StringIO.StringIO()})
 
         handler = types[name](**kwargs)
         handler.setLevel(levels[level])
@@ -167,9 +172,10 @@ except ImportError as e:
     PygmentHandler = BWHandler
 
 types = {
+    'stringio': BWHandler,
     'console-bw': BWHandler,
     'console-color': PygmentHandler,
-    'rotating-log': LogHandler
+    'rotating-log': LogHandler,
 }
 
 levels = {
