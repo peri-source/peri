@@ -310,53 +310,11 @@ class Tile(object):
         return inner, outer
 
 
-class RawImage():
-    def __init__(self, filename, tile=None, zstart=None, zstop=None,
-            xysize=None, invert=False, exposure=None):
-        """
-        An image object which stores information about desired region and padding,
-        etc.  There are number of ways to create an image object:
-
-        filename : str
-            path of the image file.  recommended that you supply a relative path
-            so that transfer between computers is possible
-
-        exposure : tuple of floats (min, max) | None
-            If set, it is the values used to normalize the image instead of setting
-            min to 0 and max to 1 (which depends on noise, exposure). Setting this
-            values allows a series of images to be initialized with the same
-            ILM, PSF etc. Should be the bit value of the camera.
-
-        tile : `peri.util.Tile`
-            the region of the image to crop out to use for the actual featuring, etc
-
-        """
-        self.filename = filename
-        self.invert = invert
-        self.filters = None
-        self.exposure = exposure
-
-        self.load_image()
-
-        if tile is not None:
-            self.tile = tile
-        else:
-            zstart = zstart or 0
-            zstop = zstop or self.image.shape[0]
-
-            left = (zstart, 0, 0)
-            right = (zstop, xysize, xysize)
-            self.tile = Tile(left=left, right=right)
-
-    def load_image(self):
-        try:
-            self.image = initializers.load_tiff(self.filename)
-            self.image = initializers.normalize(
-                self.image, invert=self.invert, scale=self.exposure
-            )
-        except IOError as e:
-            print "Could not find image '%s'" % self.filename
-            raise e
+class Image(object):
+    def __init__(self, image, tile=None, filters=None):
+        self.filters = filters or []
+        self.image = image
+        self.tile = tile or Tile(image.shape)
 
     def get_image(self):
         im = self.image[self.tile.slicer]
@@ -376,6 +334,48 @@ class RawImage():
 
     def set_filter(self, slices, values):
         self.filters = [[sl,values[sl]] for sl in slices]
+
+class RawImage(Image):
+    def __init__(self, filename, tile=None, invert=False, exposure=None):
+        """
+        An image object which stores information about desired region and padding,
+        etc.  There are number of ways to create an image object:
+
+        filename : str
+            path of the image file.  recommended that you supply a relative path
+            so that transfer between computers is possible
+
+        tile : `peri.util.Tile`
+            the region of the image to crop out to use for the actual featuring, etc
+
+        invert : boolean
+            Whether to invert the image.
+
+        exposure : tuple of floats (min, max) | None
+            If set, it is the values used to normalize the image instead of setting
+            min to 0 and max to 1 (which depends on noise, exposure). Setting this
+            values allows a series of images to be initialized with the same
+            ILM, PSF etc. Should be the bit value of the camera.
+
+        """
+        self.filename = filename
+        self.invert = invert
+        self.filters = None
+        self.exposure = exposure
+        self.tile = tile
+
+        super(RawImage, self).__init__(self.load_image())
+
+    def load_image(self):
+        try:
+            image = initializers.load_tiff(self.filename)
+            image = initializers.normalize(
+                self.image, invert=self.invert, scale=self.exposure
+            )
+        except IOError as e:
+            print "Could not find image '%s'" % self.filename
+            raise e
+        return image
 
     def get_scale(self):
         if self.exposure is not None:
@@ -399,7 +399,7 @@ class RawImage():
 
     def __setstate__(self, idct):
         self.__dict__.update(idct)
-        self.load_image()
+        self.image = self.load_image()
 
 def cdd(d, k):
     """ Conditionally delete key (or list of keys) 'k' from dict 'd' """
