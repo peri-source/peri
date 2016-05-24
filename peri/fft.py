@@ -96,54 +96,62 @@ class FFTW(FFTBase):
         if shape is None:
             return
 
-        self.shape = shape
+        self.shape = tuple(shape)
         if self.real:
+            k = {
+                'threads': self.threads,
+                'planner_effort': self.plan,
+                's': self.shape,
+            }
+
+            # FIXME -- fft2 / ifft2 in this case. can't figure it out.
             self._fftn_data = pyfftw.n_byte_align_empty(self.shape, 16, dtype='double')
-            self._fftn_func = pyfftw.builders.rfftn(self._fftn_data, threads=self.threads,
-                    planner_effort=self.plan, s=self.shape)
+            self._fftn_func = pyfftw.builders.rfftn(self._fftn_data, **k)
 
             oshape = self.fftn(np.zeros(shape)).shape
             self._ifftn_data = pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
-            self._ifftn_func = pyfftw.builders.irfftn(self._ifftn_data, threads=self.threads,
-                    planner_effort=self.plan, s=self.shape)
-
-            self._fft2_data = pyfftw.n_byte_align_empty(self.shape, 16, dtype='double')
-            self._fft2_func = pyfftw.builders.rfft2(self._fft2_data, threads=self.threads,
-                    planner_effort=self.plan, s=self.shape)
-
-            oshape = self.fft2(np.zeros(shape)).shape
-            self._ifft2_data = pyfftw.n_byte_align_empty(oshape, 16, dtype='complex')
-            self._ifft2_func = pyfftw.builders.irfft2(self._ifft2_data, threads=self.threads,
-                    planner_effort=self.plan, s=self.shape)
+            self._ifftn_func = pyfftw.builders.irfftn(self._ifftn_data, **k)
         else:
-            self._fftn_data = pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
-            self._fftn_func = pyfftw.builders.fftn(self._fftn_data, overwrite_input=False,
-                    planner_effort=self.plan, threads=self.threads)
+            k = {
+                'threads': self.threads,
+                'planner_effort': self.plan,
+                'overwrite_input': False
+            }
+            def _alloc(name):
+                data = pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
+                func = getattr(pyfftw.builders, name)(data, **k)
+                return data, func
 
-            self._ifftn_data = pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
-            self._ifftn_func = pyfftw.builders.ifftn(self._ifftn_data, overwrite_input=False,
-                    planner_effort=self.plan, threads=self.threads)
+            # FIXME -- too much memory?
+            self._fftn_data, self._fftn_func = _alloc('fftn')
+            self._ifftn_data, self._ifftn_func = _alloc('ifftn')
+            self._fft2_data, self._fft2_func = _alloc('fft2')
+            self._ifft2_data, self._ifft2_func = _alloc('ifft2')
+            self._fft_data, self._fft_func = _alloc('fft')
+            self._ifft_data, self._ifft_func = _alloc('ifft')
 
-            self._fft2_data = pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
-            self._fft2_func = pyfftw.builders.fft2(self._fft2_data, overwrite_input=False,
-                    planner_effort=self.plan, threads=self.threads)
-
-            self._ifft2_data = pyfftw.n_byte_align_empty(shape, 16, dtype='complex')
-            self._ifft2_func = pyfftw.builders.ifft2(self._ifft2_data, overwrite_input=False,
-                    planner_effort=self.plan, threads=self.threads)
-
-    def _exec(self, prefix, field):
+    def _prefix_to_obj(self, prefix):
         func = self.__dict__.get('_%s_func' % prefix)
         data = self.__dict__.get('_%s_data' % prefix)
+        return func, data
+
+    def _exec(self, prefix, field):
+        func, data = self._prefix_to_obj(prefix)
 
         if (self.shape is None) or (data is None) or (field.shape != data.shape):
             self.set_shape(field.shape)
-            func = self.__dict__.get('_%s_func' % prefix)
-            data = self.__dict__.get('_%s_data' % prefix)
+            func, data = self._prefix_to_obj(prefix)
 
         data[:] = field
         func.execute()
         return func.get_output_array().copy()
+
+    def fft(self, a):
+        return self._exec('fft', a)
+
+    def ifft(self, a, shape=None):
+        normalization = 1.0/np.prod(self.shape[2:])
+        return normalization * self._exec('ifft', a)
 
     def fft2(self, a):
         return self._exec('fft2', a)
