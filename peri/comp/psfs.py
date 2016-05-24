@@ -31,7 +31,10 @@ class PSF(Component):
         self.tile = Tile((0,0,0))
         super(PSF, self).__init__(params, values)
 
-        self.update(params, values)
+        self.initialize()
+
+    def initialize(self):
+        self.update(self.params, self.values)
         self.set_tile(Tile(self.shape))
 
     @memoize()
@@ -51,7 +54,7 @@ class PSF(Component):
 
     def calculate_min_rpsf(self):
         # calculate the minimum supported real-space PSF
-        min_support = np.ceil(self.get_padding_size(util.Tile(self.shape))).astype('int')
+        min_support = self.get_padding_size(Tile(self.shape)).shape
         min_support += min_support % 2
         min_rpsf = self.rpsf_func(self._rvecs(min_support))
         return min_rpsf, min_support
@@ -121,7 +124,7 @@ class IdentityPSF(PSF):
         return field
     
     def get_padding_size(self, tile):
-        return np.ones(3)
+        return Tile(np.ones(3))
     
     def update(self, params, values):
         self.set_values(params, values)
@@ -131,7 +134,7 @@ class IdentityPSF(PSF):
             self.tile = tile
 
 class AnisotropicGaussian(PSF):
-    def __init__(self, shape, sigmas, error=1.0/255):
+    def __init__(self, shape, sigmas=(2.0, 1.0), error=1.0/255):
         self.error = error
         params = ['psf-sig-z', 'psf-sig-rho'] 
         super(AnisotropicGaussian, self).__init__(
@@ -149,10 +152,10 @@ class AnisotropicGaussian(PSF):
     def get_padding_size(self, tile):
         self.pr = np.sqrt(-2*np.log(self.error)*self.values[0]**2)
         self.pz = np.sqrt(-2*np.log(self.error)*self.values[1]**2)
-        return np.array([self.pz, self.pr, self.pr])
+        return Tile(np.ceil([self.pz, self.pr, self.pr]))
 
 class AnisotropicGaussianXYZ(PSF):
-    def __init__(self, shape, sigmas, error=1.0/255):
+    def __init__(self, shape, sigmas=(2.0, 0.5, 1.0), error=1.0/255):
         self.error = error
         params = ['psf-sigz', 'psf-sigy', 'psf-sigx']
         super(AnisotropicGaussianXYZ, self).__init__(
@@ -175,7 +178,7 @@ class AnisotropicGaussianXYZ(PSF):
         self.px = np.sqrt(-2*np.log(self.error)*self.values[2]**2)
         self.py = np.sqrt(-2*np.log(self.error)*self.values[1]**2)
         self.pz = np.sqrt(-2*np.log(self.error)*self.values[0]**2)
-        return np.array([self.pz, self.py, self.px])
+        return Tile(np.ceil([self.pz, self.py, self.px]))
 
 
 #=============================================================================
@@ -254,7 +257,7 @@ class PSF4D(PSF):
         z = self._zpos(self.tile)
 
         for i in xrange(len(z)):
-            size = self.get_padding_size(z=z[i])
+            size = self.get_padding_size(z=z[i]).shape
             m = (z >= z[i]-size[0]) & (z <= z[i]+size[0])
             g = self.rpsf_z(z[m], z[i])
             out[i] = cov2dT[...,m].dot(g)
@@ -313,19 +316,18 @@ class Gaussian4D(PSF4D):
         self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
         self.py = np.max([np.sqrt(-2*np.log(self.error)*s[1]**2), 2.1*np.ones_like(s[1])], axis=0)
         self.px = np.max([np.sqrt(-2*np.log(self.error)*s[2]**2), 2.1*np.ones_like(s[2])], axis=0)
-        size = np.array([self.pz, self.py, self.px])
-        return size
+        return Tile(np.ceil([self.pz, self.py, self.px]))
 
     @memoize()
     def rpsf_z(self, z, zp):
         s = self._sigma(zp, 0)
-        size = self.get_padding_size(z=zp)
+        size = self.get_padding_size(z=zp).shape
         out = np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
         return out / out.sum()
 
     def rpsf_xy(self, vecs, zp):
         rx, ry = vecs
-        size = self.get_padding_size(z=zp)
+        size = self.get_padding_size(z=zp).shape
         mask = (np.abs(rx) <= size[2]) * (np.abs(ry) <= size[1])
 
         sx = self._sigma(zp, 2)
@@ -458,20 +460,19 @@ class GaussianMomentExpansion(PSF4D):
         self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
         self.py = np.max([np.sqrt(-2*np.log(self.error)*s[1]**2), 2.1*np.ones_like(s[1])], axis=0)
         self.px = np.max([np.sqrt(-2*np.log(self.error)*s[2]**2), 2.1*np.ones_like(s[2])], axis=0)
-        size = np.array([self.pz, self.py, self.px])
-        return size
+        return Tile(np.ceil([self.pz, self.py, self.px]))
 
     @memoize()
     def rpsf_z(self, z, zp):
         s = self._sigma(zp, 0)
-        size = self.get_padding_size(z=zp)
+        size = self.get_padding_size(z=zp).shape
         pref = self._moment((z-zp)/s, zp, d=1)
         out = pref*np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
         return out / out.sum()
 
     def rpsf_xy(self, vecs, zp):
         rx, ry = vecs
-        size = self.get_padding_size(z=zp)
+        size = self.get_padding_size(z=zp).shape
         mask = (np.abs(rx) <= size[2]) * (np.abs(ry) <= size[1])
 
         sx = self._sigma(zp, 2)
@@ -506,10 +507,10 @@ class FromArray(PSF):
             self.tile = tile
 
     def _pad(self, field):
-        if any(self.tile.shape < self.get_padding_size()):
+        if any(self.tile.shape < self.get_padding_size().shape):
             raise IndexError("PSF tile size is less than minimum support size")
 
-        d = self.tile.shape - self.get_padding_size()
+        d = self.tile.shape - self.get_padding_size().shape
 
         # fix off-by-one issues when going odd to even tile sizes
         o = d % 2
@@ -547,4 +548,4 @@ class FromArray(PSF):
         return self.params
 
     def get_padding_size(self, z=None):
-        return self.support
+        return Tile(self.support)
