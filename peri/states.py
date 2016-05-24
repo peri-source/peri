@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import types
 import numpy as np
@@ -9,6 +10,11 @@ from contextlib import contextmanager
 
 from peri import const, util
 from peri.comp import ParameterGroup, ComponentCollection
+from peri.logger import log as baselog
+log = baselog.getChild('state')
+
+class ModelError(Exception):
+    pass
 
 def superdoc(func):
     def wrapper(func):
@@ -22,7 +28,7 @@ class State(ParameterGroup):
         self.logpriors = logpriors
 
         super(State, self).__init__(params, values, **kwargs)
-        self._build_funcs()
+        self.build_funcs()
 
     @property
     def data(self):
@@ -37,6 +43,12 @@ class State(ParameterGroup):
     @property
     def residuals(self):
         pass
+
+    def random_pixels(self, N, flat=True):
+        inds = np.random.choice(self.data.size, size=N, replace=False)
+        if not flat:
+            return np.unravel_index(inds, self.data.shape)
+        return inds
 
     def residuals_sample(self, inds=None, slicer=None):
         if inds is not None:
@@ -53,10 +65,7 @@ class State(ParameterGroup):
         return self.model
 
     def loglikelihood(self):
-        loglike = self.dologlikelihood()
-        if self.logpriors is not None:
-            loglike += self.logpriors()
-        return loglike
+        pass
 
     def logprior(self):
         pass
@@ -147,7 +156,7 @@ class State(ParameterGroup):
                 hess[J][i] = thess
         return np.array(hess)
 
-    def _build_funcs(self):
+    def build_funcs(self):
         # FIXME -- docstrings
         self.gradloglikelihood = partial(self._grad, func=self.loglikelihood)
         self.hessloglikelihood = partial(self._hess, func=self.loglikelihood)
@@ -210,9 +219,11 @@ class PolyFitState(State):
             -np.log(np.sqrt(2*np.pi)*sig)*self._data.shape[0]
         )
 
+    def logprior(self):
+        return 1.0
 
 class ConfocalImageState(State, ComponentCollection):
-    def __init__(self, image, comps, zscale=1, offset=0, sigma=0.04, priors=None,
+    def __init__(self, image, comps, offset=0, sigma=0.04, priors=None,
             nlogs=True, pad=const.PAD, modelnum=0, catmap=None, modelstr=None):
         """
         The state object to create a confocal image.  The model is that of
@@ -230,7 +241,15 @@ class ConfocalImageState(State, ComponentCollection):
             on pickle size.
 
         comp : list of `peri.comp.Component`s or `peri.comp.ComponentCollection`s
-            Components used to make up the model image
+            Components used to make up the model image. Each separate component
+            must be of a different category, otherwise combining them would be
+            ambiguous. If you desire multiple Components of one category,
+            combine them using a ComponentCollection (which has functions for
+            combining) and supply that to the comps list.
+
+            The component types must match the list of categories in the
+            ConfocalImageState.catmap which tells how components are matched to
+            parts of the model equation.
 
         zscale : float, typically (1, 1.5) [default: 1]
             The initial zscaling for the pixel sizes.  Bigger is more compressed.
@@ -238,7 +257,7 @@ class ConfocalImageState(State, ComponentCollection):
         offset : float, typically (0, 1) [default: 1]
             The level that particles inset into the illumination field
 
-        priors: boolean [default: False]
+        priors: list of `peri.priors` [default: ()]
             Whether or not to turn on overlap priors using neighborlists
 
         nlogs: boolean [default: True]
@@ -260,7 +279,7 @@ class ConfocalImageState(State, ComponentCollection):
             (Using a custom model) The mapping of variables in the modelstr
             equations to actual component types. For example:
 
-                {'P': 'platonic', 'H': 'psf'}
+                {'P': 'obj', 'H': 'psf'}
 
         modelstr : dict of strings
             (Using a custom model) The actual equations used to defined the model.
@@ -275,13 +294,13 @@ class ConfocalImageState(State, ComponentCollection):
         self.priors = priors
         self.dollupdate = True
 
-        self.zscale = zscale
         self.rscale = 1.0
         self.offset = offset
 
         ComponentCollection.__init__(self, comps=comps)
         self.set_model(modelnum=modelnum, catmap=catmap, modelstr=modelstr)
         self.set_image(image)
+        self.build_funcs()
 
     def set_model(self, modelnum=None, catmap=None, modelstr=None):
         """
@@ -321,13 +340,54 @@ class ConfocalImageState(State, ComponentCollection):
             self.modelstr = modelstrs[modelnum]
 
         self.mapcat = {v:k for k,v in self.catmap.iteritems()}
-
-        # FIXME -- make sure that the required comps are included in the list
-        # of components supplied by the user. Also check that the parameters
-        # are consistent across the many components.
+        self.check_inputs(self.catmap, self.modelstr, self.comps)
 
         for c in self.comps:
             setattr(self, '_comp_'+c.category, c)
+
+    def check_inputs(self, catmap, model, comps):
+        """
+        Make sure that the required comps are included in the list of
+        components supplied by the user. Also check that the parameters are
+        consistent across the many components.
+        """
+        error = False
+        compcats = [c.category for c in comps]
+        regex = re.compile('([a-zA-Z_][a-zA-Z0-9_]*)')
+
+        if not model.has_key('full'):
+            raise ModelError(
+                'Model must contain a `full` key describing '
+                'the entire image formation'
+            )
+
+        # Check that the two model descriptors are consistent
+        for name, eq in model.iteritems():
+            var = regex.findall(eq)
+            for v in var:
+                # remove the derivative signs
+                v = re.sub(r"^d", '', v)
+                if v not in catmap:
+                    log.error(
+                        "Variable '%s' (eq. '%s': '%s') not found in category map %r" %
+                        (v, name, eq, catmap)
+                    )
+                    error = True
+
+        if error:
+            raise ModelError('Inconsistent catmap and model descriptions')
+
+        # Check that the components are all provided, given the categories
+        for k,v in catmap.iteritems():
+            if k not in model['full']:
+                log.warn('Component (%s : %s) not used in model.' % (k,v))
+
+            if not v in compcats:
+                log.error('Map component (%s : %s) not found in list of components.' % (k,v))
+                error = True
+
+        if error:
+            raise ModelError('Component list incomplete or incorrect')
 
     def set_image(self, image):
         """
