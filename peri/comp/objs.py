@@ -197,7 +197,7 @@ def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
 #=============================================================================
 # Actual sphere collection (and slab)
 #=============================================================================
-class SphereCollectionRealSpace(Component):
+class PlatonicSpheresCollection(Component):
     category = 'obj'
 
     def __init__(self, pos, rad, shape, zscale=1.0, support_pad=2,
@@ -373,9 +373,6 @@ class SphereCollectionRealSpace(Component):
 
         return Tile.boundingtile(tiles0 + tiles1)
 
-    def get_padding_size(self, params, values):
-        return Tile(0)
-
     @property
     def N(self):
         return self.rad.shape[0]
@@ -511,6 +508,12 @@ class SphereCollectionRealSpace(Component):
         pos, rad = self.pos[n], self.rad[n]
         return Tile(pos - zsc*rad, pos + zsc*rad).pad(self.support_pad)
 
+    def __str__(self):
+        return "{} N={}".format(self.__class__.__name__, self.N)
+
+    def __repr__(self):
+        return self.__str__()
+
     def __getstate__(self):
         odict = self.__dict__.copy()
         cdd(odict, ['rvecs', 'particles', '_params'])
@@ -591,9 +594,6 @@ class Slab(Component):
 
     def get_update_tile(self, params, values):
         return Tile(self.shape)
-
-    def get_padding_size(self, params, values):
-        return Tile(0)
 
     def __getstate__(self):
         odict = self.__dict__.copy()
