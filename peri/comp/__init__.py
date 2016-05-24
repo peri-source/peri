@@ -1,1 +1,1 @@
-from peri.comp.comp import ParameterGroup, Component, ComponentCollection
+from peri.comp.comp import ParameterGroup, Component, ComponentCollection, GlobalScalarComponent

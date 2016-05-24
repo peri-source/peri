@@ -1,3 +1,4 @@
+import json
 from operator import add
 from collections import OrderedDict, defaultdict
 
@@ -55,6 +56,12 @@ class ParameterGroup(object):
     def values(self):
         return self.param_dict.values()
 
+    def __str__(self):
+        return json.dumps(self.param_dict, indent=2)
+
+    def __repr__(self):
+        return self.__str__()
+
     # Functions that begin with block_ will be passed through to the states and
     # other functions so that nice interfaces are present
     # def block_particle_positions(self):
@@ -69,6 +76,7 @@ class Component(ParameterGroup):
     category = 'comp'
 
     def __init__(self, params, values):
+        self.shape = None
         super(Component, self).__init__(params, values)
 
     def initialize(self):
@@ -96,21 +104,60 @@ class Component(ParameterGroup):
         pass
 
     def get_padding_size(self, tile):
+        """
+        Get the amount of padding required for this object when calculating
+        about a tile `tile`. Padding size is the total size, so twice that
+        on each side.
+
+        Parameters:
+        -----------
+        tile : `peri.util.Tile`
+            A tile defining the region of interest
+        """
         pass
 
     def get_field(self):
+        """ Return the current field as determined by self.set_tile """
         return self
 
     def set_tile(self, tile):
+        """ Set the currently active tile region for the calculation """
         pass
 
+    def set_shape(self, shape):
+        """
+        Set the overall shape of the calculation area. The total shape of that
+        the calculation can possibly occupy, in pixels.
+        """
+        self.shape = shape
+
     def execute(self, field):
+        """ Perform its routine, whatever that may be """
         pass
+
+    def get(self):
+        """
+        Return the `natural` part of the model. In the case of most elements it
+        is the get_field method, for others it is the object itself.
+        """
+        return self.get_field()
 
     def __call__(self, field):
         return self.execute(field)
 
     # TODO make all components serializable via _getinitargs_
+
+class GlobalScalarComponent(Component):
+    category = 'scalar'
+
+    def __init__(self, name, value):
+        super(GlobalScalarComponent, self).__init__([name], [value])
+
+    def get(self):
+        return self.values[0]
+
+    def get_update_tile(self, params, values):
+        return Tile(self.shape)
 
 #=============================================================================
 # Component class == model components for an image
@@ -261,3 +308,8 @@ class ComponentCollection(Component):
     def sync_params(self):
         """ Ensure that shared parameters are the same value everywhere """
         pass # FIXME
+
+
+util.patch_doc(GlobalScalarComponent, Component)
+util.patch_doc(ComponentCollection, Component)
+
