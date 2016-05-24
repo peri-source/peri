@@ -87,6 +87,9 @@ class PSF(Component):
 
         return np.real(fft.ifftn(infield * self.kpsf))
 
+    def get_update_tile(self, params, values):
+        return Tile(self.shape)
+
     def get_padding_size(self, tile):
         raise NotImplemented('subclasses must implement `get_padding_size`')
 
@@ -146,7 +149,7 @@ class AnisotropicGaussian(PSF):
         rhosq = rx**2 + ry**2
 
         vals = np.array(self.values)/2
-        arg = np.exp(-(rhosq/vals[0]**2 + (rz/vals[1])**2)/2)
+        arg = np.exp(-(rhosq/vals[1]**2 + (rz/vals[0])**2)/2)
         return arg * (rhosq <= self.pr**2) * (np.abs(rz) <= self.pz)
 
     def get_padding_size(self, tile):
@@ -309,7 +312,9 @@ class Gaussian4D(PSF4D):
         return self._poly(z/self.zrange, self._sigma_coeffs(d=d))
 
     @memoize()
-    def get_padding_size(self, z):
+    def get_padding_size(self, tile=None, z=None):
+        if tile is not None:
+            z = tile.r[0]
         if isinstance(z, np.ndarray) and z.shape[0] > 1:
             z = z[0]
         s = np.array([self._sigma(z, 0), self._sigma(z, 1), self._sigma(z, 2)])
@@ -321,13 +326,13 @@ class Gaussian4D(PSF4D):
     @memoize()
     def rpsf_z(self, z, zp):
         s = self._sigma(zp, 0)
-        size = self.get_padding_size(z=zp).shape
+        size = self.get_padding_size(tile=None, z=zp).shape
         out = np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
         return out / out.sum()
 
     def rpsf_xy(self, vecs, zp):
         rx, ry = vecs
-        size = self.get_padding_size(z=zp).shape
+        size = self.get_padding_size(tile=None, z=zp).shape
         mask = (np.abs(rx) <= size[2]) * (np.abs(ry) <= size[1])
 
         sx = self._sigma(zp, 2)
@@ -453,9 +458,13 @@ class GaussianMomentExpansion(PSF4D):
         return (np.tanh(val)+1)/12.*(3 - 6*x**2 + x**4)
 
     @memoize()
-    def get_padding_size(self, z):
+    def get_padding_size(self, tile=None, z=None):
+        if tile is not None:
+            z = tile.r[0]
+
         if isinstance(z, np.ndarray) and z.shape[0] > 1:
             z = z[0]
+
         s = np.array([self._sigma(z, 0), self._sigma(z, 1), self._sigma(z, 2)])
         self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
         self.py = np.max([np.sqrt(-2*np.log(self.error)*s[1]**2), 2.1*np.ones_like(s[1])], axis=0)
@@ -465,14 +474,14 @@ class GaussianMomentExpansion(PSF4D):
     @memoize()
     def rpsf_z(self, z, zp):
         s = self._sigma(zp, 0)
-        size = self.get_padding_size(z=zp).shape
+        size = self.get_padding_size(tile=None, z=zp).shape
         pref = self._moment((z-zp)/s, zp, d=1)
         out = pref*np.exp(-(z-zp)**2 / (2*s**2)) * (np.abs(z-zp) <= size[0])
         return out / out.sum()
 
     def rpsf_xy(self, vecs, zp):
         rx, ry = vecs
-        size = self.get_padding_size(z=zp).shape
+        size = self.get_padding_size(tile=None, z=zp).shape
         mask = (np.abs(rx) <= size[2]) * (np.abs(ry) <= size[1])
 
         sx = self._sigma(zp, 2)
