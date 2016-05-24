@@ -107,6 +107,15 @@ class Tile(object):
         l, r = self.bounds
         return np.s_[l[0]:r[0], l[1]:r[1], l[2]:r[2]]
 
+    def oslicer(self, tile):
+        """ Opposite slicer, the outer part wrt to a field """
+        z,y,x = tile.coords(form='meshed')
+        z[self.slicer] = -1
+        y[self.slicer] = -1
+        x[self.slicer] = -1
+        mask = (z>0)&(y>0)&(x>0)
+        return tuple(np.array(i).astype('int') for i in zip(z[mask], y[mask], x[mask]))
+
     @property
     def shape(self):
         return self.r - self.l
