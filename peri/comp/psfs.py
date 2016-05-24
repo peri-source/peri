@@ -225,7 +225,7 @@ class PSF4D(PSF):
 
         # need to normalize each x-y slice individually
         for i,z in enumerate(zs):
-            kpsf[i,0,0] = 1.0
+            kpsf[i] *= 1.0/kpsf[i,0,0]
 
         return rpsf, kpsf
 
@@ -314,9 +314,13 @@ class Gaussian4D(PSF4D):
     @memoize()
     def get_padding_size(self, tile=None, z=None):
         if tile is not None:
-            z = tile.r[0]
+            tile0 = self.get_padding_size(z=tile.l[0])
+            tile1 = self.get_padding_size(z=tile.r[0])
+            return Tile.intersection(tile0, tile1)
+
         if isinstance(z, np.ndarray) and z.shape[0] > 1:
             z = z[0]
+
         s = np.array([self._sigma(z, 0), self._sigma(z, 1), self._sigma(z, 2)])
         self.pz = np.max([np.sqrt(-2*np.log(self.error)*s[0]**2), 2.1*np.ones_like(s[0])], axis=0)
         self.py = np.max([np.sqrt(-2*np.log(self.error)*s[1]**2), 2.1*np.ones_like(s[1])], axis=0)
@@ -460,7 +464,9 @@ class GaussianMomentExpansion(PSF4D):
     @memoize()
     def get_padding_size(self, tile=None, z=None):
         if tile is not None:
-            z = tile.r[0]
+            tile0 = self.get_padding_size(z=tile.l[0])
+            tile1 = self.get_padding_size(z=tile.r[0])
+            return Tile.intersection(tile0, tile1)
 
         if isinstance(z, np.ndarray) and z.shape[0] > 1:
             z = z[0]
@@ -507,9 +513,9 @@ class FromArray(PSF):
         be centered in this array. Hint: np.fft.fftfreq provides the correct
         ordering of values for both even and odd lattices.
         """
-        self.param_shape = array.shape
+        self.array = array
         self.support = np.array(array.shape[1:])
-        super(FromArray, self).__init__(*args, params=array.flatten(), **kwargs)
+        super(FromArray, self).__init__(*args, params=['dummy'], values=[0], **kwargs)
 
     def set_tile(self, tile):
         if (self.tile.shape != tile.shape).any():
@@ -532,9 +538,6 @@ class FromArray(PSF):
         kpsf /= (np.real(kpsf[0,0,0]) + 1e-15)
         return kpsf
 
-    def update(self, params):
-        pass
-
     def execute(self, field):
         if any(field.shape != self.tile.shape):
             raise AttributeError("Field passed to PSF incorrect shape")
@@ -548,13 +551,10 @@ class FromArray(PSF):
 
         for i in xrange(field.shape[0]):
             z = int(self.tile.l[0] + i)
-            kpsf = self._pad(self.params.reshape(self.param_shape)[z])
+            kpsf = self._pad(self.array[z])
             outfield[i] = np.real(fft.ifftn(infield * kpsf))[i]
 
         return outfield
-
-    def get_params(self):
-        return self.params
 
     def get_padding_size(self, z=None):
         return Tile(self.support)
