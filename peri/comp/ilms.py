@@ -114,6 +114,14 @@ class Polynomial3D(Component):
     def get_update_tile(self, params, values):
         return Tile(self.shape)
 
+    def __str__(self):
+        return "{} [{} {}]".format(
+            self.__class__.__name__, self.order
+        )
+
+    def __repr__(self):
+        return self.__str__()
+
     def __getstate__(self):
         odict = self.__dict__.copy()
         cdd(odict, ['r', 'field', '_last_term', '_last_index'])
@@ -699,3 +707,13 @@ class BarnesStreakLegPoly2P1D(BarnesStreakLegPoly2P1D):
             diff = self.get_field().max() - vmax
             self.params[0] -= diff * (diff > 0)
         self.initialize()
+
+    def __str__(self):
+        return "{} [{} {}]".format(
+            self.__class__.__name__, self.order, self.npts
+        )
+
+    def __repr__(self):
+        return self.__str__()
+
+
