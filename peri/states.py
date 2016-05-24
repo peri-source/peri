@@ -83,7 +83,7 @@ class State(ParameterGroup):
         return self.params
 
     def _grad_one_param(self, func, p, dl=1e-3, f0=None, rts=True, **kwargs):
-        vals = self.get_values(p)
+        vals = np.array(self.get_values(p))
         f0 = util.callif(func(**kwargs)) if f0 is None else f0
 
         self.update(p, vals+dl)
@@ -95,8 +95,8 @@ class State(ParameterGroup):
         return (f1 - f0) / dl
 
     def _hess_two_param(self, func, p0, p1, dl=1e-3, f0=None, rts=True, **kwargs):
-        vals0 = self.get_values(p0)
-        vals1 = self.get_values(p1)
+        vals0 = np.array(self.get_values(p0))
+        vals1 = np.array(self.get_values(p1))
 
         f00 = util.callif(func(**kwargs)) if f0 is None else f0
 
