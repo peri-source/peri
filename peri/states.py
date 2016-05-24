@@ -251,9 +251,6 @@ class ConfocalImageState(State, ComponentCollection):
             ConfocalImageState.catmap which tells how components are matched to
             parts of the model equation.
 
-        zscale : float, typically (1, 1.5) [default: 1]
-            The initial zscaling for the pixel sizes.  Bigger is more compressed.
-
         offset : float, typically (0, 1) [default: 1]
             The level that particles inset into the illumination field
 
@@ -323,10 +320,10 @@ class ConfocalImageState(State, ComponentCollection):
         }
 
         catmaps[1] = {
-            'P': 'obj', 'H': 'psf'
+            'P': 'obj', 'H': 'psf', 'C': 'offset'
         }
         modelstrs[1] = {
-            'full': 'H(P)',
+            'full': 'H(P + C)',
             'dP': 'H(dP)'
         }
 
