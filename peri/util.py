@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import inspect
 import datetime
 import numpy as np
 import code, traceback, signal
@@ -642,6 +643,27 @@ def memoize(cache_max_size=1e9):
         return wrapper
 
     return memoize_inner
+
+#=============================================================================
+# patching docstrings of sub-classes
+#=============================================================================
+def patch_docs(subclass, superclass):
+    funcs0 = inspect.getmembers(subclass, predicate=inspect.ismethod)
+    funcs1 = inspect.getmembers(superclass, predicate=inspect.ismethod)
+
+    funcs1 = [f[0] for f in funcs1]
+
+    for name, func in funcs0:
+        if name.startswith('_'):
+            continue
+
+        if name not in funcs1:
+            continue
+
+        if func.__doc__ is None:
+            func = getattr(subclass, name)
+            func.im_func.__doc__ = getattr(superclass, name).im_func.__doc__
+
 
 #=============================================================================
 # debugging / python interpreter / logging
