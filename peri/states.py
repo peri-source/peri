@@ -212,7 +212,7 @@ class PolyFitState(State):
 
 
 class ConfocalImageState(State, ComponentCollection):
-    def __init__(self, image, comp, zscale=1, offset=0, sigma=0.04, priors=None,
+    def __init__(self, image, comps, zscale=1, offset=0, sigma=0.04, priors=None,
             nlogs=True, pad=const.PAD, modelnum=0, catmap=None, modelstr=None):
         """
         The state object to create a confocal image.  The model is that of
@@ -294,7 +294,7 @@ class ConfocalImageState(State, ComponentCollection):
         modelstrs = [0]*N
 
         catmaps[0] = {
-            'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'platonic', 'C': 'offset'
+            'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'obj', 'C': 'offset'
         }
         modelstrs[0] = {
             'full' : 'H(I*(1-P)+C*P) + B',
@@ -304,7 +304,7 @@ class ConfocalImageState(State, ComponentCollection):
         }
 
         catmaps[1] = {
-            'P': 'platonic', 'H': 'psf'
+            'P': 'obj', 'H': 'psf'
         }
         modelstrs[1] = {
             'full': 'H(P)',
@@ -317,8 +317,8 @@ class ConfocalImageState(State, ComponentCollection):
         elif catmap is not None or modelstr is not None:
             raise AttributeError('If catmap or modelstr is supplied, the other must as well')
         else:
-            self.catmap = catmaps[methodnum]
-            self.modelstr = modelstrs[methodnum]
+            self.catmap = catmaps[modelnum]
+            self.modelstr = modelstrs[modelnum]
 
         self.mapcat = {v:k for k,v in self.catmap.iteritems()}
 
@@ -326,31 +326,30 @@ class ConfocalImageState(State, ComponentCollection):
         # of components supplied by the user. Also check that the parameters
         # are consistent across the many components.
 
+        for c in self.comps:
+            setattr(self, '_comp_'+c.category, c)
+
     def set_image(self, image):
         """
         Update the current comparison (real) image
         """
-        if isinstance(image, util.RawImage):
-            self.rawimage = image
-            image = image.get_padded_image(self.pad)
-        else:
-            self.rawimage = None
+        self.rawimage = image
+        self._data = self.rawimage.get_padded_image(self.pad)
 
-        self.image = image.copy()
-        self.image_mask = (image > const.PADVAL).astype('float')
-        self.image *= self.image_mask
+        #self.image_mask = (image > const.PADVAL).astype('float')
+        #self.image *= self.image_mask
 
         self.inner = (np.s_[self.pad:-self.pad],)*3
-        self._model = np.zeros_like(self.image)
-        self._residuals = np.zeros_like(self.image)
-        self._logprior = 0.0
-        self._loglikelihood = 0.0
+        self.reset()
 
     def reset(self):
-        # FIXME -- not yet, need model
-        self._model =  self._calc_model()
+        for c in self.comps:
+            c.initialize()
+
+        self._model = self._calc_model()
+        self._residuals = self._calc_residuals()
         self._loglikelihood = self._calc_loglikelihood()
-        self._logprior = self._calc_logprior()
+        #self._logprior = self._calc_logprior()
 
     def model_to_true_image(self):
         """
@@ -371,7 +370,7 @@ class ConfocalImageState(State, ComponentCollection):
     @property
     def model(self):
         """ Get the current model fit to the data """
-        return self.image.get_image()
+        return self._model
 
     @property
     def residuals(self):
@@ -386,7 +385,7 @@ class ConfocalImageState(State, ComponentCollection):
         """
         # now remove the part of the tile that is outside the image and
         # pad the interior part with that overhang
-        img = util.Tile(self.image.shape)
+        img = util.Tile(self.data.shape)
 
         # reflect the necessary padding back into the image itself for
         # the outer slice which we will call outer
@@ -394,14 +393,15 @@ class ConfocalImageState(State, ComponentCollection):
         inner, outer = outer.reflect_overhang(img)
         iotile = inner.translate(-outer.l)
 
-        return outer, inner, iotile.slicer
+        return outer, inner, iotile
 
     def _map_vars(self, funcname, extra=None, *args, **kwargs):
         out = {}
+        extra = extra or {}
 
         for c in self.comps:
             cat = c.category
-            out[self.mapcat[cat]] = c.__dict__[funcname](*args, **kwargs)
+            out[self.mapcat[cat]] = getattr(c, funcname)(*args, **kwargs)
 
         out.update(extra)
         return out
@@ -421,7 +421,7 @@ class ConfocalImageState(State, ComponentCollection):
         itile, otile, iotile = self.get_io_tiles(otile, ptile)
 
         # have all components update their tiles
-        self.set_tiles(otile)
+        self.set_tile(otile)
 
         oldmodel = self.model[itile.slicer].copy()
 
@@ -441,7 +441,7 @@ class ConfocalImageState(State, ComponentCollection):
 
             diff = model1 - model0
             evar = self._map_vars('get_field', extra={dcompname: diff})
-            diff = eval(self.modelstr[dcompname], globals=evar)
+            diff = eval(self.modelstr[dcompname], evar)
 
             self._model[itile.slicer] += diff[iotile.slicer]
         else:
@@ -450,7 +450,7 @@ class ConfocalImageState(State, ComponentCollection):
             # unpack a few variables to that this is easier to read, nice compact
             # formulas coming up, B = bkg, I = ilm, C = off
             evar = self._map_vars('get_field')
-            diff = eval(self.modelstr['full'], globals=evar)
+            diff = eval(self.modelstr['full'], evar)
             self._model[itile.slicer] = diff[iotile.slicer]
 
         newmodel = self.model[itile.slicer].copy()
@@ -459,13 +459,21 @@ class ConfocalImageState(State, ComponentCollection):
         # are hard to compute globally for small local updates
         self.update_from_model_change(oldmodel, newmodel, itile)
 
+    def _calc_model(self):
+        self.set_tile(util.Tile(self.data.shape))
+        var = self._map_vars('get_field')
+        return eval(self.modelstr['full'], var)
+
+    def _calc_residuals(self):
+        return self.model - self.data
+
     def _calc_loglikelihood(self, model=None, tile=None):
         if model is None:
             res = self.residuals
         else:
             res = model - self.data[tile.slicer]
 
-        sig = self.get_value('sigma')
+        sig = 0.1#self.get_values('sigma')
         return -0.5*((res/sig)**2).sum() - np.log(np.sqrt(2*np.pi)*sig)*res.size
 
     def update_from_model_change(self, oldmodel, newmodel, tile):
@@ -482,7 +490,7 @@ class ConfocalImageState(State, ComponentCollection):
 
     def __str__(self):
         return "{} [\n    {}\n]".format(self.__class__.__name__,
-            '\n    '.join([str(c) for c in self.comps])
+            '\n    '.join([c.category+': '+str(c) for c in self.comps])
         )
 
     def __getstate__(self):
