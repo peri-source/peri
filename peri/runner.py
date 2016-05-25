@@ -3,6 +3,7 @@ import scipy.ndimage as nd
 
 from peri import const, util
 from peri import states, initializers
+from peri.mc import sample
 
 # poly fit function, because I can
 def poly_fit(x, y, order=2, sigma=0.1, N=100, burn=100):
@@ -13,8 +14,8 @@ def poly_fit(x, y, order=2, sigma=0.1, N=100, burn=100):
     """
     from peri.states import PolyFitState
     s = PolyFitState(x, y, order=order, sigma=sigma)
-    h = sample_state(s, s.params, N=burn, doprint=True, procedure='uniform')
-    h = sample_state(s, s.params, N=burn, doprint=True, procedure='uniform')
+    h = sample.sample_state(s, s.params, N=burn, doprint=True, procedure='uniform')
+    h = sample.sample_state(s, s.params, N=burn, doprint=True, procedure='uniform')
 
     import pylab as pl
     pl.plot(s.data, 'o')
