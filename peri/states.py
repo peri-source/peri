@@ -492,7 +492,7 @@ class ImageState(State, ComponentCollection):
         self._model = self._calc_model()
         self._residuals = self._calc_residuals()
         self._loglikelihood = self._calc_loglikelihood()
-        #self._logprior = self._calc_logprior()
+        self._logprior = self._calc_logprior()
 
     def model_to_true_image(self):
         """
@@ -568,22 +568,22 @@ class ImageState(State, ComponentCollection):
 
         oldmodel = self.model[itile.slicer].copy()
 
+        if len(comps) == 0:
+            return False
+
+        comp0 = comps[0]
+        dcompname = 'd'+self.mapcat[comp0.category]
+
         # here we diverge depending if there is only one component update
         # (so that we may calculate a variation / difference image) or if many
         # parameters are being update (should just update the whole model).
-        if len(comps) == 1 and len(comps[0].category) == 1:
-            comp = comps[0]
-            compname = self.mapcat[comp.category]
-            dcompname = 'd'+compname
-
-            # FIXME -- check that self.modelstr[dcompname] exists first
-
-            model0 = comp.get_field()
+        if (len(comps) == 1 and self.modelstr.has_key(dcompname)):
+            model0 = comp0.get()
             super(ImageState, self).update(params, values)
-            model1 = comp.get_field()
+            model1 = comp0.get()
 
             diff = model1 - model0
-            evar = self._map_vars('get_field', extra={dcompname: diff})
+            evar = self._map_vars('get', extra={dcompname: diff})
             diff = eval(self.modelstr[dcompname], evar)
 
             self._model[itile.slicer] += diff[iotile.slicer]
@@ -592,7 +592,7 @@ class ImageState(State, ComponentCollection):
 
             # unpack a few variables to that this is easier to read, nice compact
             # formulas coming up, B = bkg, I = ilm, C = off
-            evar = self._map_vars('get_field')
+            evar = self._map_vars('get')
             diff = eval(self.modelstr['full'], evar)
             self._model[itile.slicer] = diff[iotile.slicer]
 
@@ -604,11 +604,14 @@ class ImageState(State, ComponentCollection):
 
     def _calc_model(self):
         self.set_tile(util.Tile(self.data.shape))
-        var = self._map_vars('get_field')
+        var = self._map_vars('get')
         return eval(self.modelstr['full'], var)
 
     def _calc_residuals(self):
         return self.model - self.data
+
+    def _calc_logprior(self):
+        return 1.0 # FIXME
 
     def _calc_loglikelihood(self, model=None, tile=None):
         if model is None:
@@ -616,7 +619,7 @@ class ImageState(State, ComponentCollection):
         else:
             res = model - self.data[tile.slicer]
 
-        sig = 0.1#self.get_values('sigma')
+        sig = 0.1#self.get_values('sigma') # FIXME
         return -0.5*((res/sig)**2).sum() - np.log(np.sqrt(2*np.pi)*sig)*res.size
 
     def update_from_model_change(self, oldmodel, newmodel, tile):
