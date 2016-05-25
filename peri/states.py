@@ -16,12 +16,27 @@ log = baselog.getChild('state')
 class ModelError(Exception):
     pass
 
-def superdoc(func):
-    def wrapper(func):
-        func.__doc__ = blah
-        return func
-    return wrapper(func)
+def sample(field, inds=None, slicer=None):
+    """
+    Take a sample from a field given flat indices or a shaped slice
 
+    Parameters:
+    -----------
+    inds : list of indices
+        One dimensional (raveled) indices to return from the field
+
+    slicer : slice object
+        A shaped (3D) slicer that returns a section of image
+    """
+    if inds is not None:
+        return field.ravel()[inds]
+    if slicer is not None:
+        return field[slicer].ravel()
+    return field.ravel()
+
+#=============================================================================
+# Super class of State, has all basic components and structure
+#=============================================================================
 class State(ParameterGroup):
     def __init__(self, params, values, logpriors=None, **kwargs):
         self.stack = []
@@ -42,35 +57,18 @@ class State(ParameterGroup):
 
     @property
     def residuals(self):
-        pass
+        """ Get the model residuals wrt data """
+        return self.model - self.data
 
-    def random_pixels(self, N, flat=True):
-        """
-        Return N random pixel indices from the data shape. If flat, then
-        return raveled coordinates only.
-        """
-        inds = np.random.choice(self.data.size, size=N, replace=False)
-        if not flat:
-            return np.unravel_index(inds, self.data.shape)
-        return inds
+    @property
+    def error(self):
+        return np.dot(self.residuals.flat, self.residuals.flat)
 
-    def residuals_sample(self, inds=None, slicer=None):
-        if inds is not None:
-            return self.residuals.ravel()[inds]
-        if slicer is not None:
-            return self.residuals[slicer]
-        return self.residuals
-
-    def model_sample(self, inds=None, slicer=None):
-        if inds is not None:
-            return self.model.ravel()[inds]
-        if slicer is not None:
-            return self.model[slicer]
-        return self.model
-
+    @property
     def loglikelihood(self):
         pass
 
+    @property
     def logprior(self):
         pass
 
@@ -95,62 +93,75 @@ class State(ParameterGroup):
     def block_all(self):
         return self.params
 
-    def _grad_one_param(self, func, p, dl=1e-3, f0=None, rts=True, **kwargs):
+    graddoc = \
+    """
+    Parameters:
+    -----------
+    func : callable
+        Function wrt to take a derivative, should return a nparray that is
+        the same shape for all params and values
+
+    params : string or list of strings
+        Paramter(s) to take the derivative wrt
+
+    dl : float
+        Derivative step size for numerical deriv
+
+    f0 : ndarray or float (optional)
+        Value at the current parameters. Useful when evaluating many derivs
+        so that it is not recalculated for every parameter.
+
+    rts : boolean
+        Return To State. Return the state to how you found it when done,
+        needs another update call, so can be ommitted sometimes (small dl)
+
+    **kwargs :
+        Arguments to `func`
+    """
+
+    sampledoc = \
+    """
+    kwargs (supply only one):
+    -----------------------------
+    inds : list of indices
+        One dimensional (raveled) indices to return from the field
+
+    slicer : slice object
+        A shaped (3D) slicer that returns a section of image
+    """
+
+    def _grad_one_param(self, funct, p, dl=1e-3, f0=None, rts=True, **kwargs):
         """
-        Gradient of `func` wrt a single parameter `p`.
-
-        Parameters:
-        -----------
-        func : callable
-            Function wrt to take a derivative, should return a nparray that is
-            the same shape for all params and values
-
-        p : string
-            Paramter to take the derivative wrt
-
-        dl : float
-            Derivative step size for numerical deriv
-
-        f0 : ndarray or float (optional)
-            Value at the current parameters. Useful when evaluating many derivs
-            so that it is not recalculated for every parameter.
-
-        rts : boolean
-            Return To State. Return the state to how you found it when done,
-            needs another update call, so can be ommitted sometimes (small dl)
-
-        **kwargs :
-            Arguments to `func`
+        Gradient of `func` wrt a single parameter `p`. (see graddoc)
         """
         vals = np.array(self.get_values(p))
-        f0 = util.callif(func(**kwargs)) if f0 is None else f0
+        f0 = funct(**kwargs) if f0 is None else f0
 
         self.update(p, vals+dl)
-        f1 = util.callif(func(**kwargs))
+        f1 = funct(**kwargs)
 
         if rts:
             self.update(p, vals)
 
         return (f1 - f0) / dl
 
-    def _hess_two_param(self, func, p0, p1, dl=1e-3, f0=None, rts=True, **kwargs):
+    def _hess_two_param(self, funct, p0, p1, dl=1e-3, f0=None, rts=True, **kwargs):
         """
-        Hessian of `func` wrt two parameters `p0` and `p1`. Parameters follow
-        conventions of State._grad_one_param.
+        Hessian of `func` wrt two parameters `p0` and `p1`. (see graddoc)
         """
         vals0 = np.array(self.get_values(p0))
         vals1 = np.array(self.get_values(p1))
 
-        f00 = util.callif(func(**kwargs)) if f0 is None else f0
+        f00 = funct(**kwargs) if f0 is None else f0
 
         self.update(p0, vals0+dl)
-        f10 = util.callif(func(**kwargs))
+        f10 = funct(**kwargs)
 
         self.update(p1, vals1+dl)
-        f11 = util.callif(func(**kwargs))
+        f11 = funct(**kwargs)
 
         self.update(p0, vals0)
-        f01 = util.callif(func(**kwargs))
+        f01 = funct(**kwargs)
 
         if rts:
             self.update(p0, vals0)
@@ -158,62 +169,80 @@ class State(ParameterGroup):
 
         return (f11 - f10 - f01 + f00) / (dl**2)
 
-    def _grad(self, func, params=None, dl=1e-3, rts=True, **kwargs):
+    def _grad(self, funct, params=None, dl=1e-3, rts=True, **kwargs):
         """
-        Gradient of `func` wrt a set of parameters params. Parameters follow
-        conventions of State._grad_one_param.
+        Gradient of `func` wrt a set of parameters params. (see graddoc)
         """
         if params is None:
             params = self.block_all()
 
         ps = util.listify(params)
-        f0 = util.callif(func(**kwargs))
+        f0 = funct(**kwargs)
 
         grad = []
         for i, p in enumerate(ps):
             tgrad = self._grad_one_param(
-                func, p, dl=dl, f0=f0, rts=rts, **kwargs
+                funct, p, dl=dl, f0=f0, rts=rts, **kwargs
             )
             grad.append(tgrad)
         return np.array(grad)
 
-    def _jtj(self, func, params=None, dl=1e-3, rts=True, **kwargs):
+    def _jtj(self, funct, params=None, dl=1e-3, rts=True, **kwargs):
         """
-        jTj of a `func` wrt to parmaeters `params`. Parameters follow
-        conventions of State._grad_one_param.
+        jTj of a `func` wrt to parmaeters `params`. (see graddoc)
         """
-        grad = self._grad(func=func, params=params, dl=dl, rts=rts, **kwargs)
+        grad = self._grad(funct=funct, params=params, dl=dl, rts=rts, **kwargs)
         return np.dot(grad, grad.T)
 
-    def _hess(self, func, params=None, dl=1e-3, rts=True, **kwargs):
+    def _hess(self, funct, params=None, dl=1e-3, rts=True, **kwargs):
         """
-        Hessian of a `func` wrt to parmaeters `params`. Parameters follow
-        conventions of State._grad_one_param.
+        Hessian of a `func` wrt to parmaeters `params`. (see graddoc)
         """
         if params is None:
             params = self.block_all()
 
         ps = util.listify(params)
-        f0 = util.callif(func(**kwargs))
+        f0 = funct(**kwargs)
 
         hess = [[0]*len(ps) for i in xrange(len(ps))]
         for i, pi in enumerate(ps):
             for j, pj in enumerate(ps[i:]):
                 J = j + i
                 thess = self._hess_two_param(
-                    func, pi, pj, dl=dl, f0=f0, rts=rts, **kwargs
+                    funct, pi, pj, dl=dl, f0=f0, rts=rts, **kwargs
                 )
                 hess[i][J] = thess
                 hess[J][i] = thess
         return np.array(hess)
 
+    def _graddoc(self, f):
+        f.im_func.func_doc += self.graddoc
+
     def build_funcs(self):
-        # FIXME -- docstrings
-        self.gradloglikelihood = partial(self._grad, func=self.loglikelihood)
-        self.hessloglikelihood = partial(self._hess, func=self.loglikelihood)
-        self.fisherinformation = partial(self._jtj, func=self.model_sample) #FIXME -- sigma^2
-        self.J = partial(self._grad, func=self.residuals_sample)
-        self.JTJ = partial(self._jtj, func=self.residuals_sample)
+        def m(inds=None, slicer=None):
+            return sample(self.model, inds=inds, slicer=slicer)
+
+        def r(inds=None, slicer=None):
+            return sample(self.residuals, inds=inds, slicer=slicer)
+
+        l = lambda: self.loglikelihood
+
+        self.fisherinformation = partial(self._jtj, funct=m)
+        self.gradloglikelihood = partial(self._grad, funct=l)
+        self.hessloglikelihood = partial(self._hess, funct=l)
+        self.J = partial(self._grad, funct=r)
+        self.JTJ = partial(self._jtj, funct=r)
+
+        self.fisherinformation.__doc__ = self.graddoc + self.sampledoc
+        self.gradloglikelihood.__doc__ = self.graddoc
+        self.hessloglikelihood.__doc__ = self.graddoc
+        self.J.__doc__ = self.graddoc + self.sampledoc
+        self.JTJ.__doc__ = self.graddoc + self.sampledoc
+
+        self._graddoc(self._grad_one_param)
+        self._graddoc(self._hess_two_param)
+        self._graddoc(self._grad)
+        self._graddoc(self._hess)
 
         class _Statewrap(object):
             def __init__(self, obj):
@@ -260,9 +289,6 @@ class PolyFitState(State):
         return np.polyval(self.values, self._xpts)
 
     @property
-    def residuals(self):
-        return self.model - self.data
-
     def loglikelihood(self):
         sig = self.param_dict['sigma']
         return (
@@ -270,9 +296,13 @@ class PolyFitState(State):
             -np.log(np.sqrt(2*np.pi)*sig)*self._data.shape[0]
         )
 
+    @property
     def logprior(self):
         return 1.0
 
+#=============================================================================
+# Image state which specializes to components with regions, etc.
+#=============================================================================
 class ImageState(State, ComponentCollection):
     def __init__(self, image, comps, offset=0, sigma=0.04, priors=None,
             nlogs=True, pad=const.PAD, modelnum=0, catmap=None, modelstr=None):
@@ -598,6 +628,7 @@ class ImageState(State, ComponentCollection):
         self._loglikelihood += self._calc_loglikelihood(newmodel, tile=tile)
         self._residuals[tile.slicer] = newmodel - self.data[tile.slicer]
 
+    @property
     def loglikelihood(self):
         return self._logprior + self._loglikelihood
 
