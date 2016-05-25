@@ -17,7 +17,7 @@ class Sampler(object):
 
     def loglikelihood(self, state, substate):
         if state.update(self.block, substate):
-            return state.loglikelihood()
+            return state.loglikelihood
         return PRIORCUT/2
 
     def gradloglikelihood(self, state, substate):

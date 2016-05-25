@@ -33,7 +33,7 @@ def scan_ll(state, element, size=0.1, N=1000):
     vals = np.linspace(start-size, start+size, N)
     for val in vals:
         state.update(element, val)
-        l = state.loglikelihood()
+        l = state.loglikelihood
         ll.append(l)
 
     state.update(element, start)
@@ -109,7 +109,7 @@ def sample_block(state, blockname, explode=True, stepout=0.1, quiet=False):
 def sample_block_list(state, blocklist, stepout=0.1, quiet=False):
     for bl in blocklist:
         sample_block(state, bl, stepout=stepout, quiet=quiet)
-    return state.state.copy(), state.loglikelihood()
+    return state.state.copy(), state.loglikelihood
 
 def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
         prefix='peri', save_name=None, sigma=True, pos=True, quiet=False, postfix=None):
@@ -150,7 +150,7 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
 
         if i >= burn:
             h.append(s.state.copy())
-            ll.append(s.loglikelihood())
+            ll.append(s.loglikelihood)
 
     if save_period > 0 and save_name:
         os.remove(save_name)
@@ -173,7 +173,7 @@ def do_blocks(s, blocks, sweeps, burn, stepout=0.1, postfix=None, quiet=False):
 
         if i >= burn:
             h.append(s.state.copy())
-            ll.append(s.loglikelihood())
+            ll.append(s.loglikelihood)
 
     h = np.array(h)
     ll = np.array(ll)
