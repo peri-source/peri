@@ -191,6 +191,8 @@ class ComponentCollection(Component):
         lmap = defaultdict(list)
 
         for c in comps:
+            if not isinstance(c, (Component, ComponentCollection)):
+                raise AttributeError("%r is not a valid Component or ComponentCollection" % c)
             for p in c.params:
                 pmap[p].update([c])
                 lmap[p].extend([c])
