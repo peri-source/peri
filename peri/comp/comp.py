@@ -1,7 +1,7 @@
 from operator import add
 from collections import OrderedDict, defaultdict
 
-from peri.util import listify, delistify, Tile, patch_docs
+from peri import util
 
 #=============================================================================
 # A base class for parameter groups (components and priors)
@@ -36,7 +36,7 @@ class ParameterGroup(object):
 
     def get_values(self, params):
         """ Get the value of a list or single parameter """
-        values = delistify([self.param_dict[p] for p in listify(params)])
+        values = util.delistify([self.param_dict[p] for p in util.listify(params)])
         return values
 
     def set_values(self, params, values):
@@ -44,7 +44,7 @@ class ParameterGroup(object):
         Directly set a single (param, value) combination, or a list or tuple of
         params and corresponding values for the object.
         """
-        for p, v in zip(listify(params), listify(values)):
+        for p, v in zip(util.listify(params), util.listify(values)):
             self.param_dict[p] = v
 
     @property
@@ -150,6 +150,7 @@ class GlobalScalarComponent(Component):
 
     def __init__(self, name, value, shape=None):
         self.shape = shape
+        self.category = name
         super(GlobalScalarComponent, self).__init__([name], [value])
 
     def get(self):
@@ -159,7 +160,7 @@ class GlobalScalarComponent(Component):
         return self.values[0]
 
     def get_update_tile(self, params, values):
-        return Tile(self.shape)
+        return util.Tile(self.shape)
 
 #=============================================================================
 # Component class == model components for an image
@@ -217,11 +218,11 @@ class ComponentCollection(Component):
 
         returnvalues = values is not None
         if values is None:
-            values = [0]*len(listify(params))
+            values = [0]*len(util.listify(params))
 
         for c in self.comps:
             tp, tv = [], []
-            for p,v in zip(listify(params), listify(values)):
+            for p,v in zip(util.listify(params), util.listify(values)):
                 if c in self.pmap[p]:
                     tp.append(p)
                     tv.append(v)
@@ -250,7 +251,7 @@ class ComponentCollection(Component):
 
     def get_values(self, params):
         vals = []
-        for p in listify(params):
+        for p in util.listify(params):
             vals.append(self.lmap[p][0].get_values(p))
         return vals
 
@@ -285,7 +286,7 @@ class ComponentCollection(Component):
                 if tile is not None:
                     sizes.append(tile)
 
-        return Tile.boundingtile(sizes)
+        return util.Tile.boundingtile(sizes)
 
     def get_padding_size(self, tile):
         sizes = []
@@ -295,7 +296,7 @@ class ComponentCollection(Component):
             if pad is not None:
                 sizes.append(pad)
 
-        return Tile.boundingtile(sizes)
+        return util.Tile.boundingtile(sizes)
 
     def get_field(self):
         """ Combine the fields from all components """
@@ -312,6 +313,6 @@ class ComponentCollection(Component):
         pass # FIXME
 
 
-patch_docs(GlobalScalarComponent, Component)
-patch_docs(ComponentCollection, Component)
+util.patch_docs(GlobalScalarComponent, Component)
+util.patch_docs(ComponentCollection, Component)
 

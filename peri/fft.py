@@ -127,8 +127,6 @@ class FFTW(FFTBase):
             self._ifftn_data, self._ifftn_func = _alloc('ifftn')
             self._fft2_data, self._fft2_func = _alloc('fft2')
             self._ifft2_data, self._ifft2_func = _alloc('ifft2')
-            self._fft_data, self._fft_func = _alloc('fft')
-            self._ifft_data, self._ifft_func = _alloc('ifft')
 
     def _prefix_to_obj(self, prefix):
         func = self.__dict__.get('_%s_func' % prefix)
@@ -178,14 +176,15 @@ class FFTW(FFTBase):
             self.save_wisdom(wisdomfile)
         self.wisdomfile = wisdomfile
 
-    def save_wisdom(self):
-        wisdomfile = self.__dict__.get('wisdomfile')
-
+    def save_wisdom(self, wisdomfile):
         if wisdomfile is None:
             return
 
         if wisdomfile:
-            pickle.dump(pyfftw.export_wisdom(), open(self.wisdomfile, 'wb'), protocol=-1)
+            pickle.dump(
+                pyfftw.export_wisdom(), open(wisdomfile, 'wb'),
+                protocol=-1
+            )
 
     def __getinitargs__(self):
         return (self.shape, self.real, self.plan, self.threads)
@@ -200,7 +199,7 @@ if hasfftw:
 
     @atexit.register
     def goodbye():
-        fft.save_wisdom()
+        fft.save_wisdom(wisdom)
 else:
     fft = FFTNPY()
     rfft = FFTNPY(real=True)
