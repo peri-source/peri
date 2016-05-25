@@ -45,6 +45,10 @@ class State(ParameterGroup):
         pass
 
     def random_pixels(self, N, flat=True):
+        """
+        Return N random pixel indices from the data shape. If flat, then
+        return raveled coordinates only.
+        """
         inds = np.random.choice(self.data.size, size=N, replace=False)
         if not flat:
             return np.unravel_index(inds, self.data.shape)
@@ -92,6 +96,32 @@ class State(ParameterGroup):
         return self.params
 
     def _grad_one_param(self, func, p, dl=1e-3, f0=None, rts=True, **kwargs):
+        """
+        Gradient of `func` wrt a single parameter `p`.
+
+        Parameters:
+        -----------
+        func : callable
+            Function wrt to take a derivative, should return a nparray that is
+            the same shape for all params and values
+
+        p : string
+            Paramter to take the derivative wrt
+
+        dl : float
+            Derivative step size for numerical deriv
+
+        f0 : ndarray or float (optional)
+            Value at the current parameters. Useful when evaluating many derivs
+            so that it is not recalculated for every parameter.
+
+        rts : boolean
+            Return To State. Return the state to how you found it when done,
+            needs another update call, so can be ommitted sometimes (small dl)
+
+        **kwargs :
+            Arguments to `func`
+        """
         vals = np.array(self.get_values(p))
         f0 = util.callif(func(**kwargs)) if f0 is None else f0
 
@@ -104,6 +134,10 @@ class State(ParameterGroup):
         return (f1 - f0) / dl
 
     def _hess_two_param(self, func, p0, p1, dl=1e-3, f0=None, rts=True, **kwargs):
+        """
+        Hessian of `func` wrt two parameters `p0` and `p1`. Parameters follow
+        conventions of State._grad_one_param.
+        """
         vals0 = np.array(self.get_values(p0))
         vals1 = np.array(self.get_values(p1))
 
@@ -124,34 +158,51 @@ class State(ParameterGroup):
 
         return (f11 - f10 - f01 + f00) / (dl**2)
 
-    def _grad(self, func, ps=None, dl=1e-3, **kwargs):
-        if ps is None:
-            ps = self.block_all()
+    def _grad(self, func, params=None, dl=1e-3, rts=True, **kwargs):
+        """
+        Gradient of `func` wrt a set of parameters params. Parameters follow
+        conventions of State._grad_one_param.
+        """
+        if params is None:
+            params = self.block_all()
 
-        ps = util.listify(ps)
+        ps = util.listify(params)
         f0 = util.callif(func(**kwargs))
 
         grad = []
         for i, p in enumerate(ps):
-            grad.append(self._grad_one_param(func, p, dl, f0=f0, **kwargs))
+            tgrad = self._grad_one_param(
+                func, p, dl=dl, f0=f0, rts=rts, **kwargs
+            )
+            grad.append(tgrad)
         return np.array(grad)
 
-    def _jtj(self, func, ps=None, dl=1e-3, **kwargs):
-        grad = self._grad(func=func, ps=ps, dl=dl, **kwargs)
+    def _jtj(self, func, params=None, dl=1e-3, rts=True, **kwargs):
+        """
+        jTj of a `func` wrt to parmaeters `params`. Parameters follow
+        conventions of State._grad_one_param.
+        """
+        grad = self._grad(func=func, params=params, dl=dl, rts=rts, **kwargs)
         return np.dot(grad, grad.T)
 
-    def _hess(self, func, ps=None, dl=1e-3, **kwargs):
-        if ps is None:
-            ps = self.block_all()
+    def _hess(self, func, params=None, dl=1e-3, rts=True, **kwargs):
+        """
+        Hessian of a `func` wrt to parmaeters `params`. Parameters follow
+        conventions of State._grad_one_param.
+        """
+        if params is None:
+            params = self.block_all()
 
-        ps = util.listify(ps)
+        ps = util.listify(params)
         f0 = util.callif(func(**kwargs))
 
         hess = [[0]*len(ps) for i in xrange(len(ps))]
         for i, pi in enumerate(ps):
             for j, pj in enumerate(ps[i:]):
                 J = j + i
-                thess = self._hess_two_param(func, pi, pj, dl=dl, f0=f0, **kwargs)
+                thess = self._hess_two_param(
+                    func, pi, pj, dl=dl, f0=f0, rts=rts, **kwargs
+                )
                 hess[i][J] = thess
                 hess[J][i] = thess
         return np.array(hess)
@@ -222,7 +273,7 @@ class PolyFitState(State):
     def logprior(self):
         return 1.0
 
-class ConfocalImageState(State, ComponentCollection):
+class ImageState(State, ComponentCollection):
     def __init__(self, image, comps, offset=0, sigma=0.04, priors=None,
             nlogs=True, pad=const.PAD, modelnum=0, catmap=None, modelstr=None):
         """
@@ -248,7 +299,7 @@ class ConfocalImageState(State, ComponentCollection):
             combining) and supply that to the comps list.
 
             The component types must match the list of categories in the
-            ConfocalImageState.catmap which tells how components are matched to
+            ImageState.catmap which tells how components are matched to
             parts of the model equation.
 
         offset : float, typically (0, 1) [default: 1]
@@ -302,7 +353,7 @@ class ConfocalImageState(State, ComponentCollection):
     def set_model(self, modelnum=None, catmap=None, modelstr=None):
         """
         Setup the image model formation equation and corresponding objects into
-        their various objects. See the ConfocalImageState __init__ docstring
+        their various objects. See the ImageState __init__ docstring
         for information on these parameters.
         """
         N = 2
@@ -323,8 +374,9 @@ class ConfocalImageState(State, ComponentCollection):
             'P': 'obj', 'H': 'psf', 'C': 'offset'
         }
         modelstrs[1] = {
-            'full': 'H(P + C)',
-            'dP': 'H(dP)'
+            'full': 'H(P) + C',
+            'dP': 'H(dP)',
+            'dC': 'dC'
         }
 
         if catmap is not None and modelstr is not None:
@@ -493,7 +545,7 @@ class ConfocalImageState(State, ComponentCollection):
             # FIXME -- check that self.modelstr[dcompname] exists first
 
             model0 = comp.get_field()
-            super(ConfocalImageState, self).update(params, values)
+            super(ImageState, self).update(params, values)
             model1 = comp.get_field()
 
             diff = model1 - model0
@@ -502,7 +554,7 @@ class ConfocalImageState(State, ComponentCollection):
 
             self._model[itile.slicer] += diff[iotile.slicer]
         else:
-            super(ConfocalImageState, self).update(params, values)
+            super(ImageState, self).update(params, values)
 
             # unpack a few variables to that this is easier to read, nice compact
             # formulas coming up, B = bkg, I = ilm, C = off
@@ -562,7 +614,7 @@ def save(state, filename=None, desc='', extra=None):
     Save the current state with extra information (for example samples and LL
     from the optimization procedure).
 
-    state : peri.states.ConfocalImageState
+    state : peri.states.ImageState
         the state object which to save
 
     filename : string
