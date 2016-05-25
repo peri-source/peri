@@ -200,7 +200,7 @@ def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
 class PlatonicSpheresCollection(Component):
     category = 'obj'
 
-    def __init__(self, pos, rad, shape, zscale=1.0, support_pad=2,
+    def __init__(self, pos, rad, shape=None, zscale=1.0, support_pad=2,
             method='exact-gaussian-fast', alpha=None, user_method=None,
             exact_volume=True, volume_error=1e-5, max_radius_change=1e-2,
             param_prefix='sph'):
@@ -271,19 +271,21 @@ class PlatonicSpheresCollection(Component):
         self.set_draw_method(method=method, alpha=alpha, user_method=user_method)
 
         self.shape = shape
-        self.initialize()
+        self.setup_variables()
+        if self.shape:
+            self.initialize()
 
     def initialize(self):
         """ Start from scratch and initialize all objects """
-        if len(self.pos.shape) != 2:
-            raise AttributeError("Position array needs to be (-1,3) shaped, (z,y,x) order")
-
         self.rvecs = Tile(self.shape).coords(form='vector')
         self.particles = np.zeros(self.shape)
 
-        self._params = []
         for i, (p0, r0) in enumerate(zip(self.pos, self.rad)):
             self._draw_particle(p0, r0)
+
+    def setup_variables(self):
+        self._params = []
+        for i, (p0, r0) in enumerate(zip(self.pos, self.rad)):
             self._params.extend([self._i2p(i, c) for c in ['x','y','z','a']])
         self._params += ['zscale']
 

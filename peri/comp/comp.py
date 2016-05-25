@@ -74,8 +74,8 @@ class ParameterGroup(object):
 class Component(ParameterGroup):
     category = 'comp'
 
-    def __init__(self, params, values):
-        super(Component, self).__init__(params, values)
+    def __init__(self, params, values, ordered=True):
+        super(Component, self).__init__(params, values, ordered=ordered)
 
     def initialize(self):
         """ Begin anew and initialize the component """
@@ -120,14 +120,17 @@ class Component(ParameterGroup):
 
     def set_tile(self, tile):
         """ Set the currently active tile region for the calculation """
-        pass
+        self.tile = tile
 
-    def set_shape(self, shape):
+    def set_shape(self, shape, inner):
         """
         Set the overall shape of the calculation area. The total shape of that
-        the calculation can possibly occupy, in pixels.
+        the calculation can possibly occupy, in pixels. The second, inner, is
+        the region of interest within the image.
         """
         self.shape = shape
+        self.inner = inner
+        self.initialize()
 
     def execute(self, field):
         """ Perform its routine, whatever that may be """
@@ -151,7 +154,7 @@ class GlobalScalarComponent(Component):
     def __init__(self, name, value, shape=None):
         self.shape = shape
         self.category = name
-        super(GlobalScalarComponent, self).__init__([name], [value])
+        super(GlobalScalarComponent, self).__init__([name], [value], ordered=False)
 
     def get(self):
         return self.values[0]

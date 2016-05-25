@@ -449,6 +449,10 @@ class ImageState(State, ComponentCollection):
         #self.image *= self.image_mask
 
         self.inner = (np.s_[self.pad:-self.pad],)*3
+
+        for c in self.comps:
+            c.set_shape(self._data.shape, self.inner)
+
         self.reset()
 
     def reset(self):

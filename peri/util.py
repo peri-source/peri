@@ -664,6 +664,8 @@ def patch_docs(subclass, superclass):
             func = getattr(subclass, name)
             func.im_func.__doc__ = getattr(superclass, name).im_func.__doc__
 
+def copydoc(obj0, obj1):
+    pass
 
 #=============================================================================
 # debugging / python interpreter / logging

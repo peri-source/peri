@@ -16,7 +16,7 @@ from peri.fft import fft, rfft
 class PSF(Component):
     category = 'psf'
 
-    def __init__(self, shape, params, values):
+    def __init__(self, params, values, shape=None):
         """
         Point spread function classes must contain the following classes in order
         to interface with the states class:
@@ -31,7 +31,8 @@ class PSF(Component):
         self.tile = Tile((0,0,0))
         super(PSF, self).__init__(params, values)
 
-        self.initialize()
+        if self.shape:
+            self.initialize()
 
     def initialize(self):
         self.update(self.params, self.values)
@@ -140,7 +141,7 @@ class IdentityPSF(PSF):
             self.tile = tile
 
 class AnisotropicGaussian(PSF):
-    def __init__(self, shape, sigmas=(2.0, 1.0), error=1.0/255):
+    def __init__(self, sigmas=(2.0, 1.0), error=1.0/255, shape=None):
         self.error = error
         params = ['psf-sig-z', 'psf-sig-rho'] 
         super(AnisotropicGaussian, self).__init__(
@@ -161,7 +162,7 @@ class AnisotropicGaussian(PSF):
         return Tile(np.ceil([self.pz, self.pr, self.pr]))
 
 class AnisotropicGaussianXYZ(PSF):
-    def __init__(self, shape, sigmas=(2.0, 0.5, 1.0), error=1.0/255):
+    def __init__(self, sigmas=(2.0, 0.5, 1.0), error=1.0/255, shape=None):
         self.error = error
         params = ['psf-sigz', 'psf-sigy', 'psf-sigx']
         super(AnisotropicGaussianXYZ, self).__init__(
@@ -191,7 +192,7 @@ class AnisotropicGaussianXYZ(PSF):
 # Begin 4-dimensional point spread functions
 #=============================================================================
 class PSF4D(PSF):
-    def __init__(self, shape, params, values):
+    def __init__(self, params, values, shape=None):
         """
         4-dimensional Point-Spread-Function (PSF) is implemented by assuming
         that the there is only z-dependence of parameters (so that it can be
@@ -202,7 +203,7 @@ class PSF4D(PSF):
         The key variables are rpsf (2d) and kpsf (2d) which are used for the
         x-y convolution.  The z-convolution cannot be cached.
         """
-        super(PSF4D, self).__init__(shape=shape, params=params, values=values)
+        super(PSF4D, self).__init__(params=params, values=values, shape=shape)
 
     def rvecs(self, tile):
         rz, ry, rx = tile.kvectors(norm=1.0/tile.shape)
@@ -285,8 +286,8 @@ class PSF4D(PSF):
         pass
 
 class Gaussian4D(PSF4D):
-    def __init__(self, shape, sigmas=(2.0,0.5,1.0), order=(1,1,1),
-            error=1.0/255, zrange=128):
+    def __init__(self, sigmas=(2.0,0.5,1.0), order=(1,1,1), error=1.0/255,
+            zrange=128, shape=None):
         self.order = order
         self.error = error
         self.zrange = float(zrange)
@@ -366,8 +367,8 @@ class Gaussian4DPoly(Gaussian4D):
         return self._poly(z/self.zrange, self._sigma_coeffs(d=d))
 
 class Gaussian4DLegPoly(Gaussian4DPoly):
-    def __init__(self, shape, sigmas=(2.0,0.5,1.0), order=(1,1,1),
-            error=1.0/255, zrange=128):
+    def __init__(self, sigmas=(2.0,0.5,1.0), order=(1,1,1), error=1.0/255,
+            zrange=128, shape=None):
         super(Gaussian4DLegPoly, self).__init__(
             shape=shape, sigmas=sigmas, order=order, error=error, zrange=zrange
         )
@@ -376,8 +377,8 @@ class Gaussian4DLegPoly(Gaussian4DPoly):
         return legval(z, coeffs)
 
 class GaussianMomentExpansion(PSF4D):
-    def __init__(self, shape, sigmas=(2.0,0.5,1.0), order=(1,1,1),
-            moment_order=(3,3), error=1.0/255, zrange=128):
+    def __init__(self, sigmas=(2.0,0.5,1.0), order=(1,1,1),
+            moment_order=(3,3), error=1.0/255, zrange=128, shape=None):
         """
         3+1D PSF that is of the form:
             (1+a*(3x-x^3) + b*(3-6*x^2+x^4))*exp(-(x/s)^2/2)

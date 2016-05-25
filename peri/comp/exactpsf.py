@@ -18,7 +18,7 @@ def moment(p, v, order=1):
 # The actual interfaces that can be used in the peri system
 #=============================================================================
 class ExactLineScanConfocalPSF(psfs.PSF):
-    def __init__(self, shape, zrange=None, laser_wavelength=0.488, zslab=0.,
+    def __init__(self, shape=None, zrange=None, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
             pxsize=0.125, support_factor=2, normalize=False, sigkf=0.0,
             nkpts=None, cutoffval=None, measurement_iterations=None,
@@ -391,6 +391,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self.slices.append(psf)
 
         self.slices = np.array(self.slices)
+        return True
 
     def update_values(self, params, values):
         #Clipping params to computable values:
@@ -511,6 +512,7 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
 
         self.cheb = interpolation.ChebyshevInterpolation1D(self.psf, window=self.zrange,
                         degree=self.cheb_degree, evalpts=self.cheb_evals)
+        return True
 
     def psf(self, z):
         psf = []
