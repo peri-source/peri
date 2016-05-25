@@ -1,7 +1,7 @@
 import numpy as np
 
 class BarnesInterpolation1D(object):
-    def __init__(self, x, d, filter_size=None, iterations=4, clip=False, damp=0.95):
+    def __init__(self, x, d, filter_size=None, iterations=4, clip=False, clipsize=3, damp=0.95):
         """
         A class for 1-d barnes interpolation. Give data points d at locations x.
 
@@ -20,6 +20,9 @@ class BarnesInterpolation1D(object):
         clip : boolean
             whether to clip the number of data points used by the filtersize
 
+        clipsize : float
+            Total clipsize is determined by clipsize * filter_size
+
         damp : float
             the damping parameter used in Koch 1983 J. Climate Appl. Meteor. 22 1487-1503
         """
@@ -34,11 +37,13 @@ class BarnesInterpolation1D(object):
         else:
             self.filter_size = filter_size
 
+        self.clipsize = clipsize * self.filter_size
+
     def _weight(self, rsq, size=None):
         size = size or self.filter_size
 
         o = np.exp(-rsq / (2*size**2))
-        o = o * (not self.clip or (self.clip and (rsq < 6*size**2)))
+        o = o * (not self.clip or (self.clip and (rsq < self.clipsize**2)))
         return o
 
     def _outer(self, a, b):

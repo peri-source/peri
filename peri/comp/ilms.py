@@ -93,6 +93,9 @@ class Polynomial3D(Component):
         self.tile = tile
 
     def update(self, params, values):
+        params = util.listify(params)
+        values = util.listify(values)
+
         if len(params) < len(self.params)/2:
             for p,v1 in zip(params, values):
                 v0 = self.get_values(p)
@@ -254,6 +257,9 @@ class Polynomial2P1D(Polynomial3D):
             return self.r[0]**k
 
     def update(self, params, values):
+        params = util.listify(params)
+        values = util.listify(values)
+
         if len(params) < len(self.params)/2:
             for p,v1 in zip(params, values):
                 if p in self.xy_param:
@@ -415,7 +421,8 @@ class BarnesStreakLegPoly2P1D(Component):
         coeffs = self.get_values(self.barnes_params[n])
 
         b = BarnesInterpolation1D(
-            b_in, coeffs, filter_size=fdst, damp=0.9, iterations=3
+            b_in, coeffs, filter_size=fdst, damp=0.9, iterations=3,
+            clip=True, clipsize=3
         )
         return b(y)
 
@@ -483,6 +490,42 @@ class BarnesStreakLegPoly2P1D(Component):
 
     def get_field(self):
         return self.field[self.tile.slicer]
+
+    def get_update_tile(self, params, values):
+        params = util.listify(params)
+        values = util.listify(values)
+
+        orig_values = self.get_values(params)
+
+        tiles = []
+        for p,v in zip(params, values):
+            # global parameters get global tiles
+            if p in self.poly_params or p == 'ilm-scale' or p == 'ilm-off':
+                return util.Tile(self.shape)
+
+            # figure out hte barnes local update size
+            for n, grp in enumerate(self.barnes_params):
+                if not p in grp:
+                    continue
+
+                val0 = self._barnes(self.b_out, n=n)
+                self.set_values(p, v)
+                val1 = self._barnes(self.b_out, n=n)
+
+                inds = np.arange(self.b_out.shape[0])
+                inds = inds[(val1 - val0) > 1e-12]
+                if len(inds) <= 1:
+                    continue
+
+                l, r = inds.min(), inds.max()
+
+                tile = util.Tile(self.shape)
+                tile.l[2] = l-1
+                tile.r[2] = r+1
+                tiles.append(util.Tile(tile.l, tile.r))
+
+        self.set_values(params, orig_values)
+        return util.Tile.boundingtile(tiles)
 
     def randomize_parameters(self, ptp=0.2, fourier=False, vmin=None, vmax=None):
         """
