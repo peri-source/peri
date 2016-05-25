@@ -75,7 +75,7 @@ def calculate_J_approx(s, blocks, inds, **kwargs):
         to_return.append(a_der[inds[0], inds[1], inds[2]].ravel().copy())
     return np.array(to_return)
 
-def calculate_err_approx(s, inds):
+def calculate_err_approx(s, inds): ##only in conj_grad_jtj
     return s.get_difference_image()[inds[0], inds[1], inds[2]].ravel().copy()
 
 def eval_deriv(s, block, dl=1e-8, be_nice=False, threept=False, **kwargs):
@@ -115,7 +115,7 @@ def get_rand_Japprox(s, blocks, num_inds=1000, **kwargs):
 def j_to_jtj(J):
     return np.dot(J, J.T)
 
-def calc_im_grad(s, J, inds):
+def calc_im_grad(s, J, inds): #only in conj_grad_jtj
     err = calculate_err_approx(s, inds)
     return np.dot(J, err)
 
@@ -1997,7 +1997,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     for a in xrange(n_loop):
         start_err = get_err(s)
         #2a. Globals
-        CLOG.info('Beginning of loop %d:\t%f' % (a, get_err(s)))
+        CLOG.info('Start of loop %d:\t%f' % (a, get_err(s)))
         glbl_dmp = 0.3 if a ==0 else 3e-2
         if a != 0 or mode != 'do_positions':
             gstats = do_levmarq(s, glbl_blk, max_iter=1, run_length=
