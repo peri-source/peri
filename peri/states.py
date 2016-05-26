@@ -16,6 +16,9 @@ log = baselog.getChild('state')
 class ModelError(Exception):
     pass
 
+class UpdateError(Exception):
+    pass
+
 def sample(field, inds=None, slicer=None, flat=True):
     """
     Take a sample from a field given flat indices or a shaped slice
@@ -141,7 +144,7 @@ class State(comp.ParameterGroup):
         Whether to flatten the sampled item before returning
     """
 
-    def _grad_one_param(self, funct, p, dl=2e-5, f0=None, rts=True, **kwargs):
+    def _grad_one_param(self, funct, p, dl=2e-5, f0=None, rts=False, **kwargs):
         """
         Gradient of `func` wrt a single parameter `p`. (see graddoc)
         """
@@ -156,7 +159,7 @@ class State(comp.ParameterGroup):
 
         return (f1 - f0) / dl
 
-    def _hess_two_param(self, funct, p0, p1, dl=2e-5, f0=None, rts=True, **kwargs):
+    def _hess_two_param(self, funct, p0, p1, dl=2e-5, f0=None, rts=False, **kwargs):
         """
         Hessian of `func` wrt two parameters `p0` and `p1`. (see graddoc)
         """
@@ -180,7 +183,7 @@ class State(comp.ParameterGroup):
 
         return (f11 - f10 - f01 + f00) / (dl**2)
 
-    def _grad(self, funct, params=None, dl=2e-5, rts=True, **kwargs):
+    def _grad(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
         """
         Gradient of `func` wrt a set of parameters params. (see graddoc)
         """
@@ -198,14 +201,14 @@ class State(comp.ParameterGroup):
             grad.append(tgrad)
         return np.array(grad)
 
-    def _jtj(self, funct, params=None, dl=2e-5, rts=True, **kwargs):
+    def _jtj(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
         """
         jTj of a `func` wrt to parmaeters `params`. (see graddoc)
         """
         grad = self._grad(funct=funct, params=params, dl=dl, rts=rts, **kwargs)
         return np.dot(grad, grad.T)
 
-    def _hess(self, funct, params=None, dl=2e-5, rts=True, **kwargs):
+    def _hess(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
         """
         Hessian of a `func` wrt to parmaeters `params`. (see graddoc)
         """
@@ -510,7 +513,7 @@ class ImageState(State, comp.ComponentCollection):
 
         self.reset()
 
-    def model_to_data(self, sigma=0.05):
+    def model_to_data(self, sigma=0.0):
         """ Switch out the data for the model's recreation of the data. """
         im = self.model.copy()
         im += sigma*np.random.randn(*im.shape)
@@ -554,6 +557,11 @@ class ImageState(State, comp.ComponentCollection):
         otile = self.get_update_tile(params, values)
         ptile = self.get_padding_size(otile)
 
+        if (otile.l < 0).any() or (otile.r > self.oshape.r).any() or (otile.shape <= 0).any():
+            raise UpdateError("update triggered negative block size")
+        if (ptile.l < 0).any() or (ptile.r > self.oshape.r).any() or (ptile.shape <= 0).any():
+            raise UpdateError("update triggered negative padding size")
+
         # now remove the part of the tile that is outside the image and pad the
         # interior part with that overhang. reflect the necessary padding back
         # into the image itself for the outer slice which we will call outer
@@ -561,6 +569,8 @@ class ImageState(State, comp.ComponentCollection):
         inner, outer = outer.reflect_overhang(self.oshape)
         iotile = inner.translate(-outer.l)
 
+        outer = util.Tile.intersection(outer, self.oshape)
+        inner = util.Tile.intersection(inner, self.oshape)
         return outer, inner, iotile
 
     def _map_vars(self, funcname, extra=None, *args, **kwargs):
