@@ -601,6 +601,14 @@ class ImageState(State, ComponentCollection):
         # use the model image update to modify other class variables which
         # are hard to compute globally for small local updates
         self.update_from_model_change(oldmodel, newmodel, itile)
+        return True
+
+    def get(self, name):
+        """ Return component by category name """
+        for c in self.comps:
+            if c.category == name:
+                return c
+        return None
 
     def _calc_model(self):
         self.set_tile(self.oshape)
