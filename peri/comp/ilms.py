@@ -520,8 +520,8 @@ class BarnesStreakLegPoly2P1D(Component):
                 l, r = inds.min(), inds.max()
 
                 tile = self.shape
-                tile.l[2] = l-1
-                tile.r[2] = r+1
+                tile.l[2] = l
+                tile.r[2] = r
                 tiles.append(util.Tile(tile.l, tile.r))
 
         self.set_values(params, orig_values)
