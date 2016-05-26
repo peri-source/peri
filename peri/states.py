@@ -90,7 +90,7 @@ class State(ParameterGroup):
         yield
         self.pop_update()
 
-    def block_all(self):
+    def param_all(self):
         return self.params
 
     graddoc = \
@@ -174,7 +174,7 @@ class State(ParameterGroup):
         Gradient of `func` wrt a set of parameters params. (see graddoc)
         """
         if params is None:
-            params = self.block_all()
+            params = self.param_all()
 
         ps = util.listify(params)
         f0 = funct(**kwargs)
@@ -199,7 +199,7 @@ class State(ParameterGroup):
         Hessian of a `func` wrt to parmaeters `params`. (see graddoc)
         """
         if params is None:
-            params = self.block_all()
+            params = self.param_all()
 
         ps = util.listify(params)
         f0 = funct(**kwargs)
@@ -310,7 +310,7 @@ class ImageState(State, ComponentCollection):
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
         shapes are subtracted.  This is then spread with a point spread function
-        (PSF). 
+        (PSF).
 
         Parameters:
         -----------
@@ -341,7 +341,7 @@ class ImageState(State, ComponentCollection):
         nlogs: boolean [default: True]
             Include in the Loglikelihood calculate the term:
 
-                LL = -(p_i - I_i)^2/(2*\sigma^2) - \log{\sqrt{2\pi} \sigma} 
+                LL = -(p_i - I_i)^2/(2*\sigma^2) - \log{\sqrt{2\pi} \sigma}
 
         pad : integer or tuple of integers (optional)
             No recommended to set by hand.  The padding level of the raw image needed
@@ -556,7 +556,6 @@ class ImageState(State, ComponentCollection):
         ptile = self.get_padding_size(otile)
         itile, otile, iotile = self.get_io_tiles(otile, ptile)
 
-        print itile, otile, iotile
         # have all components update their tiles
         self.set_tile(otile)
 
@@ -654,7 +653,7 @@ def save(state, filename=None, desc='', extra=None):
         a RawImage, the it is saved to RawImage.filename + "-peri-save.pkl"
 
     desc : string
-        if provided, will augment the default filename to be 
+        if provided, will augment the default filename to be
         RawImage.filename + '-peri-' + desc + '.pkl'
 
     extra : list of pickleable objects
