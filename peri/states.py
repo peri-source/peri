@@ -230,12 +230,16 @@ class State(ParameterGroup):
         self.fisherinformation = partial(self._jtj, funct=m)
         self.gradloglikelihood = partial(self._grad, funct=l)
         self.hessloglikelihood = partial(self._hess, funct=l)
+        self.gradmodel = partial(self._grad, funct=m)
+        self.hessmodel = partial(self._hess, funct=m)
         self.J = partial(self._grad, funct=r)
         self.JTJ = partial(self._jtj, funct=r)
 
         self.fisherinformation.__doc__ = self.graddoc + self.sampledoc
         self.gradloglikelihood.__doc__ = self.graddoc
         self.hessloglikelihood.__doc__ = self.graddoc
+        self.gradmodel.__doc__ = self.graddoc + self.sampledoc
+        self.hessmodel.__doc__ = self.graddoc + self.sampledoc
         self.J.__doc__ = self.graddoc + self.sampledoc
         self.JTJ.__doc__ = self.graddoc + self.sampledoc
 
@@ -293,7 +297,7 @@ class PolyFitState(State):
         sig = self.param_dict['sigma']
         return (
             -(0.5 * (self.residuals/sig)**2).sum()
-            -np.log(np.sqrt(2*np.pi)*sig)*self._data.shape[0]
+            -np.log(np.sqrt(2*np.pi)*sig)*self._data.oshape[0]
         )
 
     @property
@@ -432,6 +436,7 @@ class ImageState(State, ComponentCollection):
         compcats = [c.category for c in comps]
         regex = re.compile('([a-zA-Z_][a-zA-Z0-9_]*)')
 
+        # there at least must be the full model, not necessarily partial updates
         if not model.has_key('full'):
             raise ModelError(
                 'Model must contain a `full` key describing '
@@ -442,7 +447,7 @@ class ImageState(State, ComponentCollection):
         for name, eq in model.iteritems():
             var = regex.findall(eq)
             for v in var:
-                # remove the derivative signs
+                # remove the derivative signs if there (dP -> P)
                 v = re.sub(r"^d", '', v)
                 if v not in catmap:
                     log.error(
@@ -475,11 +480,14 @@ class ImageState(State, ComponentCollection):
 
         self.image = image
         self._data = self.image.get_padded_image(self.pad)
-        self.shape = util.Tile(self._data.shape)
-        self.inner = self.shape.pad(-self.pad)
+
+        # set up various slicers and Tiles associated with the image and pad
+        self.oshape = util.Tile(self._data.shape)
+        self.ishape = self.oshape.pad(-self.pad)
+        self.inner = self.ishape.slicer
 
         for c in self.comps:
-            c.set_shape(self.shape, self.inner)
+            c.set_shape(self.oshape, self.ishape)
 
         self.reset()
 
@@ -501,16 +509,16 @@ class ImageState(State, ComponentCollection):
     @property
     def data(self):
         """ Get the raw data of the model fit """
-        return self._data[self.inner.slicer]
+        return self._data[self.inner]
 
     @property
     def model(self):
         """ Get the current model fit to the data """
-        return self._model[self.inner.slicer]
+        return self._model[self.inner]
 
     @property
     def residuals(self):
-        return self._residuals[self.inner.slicer]
+        return self._residuals[self.inner]
 
     def get_io_tiles(self, otile, ptile):
         """
@@ -521,7 +529,7 @@ class ImageState(State, ComponentCollection):
         """
         # now remove the part of the tile that is outside the image and
         # pad the interior part with that overhang
-        img = util.Tile(self._data.shape)
+        img = self.oshape
 
         # reflect the necessary padding back into the image itself for
         # the outer slice which we will call outer
@@ -595,7 +603,7 @@ class ImageState(State, ComponentCollection):
         self.update_from_model_change(oldmodel, newmodel, itile)
 
     def _calc_model(self):
-        self.set_tile(util.Tile(self._data.shape))
+        self.set_tile(self.oshape)
         var = self._map_vars('get')
         return eval(self.modelstr['full'], var)
 
