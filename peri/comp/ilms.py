@@ -228,13 +228,13 @@ class Polynomial2P1D(Polynomial3D):
 
     def initialize(self):
         self.r = self.rvecs()
-        self.field_xy = 0*self.term_xy((0,0))
-        self.field_z = 0*self.term_z((0,))
+        self.field_xy = 0*self.term_ijk((0,0))
+        self.field_z = 0*self.term_ijk((0,))
         super(Polynomial2P1D, self).initialize()
 
     def calc_field(self):
-        self.field_xy = 0*self.term_xy((0,0))
-        self.field_z = 0*self.term_z((0,))
+        self.field_xy = 0*self.term_ijk((0,0))
+        self.field_z = 0*self.term_ijk((0,))
 
         for p,v in zip(self.params, self.values):
             if p in self.xy_param:
@@ -300,24 +300,22 @@ class LegendrePoly2P1D(Polynomial2P1D):
     def __init__(self, shape=None, order=(1,1,1), **kwargs):
         super(LegendrePoly2P1D, self).__init__(shape=shape, order=order, **kwargs)
 
-    def _setup_rvecs(self):
-        o = self.shape.shape
-        self.rz, self.ry, self.rx = [np.linspace(-1, 1, i) for i in o]
-        self.rz = self.rz[:,None,None]
-        self.ry = self.ry[None,:,None]
-        self.rx = self.rx[None,None,:]
+    def rvecs(self):
+        vecs = super(LegendrePoly2P1D, self).rvecs()
+        vecs = [2*v - 1 for v in vecs]
+        return vecs
 
     def term_ijk(self, index):
         if len(index) == 2:
             i,j = index
-            ci = np.diag(np.ones(i+1))[n]
-            cj = np.diag(np.ones(j+1))[n]
-            return legval(self.rx, ci) * legval(self.ry, cj)
+            ci = np.diag(np.ones(i+1))[i]
+            cj = np.diag(np.ones(j+1))[j]
+            return legval(self.r[2], ci) * legval(self.r[1], cj)
 
         elif len(index) == 1:
             k = index[0]
-            ck = np.diag(np.ones(k+1))[n]
-            return legval(self.rz, ck)
+            ck = np.diag(np.ones(k+1))[k]
+            return legval(self.r[0], ck)
 
 class ChebyshevPoly2P1D(Polynomial2P1D):
     def __init__(self, shape=None, order=(1,1,1), **kwargs):
@@ -326,14 +324,14 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
     def term_ijk(self, index):
         if len(index) == 2:
             i,j = index
-            ci = np.diag(np.ones(i+1))[n]
-            cj = np.diag(np.ones(j+1))[n]
-            return chebval(self.rx, ci) * chebval(self.ry, cj)
+            ci = np.diag(np.ones(i+1))[i]
+            cj = np.diag(np.ones(j+1))[j]
+            return chebval(self.r[2], ci) * chebval(self.r[1], cj)
 
         elif len(index) == 1:
             k = index[0]
-            ck = np.diag(np.ones(k+1))[n]
-            return chebval(self.rz, ck)
+            ck = np.diag(np.ones(k+1))[k]
+            return chebval(self.r[0], ck)
 
 #=============================================================================
 # a complex hidden variable representation of the ILM
