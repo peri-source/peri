@@ -521,13 +521,17 @@ class ImageState(State, ComponentCollection):
     def residuals(self):
         return self._residuals[self.inner]
 
-    def get_io_tiles(self, otile, ptile):
+    def get_update_io_tiles(self, params, values):
         """
         Get the tiles corresponding to a particular section of image needed to
         be updated. Inputs are the update tile and padding tile. Returned is
         the padded tile, inner tile, and slicer to go between, but accounting
         for wrap with the edge of the image as necessary.
         """
+        # get the affected area of the model image
+        otile = self.get_update_tile(params, values)
+        ptile = self.get_padding_size(otile)
+
         # now remove the part of the tile that is outside the image and pad the
         # interior part with that overhang. reflect the necessary padding back
         # into the image itself for the outer slice which we will call outer
@@ -558,9 +562,7 @@ class ImageState(State, ComponentCollection):
         comps = self.affected_components(params)
 
         # get the affected area of the model image
-        otile = self.get_update_tile(params, values)
-        ptile = self.get_padding_size(otile)
-        itile, otile, iotile = self.get_io_tiles(otile, ptile)
+        itile, otile, iotile = self.get_update_io_tiles(params, values)
 
         # have all components update their tiles
         self.set_tile(otile)
