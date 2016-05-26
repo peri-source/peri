@@ -501,7 +501,7 @@ class BarnesStreakLegPoly2P1D(Component):
         for p,v in zip(params, values):
             # global parameters get global tiles
             if p in self.poly_params or p == 'ilm-scale' or p == 'ilm-off':
-                return self.shape
+                return self.shape.copy()
 
             # figure out hte barnes local update size
             for n, grp in enumerate(self.barnes_params):
@@ -519,9 +519,12 @@ class BarnesStreakLegPoly2P1D(Component):
 
                 l, r = inds.min(), inds.max()
 
-                tile = self.shape
+                tile = self.shape.copy()
                 tile.l[2] = l
                 tile.r[2] = r
+                if tile.shape[2] == 0:
+                    tile.r[2] = tile.r[2] + 1
+
                 tiles.append(util.Tile(tile.l, tile.r))
 
         self.set_values(params, orig_values)
