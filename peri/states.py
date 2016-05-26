@@ -343,7 +343,7 @@ class ImageState(State, ComponentCollection):
 
                 LL = -(p_i - I_i)^2/(2*\sigma^2) - \log{\sqrt{2\pi} \sigma} 
 
-        pad : integer (optional)
+        pad : integer or tuple of integers (optional)
             No recommended to set by hand.  The padding level of the raw image needed
             by the PSF support.
 
@@ -367,15 +367,13 @@ class ImageState(State, ComponentCollection):
 
                 {'full': 'H(P)', 'dP': 'H(dP)'}
         """
-        self.pad = pad
         self.sigma = sigma
         self.priors = priors
-        self.dollupdate = True
-
-        self.rscale = 1.0
+        self.pad = util.a3(pad)
         self.offset = offset
 
         ComponentCollection.__init__(self, comps=comps)
+
         self.set_model(modelnum=modelnum, catmap=catmap, modelstr=modelstr)
         self.set_image(image)
         self.build_funcs()
@@ -472,18 +470,24 @@ class ImageState(State, ComponentCollection):
         """
         Update the current comparison (real) image
         """
-        self.rawimage = image
-        self._data = self.rawimage.get_padded_image(self.pad)
+        if not isinstance(image, util.Image):
+            image = util.Image(image)
 
-        #self.image_mask = (image > const.PADVAL).astype('float')
-        #self.image *= self.image_mask
-
-        self.inner = (np.s_[self.pad:-self.pad],)*3
+        self.image = image
+        self._data = self.image.get_padded_image(self.pad)
+        self.shape = util.Tile(self._data.shape)
+        self.inner = self.shape.pad(-self.pad)
 
         for c in self.comps:
-            c.set_shape(self._data.shape, self.inner)
+            c.set_shape(self.shape, self.inner)
 
         self.reset()
+
+    def model_to_data(self, sigma=0.05):
+        """ Switch out the data for the model's recreation of the data. """
+        im = self.model.copy()
+        im += sigma*np.random.randn(*im.shape)
+        self.set_image(im)
 
     def reset(self):
         for c in self.comps:
@@ -494,30 +498,19 @@ class ImageState(State, ComponentCollection):
         self._loglikelihood = self._calc_loglikelihood()
         self._logprior = self._calc_logprior()
 
-    def model_to_true_image(self):
-        """
-        In the case of generating fake data, use this method to add
-        noise to the created image (only for fake data) and rotate
-        the model image into the true image
-        """
-        im = self.model.copy()
-        im = im + self.image_mask * np.random.normal(0, self.sigma, size=self.image.shape)
-        im = im + (1 - self.image_mask) * const.PADVAL
-        self.set_image(im)
-
     @property
     def data(self):
         """ Get the raw data of the model fit """
-        return self._data
+        return self._data[self.inner.slicer]
 
     @property
     def model(self):
         """ Get the current model fit to the data """
-        return self._model
+        return self._model[self.inner.slicer]
 
     @property
     def residuals(self):
-        return self._residuals
+        return self._residuals[self.inner.slicer]
 
     def get_io_tiles(self, otile, ptile):
         """
@@ -528,7 +521,7 @@ class ImageState(State, ComponentCollection):
         """
         # now remove the part of the tile that is outside the image and
         # pad the interior part with that overhang
-        img = util.Tile(self.data.shape)
+        img = util.Tile(self._data.shape)
 
         # reflect the necessary padding back into the image itself for
         # the outer slice which we will call outer
@@ -563,24 +556,24 @@ class ImageState(State, ComponentCollection):
         ptile = self.get_padding_size(otile)
         itile, otile, iotile = self.get_io_tiles(otile, ptile)
 
+        print itile, otile, iotile
         # have all components update their tiles
         self.set_tile(otile)
 
-        oldmodel = self.model[itile.slicer].copy()
-
         if len(comps) == 0:
-            return False
+            return
 
-        comp0 = comps[0]
-        dcompname = 'd'+self.mapcat[comp0.category]
+        dcompname = 'd'+self.mapcat[comps[0].category]
+        oldmodel = self._model[itile.slicer].copy()
 
         # here we diverge depending if there is only one component update
         # (so that we may calculate a variation / difference image) or if many
         # parameters are being update (should just update the whole model).
         if (len(comps) == 1 and self.modelstr.has_key(dcompname)):
-            model0 = comp0.get()
+            comp = comps[0]
+            model0 = comp.get().copy()
             super(ImageState, self).update(params, values)
-            model1 = comp0.get()
+            model1 = comp.get().copy()
 
             diff = model1 - model0
             evar = self._map_vars('get', extra={dcompname: diff})
@@ -596,19 +589,19 @@ class ImageState(State, ComponentCollection):
             diff = eval(self.modelstr['full'], evar)
             self._model[itile.slicer] = diff[iotile.slicer]
 
-        newmodel = self.model[itile.slicer].copy()
+        newmodel = self._model[itile.slicer].copy()
 
         # use the model image update to modify other class variables which
         # are hard to compute globally for small local updates
         self.update_from_model_change(oldmodel, newmodel, itile)
 
     def _calc_model(self):
-        self.set_tile(util.Tile(self.data.shape))
+        self.set_tile(util.Tile(self._data.shape))
         var = self._map_vars('get')
         return eval(self.modelstr['full'], var)
 
     def _calc_residuals(self):
-        return self.model - self.data
+        return self._model - self._data
 
     def _calc_logprior(self):
         return 1.0 # FIXME
@@ -617,7 +610,7 @@ class ImageState(State, ComponentCollection):
         if model is None:
             res = self.residuals
         else:
-            res = model - self.data[tile.slicer]
+            res = model - self._data[tile.slicer]
 
         sig = 0.1#self.get_values('sigma') # FIXME
         return -0.5*((res/sig)**2).sum() - np.log(np.sqrt(2*np.pi)*sig)*res.size
@@ -629,7 +622,7 @@ class ImageState(State, ComponentCollection):
         """
         self._loglikelihood -= self._calc_loglikelihood(oldmodel, tile=tile)
         self._loglikelihood += self._calc_loglikelihood(newmodel, tile=tile)
-        self._residuals[tile.slicer] = newmodel - self.data[tile.slicer]
+        self._residuals[tile.slicer] = newmodel - self._data[tile.slicer]
 
     @property
     def loglikelihood(self):
