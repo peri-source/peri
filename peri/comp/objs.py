@@ -470,16 +470,19 @@ class PlatonicSpheresCollection(Component):
         return [self._i2p(i, 'a') for i in xrange(s.N)]
 
     def param_particle(self, ind):
-        """ Get position and radius of one particle """
-        return [self._i2p(ind, i) for i in ['x', 'y', 'z', 'a']]
+        """ Get position and radius of one or more particles """
+        ind = listify(ind)
+        return [self._i2p(i, j) for i in ind for j in ['x', 'y', 'z', 'a']]
 
     def param_particle_pos(self, ind):
-        """ Get position of one particle """
-        return [self._i2p(ind, i) for i in ['x', 'y', 'z']]
+        """ Get position of one or more particles """
+        ind = listify(ind)
+        return [self._i2p(i, j) for i in ind for j in ['x', 'y', 'z']]
 
     def param_particle_rad(self, ind):
-        """ Get radius of one particle """
-        return self._i2p(ind, 'a')
+        """ Get radius of one or more particles """
+        ind = listify(ind)
+        return [self._i2p(i, 'a') for i in ind]
 
     def add_particle(self, pos, rad):
         """
