@@ -255,6 +255,9 @@ class ComponentCollection(Component):
         for c in self.comps:
             tp, tv = [], []
             for p,v in zip(util.listify(params), util.listify(values)):
+                if not p in self.lmap:
+                    raise NotAParameterError("%r does not belong to %r" % (p, self))
+
                 if c in self.pmap[p]:
                     tp.append(p)
                     tv.append(v)
