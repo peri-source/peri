@@ -9,15 +9,14 @@ import cPickle as pickle
 from functools import partial
 from contextlib import contextmanager
 
-from peri import const, util
-from peri.comp import ParameterGroup, ComponentCollection
+from peri import const, util, comp
 from peri.logger import log as baselog
 log = baselog.getChild('state')
 
 class ModelError(Exception):
     pass
 
-def sample(field, inds=None, slicer=None):
+def sample(field, inds=None, slicer=None, flat=True):
     """
     Take a sample from a field given flat indices or a shaped slice
 
@@ -28,17 +27,25 @@ def sample(field, inds=None, slicer=None):
 
     slicer : slice object
         A shaped (3D) slicer that returns a section of image
+
+    flat : boolean
+        Whether to flatten the sampled item before returning
     """
     if inds is not None:
-        return field.ravel()[inds]
-    if slicer is not None:
-        return field[slicer].ravel()
-    return field.ravel()
+        out = field.ravel()[inds]
+    elif slicer is not None:
+        out = field[slicer].ravel()
+    else:
+        out = field
+
+    if flat:
+        return out.ravel()
+    return out
 
 #=============================================================================
 # Super class of State, has all basic components and structure
 #=============================================================================
-class State(ParameterGroup):
+class State(comp.ParameterGroup):
     def __init__(self, params, values, logpriors=None, **kwargs):
         self.stack = []
         self.logpriors = logpriors
@@ -113,7 +120,7 @@ class State(ParameterGroup):
         so that it is not recalculated for every parameter.
 
     rts : boolean
-        Return To State. Return the state to how you found it when done,
+        Return To Start. Return the state to how you found it when done,
         needs another update call, so can be ommitted sometimes (small dl)
 
     **kwargs :
@@ -129,9 +136,12 @@ class State(ParameterGroup):
 
     slicer : slice object
         A shaped (3D) slicer that returns a section of image
+
+    flat : boolean
+        Whether to flatten the sampled item before returning
     """
 
-    def _grad_one_param(self, funct, p, dl=1e-3, f0=None, rts=True, **kwargs):
+    def _grad_one_param(self, funct, p, dl=2e-5, f0=None, rts=True, **kwargs):
         """
         Gradient of `func` wrt a single parameter `p`. (see graddoc)
         """
@@ -146,7 +156,7 @@ class State(ParameterGroup):
 
         return (f1 - f0) / dl
 
-    def _hess_two_param(self, funct, p0, p1, dl=1e-3, f0=None, rts=True, **kwargs):
+    def _hess_two_param(self, funct, p0, p1, dl=2e-5, f0=None, rts=True, **kwargs):
         """
         Hessian of `func` wrt two parameters `p0` and `p1`. (see graddoc)
         """
@@ -170,7 +180,7 @@ class State(ParameterGroup):
 
         return (f11 - f10 - f01 + f00) / (dl**2)
 
-    def _grad(self, funct, params=None, dl=1e-3, rts=True, **kwargs):
+    def _grad(self, funct, params=None, dl=2e-5, rts=True, **kwargs):
         """
         Gradient of `func` wrt a set of parameters params. (see graddoc)
         """
@@ -188,14 +198,14 @@ class State(ParameterGroup):
             grad.append(tgrad)
         return np.array(grad)
 
-    def _jtj(self, funct, params=None, dl=1e-3, rts=True, **kwargs):
+    def _jtj(self, funct, params=None, dl=2e-5, rts=True, **kwargs):
         """
         jTj of a `func` wrt to parmaeters `params`. (see graddoc)
         """
         grad = self._grad(funct=funct, params=params, dl=dl, rts=rts, **kwargs)
         return np.dot(grad, grad.T)
 
-    def _hess(self, funct, params=None, dl=1e-3, rts=True, **kwargs):
+    def _hess(self, funct, params=None, dl=2e-5, rts=True, **kwargs):
         """
         Hessian of a `func` wrt to parmaeters `params`. (see graddoc)
         """
@@ -308,9 +318,10 @@ class PolyFitState(State):
 #=============================================================================
 # Image state which specializes to components with regions, etc.
 #=============================================================================
-class ImageState(State, ComponentCollection):
+class ImageState(State, comp.ComponentCollection):
     def __init__(self, image, comps, offset=0, sigma=0.04, priors=None,
-            nlogs=True, pad=const.PAD, modelnum=0, catmap=None, modelstr=None):
+            nlogs=True, pad=const.PAD, modelnum=0, catmap=None, modelstr=None,
+            model_as_data=False):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -371,17 +382,23 @@ class ImageState(State, ComponentCollection):
             denotes a partial update of I, for example:
 
                 {'full': 'H(P)', 'dP': 'H(dP)'}
+
+        model_as_data : boolean
+            Whether to use the model image as the true image after initializing
         """
         self.sigma = sigma
         self.priors = priors
         self.pad = util.a3(pad)
         self.offset = offset
 
-        ComponentCollection.__init__(self, comps=comps)
+        comp.ComponentCollection.__init__(self, comps=comps)
 
         self.set_model(modelnum=modelnum, catmap=catmap, modelstr=modelstr)
         self.set_image(image)
         self.build_funcs()
+
+        if model_as_data:
+            self.model_to_data(self.sigma)
 
     def set_model(self, modelnum=None, catmap=None, modelstr=None):
         """
@@ -400,7 +417,8 @@ class ImageState(State, ComponentCollection):
             'full' : 'H(I*(1-P)+C*P) + B',
             'dI' : 'H(dI*(1-P))',
             'dP' : 'H((C-I)*dP)',
-            'dB' : 'dB'
+            'dC' : 'H(dC*P)',
+            'dB' : 'dB',
         }
 
         catmaps[1] = {
@@ -521,12 +539,16 @@ class ImageState(State, ComponentCollection):
     def residuals(self):
         return self._residuals[self.inner]
 
+    @property
+    def loglikelihood(self):
+        return self._logprior + self._loglikelihood
+
     def get_update_io_tiles(self, params, values):
         """
         Get the tiles corresponding to a particular section of image needed to
-        be updated. Inputs are the update tile and padding tile. Returned is
-        the padded tile, inner tile, and slicer to go between, but accounting
-        for wrap with the edge of the image as necessary.
+        be updated. Inputs are the parameters and values. Returned is the
+        padded tile, inner tile, and slicer to go between, but accounting for
+        wrap with the edge of the image as necessary.
         """
         # get the affected area of the model image
         otile = self.get_update_tile(params, values)
@@ -562,7 +584,7 @@ class ImageState(State, ComponentCollection):
         comps = self.affected_components(params)
 
         # get the affected area of the model image
-        itile, otile, iotile = self.get_update_io_tiles(params, values)
+        otile, itile, iotile = self.get_update_io_tiles(params, values)
 
         # have all components update their tiles
         self.set_tile(otile)
@@ -630,8 +652,8 @@ class ImageState(State, ComponentCollection):
         else:
             res = model - self._data[tile.slicer]
 
-        sig = 0.1#self.get_values('sigma') # FIXME
-        return -0.5*((res/sig)**2).sum() - np.log(np.sqrt(2*np.pi)*sig)*res.size
+        nlogs = -np.log(np.sqrt(2*np.pi)*self.sigma)*res.size
+        return -0.5*((res/self.sigma)**2).sum() + nlogs
 
     def update_from_model_change(self, oldmodel, newmodel, tile):
         """
@@ -641,10 +663,6 @@ class ImageState(State, ComponentCollection):
         self._loglikelihood -= self._calc_loglikelihood(oldmodel, tile=tile)
         self._loglikelihood += self._calc_loglikelihood(newmodel, tile=tile)
         self._residuals[tile.slicer] = newmodel - self._data[tile.slicer]
-
-    @property
-    def loglikelihood(self):
-        return self._logprior + self._loglikelihood
 
     def __str__(self):
         return "{} [\n    {}\n]".format(self.__class__.__name__,
