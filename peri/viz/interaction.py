@@ -18,11 +18,16 @@ class OrthoManipulator(object):
         self.insets = ['exposure']
         self.inset = 'none'
 
-        self.views = ['field', 'diff']
+        self.views = ['field', 'diff', 'comp']
         self.view = self.views[0]
 
         self.modifiers = ['none', 'fft']
         self.modifier = self.modifiers[0]
+
+        self.components = [
+            c.category for c in state.comps if isinstance(c.get_field(), np.ndarray)
+        ]
+        self.component = self.components[0]
 
         self.state = state
         self.cmap_abs = cmap_abs
@@ -83,6 +88,11 @@ class OrthoManipulator(object):
             out = (self.state.data - self.state.model)
             vmin, vmax = -self.vrange_diff, self.vrange_diff
             cmap = self.cmap_diff
+
+        if self.view == 'comp':
+            out = self.state.get(self.component).get_field()[self.state.inner]
+            vmin, vmax = 0.0, self.vrange_img
+            cmap = self.cmap_abs
 
         if self.modifier == 'fft':
             out = np.real(np.abs(np.fft.fftn(out)))**0.2
@@ -279,6 +289,11 @@ class OrthoManipulator(object):
     def key_press_event(self, event):
         self.event = event
 
+        if event.key == 'p':
+            self.component = self.cycle(self.component, self.components)
+            self.set_field()
+            self.draw()
+            return
         if event.key == 'v':
             self.mode = 'view'
         if event.key == 'a':

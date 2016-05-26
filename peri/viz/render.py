@@ -19,9 +19,9 @@ def clip(field):
 
 def extract_field(state, field='exp-particles'):
     if field == 'exp-particles':
-        out = ((1-state.image)*(state.obj.get_field() > 1e-5))[state.inner]
+        out = ((1-state.data)*(state.get('obj').get_field() > 1e-5))[state.inner]
     elif field == 'exp-platonic':
-        out = ((1-state.image)*(state._platonic_image() > 1e-5))[state.inner]
+        out = ((1-state.data)*(state._platonic_image() > 1e-5))[state.inner]
     elif field == 'sim-particles':
         out = state.obj.get_field()[state.inner]
     elif field == 'sim-platonic':
