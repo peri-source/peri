@@ -1,3 +1,9 @@
+"""
+You need to check that the tile you're using for J etc is the model image tile
+Relative vs absolute updates
+Blocking particles everywhere
+"""
+
 import os
 import sys
 import time
@@ -60,162 +66,26 @@ rather than for all the pixels (in addition to leastsq solution instead of
 linalg.solve
 """
 
-def calculate_J_approx(s, blocks, inds, **kwargs):
+def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     """
-    Calculates an approximage J for levenberg-marquardt
-    Inputs:
-        - s: state to minimize
-        - blocks: List of the blocks to optimize over
-        - inds: 3-element list; the indices of the _inner_ image to compare
-            with. Recommended to be selected randomly.
-    """
-    to_return = []
-    for b in blocks:
-        a_der = eval_deriv(s, b, **kwargs)
-        to_return.append(a_der[inds[0], inds[1], inds[2]].ravel().copy())
-    return np.array(to_return)
+    Generates
+    Would be nice if the following arguments were accepted by state.gradmodel:
+        dl
+        be_nice (put back updates or not)
+        threept (three-point vs two-point stencil, i.e. 2+1 vs 1+1 updates)
 
-def calculate_err_approx(s, inds): ##only in conj_grad_jtj
-    return s.residuals[inds[0], inds[1], inds[2]].ravel().copy()
-
-def eval_deriv(s, block, dl=1e-8, be_nice=False, threept=False, **kwargs):
-    """
-    Using a centered difference / 3pt stencil approximation:
-    """
-    if not threept:
-        i0 = s.residuals.copy()
-
-    p0 = s.state[block]
-    s.update(block, p0+dl)
-    i1 = s.residuals.copy()
-    if threept:
-        s.update(block, p0-dl)
-        i2 = s.residuals.copy()
-        deriv = 0.5*(i1-i2)/dl
-    else:
-        deriv = (i1-i0)/dl
-    if be_nice:
-       s.update(block, p0)
-    return deriv
-
-def get_rand_Japprox(s, blocks, num_inds=1000, **kwargs):
-    """
     """
     start_time = time.time()
-    tot_pix = s.image[s.inner].size
+    tot_pix = s.residuals.size
     if num_inds < tot_pix:
-        inds = list(np.unravel_index(np.random.choice(tot_pix, size=num_inds,
-                replace=False), s.image[s.inner].shape))
+        inds = np.random.choice(tot_pix, size=num_inds, replace=False)
+        slicer = None
     else:
-        inds = [slice(0,None), slice(0,None), slice(0,None)]
-    J = calculate_J_approx(s, blocks, inds, **kwargs)
+        inds = None
+        slicer = [slice(0,None), slice(0,None), slice(0,None)]
+    J = s.gradmodel(params=params, inds=inds, slicer=slicer, **kwargs)
     CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
-    return J, inds
-
-def j_to_jtj(J):
-    return np.dot(J, J.T)
-
-def calc_im_grad(s, J, inds): #only in conj_grad_jtj
-    err = calculate_err_approx(s, inds)
-    return np.dot(J, err)
-
-def update_state_global(s, block, data, **kwargs):
-    """
-    """
-    #We need to update:
-    #obj, psf, ilm, bkg, off, slab, zscale, rscale, sigma
-    start_time = time.time()
-
-    old_state = s.state
-    new_state = old_state.copy(); new_state[block] = data.copy()
-
-    updated = {'pos', 'rad', 'typ', 'psf', 'ilm', 'bkg', 'off', 'slab', \
-        'zscale', 'sigma', 'rscale'}
-    if updated != set(s.param_order):
-        raise RuntimeError('This state has parameters that are not supported!')
-
-    #Since zscale affects obj, it needs to be first:
-    #zscale:
-    bz = s.create_block('zscale')
-    if (bz & block).sum() > 0:
-        new_zscale = new_state[bz].copy()
-        # s.update(bz, new_zscale)
-        s.zscale = new_zscale[0]
-        s.obj.initialize(s.zscale)
-
-    #obj:
-    #pos:
-    bpos = s.create_block('pos')
-    if (bpos & block).sum() > 0:
-        new_pos_params = new_state[bpos].copy().reshape(-1,3)
-        s.obj.pos = new_pos_params
-    #rad:
-    brad = s.create_block('rad')
-    if (brad & block).sum() > 0:
-        new_rad_params = new_state[brad].copy()
-        s.obj.rad = new_rad_params
-    #typ:
-    btyp = s.create_block('typ')
-    if (btyp & block).sum() > 0:
-        new_typ_params = new_state[btyp].copy()
-        s.obj.typ = new_typ_params
-    if np.any(bpos | brad | btyp):
-        s.obj.initialize(s.zscale)
-
-    #psf:
-    bp = s.create_block('psf')
-    if (bp & block).sum() > 0:
-        new_psf_params = new_state[bp].copy()
-        s.psf.update(new_psf_params)
-        #And for some reason I need to do this:
-        # s.psf._setup_ffts()
-
-    #ilm:
-    bi = s.create_block('ilm')
-    if (bi & block).sum() > 0:
-        new_ilm_params = new_state[bi].copy()
-        s.ilm.update(s.ilm.block, new_ilm_params)
-
-    #bkg:
-    bb = s.create_block('bkg')
-    if (bb & block).sum() > 0:
-        new_bkg_params = new_state[bb].copy()
-        s.bkg.update(s.bkg.block, new_bkg_params)
-
-    #slab:
-    bs = s.create_block('slab')
-    if (bs & block).sum() > 0:
-        new_slab_params = new_state[bs].copy()
-        s.slab.update(new_slab_params)
-
-    #off:
-    bo = s.create_block('off')
-    if (bo & block).sum() > 0:
-        new_off = new_state[bo].copy()
-        # s.update(bo, new_off)
-        s.offset = new_off
-
-    #rscale:
-    brscl = s.create_block('rscale')
-    if (brscl & block).sum() > 0:
-        new_rscale = new_state[brscl].copy()[0]
-        # s.update(brscl, new_rscale)
-        f = new_rscale / s.rscale
-        s.obj.rad *= f
-        s.obj.initialize(s.zscale)
-        s.rscale = new_rscale
-
-    #sigma:
-    bsig = s.create_block('sigma')
-    if (bsig & block).sum() > 0:
-        new_sig = new_state[bsig].copy()
-        #leaving this since I don't use it for opt FIXME
-        s.update(bsig, new_sig)
-
-    #Now we need to reset the state and return:
-    s._build_state()
-    s._update_global()
-    CLOG.debug('Update_state_global:\t%f' % (time.time()-start_time))
+    return J, inds, slicer
 
 def block_globals(s, include_rscale=True, include_off=True, include_sigma=False):
     blk = ( s.create_block('ilm') | s.create_block('bkg') |
@@ -231,338 +101,20 @@ def block_globals(s, include_rscale=True, include_off=True, include_sigma=False)
 
 def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwargs):
     #1. Max for a given max_mem:
-    px_mem = int( max_mem /8/ nparams) #1 float = 8 bytes
+    px_mem = int(max_mem / 8 / nparams) #1 float = 8 bytes
     #2. # for a given
     px_red = min_redundant*nparams
     #3. And # desired for decimation
-    px_dec = s.image[s.inner].size/decimate
+    px_dec = s.residuals.size/decimate
 
     if px_red > px_mem:
         raise RuntimeError('Insufficient max_mem for desired redundancy.')
     num_px = np.clip(px_dec, px_red, px_mem)
     return num_px
 
-def do_conj_grad_jtj(s, block, min_eigval=1e-12, num_sweeps=2, **kwargs):
-    """
-    Runs conjugate-gradient descent on a peri state, based on a random
-    approximation of the Hessian matrix from JTJ. Does not
-    return anything, only updates the state.
-    Parameters:
-    -----------
-    s : State
-        The peri state to optimize.
-    block: Boolean numpy.array
-        The desired blocks of the state s to minimize over. Do NOT explode it.
-    min_eigval: Float scalar, <<1.
-        The minimum eigenvalue to use in inverting the JTJ matrix, to avoid
-        degeneracies in the parameter space (i.e. 'rcond' in np.linalg.lstsq).
-        Default is 1e-12.
-    num_sweeps: Int.
-        Number of sweeps to do over the eigenvectors of the parameter
-        block, using the same Hessian approximation. Default is 2.
-    decimate: Float scalar, >1
-        The desired amount to decimate the pixels by for a random image (e.g.
-        decimate of 10 takes  1/10 of the pixels). However, the actual amount
-        of pixels is determined by max_mem and min_redundant as well. If < 1,
-        the attempts to use all the pixels in the image. Default is 1, i.e.
-        uses the max amount of memory allowed.
-    max_mem: Float scalar.
-        The maximum memory (in bytes) that J should occupy. Default is 2GB.
-    min_redundant: Float scalar.
-        Enforces a minimum amount of pixels to include in J, such that the
-        min # of pixels is at least min_redundant * number of parameters.
-        If max_mem and min_redundant result in an incompatible size an
-        error is raised. Default is 20.
-    be_nice: Bool.
-        If True, evaluating the derivative doesn't change the state. If
-        False, when the derivative is evaluated the state isn't changed
-        back to its original value, which saves time (33%) but may wreak
-        havoc. Default is True (i.e. slower, no havoc).
-    dl: Float scalar.
-        The amount to update parameters by when evaluating derivatives.
-        Default is 2e-5.
-    threept: Bool
-        Set to True to use a 3-point stencil instead of a 2-point. More
-        accurate but 20% slower. Default is False.
-    See Also
-    --------
-    do_levmarq: Levenberg-Marquardt minimization with a random-block
-        approximation to J.
-
-    Comments
-    --------
-    The sampling of pixels for J, JTJ is stochastic, but the evaluations
-    of the data are not. Since the error is checked against the global
-    image the log-likelihood will never increase during minimization
-    (there are internal checks for this).
-    """
-    #First find out how many pixels I use:
-    num_px = get_num_px_jtj(s, block.sum(), **kwargs)
-    blocks = s.explode(block)
-
-    #Then I get JTJ etc:
-    J, inds = get_rand_Japprox(s, blocks, num_inds=num_px, **kwargs)
-    JTJ = j_to_jtj(J)
-    grad = calc_im_grad(s, J, inds) #internal because s gets updated
-
-    #Now I get the conj. grad. directions:
-    evals, evecs = np.linalg.eigh(JTJ)
-
-    #And we line minimize over each direction, starting with the smallest
-    print 'Starting:\t%f' % s.error
-    for n in xrange(num_sweeps):
-        for a in xrange(evals.size-1,-1, -1): #high eigenvalues first
-            if evals[a] < min_eigval*evals.max():
-                print "Degenerate Direction\t%d" % a
-                continue #degenerate direction, ignore
-
-            #Picking a good direction/magnitude to move in:
-            cur_vec = evecs[:,a] * 0.5*np.dot(-grad, evecs[:,a])/evals[a]
-
-            do_line_min(s, block, cur_vec, **kwargs)
-            print 'Direction min %d \t%f' % (a, s.error)
-
-def do_line_min(s, block, vec, maxiter=10, **kwargs):
-    """
-    Does a line minimization over the state
-    Make vec something that update_state_global(block, p0+vec) is the "correct"
-    step size (i.e. takes you near the minimum)
-    """
-    start_err = s.error
-    p0 = s.state[block].copy()
-
-    def for_min(x):
-        update_state_global(s, block, p0 + x*vec, keep_time=False)
-        return s.error
-
-    #Need to check for a bracket:
-    brk_vals = [for_min(-2.), for_min(2.)]
-    cnt_val = for_min(0)
-    if cnt_val > np.min(brk_vals):
-        #the min is outside the interval, need a new bracket
-        run = True
-        if brk_vals[0] < brk_vals[1]:
-            bracket = [-2,0]
-            start = -2.
-            old = brk_vals[0]
-            while run:
-                start *= 3
-                new = for_min(start)
-                run = new < old; print '....'
-            bracket = [start] + bracket
-        else:
-            bracket = [0,2]
-            start = 2
-            old = brk_vals[1]
-            while run:
-                start *= 3
-                new = for_min(start)
-                run = new < old; print '....'
-            bracket.append(start)
-    else: #bracket is fine
-        bracket = [-2,0,2]
-
-    res = minimize_scalar(for_min, bracket=bracket, method='Brent', \
-            options={'maxiter':maxiter})
-    if res.fun <= start_err:
-        _ = for_min(res.x)
-    else:
-        #wtf
-        raise RuntimeError('wtf')
-
 #=============================================================================#
 #               ~~~~~        Single particle stuff    ~~~~~
 #=============================================================================#
-def update_one_particle(s, particle, pos, rad, typ=None, relative=False,
-        do_update_tile=True, fix_errors=False, **kwargs):
-    """
-    Updates a single particle (labeled ind) in the state s.
-
-    Parameters
-    -----------
-    s : State
-        The peri state to optimize.
-    particle: 1-element int numpy.ndarray
-        Index of the particle to update.
-    pos: 3-element numpy.ndarray
-        New position of the particle.
-    rad: 1-element numpy.ndarray
-        New radius of the particle.
-    typ: 1-element numpy.ndarray.
-        New typ of the particle; defaults to the previous typ.
-    relative: Bool
-        Set to true to make pos, rad updates relative to the previous
-        position (i.e. p1 = p0+pos instead of p1 = pos, etc for rad).
-        Default is False.
-    do_update_tile: Bool
-        If False, only updates s.object and not the actual model image.
-        Set to False only if you're going to update manually later.
-        Default is True
-    fix_errors: Bool
-        Set to True to fix errors for placing particles outside the
-        image or with negative radii (otherwise a ValueError is raised).
-        Default is False
-
-    Returns
-    --------
-    tiles: 3-element list.
-        peri.util.Tile's of the region of the image affected by the
-        update. Returns what s._tile_from_particle_change returns
-        (outer, inner, slice)
-    """
-    #the closest a particle can get to an edge, > any reasonable dl
-    MIN_DIST= 3e-3
-    #We also need a maximum radius, > any reasonable radius:
-    MAX_RAD = 2e2
-
-    if type(particle) != np.ndarray:
-        particle = np.array([particle])
-
-    prev = s.state.copy()
-    p0 = prev[s.b_pos].copy().reshape(-1,3)[particle]
-    r0 = prev[s.b_rad][particle]
-    if s.varyn:
-        t0 = prev[s.b_typ][particle]
-    else:
-        t0 = np.ones(particle.size)
-
-    is_bad_update = lambda p, r: np.any(p < 0) or np.any(p > \
-            np.array(s.image.shape)) or np.any(r < 0) or np.any(r > MAX_RAD)
-    if fix_errors:
-        #Instead of ignoring errors, we modify pos, rad in place
-        #so that they are the best possible updates.
-        if relative:
-            if is_bad_update(p0+pos, r0+rad):
-                pos[:] = np.clip(pos, MIN_DIST-p0, np.array(s.image.shape)-
-                        MIN_DIST-p0)
-                rad[:] = np.clip(rad, MIN_DIST-r0, MAX_RAD-r0)
-        else:
-            if is_bad_update(pos, rad):
-                pos[:] = np.clip(pos, MIN_DIST, np.array(s.image.shape)-MIN_DIST)
-                rad[:] = np.clip(rad, MIN_DIST, MAX_RAD)
-
-    if typ is None:
-        t1 = t0.copy()
-    else:
-        t1 = typ
-
-    if relative:
-        p1 = p0 + pos
-        r1 = r0 + rad
-    else:
-        p1 = pos.copy()
-        r1 = rad.copy()
-
-    if is_bad_update(p1, r1):
-        raise ValueError('Particle outside image / negative radius!')
-
-    tiles = s._tile_from_particle_change(p0, r0, t0, p1, r1, t1) #312 us
-    s.obj.update(particle, p1.reshape(-1,3), r1, t1, s.zscale, difference=s.difference) #4.93 ms
-    if do_update_tile:
-        s._update_tile(*tiles, difference=s.difference) #66.5 ms
-    s._build_state()
-    return tiles
-
-def eval_one_particle_grad(s, particle, dl=1e-6, threept=False, slicer=None,
-        be_nice=False, include_rad=True, **kwargs):
-    """
-    Evaluates the gradient of the image for 1 particle, for all of its
-    parameters (x,y,z,R). Used for J for LM.
-
-    Parameters
-    -----------
-    s : State
-        The peri state to evaluate derivatives on.
-    particle: 1-element int numpy.ndarray
-        Index of the particle to evaluate derivatives for.
-    slicer: slice
-        Slice object of the regions of the image at which to evaluate
-        the derivative. Default is None, which finds the tile of the
-        pixels changed by updating the particle and returns that.
-    dl: Float
-        The amount to change values by when evaluating derivatives.
-        Default is 1e-6.
-    threept: Bool
-        If True, uses a 3-point finite difference instead of 2-point.
-        Default is False (using two-point for 1 less function call).
-    be_nice: Bool
-        If True, spends 1x4 extra updates placing the (x,y,z,R) back to
-        their original values after evaluating the derivatives. Default
-        is False, i.e. plays fast and dangerous.
-
-    Returns
-    --------
-    grads: numpy.ndarray
-        [4,N] element numpy.ndarray; grads[i,j] is the [x,y,z,R][i]
-        derivative evaluated at the j'th pixel in the affected region.
-    slicer: slice
-        The slice containing which points in the image the derivate was
-        evaluated at. If the input parameter slicer is not None, then it
-        is the same as the slice passed in.
-    """
-    p0 = s.state[s.block_particle_pos(particle)].copy()
-
-    grads = []
-    if slicer is not None:
-        mask = s.image_mask[slicer] == 1
-
-    #xyz pos:
-    for a in xrange(3):
-        if not threept:
-            i0 = get_slicered_difference(s, slicer, mask)
-        dx = np.zeros(p0.size)
-        dx[a] = 1*dl
-        tiles = update_one_particle(s, particle, dx, 0, relative=True)
-        if slicer == None:
-            slicer = tiles[0].slicer
-            mask = s.image_mask[slicer] == 1
-
-        i1 = get_slicered_difference(s, slicer, mask)
-        if threept:
-            toss = update_one_particle(s, particle, -2*dx, 0, relative=True)
-            #we want to compare the same slice. Also -2 to go backwards
-            i2 = get_slicered_difference(s, slicer, mask)
-            if be_nice:
-                toss = update_one_particle(s, particle, dx, 0, relative=True)
-            grads.append((i1-i2)*0.5/dl)
-        else:
-            if be_nice:
-                toss = update_one_particle(s, particle, -dx, 0, relative=True)
-            grads.append( (i1-i0)/dl )
-    #rad:
-    if include_rad:
-        if not threept:
-            i0 = get_slicered_difference(s, slicer, mask)
-        dr = np.array([dl])
-        toss = update_one_particle(s, particle, 0, 1*dr, relative=True)
-        i1 = get_slicered_difference(s, slicer, mask)
-        if threept:
-            toss = update_one_particle(s, particle, 0, -2*dr, relative=True)
-            i2 = get_slicered_difference(s, slicer, mask)
-            if be_nice:
-                toss = update_one_particle(s, particle, 0, dr, relative=True)
-            grads.append((i1-i2)*0.5/dl)
-        else:
-            if be_nice:
-                toss = update_one_particle(s, particle, 0, -dr, relative=True)
-            grads.append( (i1-i0)/dl )
-
-    return np.array(grads), slicer
-
-def eval_many_particle_grad(s, particles, **kwargs):
-    """Wrapper for eval_one_particle_grad. Particles is an iterable"""
-    grad = eval_one_particle_grad(s, particles[0], **kwargs)[0]
-    #
-    gs = grad.shape
-    ans = np.zeros([len(particles) * gs[0], gs[1]], dtype=grad.dtype)
-    counter = gs[0]; dcounter = gs[0]
-    ans[:counter] = grad.copy() #; del grad
-    for p in particles[1:]:
-        #throwing out the slicer info right now...
-        ans[counter:counter+dcounter,:] = eval_one_particle_grad(s, p, **kwargs)[0]
-        counter += dcounter
-    return ans
-
 def find_particles_in_box(s, bounds):
     """
     Finds the particles in a box.
@@ -584,83 +136,6 @@ def find_particles_in_box(s, bounds):
     is_in_xi = lambda i: (s.obj.pos[:,i] > bounds[0][i]) & (s.obj.pos[:,i] <= bounds[1][i])
     in_region = is_in_xi(0) & is_in_xi(1) & is_in_xi(2) & (s.obj.typ==1)
     return np.nonzero(in_region)[0]
-
-def get_slicered_difference(s, slicer, mask):
-    return np.copy((s.image[slicer] - s.get_model_image()[slicer])[mask])
-
-def get_tile_from_multiple_particle_change(s, inds):
-    """
-    Finds the tile from changing multiple particles by taking the maximum
-    enclosing tile
-    """
-    all_left = []
-    all_right = []
-    for i in inds:
-        p0 = np.array(s.obj.pos[i])
-        r0 = np.array([s.obj.rad[i]])
-        t0 = np.array([s.obj.typ[i]])
-        tile, _, __ = s._tile_from_particle_change(p0, r0, t0, p0, r0, t0)
-        all_left.append(tile.l)
-        all_right.append(tile.r)
-
-    left = np.min(all_left, axis=0)
-    right= np.max(all_right,axis=0)
-
-    return Tile(left, right=right)
-
-def update_particles(s, particles, params, include_rad=True, **kwargs):
-    #eval_particle_grad returns parameters in order(p0,r0,p1,r1,p2,r2...)
-    #so that determines the order for updating particles:
-    all_part_tiles = []
-
-    #FIXME
-    #You have a function get_tile_from_particle change. You should update
-    #it to use the new tile version below, and call it here.
-    #Right now it's being used to get the LM comparison region for do_levmarq_particles
-    #but you could also use it in update_particles and in
-    #do_levmarq_all_particle_groups.calc_mem_usage
-    #Plus, it would be nice to give it to Matt
-
-    #We update the object but only update the field at the end
-    for a in xrange(particles.size):
-        # pos = params[4*a:4*a+3] if include_rad else params[3*a:3*a+3]
-        # rad = params[4*a+3:4*a+4] if include_rad else r0
-
-        #To play nice with relative, we get p0, r0 first, then p1, r1
-        p0 = s.obj.pos[particles[a]].copy()
-        r0 = np.array([s.obj.rad[particles[a]]])
-        t0 = np.array([s.obj.typ[particles[a]]])
-
-        if include_rad:
-            toss = update_one_particle(s, particles[a], params[4*a:4*a+3],
-                    params[4*a+3:4*a+4], do_update_tile=False, **kwargs)
-        else:
-            toss = update_one_particle(s, particles[a], params[3*a:3*a+3],
-                    r0.copy(), do_update_tile=False, **kwargs)
-
-        p1 = s.obj.pos[particles[a]].copy()
-        r1 = np.array([s.obj.rad[particles[a]]])
-        t1 = np.array([s.obj.typ[particles[a]]])
-        #We reconstruct the tiles separately to deal with edge-particle
-        #overhang pads:
-        left, right = s.obj.get_update_tile(p0, r0, t0, p1, r1, t1, s.zscale)
-        all_part_tiles.append(Tile(left, right, mins=0, maxs=s.image.shape))
-
-    particle_tile = all_part_tiles[0].boundingtile(all_part_tiles)
-
-    #From here down is basically copied from states._tile_from_particle_change
-    psf_pad_l = s.psf.get_update_tile(particle_tile.l[0])
-    psf_pad_r = s.psf.get_update_tile(particle_tile.r[0])
-    psftile = Tile.boundingtile([Tile(np.ceil(i)) for i in [psf_pad_l, psf_pad_r]])
-    img = Tile(s.image.shape)
-    outer_tile = particle_tile.pad(psftile.shape/2+1)
-    inner_tile, outer_tile = outer_tile.reflect_overhang(img)
-    iotile = inner_tile.translate(-outer_tile.l)
-    ioslice = iotile.slicer
-    #end copy
-
-    s._update_tile(outer_tile, inner_tile, ioslice, difference=s.difference)
-    return outer_tile, inner_tile, ioslice
 
 def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
     """
@@ -728,11 +203,11 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
         rs = np.array(region_size)
         particle_groups = separate_particles_into_groups(s, region_size=
                 rs.tolist(), **kwargs)
-        #The actual max_mem is np.max(map(f, p_groups) where 
-        # f = lambda g: get_slicered_difference(s, get_tile_from_multiple-
+        #The actual max_mem is np.max(map(f, p_groups) where
+        # f = lambda g: get_slicered_difference(s, get_tile_from_multiple_
         #   particle_change(s, g).slicer, s.image_mask[" " " " .slicer] == 1)
         #   .nbytes * g.size * 4
-        #However this is _way_ too slow. A better approximation is 
+        #However this is _way_ too slow. A better approximation is
         # d = s.residuals
         # max_mem = np.max(map(lambda g: d[get_tile_from_multiple_particle_change(
                 # s, g).slicer].nbytes * g.size * 4, particle_groups))
@@ -754,6 +229,22 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
         region_size -= 1 #need to be < memory, so we undo 1 iteration
 
     return region_size
+
+def get_residuals_update_tile(st, padded_tile):
+    """
+    Given a state and a tile that corresponds to the padded image, returns
+    a tile that corresponds to the the corresponding pixels of the difference
+    image
+    """
+    imshape = st.image.shape
+    residuals_tile = Tile(left=np.zeros(len(imshape), dtype='int') + st.pad,
+            right=np.array(imshape) - st.pad)
+    ans_tile = residuals_tile.intersection([residuals_tile, padded_tile])
+    ans_tile.translate(-st.pad)
+    return ans_tile
+#=============================================================================#
+#               ~~~~~           Fit ilm???         ~~~~~
+#=============================================================================#
 
 def fit_ilm(new_ilm, old_ilm, **kwargs):
     """
@@ -830,7 +321,7 @@ class LMEngine(object):
     def __init__(self, damping=1., increase_damp_factor=3., decrease_damp_factor=8.,
                 min_eigval=1e-13, marquardt_damping=True, transtrum_damping=None,
                 use_accel=False, max_accel_correction=1., ptol=1e-6,
-                errtol=1e-5, costol=None, max_iter=5, run_length=5,
+                ftol=1e-5, costol=None, max_iter=5, run_length=5,
                 update_J_frequency=1, broyden_update=False, eig_update=False,
                 partial_update_frequency=3, num_eig_dirs=8):
         """
@@ -875,7 +366,7 @@ class LMEngine(object):
             ptol: Float
                 Algorithm has converged when the none of the parameters
                 have changed by more than ptol. Default is 1e-6.
-            errtol: Float
+            ftol: Float
                 Algorithm has converged when the error has changed
                 by less than ptol after 1 step. Default is 1e-6.
             costol: Float
@@ -929,7 +420,7 @@ class LMEngine(object):
         self.max_accel_correction = max_accel_correction
 
         self.ptol = ptol
-        self.errtol = errtol
+        self.ftol = ftol
         self.costol = costol
         self.max_iter = max_iter
 
@@ -945,15 +436,14 @@ class LMEngine(object):
 
         #We want to start updating JTJ
         self.J = None
-        self._inds = None
         self._J_update_counter = update_J_frequency
         self._fresh_JTJ = False
 
         #the max # of times trying to decrease damping before giving up
         self._max_inner_loop = 10
 
-        #Finally we set the error and parameters
-        self._set_err_params()
+        #Finally we set the error and parameter values:
+        self._set_err_paramvals()
         self._has_run = False
 
     def reset(self, new_damping=None):
@@ -967,12 +457,12 @@ class LMEngine(object):
         self._has_run = False
         if new_damping is not None:
             self.damping = np.array(new_damping).astype('float')
-        self._set_err_params()
+        self._set_err_paramvals()
 
-    def _set_err_params(self):
+    def _set_err_paramvals(self):
         """
         Must update:
-            self.error, self._last_error, self.params, self._last_params
+            self.error, self._last_error, self.param_vals, self._last_vals
         """
         raise NotImplementedError('implement in subclass')
 
@@ -983,29 +473,9 @@ class LMEngine(object):
     def calc_residuals(self):
         raise NotImplementedError('implement in subclass')
 
-    def calc_model_cosine(self, decimate=None):
-        """
-        Calculates the cosine of the fittable residuals with the actual
-        residuals, cos(phi) = |P^T r| / |r| where P^T is the projection
-        operator onto the model manifold and r the residuals.
-
-        `Decimate' allows for every nth pixel only to be counted for speed.
-        While this is n x faster, it is considerably less accurate, so the
-        default is no decimation. (set decimate to an int or None).
-        """
-        slicer = slice(0,-1,decimate)
-
-        #1. Calculate projection term
-        u, sig, v = np.linalg.svd(self.J[:,slicer], full_matrices=False) #slow part
-        # p = np.dot(v.T, v) - memory error, so term-by-term
-        r = self.calc_residuals()[slicer]
-        abs_r = np.sqrt((r*r).sum())
-
-        v_r = np.dot(v,r/abs_r)
-        projected = np.dot(v.T, v_r)
-
-        abs_cos = np.sqrt((projected*projected).sum())
-        return abs_cos
+    def update_function(self, param_vals):
+        """Takes an array param_vals, updates function, returns the new error"""
+        raise NotImplementedError('implement in subclass')
 
     def do_run_1(self):
         """
@@ -1023,27 +493,27 @@ class LMEngine(object):
                     self.update_eig_J()
 
             #1. Assuming that J starts updated:
-            delta_params = self.find_LM_updates(self.calc_grad())
+            delta_vals = self.find_LM_updates(self.calc_grad())
 
             #2. Increase damping until we get a good step:
-            er1 = self.update_function(self.params + delta_params)
+            er1 = self.update_function(self.param_vals + delta_vals)
             good_step = er1 < self.error
             if not good_step:
-                er0 = self.update_function(self.params)
+                er0 = self.update_function(self.param_vals)
                 if np.abs(er0 -self.error) > 1e-7:
                     raise RuntimeError('ARG!!!') #FIXME
             _try = 0
             if (not good_step):
-                CLOG.debug('Bad step, increasing damping\t%f\t%f' % 
+                CLOG.debug('Bad step, increasing damping\t%f\t%f' %
                         (self.error, er1))
             while (_try < self._max_inner_loop) and (not good_step):
                 _try += 1
                 self.increase_damping()
-                delta_params = self.find_LM_updates(self.calc_grad())
-                er1 = self.update_function(self.params + delta_params)
+                delta_vals = self.find_LM_updates(self.calc_grad())
+                er1 = self.update_function(self.param_vals + delta_vals)
                 good_step = er1 < self.error
                 if not good_step:
-                    er0 = self.update_function(self.params)
+                    er0 = self.update_function(self.param_vals)
                     if np.abs(er0 -self.error) > 1e-7:
                         raise RuntimeError('ARG!!!') #FIXME
             if _try == (self._max_inner_loop-1):
@@ -1055,7 +525,7 @@ class LMEngine(object):
                 self.error = er1
                 CLOG.debug('Good step\t%f\t%f' % (self._last_error, self.error))
 
-            self.update_params(delta_params, incremental=True)
+            self.update_param_vals(delta_vals, incremental=True)
             self.decrease_damping()
             self._num_iter += 1; self._inner_run_counter += 1
 
@@ -1078,7 +548,7 @@ class LMEngine(object):
             #0. Find _last_residuals, _last_error, etc:
             _last_residuals = self.calc_residuals().copy()
             _last_error = 1*self.error
-            _last_params = self.params.copy()
+            _last_vals = self.param_vals.copy()
 
 
             #1. Calculate 2 possible steps
@@ -1090,39 +560,39 @@ class LMEngine(object):
             self.decrease_damping(undo_decrease=True)
 
             #2. Check which step is best:
-            er1 = self.update_function(self.params + delta_params_1)
-            er2 = self.update_function(self.params + delta_params_2)
+            er1 = self.update_function(self.param_vals + delta_params_1)
+            er2 = self.update_function(self.param_vals + delta_params_2)
 
             triplet = (self.error, er1, er2)
             if self.error < min([er1, er2]):
                 #Both bad steps, put back & increase damping:
-                _ = self.update_function(self.params.copy())
+                _ = self.update_function(self.param_vals.copy())
                 _try = 0
                 good_step = False
                 CLOG.debug('Bad step, increasing damping\t%f\t%f\t%f' % triplet)
                 while (_try < self._max_inner_loop) and (not good_step):
                     self.increase_damping()
-                    delta_params = self.find_LM_updates(self.calc_grad())
-                    er_new = self.update_function(self.params + delta_params)
+                    delta_vals = self.find_LM_updates(self.calc_grad())
+                    er_new = self.update_function(self.param_vals + delta_vals)
                     good_step = er_new < self.error
                     _try += 1
                 if not good_step:
                     #Throw a warning, put back the parameters
                     CLOG.warn('Stuck!')
-                    self.error = self.update_function(self.params.copy())
+                    self.error = self.update_function(self.param_vals.copy())
                 else:
                     #Good step => Update params, error:
-                    self.update_params(delta_params, incremental=True)
+                    self.update_param_vals(delta_vals, incremental=True)
                     self.error = er_new
-                    CLOG.debug('Sufficiently increased damping\t%f\t%f' % 
+                    CLOG.debug('Sufficiently increased damping\t%f\t%f' %
                             (triplet[0], self.error))
 
             elif er1 <= er2:
                 good_step = True
                 CLOG.debug('Good step, same damping\t%f\t%f\t%f' % triplet)
                 #Update to er1 params:
-                er1_1 = self.update_function(self.params + delta_params_1)
-                self.update_params(delta_params_1, incremental=True)
+                er1_1 = self.update_function(self.param_vals + delta_params_1)
+                self.update_param_vals(delta_params_1, incremental=True)
                 if np.abs(er1_1 - er1) > 1e-6:
                     raise RuntimeError('GODDAMMIT!') #FIXME
                 self.error = er1
@@ -1132,17 +602,17 @@ class LMEngine(object):
                 self.error = er2
                 CLOG.debug('Good step, decreasing damping\t%f\t%f\t%f' % triplet)
                 #-we're already at the correct parameters
-                self.update_params(delta_params_2, incremental=True)
+                self.update_param_vals(delta_params_2, incremental=True)
                 self.decrease_damping()
 
             #3. Run with current J, damping; update what we need to::
             if good_step:
                 self._last_residuals = _last_residuals
                 self._last_error = _last_error
-                self._last_params = _last_params
+                self._last_vals = _last_vals
                 self.error
-                self.do_internal_run()
                 self._has_run = True
+                self.do_internal_run()
             #1 loop
             self._num_iter += 1
 
@@ -1153,7 +623,7 @@ class LMEngine(object):
         Called internally by do_run_2() but might also be useful on its own.
 
         When I update the function, I need to update:
-            self.update_params()
+            self.update_param_vals()
             self._last_residuals
             self._last_error
             self.error
@@ -1175,17 +645,17 @@ class LMEngine(object):
                 self.update_eig_J()
 
             #2. Getting parameters, error
-            er0 = _last_error; old_params = self.params.copy()
-            delta_params = self.find_LM_updates(grad, do_correct_damping=False)
-            er1 = self.update_function(self.params + delta_params)
+            er0 = 1*self.error
+            delta_vals = self.find_LM_updates(grad, do_correct_damping=False)
+            er1 = self.update_function(self.param_vals + delta_vals)
             good_step = er1 < er0
 
             if good_step:
-                CLOG.debug('%f\t%f' % (_last_error, er1))
+                CLOG.debug('%f\t%f' % (er0, er1))
                 #Updating:
-                self.update_params(delta_params, incremental=True)
+                self.update_param_vals(delta_vals, incremental=True)
                 self._last_residuals = _last_residuals.copy()
-                self._last_error = _last_error*1
+                self._last_error = er0
                 self.error = er1
 
                 #and updating the things we need in the loop
@@ -1193,16 +663,12 @@ class LMEngine(object):
                 _last_residuals = self.calc_residuals().copy()
                 _last_error = 1*self.error
             else:
-                er0_0 = self.update_function(self.params)
+                er0_0 = self.update_function(self.param_vals)
                 CLOG.debug('Bad step!')
                 if np.abs(er0 - er0_0) > 1e-6:
                     raise RuntimeError('GODDAMMIT!') #FIXME
 
             self._inner_run_counter += 1
-
-    def update_function(self, params):
-        """Takes an array params, updates function, returns the new error"""
-        raise NotImplementedError('implement in subclass')
 
     def _calc_damped_jtj(self):
         diag = 0*self.JTJ
@@ -1253,22 +719,46 @@ class LMEngine(object):
         else:
             self.damping /= self.decrease_damp_factor
 
-    def update_params(self, new_params, incremental=False):
-        self._last_params = self.params.copy()
+    def update_param_vals(self, new_vals, incremental=False):
+        self._last_vals = self.param_vals.copy()
         if incremental:
-            self.params += new_params
+            self.param_vals += new_vals
         else:
-            self.params = new_params.copy()
+            self.param_vals = new_vals.copy()
         #And we've updated, so JTJ is no longer valid:
         self._fresh_JTJ = False
+
+    def calc_model_cosine(self, decimate=None):
+        """
+        Calculates the cosine of the fittable residuals with the actual
+        residuals, cos(phi) = |P^T r| / |r| where P^T is the projection
+        operator onto the model manifold and r the residuals.
+
+        `Decimate' allows for every nth pixel only to be counted for speed.
+        While this is n x faster, it is considerably less accurate, so the
+        default is no decimation. (set decimate to an int or None).
+        """
+        slicer = slice(0,-1,decimate)
+
+        #1. Calculate projection term
+        u, sig, v = np.linalg.svd(self.J[:,slicer], full_matrices=False) #slow part
+        # p = np.dot(v.T, v) - memory error, so term-by-term
+        r = self.calc_residuals()[slicer]
+        abs_r = np.sqrt((r*r).sum())
+
+        v_r = np.dot(v,r/abs_r)
+        projected = np.dot(v.T, v_r)
+
+        abs_cos = np.sqrt((projected*projected).sum())
+        return abs_cos
 
     def get_termination_stats(self, get_cos=True):
         """
         Returns a dict of termination statistics
         """
-        delta_params = self._last_params - self.params
+        delta_vals = self._last_vals - self.param_vals
         delta_err = self._last_error - self.error
-        to_return = {'delta_params':delta_params, 'delta_err':delta_err,
+        to_return = {'delta_vals':delta_vals, 'delta_err':delta_err,
                 'num_iter':1*self._num_iter}
         if get_cos:
             model_cosine = self.calc_model_cosine()
@@ -1282,12 +772,12 @@ class LMEngine(object):
         terminate = False
 
         #1. change in params small enough?
-        delta_params = self._last_params - self.params
-        terminate |= np.all(np.abs(delta_params) < self.ptol)
+        delta_vals = self._last_vals - self.param_vals
+        terminate |= np.all(np.abs(delta_vals) < self.ptol)
 
         #2. change in err small enough?
         delta_err = self._last_error - self.error
-        terminate |= (delta_err < self.errtol)
+        terminate |= (delta_err < self.ftol)
 
         #3. change in cosine small enough?
         if self.costol is not None:
@@ -1299,13 +789,12 @@ class LMEngine(object):
     def check_terminate(self):
         """
         Termination if ftol, ptol, costol are < a certain amount
-        Currently costol is not used / supported
         """
 
         if not self._has_run:
             return False
         else:
-            #1-3. errtol, ptol, model cosine low enough?
+            #1-3. ftol, ptol, model cosine low enough?
             terminate = self.check_completion()
 
             #4. too many iterations??
@@ -1320,7 +809,7 @@ class LMEngine(object):
         self._J_update_counter += 1
         update = self._J_update_counter >= self.update_J_frequency
         return update & (not self._fresh_JTJ)
-    
+
     def update_J(self):
         self.calc_J()
         self.JTJ = np.dot(self.J, self.J.T)
@@ -1350,13 +839,10 @@ class LMEngine(object):
         """
         Broyden update of jacobian.
         """
-        delta_params = self.params - self._last_params
+        delta_vals = self.param_vals - self._last_vals
         delta_residuals = self.calc_residuals() - self._last_residuals
-        # broyden_update = np.outer(delta_params, (delta_residuals -\
-                # np.dot(self.J.T, delta_params))) / np.sum(delta_params**2)
-        # self.J += broyden_update
-        nrm = np.sqrt(delta_params*delta_params)
-        direction = delta_params / nrm
+        nrm = np.sqrt(delta_vals*delta_vals)
+        direction = delta_vals / nrm
         vals = delta_residuals / nrm
         self._rank_1_J_update(direction, vals)
         self.JTJ = np.dot(self.J, self.J.T)
@@ -1375,7 +861,7 @@ class LMEngine(object):
 
             #2. Evaluating derivative along that direction, we'll use dl=5e-4:
             dl = 5e-4
-            _ = self.update_function(self.params+dl*stif_dir)
+            _ = self.update_function(self.param_vals+dl*stif_dir)
             res1 = self.calc_residuals()
 
             #3. Updating
@@ -1384,17 +870,16 @@ class LMEngine(object):
 
         self.JTJ = np.dot(self.J, self.J.T)
         #Putting the parameters back:
-        _ = self.update_function(self.params)
+        _ = self.update_function(self.param_vals)
 
     def calc_accel_correction(self, damped_JTJ, delta0):
-        dh = 0.2 #paper recommends 0.1, but I think it'll be better to do
-        #slightly higher to get more of a secant approximation
+        dh = 0.1
         rm0 = self.calc_residuals()
-        _ = self.update_function(self.params + delta0*dh)
+        _ = self.update_function(self.param_vals + delta0*dh)
         rm1 = self.calc_residuals()
         term1 = (rm1 - rm0) / dh
         #and putting back the parameters:
-        _ = self.update_function(self.params)
+        _ = self.update_function(self.param_vals)
 
         term2 = np.dot(self.J.T, delta0)
         der2 = 2./dh*(term1 - term2)
@@ -1405,21 +890,63 @@ class LMEngine(object):
         corr *= -0.5
         return corr
 
+class LMFunction(LMEngine):
+    def __init__(self, data, func, p0, func_args=(), func_kwargs={}, **kwargs):
+        """
+        Levenberg-Marquardt engine for a user-supplied function with all
+        the options from the M. Transtrum J. Sethna 2012 ArXiV paper. See
+        LMEngine for documentation.
+
+        Inputs:
+        -------
+            data : N-element numpy.ndarray
+                The measured data to fit.
+            func: Function
+                The function to evaluate. Syntax must be
+                func(p0, *func_args, **func_kwargs)
+            p0 : numpy.ndarray
+                The initial guess.
+            func_args : List-like
+                Extra *args to pass to the function. Optional.
+            func_kargs : Dictionary
+                Extra **kwargs to pass to the function. Optional.
+            **kwargs : Any keyword args passed to LMEngine.
+        """
+        self.data = data
+        self.function = function
+        self.func_args = func_args
+        self.func_kargs = func_kargs
+        super(LMFunction, self).__init__(**kwargs)
+
+    def _set_err_paramvals(self):
+        """
+        Must update:
+            self.error, self._last_error, self.param_vals, self._last_vals
+        """
+        raise NotImplementedError('implement in subclass')
+
+    def calc_J(self):
+        """Updates self.J, returns nothing"""
+        raise NotImplementedError('implement in subclass')
+
+    def calc_residuals(self):
+        return self.model - self.data
+
 class LMGlobals(LMEngine):
-    def __init__(self, state, block, max_mem=3e9, opt_kwargs={}, **kwargs):
+    def __init__(self, state, param_names, max_mem=3e9, opt_kwargs={}, **kwargs):
         """
         Levenberg-Marquardt engine for state globals with all the options
-        from the M. Transtrum J. Sethna 2012 ArXiV paper. See LMGlobals
+        from the M. Transtrum J. Sethna 2012 ArXiV paper. See LMEngine
         for documentation.
 
         Inputs:
         -------
         state: peri.states.ConfocalImagePython instance
             The state to optimize
-        block: np.ndarray of bools
-            The (un-exploded) blocks to optimize over.
+        param_names: List of strings(???)
+            The parameternames to optimize over
         max_mem: Int
-            The maximum memory to use for the optimization; controls block
+            The maximum memory to use for the optimization; controls pixel
             decimation. Default is 3e9.
         opt_kwargs: Dict
             Dict of **kwargs for opt implementation. Right now only for
@@ -1428,54 +955,56 @@ class LMGlobals(LMEngine):
         self.state = state
         self.kwargs = opt_kwargs
         self.max_mem = max_mem
-        self.num_pix = get_num_px_jtj(state, block.sum(), max_mem=max_mem, 
+        self.num_pix = get_num_px_jtj(state, len(param_names), max_mem=max_mem,
                 **self.kwargs)
-        self.blocks = state.explode(block)
-        self.block = block
+        # self.blocks = state.explode(block) ???
+        self.param_names = param_names
         super(LMGlobals, self).__init__(**kwargs)
 
-    def _set_err_params(self):
-        self.error = get_err(self.state)
-        self._last_error = get_err(self.state)
-        self.params = self.state.state[self.block].copy()
-        self._last_params = self.params.copy()
+    def _set_err_paramvals(self):
+        self.error = self.state.error
+        self._last_error = self.state.error
+        self.param_vals = np.array(self.state.state[self.param_names]).copy()
+        self._last_values = self.param_vals.copy()
 
     def calc_J(self):
-        # J, inds = get_rand_Japprox(self.state, self.blocks,
-                # num_inds=self.num_pix, **self.kwargs)
-        # self._inds = inds
-        # self.J = J
-        del self.J, self._inds
-        self.J, self._inds = get_rand_Japprox(self.state, self.blocks,
-                num_inds=self.num_pix, **self.kwargs)
+        del self.J
+        self.J, self._inds, self._slicer = get_rand_Japprox(self.state,
+                self.param_names, num_inds=self.num_pix, **self.kwargs)
 
     def calc_residuals(self):
         return self.state.residuals[self._inds].ravel()
 
-    def update_function(self, params):
-        update_state_global(self.state, self.block, params)
-        return get_err(self.state)
+    def update_function(self, values):
+        self.state.update(self.param_names, values)
+        return self.state.error
 
-    def set_block(self, new_block, new_damping=None):
-        self.block = new_block
-        self.blocks = self.state.explode(new_block)
-        self._set_err_params()
+    def set_params(self, new_param_names, new_damping=None):
+        self.param_names = new_param_names
+        # self.blocks = self.state.explode(new_block) #???
+        self._set_err_paramvals()
         self.reset(new_damping=new_damping)
 
-class LMParticles(LMEngine):
+class LMParticles(LMEngine): #UPDATE ME when you know how the particle labels work
     def __init__(self, state, particles, particle_kwargs={}, **kwargs):
         """include_rad is in particle_kwargs"""
         self.state = state
         self.particle_kwargs = particle_kwargs
         self.particles = particles
-        self.error = get_err(self.state)
-        self._dif_tile = get_tile_from_multiple_particle_change(state, particles)
+        self.error = self.state.error
+        self._dif_tile = self._get_diftile()
         super(LMParticles, self).__init__(**kwargs)
 
-    def _set_err_params(self):
-        self.error = get_err(self.state)
-        self._last_error = get_err(self.state)
-        params = []
+    def _get_diftile(self):
+        itile = self.state.get_update_io_tiles(params, values)[1]
+        #UPDATE ME what are params, values for particles?
+        #(values should be their current values)
+        return get_residuals_update_tile(self.state, iotile)
+
+    def _set_err_paramvals(self):
+        self.error = self.state.error
+        self._last_error = self.state.error
+        param_names = [] #UPDATE ME obj.pos[p] is not the best anymore...
         if (self.particle_kwargs.has_key('include_rad') and
                 self.particle_kwargs['include_rad'] == False):
             for p in self.particles:
@@ -1484,32 +1013,29 @@ class LMParticles(LMEngine):
             for p in self.particles:
                 params.extend(self.state.obj.pos[p].tolist() + [self.state.obj.rad[p]])
         self.params = np.array(params)
-        self._last_params = self.params.copy()
+        self._last_vals = self.params.copy()
 
     def calc_J(self):
-        self._dif_tile = get_tile_from_multiple_particle_change(self.state,
-                self.particles)
+        self._dif_tile = self._get_diftile()
         del self.J
-        self.J = eval_many_particle_grad(self.state, self.particles,
-                slicer=self._dif_tile.slicer, **self.particle_kwargs)
+        self.J = self.state.gradmodel(params=self.param_names, rts=False,
+            slicer=self._dif_tile.slicer)
 
     def calc_residuals(self):
-        return get_slicered_difference(self.state, self._dif_tile.slicer,
-                self.state.image_mask[self._dif_tile.slicer].astype('bool'))
+        return self.state.residuals[self._dif_tile.slicer]
 
-    def update_function(self, params):
-        update_particles(self.state, self.particles, params,
-                relative=False, fix_errors=True, **self.particle_kwargs)
-        return get_err(self.state)
+    def update_function(self, values):
+        self.state.update(self.particles, values) #UPDATE ME you need to be able to add these options below:
+                # relative=False, fix_errors=True, **self.particle_kwargs)
+        return self.state.error
 
     def set_particles(self, new_particles, new_damping=None):
         self.particles = new_particles
-        self._dif_tile = get_tile_from_multiple_particle_change(
-                self.state, particles)
-        self._set_err_params()
+        self._dif_tile = self._get_diftile()
+        self._set_err_paramvals()
         self.reset(new_damping=new_damping)
 
-class LMParticleGroupCollection(object):
+class LMParticleGroupCollection(object): #UPDATE ME when LMParticles diftile changes
     """
     Convenience wrapper for LMParticles. This generates a separate instance
     for the particle groups each time and optimizes with that, since storing
@@ -1608,7 +1134,7 @@ class LMParticleGroupCollection(object):
         j_file, tile_file = self._get_tmpfiles(group_index)
         J = np.load(j_file)
         tile = pickle.load(tile_file)
-        JTJ = j_to_jtj(J)
+        JTJ = np.dot(J, J.T)
         return J, JTJ, tile
 
     def _do_run(self, mode='1'):
@@ -1643,24 +1169,25 @@ class LMParticleGroupCollection(object):
             raise RuntimeError('J, JTJ have not been pre-computed. Call do_run_1 or do_run_2')
         self._do_run(mode='internal')
 
-class AugmentedState(object):
+class AugmentedState(object): #FIXME when blocks work....
     """
     A state that, in addition to having normal state update options,
     allows for updating all the particle R, xyz's depending on their
     positions -- basically rscale(x) for everything.
     Right now I'm just doing this with R(z)
     """
-    def __init__(self, state, block, rz_order=3):
+    def __init__(self, state, param_names, rz_order=3):
         """
         block can be an array of False, that's OK
         However it cannot have any radii blocks
         """
+        #FIXME block -> param_names
 
         if np.any(block & state.b_rad) or np.any(block & state.create_block('rscale')):
             raise ValueError('block must not contain any radii blocks.')
 
         self.state = state
-        self.block = block
+        self.param_names = param_names
         self.rz_order = rz_order
 
         #Controling which params are globals, which are r(xyz) parameters
@@ -1670,9 +1197,9 @@ class AugmentedState(object):
         self.globals_mask = globals_mask
         self.rscale_mask = rscale_mask
 
-        params = np.zeros(globals_mask.size, dtype='float')
-        params[:block.sum()] = self.state.state[block].copy()
-        self.params = params
+        param_vals = np.zeros(globals_mask.size, dtype='float')
+        param_vals[:block.sum()] = self.state.state[block].copy()
+        self.param_vals = param_vals
         self.reset()
 
     def reset(self):
@@ -1684,7 +1211,7 @@ class AugmentedState(object):
         self._particle_mask = self.state.obj.typ == 1
         self._initial_rad = self.state.obj.rad[self._particle_mask].copy()
         self._initial_pos = self.state.obj.pos[self._particle_mask].copy()
-        self.params[self.rscale_mask] = 0
+        self.param_vals[self.rscale_mask] = 0
         self._st_rad_blk = self._get_rad_block()
 
     def set_block(self, new_block):
@@ -1705,12 +1232,12 @@ class AugmentedState(object):
         zmin = 0.0
         zmid = zmax / 2
 
-        coeffs = self.params[self.rscale_mask].copy()
+        coeffs = self.param_vals[self.rscale_mask].copy()
         if coeffs.size == 0:
             ans = 0*z
         else:
             ans = np.polynomial.legendre.legval((z-zmid)/zmid,
-                    self.params[self.rscale_mask])
+                    self.param_vals[self.rscale_mask])
         return ans
 
     def _get_rad_block(self):
@@ -1721,18 +1248,18 @@ class AugmentedState(object):
                 block |= s.block_particle_rad(1*a)
         return block
 
-    def update(self, params):
+    def update(self, param_vals):
         """Updates all the parameters of the state + rscale(z)"""
-        self.update_rscl_x_params(params[self.rscale_mask], do_reset=False)
-        update_state_global(self.state, self.block, params[self.globals_mask])
-        self.params[:] = params.copy()
+        self.update_rscl_x_params(param_vals[self.rscale_mask], do_reset=False)
+        self.state.update(self.params, param_vals[self.globals_mask])
+        self.param_vals[:] = param_vals.copy()
 
     def update_rscl_x_params(self, new_rscl_params, do_reset=True):
         #1. What to change:
         p = self._initial_pos
 
         #2. New, old values:
-        self.params[self.rscale_mask] = new_rscl_params
+        self.param_vals[self.rscale_mask] = new_rscl_params
         new_scale = self.rad_func(p)
 
         rnew = self._initial_rad * new_scale
@@ -1767,40 +1294,43 @@ class LMAugmentedState(LMEngine):
                 aug_state.rz_order, max_mem=max_mem, **self.kwargs)
         super(LMAugmentedState, self).__init__(**kwargs)
 
-    def _set_err_params(self):
-        self.error = get_err(self.aug_state.state)
-        self._last_error = get_err(self.aug_state.state)
-        self.params = self.aug_state.params.copy()
-        self._last_params = self.params.copy()
+    def _set_err_paramvals(self):
+        self.error = self.aug_state.state.error
+        self._last_error = self.aug_state.state.error
+        self.param_vals = self.aug_state.params.copy()
+        self._last_values = self.param_vals.copy()
 
     def calc_J(self):
-        #0. 
+        #0.
         del self.J, self._inds
 
         #1. J for the state:
         s = self.aug_state.state
-        sa = self.aug_state
+        param_names = self.aug_state.param_names
         blocks = s.explode(self.aug_state.block)
+        J_st, inds, slicer = get_rand_Japprox(s, param_names, num_inds=
+                self.num_pix, **self.kwargs)
         J_st, inds = get_rand_Japprox(s, blocks, num_inds=self.num_pix,
                 **self.kwargs)
         self._inds = inds
+        self._slicer = slicer
 
         #2. J for the augmented portion:
-        old_aug_params = sa.params[sa.rscale_mask].copy()
+        old_aug_vals = sa.param_vals[sa.rscale_mask].copy()
         dl = 1e-6
         J_aug = []
         i0 = s.residuals
-        for a in xrange(old_aug_params.size):
-            dx = np.zeros(old_aug_params.size)
+        for a in xrange(old_aug_vals.size):
+            dx = np.zeros(old_aug_vals.size)
             dx[a] = dl
-            sa.update_rscl_x_params(old_aug_params + dl, do_reset=True)
+            sa.update_rscl_x_params(old_aug_vals + dl, do_reset=True)
             i1 = s.residuals
             der = (i1-i0)/dl
             J_aug.append(der[self._inds].ravel())
 
         if J_st.size == 0:
             self.J = np.array(J_aug)
-        elif old_aug_params.size == 0:
+        elif old_aug_vals.size == 0:
             self.J = J_st
         else:
             self.J = np.append(J_st, np.array(J_aug), axis=0)
@@ -1810,7 +1340,7 @@ class LMAugmentedState(LMEngine):
 
     def update_function(self, params):
         self.aug_state.update(params)
-        return get_err(self.aug_state.state)
+        return self.aug_state.state.error
 
     def reset(self, **kwargs):
         """Resets the aug_state and the LMEngine"""
@@ -1820,7 +1350,7 @@ class LMAugmentedState(LMEngine):
 #=============================================================================#
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
-def do_levmarq(s, block, damping=0.1, decrease_damp_factor=10., run_length=6,
+def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10., run_length=6,
         eig_update=True, collect_stats=False, use_aug=False, run_type=2,
         **kwargs):
     """
@@ -1828,22 +1358,13 @@ def do_levmarq(s, block, damping=0.1, decrease_damp_factor=10., run_length=6,
     the defaults to what I've found to be useful values for optimizing globals.
     See LMGlobals and LMEngine for documentation.
     """
-    #Backwards compatibility stuff:
-    if 'damp' in kwargs.keys():
-        damping = kwargs.pop('damp')
-    if 'ddamp' in kwargs.keys():
-        decrease_damp_factor = kwargs.pop('ddamp')
-    if 'num_iter' in kwargs.keys():
-        max_iter = kwargs.pop('num_iter')
-        kwargs.update({'max_iter':max_iter})
-
     if use_aug:
-        aug = AugmentedState(s, block, rz_order=3)
+        aug = AugmentedState(s, param_names, rz_order=3)
         lm = LMAugmentedState(aug, damping=damping, run_length=run_length,
                 decrease_damp_factor=decrease_damp_factor, eig_update=
                 eig_update, **kwargs)
     else:
-        lm = LMGlobals(s, block, damping=damping, run_length=run_length,
+        lm = LMGlobals(s, param_names, damping=damping, run_length=run_length,
                 decrease_damp_factor=decrease_damp_factor, eig_update=
                 eig_update, **kwargs)
     if run_type == 2:
@@ -2000,7 +1521,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
                     partial_update_frequency=3, damping=glbl_dmp,
                     decrease_damp_factor=10., use_aug=use_aug,
-                    collect_stats=collect_stats, errtol=1e-3, max_mem=max_mem)
+                    collect_stats=collect_stats, ftol=0.1*ftol, max_mem=max_mem)
             all_lm_stats.append(gstats)
         if desc is not None:
             states.save(s, desc=desc)
@@ -2010,8 +1531,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         prtl_dmp = 1.0 if a==0 else 1e-2
         pstats = do_levmarq_all_particle_groups(s, region_size=
                 region_size, max_iter=1, do_calc_size=do_calc_size, run_length=4,
-                eig_update=False, damping=prtl_dmp, errtol=1e-3, 
-                collect_stats=collect_stats, max_mem=max_mem, 
+                eig_update=False, damping=prtl_dmp, ftol=0.1*ftol,
+                collect_stats=collect_stats, max_mem=max_mem,
                 particle_kwargs=particle_kwargs)
         all_lp_stats.append(pstats)
         if desc is not None:
