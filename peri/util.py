@@ -374,7 +374,7 @@ class RawImage(Image):
         self.invert = invert
         self.filters = None
         self.exposure = exposure
-        self.tile = tile
+        self.tile = tile or Tile(image.shape)
 
         super(RawImage, self).__init__(self.load_image())
 
