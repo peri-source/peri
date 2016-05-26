@@ -1,5 +1,6 @@
 import os
 import re
+import copy
 import json
 import types
 import numpy as np
@@ -527,14 +528,11 @@ class ImageState(State, ComponentCollection):
         the padded tile, inner tile, and slicer to go between, but accounting
         for wrap with the edge of the image as necessary.
         """
-        # now remove the part of the tile that is outside the image and
-        # pad the interior part with that overhang
-        img = self.oshape
-
-        # reflect the necessary padding back into the image itself for
-        # the outer slice which we will call outer
+        # now remove the part of the tile that is outside the image and pad the
+        # interior part with that overhang. reflect the necessary padding back
+        # into the image itself for the outer slice which we will call outer
         outer = otile.pad((ptile.shape+1)/2)
-        inner, outer = outer.reflect_overhang(img)
+        inner, outer = outer.reflect_overhang(self.oshape)
         iotile = inner.translate(-outer.l)
 
         return outer, inner, iotile
@@ -578,15 +576,18 @@ class ImageState(State, ComponentCollection):
         # parameters are being update (should just update the whole model).
         if (len(comps) == 1 and self.modelstr.has_key(dcompname)):
             comp = comps[0]
-            model0 = comp.get().copy()
+            model0 = copy.copy(comp.get())
             super(ImageState, self).update(params, values)
-            model1 = comp.get().copy()
+            model1 = copy.copy(comp.get())
 
             diff = model1 - model0
             evar = self._map_vars('get', extra={dcompname: diff})
             diff = eval(self.modelstr[dcompname], evar)
 
-            self._model[itile.slicer] += diff[iotile.slicer]
+            if isinstance(model0, (float, int)):
+                self._model[itile.slicer] += diff
+            else:
+                self._model[itile.slicer] += diff[iotile.slicer]
         else:
             super(ImageState, self).update(params, values)
 
