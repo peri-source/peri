@@ -3,6 +3,17 @@ from peri import util
 import numpy as np
 import scipy as sp
 
+def create_configuration(N, tile, radius=5.0):
+    """
+    Quick configuration creation with `N` particles in a tile of size `tile`.
+    """
+    pos, rad, tile = initialize_particles(N, tile, radius=radius)
+    sim = BrownianHardSphereSimulation(pos, rad, tile)
+    sim.relax(1000)
+    sim.step(1000)
+    sim.relax(1000)
+    return sim.pos, sim.rad
+
 def initialize_particles(N=None, tile=None, phi=None, radius=5., polydispersity=0.):
     """
     Creates an initial (overlapping) particle configuration by 3 different ways:
