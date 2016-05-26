@@ -462,15 +462,15 @@ class PlatonicSpheresCollection(Component):
         return self.particles[self.tile.slicer]
 
     def _vps(self, inds):
-        return [j for j in inds if j > 0 and j < s.N]
+        return [j for j in inds if j > 0 and j < self.N]
 
     def param_positions(self):
         """ Return params of all positions """
-        return [self._i2p(i, j) for i in xrange(s.N) for j in ['x','y','z']]
+        return [self._i2p(i, j) for i in xrange(self.N) for j in ['x','y','z']]
 
     def param_radii(self):
         """ Return params of all radii """
-        return [self._i2p(i, 'a') for i in xrange(s.N)]
+        return [self._i2p(i, 'a') for i in xrange(self.N)]
 
     def param_particle(self, ind):
         """ Get position and radius of one or more particles """
