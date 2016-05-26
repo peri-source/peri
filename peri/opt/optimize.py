@@ -1,9 +1,7 @@
 """
-You need to check that the tile you're using for J etc is the model image tile
-Relative vs absolute updates
-Blocking particles everywhere
+block_globals
+aug_state
 """
-
 import os
 import sys
 import time
@@ -219,7 +217,8 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
         # return max_mem
         ##But this is still too slow (like 1 min vs 250 ms). So instead --
         num_particles = np.max(map(np.size, particle_groups))
-        mem_per_part = 32 * np.prod(rs + (s.psf.support + np.median(s.obj.rad[s.obj.typ==1])))
+        psf_shape = s.get('psf').get_padding_size(s.ishape).shape
+        mem_per_part = 32 * np.prod(rs + (psf_shape + np.median(s.obj_get_radii())))
         return num_particles * mem_per_part
 
     im_shape = s.oshape.shape
@@ -1459,33 +1458,32 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         ftol : Float or None.
             If not None, the change in error at which to terminate.
 
-        mode : 'burn' or 'do_positions'
+        mode : 'burn' or 'do-particles'
             What mode to optimize with.
                 'burn'          : Your state is far from the minimum.
-                'do_positions'  : Positions are far from the minimum,
+                'do-particles'  : Positions are far from the minimum,
                                   globals are well-fit.
             'burn' is the default and will optimize any scenario, but the
             others will be faster for their specific scenarios.
 
         max_mem : Numeric
             The maximum amount of memory allowed for the optimizers' J's,
-            split equally between particles & globals. Default is 3e9,
-            i.e. 3GB per optimizer.
+            for both particles & globals. Default is 3e9, i.e. 3GB per 
+            optimizer.
 
     Comments
     --------
         - It would be nice if some of these magic #'s (region size, num_eig_dirs,
             etc) were calculated in a good way.
 
-    burn      : lm.do_run_2(), lp.do_run_2()
-    polish    : lm.calc_J(), lm.do_internal_run(), lp.do_internal_run() but must calc J's first
-    translate : lp.do_run_2() only, maybe an aug'd with ilm scale if it gets implemented.
+    burn            : lm.do_run_2(), lp.do_run_2()
+    do-particles    : lp.do_run_2(), scales for ilm, bkg's
     """
     mode = mode.lower()
-    if mode not in {'burn', 'do_positions'}:
-        raise ValueError('mode must be one of burn, do_positions')
+    if mode not in {'burn', 'do-particles'}:
+        raise ValueError('mode must be one of burn, do-particles')
     if desc is '':
-        desc = mode + 'ing' if mode != 'do_positions' else 'doing_positions'
+        desc = mode + 'ing' if mode != 'do-particles' else 'doing-particles'
 
     #For now, I'm calculating the region size. This might be a bad idea
     #because 1 bad particle can spoil the whole group.
@@ -1494,16 +1492,16 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     particle_kwargs = {'include_rad':include_rad}
 
     glbl_dmp = 0.3
-    eig_update = mode != 'do_positions'
-    glbl_run_length = 6 if mode != 'do_positions' else 3
+    eig_update = mode != 'do-particles'
+    glbl_run_length = 6 if mode != 'do-particles' else 3
 
-    if mode == 'do_positions':
-        glbl_blk = (s.explode(s.create_block('ilm'))[0] |
+    if mode == 'do-particles':
+        glbl_nms = (s.explode(s.create_block('ilm'))[0] |
                     s.explode(s.create_block('off'))[0])
         if s.bkg is not None:
-            glbl_blk |= s.create_block('off')
+            glbl_nms |= s.create_block('off')
     else:
-        glbl_blk = block_globals(s, include_rscale=(not use_aug),
+        glbl_nms = block_globals(s, include_rscale=(not use_aug),
                 include_off=True, include_sigma=False)
     all_lp_stats = []
     all_lm_stats = []
@@ -1513,9 +1511,9 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         start_err = s.error
         #2a. Globals
         CLOG.info('Start of loop %d:\t%f' % (a, s.error))
-        glbl_dmp = 0.3 if a ==0 else 3e-2
-        if a != 0 or mode != 'do_positions':
-            gstats = do_levmarq(s, glbl_blk, max_iter=1, run_length=
+        glbl_dmp = 0.3 if a == 0 else 3e-2
+        if a != 0 or mode != 'do-particles':
+            gstats = do_levmarq(s, glbl_nms, max_iter=1, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
                     partial_update_frequency=3, damping=glbl_dmp,
                     decrease_damp_factor=10., use_aug=use_aug,
@@ -1536,14 +1534,13 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         if desc is not None:
             states.save(s, desc=desc)
         CLOG.info('Particles, loop %d:\t%f' % (a, s.error))
+        gc.collect()
 
         #2c. terminate?
         if ftol is not None:
             new_err = s.error
             if (start_err - new_err) < ftol:
                 break
-
-        gc.collect()
 
     if collect_stats:
         return all_lp_stats, all_lm_stats
