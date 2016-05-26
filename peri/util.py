@@ -237,6 +237,8 @@ class Tile(object):
         o = ((items > self.l-pad) & (items < self.r+pad))
         if len(o.shape) == 2:
             o = o.all(axis=-1)
+        elif len(o.shape) == 1:
+            o = o.all()
         return o
 
     @staticmethod
