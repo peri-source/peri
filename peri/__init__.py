@@ -5,6 +5,8 @@ from peri.viz import base
 try:
     import trackpy
     import logging
-    logging.root.removeHandler(logging.root.handlers[0])
+
+    if len(logging.root.handlers) > 0:
+        logging.root.removeHandler(logging.root.handlers[0])
 except ImportError as e:
     pass
