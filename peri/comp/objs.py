@@ -359,7 +359,7 @@ class PlatonicSpheresCollection(Component):
 
         # if we are updating the zscale then really everything should change
         if dozscale:
-            return self.shape
+            return self.shape.copy()
 
         # 1) calculate the current tileset
         # 2) store the current parameters of interest
@@ -681,7 +681,7 @@ class Slab(Component):
         return self.image[self.tile.slicer]
 
     def get_update_tile(self, params, values):
-        return self.shape
+        return self.shape.copy()
 
     def __getstate__(self):
         odict = self.__dict__.copy()

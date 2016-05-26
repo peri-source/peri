@@ -92,7 +92,7 @@ class PSF(Component):
         return self
 
     def get_update_tile(self, params, values):
-        return self.shape
+        return self.shape.copy()
 
     def get_padding_size(self, tile):
         raise NotImplemented('subclasses must implement `get_padding_size`')

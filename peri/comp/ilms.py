@@ -117,7 +117,7 @@ class Polynomial3D(Component):
         return self.params
 
     def get_update_tile(self, params, values):
-        return util.Tile(self.shape.shape)
+        return self.shape.copy()
 
     def __str__(self):
         return "{} [{}]".format(
