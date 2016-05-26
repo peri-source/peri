@@ -486,8 +486,12 @@ class PlatonicSpheresCollection(Component):
         Add a particle at position pos (3 element list or numpy array) and
         radius rad (scalar float). Returns index of new particle.
         """
-        self.pos = np.vstack([self.pos, pos])
-        self.rad = np.hstack([self.rad, 0.0])
+        if len(self.rad) == 0:
+            self.pos = pos.reshape(-1, 3)
+            self.rad = np.array([rad])
+        else:
+            self.pos = np.vstack([self.pos, pos])
+            self.rad = np.hstack([self.rad, 0.0])
 
         # if we are not part of the system, go ahead and draw
         if not self._parent and self.shape:
@@ -507,8 +511,17 @@ class PlatonicSpheresCollection(Component):
 
     def remove_particle(self, ind):
         """ Remove the particle at index `ind` """
+        if self.rad.shape[0] == 0:
+            return
+
         pos = self.pos[ind].copy()
         rad = self.rad[ind].copy()
+
+        # draw it as zero size particle before changing parameters
+        params = self.param_particle(ind)
+        values = self.get_values(params)
+        values[-1] = 0.0
+        self.trigger_update(params, values)
 
         self.pos = np.delete(self.pos, ind, axis=0)
         self.rad = np.delete(self.rad, ind, axis=0)
@@ -517,15 +530,15 @@ class PlatonicSpheresCollection(Component):
         if not self._parent and self.shape:
             self._draw_particle(pos, rad, -1)
 
-        # draw it as zero size particle before changing parameters
-        params = self.param_particle(ind)
-        values = self.get_values(params)
-        values[-1] = 0.0
-        self.trigger_update(params, values)
-
         # update the parameters globally
         self.setup_variables()
         self.trigger_parameter_change()
+
+    def get_positions(self):
+        return self.pos
+
+    def get_radii(self):
+        return self.rad
 
     def closest_particle(self, x):
         """ Get the index of the particle closest to vector `x` """
@@ -533,7 +546,8 @@ class PlatonicSpheresCollection(Component):
 
     def exports(self):
         return [
-            self.add_particle, self.remove_particle, self.closest_particle
+            self.add_particle, self.remove_particle, self.closest_particle,
+            self.get_positions, self.get_radii
         ]
 
     def _i2p(self, ind, coord):
