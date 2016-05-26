@@ -334,6 +334,8 @@ class Image(object):
         return self.filtered_image(im)
 
     def get_padded_image(self, pad=const.PAD, padval=0):
+        if hasattr(pad, '__iter__'):
+            pad = [[p, p] for p in pad]
         return np.pad(self.get_image(), pad, mode='constant', constant_values=padval)
 
     def filtered_image(self, im):
