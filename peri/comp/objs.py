@@ -536,7 +536,9 @@ class PlatonicSpheresCollection(Component):
 # Coverslip half plane class
 #=============================================================================
 class Slab(Component):
-    def __init__(self, shape, zpos=0, angles=(0,0), param_prefix='slab'):
+    category = 'obj'
+
+    def __init__(self, zpos=0, angles=(0,0), param_prefix='slab', shape=None):
         """
         A half plane corresponding to a cover-slip.
 
@@ -561,7 +563,8 @@ class Slab(Component):
         values = [zpos, angles[0], angles[1]]
         super(Slab, self).__init__(params, values)
 
-        self._setup()
+        if self.shape:
+            self.initialize()
 
     def rmatrix(self):
         a0 = np.array([0,0,1])
@@ -583,12 +586,13 @@ class Slab(Component):
         pos = np.array([
             self.param_dict[self.lbl_zpos], self.shape.shape[1]/2, self.shape.shape[2]/2
         ])
+        pos = pos + self.inner.l
 
         p = (self.rvecs - pos).dot(self.normal())
         self.image = 1.0/(1.0 + np.exp(7*p))
 
     def initialize(self):
-        self.image = np.zeros(self.shape.shape)
+        self._setup()
         self._draw_slab()
 
     def set_tile(self, tile):
