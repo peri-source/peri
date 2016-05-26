@@ -16,9 +16,9 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
         if use_tp:
             minmass *= 0.1 #magic #; works well
     if invert:
-        im = 1 - st.get_difference_image()
+        im = 1 - st.residuals
     else:
-        im = st.get_difference_image()
+        im = st.residuals
     if use_tp:
         diameter = np.ceil(2*rad)
         diameter += 1-(diameter % 2) 
@@ -58,7 +58,7 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
         CLOG.info(message)
     for a in xrange(guess.shape[0]):
         p = guess[a]
-        old_err = opt.get_err(st)
+        old_err = st.error
         ind = st.add_particle(p, rad)
         if do_opt:
             opt.do_levmarq_particles(st, np.array([ind],dtype='int'), 
@@ -70,7 +70,7 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
             new_inds.append(ind)
             part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
                     st.obj.rad[ind], st.obj.pos[ind,0], st.obj.pos[ind,1], 
-                    st.obj.pos[ind,2], old_err, opt.get_err(st))
+                    st.obj.pos[ind,2], old_err, st.error)
             with log.noformat():
                 CLOG.info(part_msg)
     return accepts, new_inds
@@ -83,9 +83,9 @@ def check_remove_particle(st, n, im_change_frac=0.2, min_derr='3sig', **kwargs):
     """
     if min_derr == '3sig':
         min_derr = 3 * st.sigma
-    present_err = opt.get_err(st); present_d = st.get_difference_image().copy()
+    present_err = st.error; present_d = st.residuals.copy()
     p, r = st.remove_particle(n)
-    absent_err = opt.get_err(st); absent_d = st.get_difference_image().copy()
+    absent_err = st.error; absent_d = st.residuals.copy()
     
     im_change = np.sum((present_d - absent_d)**2)
     if (absent_err - present_err) >= max([im_change_frac * im_change, min_derr]):
@@ -186,9 +186,9 @@ def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
         CLOG.info(message)
 
     for ind in delete_inds:
-        er0 = opt.get_err(s)
+        er0 = s.error
         p, r = s.remove_particle(ind)
-        er1 = opt.get_err(s)
+        er1 = s.error
         prt_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
                 s.obj.rad[ind], s.obj.pos[ind,0], s.obj.pos[ind,1], 
                 s.obj.pos[ind,2], er0, er1)
@@ -212,12 +212,12 @@ def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
     for ind in check_inds[:tries]:
         if s.obj.typ[ind] == 0:
             raise RuntimeError('you messed up coding this')
-        er0 = opt.get_err(s)
+        er0 = s.error
         killed = check_remove_particle(s, ind, im_change_frac=im_change_frac)
         if killed:
             removed += 1
             delete_inds.append(ind)
-            er1 = opt.get_err(s)
+            er1 = s.error
             prt_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
                     s.obj.rad[ind], s.obj.pos[ind,0], s.obj.pos[ind,1], 
                     s.obj.pos[ind,2], er0, er1)

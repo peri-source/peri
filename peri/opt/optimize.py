@@ -76,21 +76,21 @@ def calculate_J_approx(s, blocks, inds, **kwargs):
     return np.array(to_return)
 
 def calculate_err_approx(s, inds): ##only in conj_grad_jtj
-    return s.get_difference_image()[inds[0], inds[1], inds[2]].ravel().copy()
+    return s.residuals[inds[0], inds[1], inds[2]].ravel().copy()
 
 def eval_deriv(s, block, dl=1e-8, be_nice=False, threept=False, **kwargs):
     """
     Using a centered difference / 3pt stencil approximation:
     """
     if not threept:
-        i0 = s.get_difference_image().copy()
+        i0 = s.residuals.copy()
 
     p0 = s.state[block]
     s.update(block, p0+dl)
-    i1 = s.get_difference_image().copy()
+    i1 = s.residuals.copy()
     if threept:
         s.update(block, p0-dl)
-        i2 = s.get_difference_image().copy()
+        i2 = s.residuals.copy()
         deriv = 0.5*(i1-i2)/dl
     else:
         deriv = (i1-i0)/dl
@@ -217,10 +217,6 @@ def update_state_global(s, block, data, **kwargs):
     s._update_global()
     CLOG.debug('Update_state_global:\t%f' % (time.time()-start_time))
 
-def get_err(s):
-    d = s.get_difference_image()
-    return np.sum(d*d)
-
 def block_globals(s, include_rscale=True, include_off=True, include_sigma=False):
     blk = ( s.create_block('ilm') | s.create_block('bkg') |
             s.create_block('psf') | s.create_block('slab') |
@@ -313,7 +309,7 @@ def do_conj_grad_jtj(s, block, min_eigval=1e-12, num_sweeps=2, **kwargs):
     evals, evecs = np.linalg.eigh(JTJ)
 
     #And we line minimize over each direction, starting with the smallest
-    print 'Starting:\t%f' % get_err(s)
+    print 'Starting:\t%f' % s.error
     for n in xrange(num_sweeps):
         for a in xrange(evals.size-1,-1, -1): #high eigenvalues first
             if evals[a] < min_eigval*evals.max():
@@ -324,7 +320,7 @@ def do_conj_grad_jtj(s, block, min_eigval=1e-12, num_sweeps=2, **kwargs):
             cur_vec = evecs[:,a] * 0.5*np.dot(-grad, evecs[:,a])/evals[a]
 
             do_line_min(s, block, cur_vec, **kwargs)
-            print 'Direction min %d \t%f' % (a, get_err(s))
+            print 'Direction min %d \t%f' % (a, s.error)
 
 def do_line_min(s, block, vec, maxiter=10, **kwargs):
     """
@@ -332,12 +328,12 @@ def do_line_min(s, block, vec, maxiter=10, **kwargs):
     Make vec something that update_state_global(block, p0+vec) is the "correct"
     step size (i.e. takes you near the minimum)
     """
-    start_err = get_err(s)
+    start_err = s.error
     p0 = s.state[block].copy()
 
     def for_min(x):
         update_state_global(s, block, p0 + x*vec, keep_time=False)
-        return get_err(s)
+        return s.error
 
     #Need to check for a bracket:
     brk_vals = [for_min(-2.), for_min(2.)]
@@ -737,7 +733,7 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
         #   particle_change(s, g).slicer, s.image_mask[" " " " .slicer] == 1)
         #   .nbytes * g.size * 4
         #However this is _way_ too slow. A better approximation is 
-        # d = s.get_difference_image()
+        # d = s.residuals
         # max_mem = np.max(map(lambda g: d[get_tile_from_multiple_particle_change(
                 # s, g).slicer].nbytes * g.size * 4, particle_groups))
         # return max_mem
@@ -1454,7 +1450,7 @@ class LMGlobals(LMEngine):
                 num_inds=self.num_pix, **self.kwargs)
 
     def calc_residuals(self):
-        return self.state.get_difference_image()[self._inds].ravel()
+        return self.state.residuals[self._inds].ravel()
 
     def update_function(self, params):
         update_state_global(self.state, self.block, params)
@@ -1793,12 +1789,12 @@ class LMAugmentedState(LMEngine):
         old_aug_params = sa.params[sa.rscale_mask].copy()
         dl = 1e-6
         J_aug = []
-        i0 = s.get_difference_image()
+        i0 = s.residuals
         for a in xrange(old_aug_params.size):
             dx = np.zeros(old_aug_params.size)
             dx[a] = dl
             sa.update_rscl_x_params(old_aug_params + dl, do_reset=True)
-            i1 = s.get_difference_image()
+            i1 = s.residuals
             der = (i1-i0)/dl
             J_aug.append(der[self._inds].ravel())
 
@@ -1810,7 +1806,7 @@ class LMAugmentedState(LMEngine):
             self.J = np.append(J_st, np.array(J_aug), axis=0)
 
     def calc_residuals(self):
-        return self.aug_state.state.get_difference_image()[self._inds].ravel()
+        return self.aug_state.state.residuals[self._inds].ravel()
 
     def update_function(self, params):
         self.aug_state.update(params)
@@ -1995,9 +1991,9 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
     #2. Burn.
     for a in xrange(n_loop):
-        start_err = get_err(s)
+        start_err = s.error
         #2a. Globals
-        CLOG.info('Start of loop %d:\t%f' % (a, get_err(s)))
+        CLOG.info('Start of loop %d:\t%f' % (a, s.error))
         glbl_dmp = 0.3 if a ==0 else 3e-2
         if a != 0 or mode != 'do_positions':
             gstats = do_levmarq(s, glbl_blk, max_iter=1, run_length=
@@ -2008,7 +2004,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
             all_lm_stats.append(gstats)
         if desc is not None:
             states.save(s, desc=desc)
-        CLOG.info('Globals, loop %d:\t%f' % (a, get_err(s)))
+        CLOG.info('Globals, loop %d:\t%f' % (a, s.error))
 
         #2b. Particles
         prtl_dmp = 1.0 if a==0 else 1e-2
@@ -2020,11 +2016,11 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         all_lp_stats.append(pstats)
         if desc is not None:
             states.save(s, desc=desc)
-        CLOG.info('Particles, loop %d:\t%f' % (a, get_err(s)))
+        CLOG.info('Particles, loop %d:\t%f' % (a, s.error))
 
         #2c. terminate?
         if ftol is not None:
-            new_err = get_err(s)
+            new_err = s.error
             if (start_err - new_err) < ftol:
                 break
 
