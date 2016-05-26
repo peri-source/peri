@@ -1,3 +1,4 @@
+import inspect
 from operator import add
 from collections import OrderedDict, defaultdict
 
@@ -143,6 +144,9 @@ class Component(ParameterGroup):
         """
         return self.get_field()
 
+    def exports(self):
+        return []
+
     def __call__(self, field):
         return self.execute(field)
 
@@ -204,6 +208,8 @@ class ComponentCollection(Component):
         if not field_reduce_func:
             field_reduce_func = lambda x: reduce(add, x)
         self.field_reduce_func = field_reduce_func
+
+        self._passthrough_func()
 
     def initialize(self):
         for c in self.comps:
@@ -317,6 +323,26 @@ class ComponentCollection(Component):
         """ Ensure that shared parameters are the same value everywhere """
         pass # FIXME
 
+    def _passthrough_func(self):
+        """
+        Inherit some functions from the components that we own. In particular,
+        let's grab all functions that begin with `block_` so the super class
+        knows how to get parameter groups. Also, take anything that is listed
+        under Component.exports and rename with the category type, i.e.,
+        SphereCollection.add_particle -> Component.obj_add_particle
+        """
+        for c in self.comps:
+            # take all member functions that start with 'block_'
+            funcs = inspect.getmembers(c, predicate=inspect.ismethod)
+            for func in funcs:
+                if func[0].startswith('block_'):
+                    setattr(self, func[0], func[1])
+
+            # add everything from exports
+            funcs = c.exports()
+            for func in funcs:
+                newname = c.category + '_' + func.im_func.func_name
+                setattr(self, newname, func)
 
 util.patch_docs(GlobalScalarComponent, Component)
 util.patch_docs(ComponentCollection, Component)

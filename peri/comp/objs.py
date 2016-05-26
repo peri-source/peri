@@ -458,18 +458,23 @@ class PlatonicSpheresCollection(Component):
         return self.particles[self.tile.slicer]
 
     def block_positions(self):
+        """ Return params of all positions """
         return [self._i2p(i, j) for i in xrange(s.N) for j in ['x','y','z']]
 
     def block_radii(self):
+        """ Return params of all radii """
         return [self._i2p(i, 'a') for i in xrange(s.N)]
 
     def block_particle(self, ind):
+        """ Get position and radius of one particle """
         return [self._i2p(ind, i) for i in ['x', 'y', 'z', 'a']]
 
     def block_particle_pos(self, ind):
+        """ Get position of one particle """
         return [self._i2p(ind, i) for i in ['x', 'y', 'z']]
 
     def block_particle_rad(self, ind):
+        """ Get radius of one particle """
         return self._i2p(ind, 'a')
 
     def add_particle(self, pos, rad):
@@ -480,6 +485,11 @@ class PlatonicSpheresCollection(Component):
 
     def closest_particle(self, x):
         pass
+
+    def exports(self):
+        return [
+            self.add_particle, self.remove_particle, self.closest_particle
+        ]
 
     def _i2p(self, ind, coord):
         """ Translate index info to parameter name """
