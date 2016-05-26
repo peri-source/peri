@@ -3,7 +3,7 @@ import matplotlib as mpl
 import matplotlib.pylab as pl
 from matplotlib.gridspec import GridSpec
 
-from peri import runner
+from peri.mc import sample
 
 class OrthoManipulator(object):
     def __init__(self, state, size=8, cmap_abs='bone', cmap_diff='RdBu',
@@ -18,8 +18,8 @@ class OrthoManipulator(object):
         self.insets = ['exposure']
         self.inset = 'none'
 
-        self.views = ['field', 'diff', 'cropped']
-        self.view = self.views[2]
+        self.views = ['field', 'diff']
+        self.view = self.views[0]
 
         self.modifiers = ['none', 'fft']
         self.modifier = self.modifiers[0]
@@ -30,7 +30,7 @@ class OrthoManipulator(object):
         self.vrange_img = vrange_img
         self.vrange_diff = vrange_diff
 
-        z,y,x = [float(i) for i in self.state.image.shape]
+        z,y,x = [float(i) for i in self.state.data.shape]
         w = float(x + z)
         h = float(y + z)
 
@@ -62,7 +62,7 @@ class OrthoManipulator(object):
         self.gr['xz'] = self.fig.add_axes((xoff+Sx*x/w, Sy*(1-y/h), Sx*(1-x/w), Sy*y/h))
         self.gr['in'] = self.fig.add_axes((xoff+Sx*x/w, Sy*0.0,     Sx*(1-x/w), Sy*(1-y/h)))
 
-        self.slices = (np.array(self.state.image.shape)/2).astype('int')
+        self.slices = (np.array(self.state.data.shape)/2).astype('int')
 
         self._grab = None
         self.set_field()
@@ -75,19 +75,14 @@ class OrthoManipulator(object):
 
     def set_field(self):
         if self.view == 'field':
-            out = self.state.model_image
+            out = self.state.model
             vmin, vmax = 0.0, self.vrange_img
             cmap = self.cmap_abs
 
         if self.view == 'diff':
-            out = (self.state.image - self.state.get_model_image())
+            out = (self.state.data - self.state.model)
             vmin, vmax = -self.vrange_diff, self.vrange_diff
             cmap = self.cmap_diff
-
-        if self.view == 'cropped':
-            out = self.state.get_model_image()
-            vmin, vmax = 0.0, self.vrange_img
-            cmap = self.cmap_abs
 
         if self.modifier == 'fft':
             out = np.real(np.abs(np.fft.fftn(out)))**0.2
@@ -103,7 +98,7 @@ class OrthoManipulator(object):
         self.cmap = cmap
 
     def draw(self):
-        self.draw_ortho(self.state.image, self.gl, cmap=self.cmap_abs, vmin=0.0, vmax=self.vrange_img)
+        self.draw_ortho(self.state.data, self.gl, cmap=self.cmap_abs, vmin=0.0, vmax=self.vrange_img)
         self.draw_ortho(self.field, self.gr, cmap=self.cmap, vmin=self.vmin, vmax=self.vmax)
 
     def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
@@ -169,8 +164,10 @@ class OrthoManipulator(object):
         p = self._pt_xyz(event)
 
         if p is not None:
-            self._grab = self.state.closest_particle(p)
-            self._pos = self.state.obj.pos[self._grab]
+            self._grab = self.state.obj_closest_particle(p)
+
+            param = self.state.param_particle_pos(self._grab)
+            self._pos = self.state.get_values(param)
         else:
             self._grab = None
 
@@ -183,7 +180,7 @@ class OrthoManipulator(object):
         p = self._pt_xyz(event)
 
         if p is not None and self._grab is not None:
-            b = self.state.block_particle_pos(self._grab)
+            b = self.state.param_particle_pos(self._grab)
             self.state.update(b, p)
             self.set_field()
             self.draw()
@@ -193,9 +190,9 @@ class OrthoManipulator(object):
         p = self._pt_xyz(event)
 
         if p is not None:
-            n = self.state.closest_particle(p)
-            b = self.state.block_particle_rad(n)
-            self.state.update(b, self.state.obj.rad[n]+event.step/self.incsize)
+            n = self.state.obj_closest_particle(p)
+            b = self.state.param_particle_rad(n)
+            self.state.update(b, np.array(self.state.get_values(b))+event.step/self.incsize)
             self.set_field()
             self.draw()
 
@@ -240,10 +237,15 @@ class OrthoManipulator(object):
         p = self._pt_xyz(event)
         if p is not None:
             p = np.array(p)
-            r = self.state.obj.rad[self.state.obj.typ==1.].mean()
+
+            r = self.state.obj_get_radii()
+            if len(r) == 0:
+                r = 5.0
+            else:
+                r = r.mean()
 
             print "Adding particle at", p, r
-            self.state.add_particle(p, r)
+            self.state.obj_add_particle(p, r)
         self.set_field()
         self.draw()
 
@@ -253,7 +255,8 @@ class OrthoManipulator(object):
         p = self._pt_xyz(event)
         if p is not None:
             print "Removing particle near", p
-            self.state.remove_closest_particle(p)
+            ind = self.state.obj_closest_particle(p)
+            self.state.obj_remove_particle(ind)
         self.set_field()
         self.draw()
 
@@ -263,9 +266,9 @@ class OrthoManipulator(object):
 
         if p is not None:
             print "Optimizing particle near", p
-            n = self.state.closest_particle(p)
-            bl = self.state.blocks_particle(n)
-            runner.sample_state(self.state, bl, stepout=0.1, doprint=True, N=3)
+            n = self.state.obj_closest_particle(p)
+            bl = self.state.param_particle(n)
+            sample.sample_state(self.state, bl, stepout=0.1, doprint=True, N=3)
 
         self.set_field()
         self.draw()
