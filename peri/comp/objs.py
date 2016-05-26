@@ -427,6 +427,10 @@ class PlatonicSpheresCollection(Component):
         return pos + self.inner.l
 
     def _draw_particle(self, pos, rad, sign=1):
+        # we can't draw 0 radius particles correctly, abort
+        if rad == 0.0:
+            return
+
         # translate to its actual position in the padded image
         pos = self._trans(pos)
 
@@ -457,34 +461,75 @@ class PlatonicSpheresCollection(Component):
     def get_field(self):
         return self.particles[self.tile.slicer]
 
-    def block_positions(self):
+    def param_positions(self):
         """ Return params of all positions """
         return [self._i2p(i, j) for i in xrange(s.N) for j in ['x','y','z']]
 
-    def block_radii(self):
+    def param_radii(self):
         """ Return params of all radii """
         return [self._i2p(i, 'a') for i in xrange(s.N)]
 
-    def block_particle(self, ind):
+    def param_particle(self, ind):
         """ Get position and radius of one particle """
         return [self._i2p(ind, i) for i in ['x', 'y', 'z', 'a']]
 
-    def block_particle_pos(self, ind):
+    def param_particle_pos(self, ind):
         """ Get position of one particle """
         return [self._i2p(ind, i) for i in ['x', 'y', 'z']]
 
-    def block_particle_rad(self, ind):
+    def param_particle_rad(self, ind):
         """ Get radius of one particle """
         return self._i2p(ind, 'a')
 
     def add_particle(self, pos, rad):
-        pass
+        """
+        Add a particle at position pos (3 element list or numpy array) and
+        radius rad (scalar float). Returns index of new particle.
+        """
+        self.pos = np.vstack([self.pos, pos])
+        self.rad = np.hstack([self.rad, 0.0])
+
+        # if we are not part of the system, go ahead and draw
+        if not self._parent and self.shape:
+            self._draw_particle(pos, rad, +1)
+
+        # update the parameters globally
+        self.setup_variables()
+        self.trigger_parameter_change()
+        ind = self.closest_particle(pos)
+
+        # now request a drawing of the particle plz
+        params = self.param_particle(ind)
+        values = self.get_values(params)
+        values[-1] = rad
+        self.trigger_update(params, values)
+        return ind
 
     def remove_particle(self, ind):
-        pass
+        """ Remove the particle at index `ind` """
+        pos = self.pos[ind].copy()
+        rad = self.rad[ind].copy()
+
+        self.pos = np.delete(self.pos, ind, axis=0)
+        self.rad = np.delete(self.rad, ind, axis=0)
+
+        # if we are not part of the system, go ahead and draw
+        if not self._parent and self.shape:
+            self._draw_particle(pos, rad, -1)
+
+        # draw it as zero size particle before changing parameters
+        params = self.param_particle(ind)
+        values = self.get_values(params)
+        values[-1] = 0.0
+        self.trigger_update(params, values)
+
+        # update the parameters globally
+        self.setup_variables()
+        self.trigger_parameter_change()
 
     def closest_particle(self, x):
-        pass
+        """ Get the index of the particle closest to vector `x` """
+        return (((self.pos - x)**2).sum(axis=-1)).argmin()
 
     def exports(self):
         return [

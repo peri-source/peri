@@ -62,9 +62,9 @@ class ParameterGroup(object):
     def __repr__(self):
         return self.__str__()
 
-    # Functions that begin with block_ will be passed through to the states and
+    # Functions that begin with param_ will be passed through to the states and
     # other functions so that nice interfaces are present
-    # def block_particle_positions(self):
+    # def param_particle_positions(self):
     #   return parameters
     #
     # Also, functions that start with (unknown) will get passed through too
@@ -76,6 +76,7 @@ class Component(ParameterGroup):
     category = 'comp'
 
     def __init__(self, params, values, ordered=True):
+        self._parent = None
         super(Component, self).__init__(params, values, ordered=ordered)
 
     def initialize(self):
@@ -144,8 +145,20 @@ class Component(ParameterGroup):
         """
         return self.get_field()
 
+    # functions that allow better handling of component collections
     def exports(self):
         return []
+
+    def register(self, obj):
+        self._parent = obj
+
+    def trigger_parameter_change(self):
+        if self._parent:
+            self._parent.trigger_parameter_change()
+
+    def trigger_update(self, params, values):
+        if self._parent:
+            self._parent.update(params, values)
 
     def __call__(self, field):
         return self.execute(field)
@@ -190,30 +203,35 @@ class ComponentCollection(Component):
         field_reduce_func : function (list of ndarrays)
             Reduction function for get_field object of collection
         """
-        comps = comps
+        self.comps = comps
+
+        if not field_reduce_func:
+            field_reduce_func = lambda x: reduce(add, x)
+        self.field_reduce_func = field_reduce_func
+
+        self.setup_params()
+        self._passthrough_func()
+
+    def initialize(self):
+        for c in self.comps:
+            c.initialize()
+
+    def setup_params(self):
         pmap = defaultdict(set)
         lmap = defaultdict(list)
 
-        for c in comps:
+        for c in self.comps:
+            c.register(self)
+
             if not isinstance(c, (Component, ComponentCollection)):
                 raise AttributeError("%r is not a valid Component or ComponentCollection" % c)
             for p in c.params:
                 pmap[p].update([c])
                 lmap[p].extend([c])
 
-        self.comps = comps
         self.pmap = pmap
         self.lmap = lmap
-
-        if not field_reduce_func:
-            field_reduce_func = lambda x: reduce(add, x)
-        self.field_reduce_func = field_reduce_func
-
-        self._passthrough_func()
-
-    def initialize(self):
-        for c in self.comps:
-            c.initialize()
+        self.sync_params()
 
     def split_params(self, params, values=None):
         """
@@ -323,19 +341,22 @@ class ComponentCollection(Component):
         """ Ensure that shared parameters are the same value everywhere """
         pass # FIXME
 
+    def trigger_parameter_change(self):
+        self.setup_params()
+
     def _passthrough_func(self):
         """
         Inherit some functions from the components that we own. In particular,
-        let's grab all functions that begin with `block_` so the super class
+        let's grab all functions that begin with `param_` so the super class
         knows how to get parameter groups. Also, take anything that is listed
         under Component.exports and rename with the category type, i.e.,
         SphereCollection.add_particle -> Component.obj_add_particle
         """
         for c in self.comps:
-            # take all member functions that start with 'block_'
+            # take all member functions that start with 'param_'
             funcs = inspect.getmembers(c, predicate=inspect.ismethod)
             for func in funcs:
-                if func[0].startswith('block_'):
+                if func[0].startswith('param_'):
                     setattr(self, func[0], func[1])
 
             # add everything from exports
