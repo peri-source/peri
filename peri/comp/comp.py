@@ -121,7 +121,7 @@ class Component(ParameterGroup):
 
     def get_field(self):
         """ Return the current field as determined by self.set_tile """
-        return self
+        pass
 
     def set_tile(self, tile):
         """ Set the currently active tile region for the calculation """

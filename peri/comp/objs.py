@@ -462,7 +462,7 @@ class PlatonicSpheresCollection(Component):
         return self.particles[self.tile.slicer]
 
     def _vps(self, inds):
-        return [j for j in inds if j > 0 and j < self.N]
+        return [j for j in inds if j >= 0 and j < self.N]
 
     def param_positions(self):
         """ Return params of all positions """
