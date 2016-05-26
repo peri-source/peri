@@ -120,7 +120,7 @@ class Polynomial3D(Component):
         return util.Tile(self.shape.shape)
 
     def __str__(self):
-        return "{} [{} {}]".format(
+        return "{} [{}]".format(
             self.__class__.__name__, self.order
         )
 
