@@ -264,7 +264,7 @@ class PSF4D(PSF):
         z = self._zpos(self.tile)
 
         for i in xrange(len(z)):
-            size = self.get_padding_size(z=z[i]).shape
+            size = self.get_padding_size(tile=None, z=z[i]).shape
             m = (z >= z[i]-size[0]) & (z <= z[i]+size[0])
             g = self.rpsf_z(z[m], z[i])
             out[i] = cov2dT[...,m].dot(g)
@@ -316,10 +316,10 @@ class Gaussian4D(PSF4D):
         return self._poly(z/self.zrange, self._sigma_coeffs(d=d))
 
     @memoize()
-    def get_padding_size(self, tile=None, z=None):
+    def get_padding_size(self, tile, z=None):
         if tile is not None:
-            tile0 = self.get_padding_size(z=tile.l[0])
-            tile1 = self.get_padding_size(z=tile.r[0])
+            tile0 = self.get_padding_size(tile=None, z=tile.l[0])
+            tile1 = self.get_padding_size(tile=None, z=tile.r[0])
             return Tile.intersection(tile0, tile1)
 
         if isinstance(z, np.ndarray) and z.shape[0] > 1:
@@ -466,10 +466,10 @@ class GaussianMomentExpansion(PSF4D):
         return (np.tanh(val)+1)/12.*(3 - 6*x**2 + x**4)
 
     @memoize()
-    def get_padding_size(self, tile=None, z=None):
+    def get_padding_size(self, tile, z=None):
         if tile is not None:
-            tile0 = self.get_padding_size(z=tile.l[0])
-            tile1 = self.get_padding_size(z=tile.r[0])
+            tile0 = self.get_padding_size(tile=None, z=tile.l[0])
+            tile1 = self.get_padding_size(tile=None, z=tile.r[0])
             return Tile.intersection(tile0, tile1)
 
         if isinstance(z, np.ndarray) and z.shape[0] > 1:
@@ -560,5 +560,5 @@ class FromArray(PSF):
 
         return outfield
 
-    def get_padding_size(self, z=None):
+    def get_padding_size(self, tile, z=None):
         return Tile(self.support)

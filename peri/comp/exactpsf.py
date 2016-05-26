@@ -377,7 +377,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             ss = [np.abs(i).sum(axis=-1) for i in [size_l, size_u]]
             self.support = util.oddify(util.amax(*ss))
 
-    def get_padding_size(self, z=None):
+    def get_padding_size(self, tile, z=None):
         return util.Tile(self.support)
 
     def update(self, params, values):
