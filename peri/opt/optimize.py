@@ -133,9 +133,14 @@ def find_particles_in_box(s, bounds):
         The indices of the particles in the box.
 
     """
-    is_in_xi = lambda i: (s.obj.pos[:,i] > bounds[0][i]) & (s.obj.pos[:,i] <= bounds[1][i])
-    in_region = is_in_xi(0) & is_in_xi(1) & is_in_xi(2) & (s.obj.typ==1)
-    return np.nonzero(in_region)[0]
+    tile = Tile(left=bounds[0], right=bounds[1])
+    is_in_region = lambda i: tile.contains(s.state[s.param_particle_pos(i)])
+    inds = np.arange(s.get('obj').N)
+    particles = []
+    for a in xrange(s.get('obj').N):
+        if is_in_region(1*a):
+            particles.append(a)
+    return np.array(particles)
 
 def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
     """
@@ -169,7 +174,7 @@ def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
         to a given image region.
     """
     if bounds is None:
-        bounds = ([0,0,0], s.image.shape)
+        bounds = (s.oshape.l, s.oshape.r)
     if type(region_size) == int:
         rs = [region_size, region_size, region_size]
     else:
@@ -217,7 +222,7 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
         mem_per_part = 32 * np.prod(rs + (s.psf.support + np.median(s.obj.rad[s.obj.typ==1])))
         return num_particles * mem_per_part
 
-    im_shape = np.array(s.image.shape).astype('int')
+    im_shape = s.oshape.shape
     if calc_mem_usage(region_size) > max_mem:
         while ((calc_mem_usage(region_size) > max_mem) and
                 np.any(region_size > 2)):
@@ -236,12 +241,8 @@ def get_residuals_update_tile(st, padded_tile):
     a tile that corresponds to the the corresponding pixels of the difference
     image
     """
-    imshape = st.image.shape
-    residuals_tile = Tile(left=np.zeros(len(imshape), dtype='int') + st.pad,
-            right=np.array(imshape) - st.pad)
-    ans_tile = residuals_tile.intersection([residuals_tile, padded_tile])
-    ans_tile.translate(-st.pad)
-    return ans_tile
+    inner_tile = st.ishape.intersection([st.ishape, padded_tile])
+    return inner_tile.translate(-st.pad)
 #=============================================================================#
 #               ~~~~~           Fit ilm???         ~~~~~
 #=============================================================================#
@@ -569,7 +570,8 @@ class LMEngine(object):
                 _ = self.update_function(self.param_vals.copy())
                 _try = 0
                 good_step = False
-                CLOG.debug('Bad step, increasing damping\t%f\t%f\t%f' % triplet)
+                CLOG.debug('Bad step, increasing damping')
+                CLOG.debug('%f\t%f\t%f' % triplet)
                 while (_try < self._max_inner_loop) and (not good_step):
                     self.increase_damping()
                     delta_vals = self.find_LM_updates(self.calc_grad())
@@ -589,7 +591,8 @@ class LMEngine(object):
 
             elif er1 <= er2:
                 good_step = True
-                CLOG.debug('Good step, same damping\t%f\t%f\t%f' % triplet)
+                CLOG.debug('Good step, same damping')
+                CLOG.debug('%f\t%f\t%f' % triplet)
                 #Update to er1 params:
                 er1_1 = self.update_function(self.param_vals + delta_params_1)
                 self.update_param_vals(delta_params_1, incremental=True)
@@ -600,7 +603,8 @@ class LMEngine(object):
             else: #er2 < er1
                 good_step = True
                 self.error = er2
-                CLOG.debug('Good step, decreasing damping\t%f\t%f\t%f' % triplet)
+                CLOG.debug('Good step, decreasing damping')
+                CLOG.debug('%f\t%f\t%f' % triplet)
                 #-we're already at the correct parameters
                 self.update_param_vals(delta_params_2, incremental=True)
                 self.decrease_damping()
@@ -986,34 +990,25 @@ class LMGlobals(LMEngine):
         self.reset(new_damping=new_damping)
 
 class LMParticles(LMEngine): #UPDATE ME when you know how the particle labels work
-    def __init__(self, state, particles, particle_kwargs={}, **kwargs):
-        """include_rad is in particle_kwargs"""
+    def __init__(self, state, particles, include_rad=True, **kwargs):
         self.state = state
-        self.particle_kwargs = particle_kwargs
         self.particles = particles
+        self.param_names = (state.param_particle(particles) if include_rad 
+                else state.param_particle_pos(particles))
         self.error = self.state.error
         self._dif_tile = self._get_diftile()
         super(LMParticles, self).__init__(**kwargs)
 
     def _get_diftile(self):
-        itile = self.state.get_update_io_tiles(params, values)[1]
-        #UPDATE ME what are params, values for particles?
-        #(values should be their current values)
-        return get_residuals_update_tile(self.state, iotile)
+        vals = self.state.state[self.param_names]
+        itile = self.state.get_update_io_tiles(self.param_names, vals)[1]
+        return get_residuals_update_tile(self.state, itile)
 
     def _set_err_paramvals(self):
         self.error = self.state.error
         self._last_error = self.state.error
-        param_names = [] #UPDATE ME obj.pos[p] is not the best anymore...
-        if (self.particle_kwargs.has_key('include_rad') and
-                self.particle_kwargs['include_rad'] == False):
-            for p in self.particles:
-                params.extend(self.state.obj.pos[p].tolist())
-        else:
-            for p in self.particles:
-                params.extend(self.state.obj.pos[p].tolist() + [self.state.obj.rad[p]])
-        self.params = np.array(params)
-        self._last_vals = self.params.copy()
+        self.param_vals = np.array(self.state.state[self.param_names])
+        self._last_vals = self.param_vals.copy()
 
     def calc_J(self):
         self._dif_tile = self._get_diftile()
@@ -1022,15 +1017,18 @@ class LMParticles(LMEngine): #UPDATE ME when you know how the particle labels wo
             slicer=self._dif_tile.slicer)
 
     def calc_residuals(self):
-        return self.state.residuals[self._dif_tile.slicer]
+        return self.state.residuals[self._dif_tile.slicer].ravel()
 
     def update_function(self, values):
-        self.state.update(self.particles, values) #UPDATE ME you need to be able to add these options below:
+        self.state.update(self.param_names, values) 
+        #UPDATE ME you need to be able to add these options below:
                 # relative=False, fix_errors=True, **self.particle_kwargs)
         return self.state.error
 
     def set_particles(self, new_particles, new_damping=None):
         self.particles = new_particles
+        self.param_names = (state.param_particle(particles) if include_rad 
+                else state.param_particle_pos(particles))
         self._dif_tile = self._get_diftile()
         self._set_err_paramvals()
         self.reset(new_damping=new_damping)
