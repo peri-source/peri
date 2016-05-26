@@ -529,7 +529,7 @@ class BarnesStreakLegPoly2P1D(Component):
 
         self.set_values(params, orig_values)
         if len(tiles) == 0:
-            return util.Tile(0)
+            return None
         return util.Tile.boundingtile(tiles)
 
     def randomize_parameters(self, ptp=0.2, fourier=False, vmin=None, vmax=None):

@@ -323,6 +323,8 @@ class ComponentCollection(Component):
                 if tile is not None:
                     sizes.append(tile)
 
+        if len(sizes) == 0:
+            return None
         return util.Tile.boundingtile(sizes)
 
     def get_padding_size(self, tile):

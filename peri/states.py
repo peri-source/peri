@@ -148,7 +148,7 @@ class State(comp.ParameterGroup):
         """
         Gradient of `func` wrt a single parameter `p`. (see graddoc)
         """
-        vals = np.array(self.get_values(p))
+        vals = self.get_values(p)[0]
         f0 = funct(**kwargs) if f0 is None else f0
 
         self.update(p, vals+dl)
@@ -163,8 +163,8 @@ class State(comp.ParameterGroup):
         """
         Hessian of `func` wrt two parameters `p0` and `p1`. (see graddoc)
         """
-        vals0 = np.array(self.get_values(p0))
-        vals1 = np.array(self.get_values(p1))
+        vals0 = self.get_values(p0)[0]
+        vals1 = self.get_values(p1)[0]
 
         f00 = funct(**kwargs) if f0 is None else f0
 
@@ -233,11 +233,11 @@ class State(comp.ParameterGroup):
         f.im_func.func_doc += self.graddoc
 
     def build_funcs(self):
-        def m(inds=None, slicer=None):
-            return sample(self.model, inds=inds, slicer=slicer)
+        def m(inds=None, slicer=None, flat=True):
+            return sample(self.model, inds=inds, slicer=slicer, flat=flat).copy()
 
-        def r(inds=None, slicer=None):
-            return sample(self.residuals, inds=inds, slicer=slicer)
+        def r(inds=None, slicer=None, flat=True):
+            return sample(self.residuals, inds=inds, slicer=slicer, flat=flat).copy()
 
         l = lambda: self.loglikelihood
 
@@ -555,7 +555,12 @@ class ImageState(State, comp.ComponentCollection):
         """
         # get the affected area of the model image
         otile = self.get_update_tile(params, values)
+        if otile is None:
+            return [None]*3
+
         ptile = self.get_padding_size(otile)
+        if ptile is None:
+            return [None]*3
 
         if (otile.l < 0).any() or (otile.r > self.oshape.r).any() or (otile.shape <= 0).any():
             raise UpdateError("update triggered negative block size")
@@ -593,14 +598,17 @@ class ImageState(State, comp.ComponentCollection):
         """
         comps = self.affected_components(params)
 
+        if len(comps) == 0:
+            return False
+
         # get the affected area of the model image
         otile, itile, iotile = self.get_update_io_tiles(params, values)
 
+        if otile is None:
+            return False
+
         # have all components update their tiles
         self.set_tile(otile)
-
-        if len(comps) == 0:
-            return
 
         dcompname = 'd'+self.mapcat[comps[0].category]
         oldmodel = self._model[itile.slicer].copy()
