@@ -277,8 +277,8 @@ class PlatonicSpheresCollection(Component):
 
     def initialize(self):
         """ Start from scratch and initialize all objects """
-        self.rvecs = Tile(self.shape).coords(form='vector')
-        self.particles = np.zeros(self.shape)
+        self.rvecs = self.shape.coords(form='vector')
+        self.particles = np.zeros(self.shape.shape)
 
         for i, (p0, r0) in enumerate(zip(self.pos, self.rad)):
             self._draw_particle(p0, r0)
@@ -359,7 +359,7 @@ class PlatonicSpheresCollection(Component):
 
         # if we are updating the zscale then really everything should change
         if dozscale:
-            return Tile(self.shape)
+            return self.shape
 
         # 1) calculate the current tileset
         # 2) store the current parameters of interest
@@ -423,11 +423,17 @@ class PlatonicSpheresCollection(Component):
         else:
             self.alpha = tuple(listify(self.alpha_defaults[self.method]))
 
+    def _trans(self, pos):
+        return pos + self.inner.l
+
     def _draw_particle(self, pos, rad, sign=1):
+        # translate to its actual position in the padded image
+        pos = self._trans(pos)
+
         p = np.round(pos)
         r = np.round(np.array([1.0/self.zscale,1,1])*np.ceil(rad)+self.support_pad)
 
-        tile = Tile(p-r, p+r, 0, self.shape)
+        tile = Tile(p-r, p+r, 0, self.shape.shape)
         rvec = self.rvecs[tile.slicer + (np.s_[:],)]
 
         # if required, do an iteration to find the best radius to produce
@@ -508,6 +514,7 @@ class PlatonicSpheresCollection(Component):
         """ Get the tile surrounding particle `n` """
         zsc = np.array([1.0/self.zscale, 1, 1])
         pos, rad = self.pos[n], self.rad[n]
+        pos = self._trans(pos)
         return Tile(pos - zsc*rad, pos + zsc*rad).pad(self.support_pad)
 
     def __str__(self):
@@ -549,7 +556,7 @@ class Slab(Component):
         self.lbl_phi = param_prefix+'-phi'
 
         self.shape = shape
-        self.set_tile(Tile(self.shape))
+        self.set_tile(self.shape)
         params = [self.lbl_zpos, self.lbl_theta, self.lbl_phi]
         values = [zpos, angles[0], angles[1]]
         super(Slab, self).__init__(params, values)
@@ -568,20 +575,20 @@ class Slab(Component):
         return np.dot(self.rmatrix(), np.array([1,0,0]))
 
     def _setup(self):
-        self.rvecs = Tile(self.shape).coords(form='vector')
-        self.image = np.zeros(self.shape)
+        self.rvecs = self.shape.coords(form='vector')
+        self.image = np.zeros(self.shape.shape)
 
     def _draw_slab(self):
         # for the position at zpos, and the center in the x-y plane
         pos = np.array([
-            self.param_dict[self.lbl_zpos], self.shape[1]/2, self.shape[2]/2
+            self.param_dict[self.lbl_zpos], self.shape.shape[1]/2, self.shape.shape[2]/2
         ])
 
         p = (self.rvecs - pos).dot(self.normal())
         self.image = 1.0/(1.0 + np.exp(7*p))
 
     def initialize(self):
-        self.image = np.zeros(self.shape)
+        self.image = np.zeros(self.shape.shape)
         self._draw_slab()
 
     def set_tile(self, tile):
@@ -595,7 +602,7 @@ class Slab(Component):
         return self.image[self.tile.slicer]
 
     def get_update_tile(self, params, values):
-        return Tile(self.shape)
+        return self.shape
 
     def __getstate__(self):
         odict = self.__dict__.copy()

@@ -63,8 +63,8 @@ class Polynomial3D(Component):
 
     def initialize(self):
         self.r = self.rvecs()
-        self.set_tile(util.Tile(self.shape))
-        self.field = np.zeros(self.shape)
+        self.set_tile(self.shape)
+        self.field = np.zeros(self.shape.shape)
         self.update(self.params, self.values)
 
     def rvecs(self):
@@ -75,7 +75,7 @@ class Polynomial3D(Component):
             vecs = img.coords(norm=img.shape)
             vecs = [v[inner.slicer] for v in vecs]
         else:
-            vecs = util.Tile(self.shape).coords(norm=self.shape)
+            vecs = self.shape.coords(norm=self.shape.shape)
         return vecs
 
     def term_ijk(self, index):
@@ -106,7 +106,7 @@ class Polynomial3D(Component):
                 self.set_values(p, v1)
                 self.field += v1 * self.term(self.param_term[p])
         else:
-            self.field = np.zeros(self.shape)
+            self.field = np.zeros(self.shape.shape)
             for p,v in zip(self.params, self.values):
                 self.field += v * self.term(self.param_term[p])
 
@@ -117,7 +117,7 @@ class Polynomial3D(Component):
         return self.params
 
     def get_update_tile(self, params, values):
-        return util.Tile(self.shape)
+        return util.Tile(self.shape.shape)
 
     def __str__(self):
         return "{} [{} {}]".format(
@@ -301,7 +301,7 @@ class LegendrePoly2P1D(Polynomial2P1D):
         super(LegendrePoly2P1D, self).__init__(shape=shape, order=order, **kwargs)
 
     def _setup_rvecs(self):
-        o = self.shape
+        o = self.shape.shape
         self.rz, self.ry, self.rx = [np.linspace(-1, 1, i) for i in o]
         self.rz = self.rz[:,None,None]
         self.ry = self.ry[None,:,None]
@@ -401,7 +401,7 @@ class BarnesStreakLegPoly2P1D(Component):
             self.initialize()
 
     def _setup_rvecs(self):
-        o = self.shape
+        o = self.shape.shape
         self.r = [np.linspace(-1, 1, i) for i in o]
         self.r[0] = self.r[0][:,None,None]
         self.r[1] = self.r[1][None,:,None]
@@ -462,7 +462,7 @@ class BarnesStreakLegPoly2P1D(Component):
 
     def initialize(self):
         self._setup_rvecs()
-        self.set_tile(util.Tile(self.shape))
+        self.set_tile(self.shape)
 
         self.poly = self.calc_poly()
         self.field = self.calc_field()
@@ -503,7 +503,7 @@ class BarnesStreakLegPoly2P1D(Component):
         for p,v in zip(params, values):
             # global parameters get global tiles
             if p in self.poly_params or p == 'ilm-scale' or p == 'ilm-off':
-                return util.Tile(self.shape)
+                return self.shape
 
             # figure out hte barnes local update size
             for n, grp in enumerate(self.barnes_params):
@@ -521,7 +521,7 @@ class BarnesStreakLegPoly2P1D(Component):
 
                 l, r = inds.min(), inds.max()
 
-                tile = util.Tile(self.shape)
+                tile = self.shape
                 tile.l[2] = l-1
                 tile.r[2] = r+1
                 tiles.append(util.Tile(tile.l, tile.r))

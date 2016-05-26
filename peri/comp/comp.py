@@ -163,7 +163,7 @@ class GlobalScalarComponent(Component):
         return self.values[0]
 
     def get_update_tile(self, params, values):
-        return util.Tile(self.shape)
+        return self.shape
 
 #=============================================================================
 # Component class == model components for an image

@@ -36,7 +36,7 @@ class PSF(Component):
 
     def initialize(self):
         self.update(self.params, self.values)
-        self.set_tile(Tile(self.shape))
+        self.set_tile(self.shape)
 
     @memoize()
     def calculate_kpsf(self, shape):
@@ -55,7 +55,7 @@ class PSF(Component):
 
     def calculate_min_rpsf(self):
         # calculate the minimum supported real-space PSF
-        min_support = self.get_padding_size(Tile(self.shape)).shape
+        min_support = self.get_padding_size(self.shape).shape
         min_support += min_support % 2
         min_rpsf = self.rpsf_func(self._rvecs(min_support))
         return min_rpsf, min_support
@@ -92,7 +92,7 @@ class PSF(Component):
         return self
 
     def get_update_tile(self, params, values):
-        return Tile(self.shape)
+        return self.shape
 
     def get_padding_size(self, tile):
         raise NotImplemented('subclasses must implement `get_padding_size`')
@@ -111,7 +111,7 @@ class PSF(Component):
         self.__dict__.update(idict)
         self.tile = Tile((0,0,0))
         self.update(self.params, self.values)
-        self.set_tile(Tile(self.shape))
+        self.set_tile(self.shape)
 
     def __str__(self):
         return self.__repr__()
