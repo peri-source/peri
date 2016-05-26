@@ -4,6 +4,9 @@ from collections import OrderedDict, defaultdict
 
 from peri import util
 
+class NotAParameterError(Exception):
+    pass
+
 #=============================================================================
 # A base class for parameter groups (components and priors)
 #=============================================================================
@@ -281,6 +284,8 @@ class ComponentCollection(Component):
     def get_values(self, params):
         vals = []
         for p in util.listify(params):
+            if not p in self.lmap:
+                raise NotAParameterError("%r does not belong to %r" % (p, self))
             vals.append(self.lmap[p][0].get_values(p))
         return vals
 
