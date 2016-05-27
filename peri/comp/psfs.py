@@ -125,7 +125,7 @@ class IdentityPSF(PSF):
         Delta-function PSF; returns the field passed to execute identically. 
         Params is an N-element numpy.ndarray, doesn't do anything. 
         """
-        super(IdentityPSF, self).__init__(shape=(1,)*3, params=['psf'], values=[0])
+        super(IdentityPSF, self).__init__(params=['psf'], values=[0])
 
     def execute(self, field):
         return field
