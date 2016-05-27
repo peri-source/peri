@@ -566,6 +566,15 @@ class ImageState(State, comp.ComponentCollection):
         self._loglikelihood += self._calc_loglikelihood(newmodel, tile=tile)
         self._residuals[tile.slicer] = newmodel - self._data[tile.slicer]
 
+    def get_field(self):
+        raise NotImplemented('inherited but not relevant')
+
+    def exports(self):
+        raise NotImplemented('inherited but not relevant')
+
+    def register(self):
+        raise NotImplemented('inherited but not relevant')
+
     def __str__(self):
         return "{} [\n    {}\n]".format(self.__class__.__name__,
             '\n    '.join([c.category+': '+str(c) for c in self.comps])
