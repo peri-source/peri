@@ -508,7 +508,7 @@ class ImageState(State, comp.ComponentCollection):
 
             diff = model1 - model0
             evar = self.mdl.map_vars(self.comps, 'get', diffvar=comp.category)
-            diff = eval(self.mdl.get_difference_model(comp), evar)
+            diff = eval(self.mdl.get_difference_model(comp.category), evar)
 
             if isinstance(model0, (float, int)):
                 self._model[itile.slicer] += diff
