@@ -85,17 +85,13 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
     return J, inds, slicer
 
-def block_globals(s, include_rscale=True, include_off=True, include_sigma=False):
-    blk = ( s.create_block('ilm') | s.create_block('bkg') |
-            s.create_block('psf') | s.create_block('slab') |
-            s.create_block('zscale') )
-    if include_rscale:
-        blk |= s.create_block('rscale')
-    if include_sigma:
-        blk |= s.create_block('sigma')
-    if include_off:
-        blk |= s.create_block('off')
-    return blk
+def name_globals(s):
+    all_params = s.params
+    for p in s.param_positions():
+        all_params.remove(p)
+    for p in s.param_radii():
+        all_params.remove(p)
+    return all_params
 
 def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwargs):
     #1. Max for a given max_mem:
@@ -594,9 +590,9 @@ class LMEngine(object):
                 CLOG.debug('%f\t%f\t%f' % triplet)
                 #Update to er1 params:
                 er1_1 = self.update_function(self.param_vals + delta_params_1)
-                self.update_param_vals(delta_params_1, incremental=True)
                 if np.abs(er1_1 - er1) > 1e-6:
                     raise RuntimeError('GODDAMMIT!') #FIXME
+                self.update_param_vals(delta_params_1, incremental=True)
                 self.error = er1
 
             else: #er2 < er1
@@ -1489,20 +1485,20 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     #because 1 bad particle can spoil the whole group.
     region_size = 40 #until we calculate it
     do_calc_size = True
-    particle_kwargs = {'include_rad':include_rad}
 
     glbl_dmp = 0.3
     eig_update = mode != 'do-particles'
     glbl_run_length = 6 if mode != 'do-particles' else 3
 
     if mode == 'do-particles':
+        raise NotImplementedError('You need to add the global ilm, bkg scales')
         glbl_nms = (s.explode(s.create_block('ilm'))[0] |
                     s.explode(s.create_block('off'))[0])
         if s.bkg is not None:
             glbl_nms |= s.create_block('off')
     else:
-        glbl_nms = block_globals(s, include_rscale=(not use_aug),
-                include_off=True, include_sigma=False)
+        glbl_nms = name_globals(s)#, include_rscale=(not use_aug), include_sigma=False)
+
     all_lp_stats = []
     all_lm_stats = []
 
@@ -1529,7 +1525,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
                 region_size, max_iter=1, do_calc_size=do_calc_size, run_length=4,
                 eig_update=False, damping=prtl_dmp, ftol=0.1*ftol,
                 collect_stats=collect_stats, max_mem=max_mem,
-                particle_kwargs=particle_kwargs)
+                include_rad=include_rad)
         all_lp_stats.append(pstats)
         if desc is not None:
             states.save(s, desc=desc)
