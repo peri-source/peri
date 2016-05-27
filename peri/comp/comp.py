@@ -168,13 +168,13 @@ class Component(ParameterGroup):
 
     # TODO make all components serializable via _getinitargs_
 
-class GlobalScalarComponent(Component):
+class GlobalScalar(Component):
     category = 'scalar'
 
     def __init__(self, name, value, shape=None):
         self.shape = shape
         self.category = name
-        super(GlobalScalarComponent, self).__init__([name], [value], ordered=False)
+        super(GlobalScalar, self).__init__([name], [value], ordered=False)
 
     def get(self):
         return self.values[0]
@@ -375,6 +375,6 @@ class ComponentCollection(Component):
                 newname = c.category + '_' + func.im_func.func_name
                 setattr(self, newname, func)
 
-util.patch_docs(GlobalScalarComponent, Component)
+util.patch_docs(GlobalScalar, Component)
 util.patch_docs(ComponentCollection, Component)
 
