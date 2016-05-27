@@ -1,7 +1,6 @@
 import os
 import copy
 import json
-import types
 import numpy as np
 import cPickle as pickle
 
@@ -100,7 +99,7 @@ class State(comp.ParameterGroup):
     def param_all(self):
         return self.params
 
-    graddoc = \
+    _graddoc = \
     """
     Parameters:
     -----------
@@ -126,7 +125,7 @@ class State(comp.ParameterGroup):
         Arguments to `func`
     """
 
-    sampledoc = \
+    _sampledoc = \
     """
     kwargs (supply only one):
     -----------------------------
@@ -142,7 +141,7 @@ class State(comp.ParameterGroup):
 
     def _grad_one_param(self, funct, p, dl=2e-5, f0=None, rts=False, **kwargs):
         """
-        Gradient of `func` wrt a single parameter `p`. (see graddoc)
+        Gradient of `func` wrt a single parameter `p`. (see _graddoc)
         """
         vals = self.get_values(p)[0]
         f0 = funct(**kwargs) if f0 is None else f0
@@ -157,7 +156,7 @@ class State(comp.ParameterGroup):
 
     def _hess_two_param(self, funct, p0, p1, dl=2e-5, f0=None, rts=False, **kwargs):
         """
-        Hessian of `func` wrt two parameters `p0` and `p1`. (see graddoc)
+        Hessian of `func` wrt two parameters `p0` and `p1`. (see _graddoc)
         """
         vals0 = self.get_values(p0)[0]
         vals1 = self.get_values(p1)[0]
@@ -181,7 +180,7 @@ class State(comp.ParameterGroup):
 
     def _grad(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
         """
-        Gradient of `func` wrt a set of parameters params. (see graddoc)
+        Gradient of `func` wrt a set of parameters params. (see _graddoc)
         """
         if params is None:
             params = self.param_all()
@@ -189,24 +188,26 @@ class State(comp.ParameterGroup):
         ps = util.listify(params)
         f0 = funct(**kwargs)
 
-        grad = []
+        shape = f0.shape if isinstance(f0, np.ndarray) else (1,)
+        shape = (len(ps),) + shape
+
+        grad = np.zeros(shape)
         for i, p in enumerate(ps):
-            tgrad = self._grad_one_param(
+            grad[i] = self._grad_one_param(
                 funct, p, dl=dl, f0=f0, rts=rts, **kwargs
             )
-            grad.append(tgrad)
-        return np.array(grad)
+        return np.squeeze(grad)
 
     def _jtj(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
         """
-        jTj of a `func` wrt to parmaeters `params`. (see graddoc)
+        jTj of a `func` wrt to parmaeters `params`. (see _graddoc)
         """
         grad = self._grad(funct=funct, params=params, dl=dl, rts=rts, **kwargs)
         return np.dot(grad, grad.T)
 
     def _hess(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
         """
-        Hessian of a `func` wrt to parmaeters `params`. (see graddoc)
+        Hessian of a `func` wrt to parmaeters `params`. (see _graddoc)
         """
         if params is None:
             params = self.param_all()
@@ -214,7 +215,10 @@ class State(comp.ParameterGroup):
         ps = util.listify(params)
         f0 = funct(**kwargs)
 
-        hess = [[0]*len(ps) for i in xrange(len(ps))]
+        shape = f0.shape if isinstance(f0, np.ndarray) else (1,)
+        shape = (len(ps), len(ps)) + shape
+
+        hess = np.zeros(shape)
         for i, pi in enumerate(ps):
             for j, pj in enumerate(ps[i:]):
                 J = j + i
@@ -223,10 +227,10 @@ class State(comp.ParameterGroup):
                 )
                 hess[i][J] = thess
                 hess[J][i] = thess
-        return np.array(hess)
+        return np.squeeze(hess)
 
-    def _graddoc(self, f):
-        f.im_func.func_doc += self.graddoc
+    def _dograddoc(self, f):
+        f.im_func.func_doc += self._graddoc
 
     def build_funcs(self):
         def m(inds=None, slicer=None, flat=True):
@@ -245,19 +249,21 @@ class State(comp.ParameterGroup):
         self.JTJ = partial(self._jtj, funct=r)
         self.J = partial(self._grad, funct=r)
 
-        self.fisherinformation.__doc__ = self.graddoc + self.sampledoc
-        self.gradloglikelihood.__doc__ = self.graddoc
-        self.hessloglikelihood.__doc__ = self.graddoc
-        self.gradmodel.__doc__ = self.graddoc + self.sampledoc
-        self.hessmodel.__doc__ = self.graddoc + self.sampledoc
-        self.JTJ.__doc__ = self.graddoc + self.sampledoc
-        self.J.__doc__ = self.graddoc + self.sampledoc
+        self.fisherinformation.__doc__ = self._graddoc + self._sampledoc
+        self.gradloglikelihood.__doc__ = self._graddoc
+        self.hessloglikelihood.__doc__ = self._graddoc
+        self.gradmodel.__doc__ = self._graddoc + self._sampledoc
+        self.hessmodel.__doc__ = self._graddoc + self._sampledoc
+        self.JTJ.__doc__ = self._graddoc + self._sampledoc
+        self.J.__doc__ = self._graddoc + self._sampledoc
 
-        self._graddoc(self._grad_one_param)
-        self._graddoc(self._hess_two_param)
-        self._graddoc(self._grad)
-        self._graddoc(self._hess)
+        self._dograddoc(self._grad_one_param)
+        self._dograddoc(self._hess_two_param)
+        self._dograddoc(self._grad)
+        self._dograddoc(self._hess)
 
+        # the state object is a workaround so that other interfaces still
+        # work. this should probably be removed in the long run
         class _Statewrap(object):
             def __init__(self, obj):
                 self.obj = obj
@@ -266,8 +272,13 @@ class State(comp.ParameterGroup):
 
         self.state = _Statewrap(self)
 
-    def crb(self, p):
-        pass
+    def crb(self, params=None):
+        """
+        Calculate the diagonal elements of the minimum covariance of the model
+        with respect to parameters params.
+        """
+        fish = self.fisherinformation(params=params)
+        return np.sqrt(np.diag(np.linalg.inv(fish))) * self.sigma
 
     def __str__(self):
         return "{}\n{}".format(self.__class__.__name__, json.dumps(self.param_dict, indent=2))
