@@ -4,7 +4,6 @@ import scipy as sp
 from peri.runner import create_state
 from peri.test import poissondisks
 from peri import states
-from peri import const
 
 def _seed_or_not(seed=None):
     if seed is None:

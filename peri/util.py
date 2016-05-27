@@ -7,7 +7,7 @@ import numpy as np
 import code, traceback, signal
 from contextlib import contextmanager
 
-from peri import const, initializers
+from peri import initializers
 
 def callif(f, *args, **kwargs):
     if hasattr(f, '__call__'):
@@ -335,7 +335,7 @@ class Image(object):
             return im
         return self.filtered_image(im)
 
-    def get_padded_image(self, pad=const.PAD, padval=0):
+    def get_padded_image(self, pad, padval=0):
         if hasattr(pad, '__iter__'):
             pad = [[p, p] for p in pad]
         return np.pad(self.get_image(), pad, mode='constant', constant_values=padval)

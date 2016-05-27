@@ -2,7 +2,7 @@ import os
 import json
 import copy
 
-from peri.const import CONF_FILE
+CONF_FILE = os.path.join(os.path.expanduser("~"), ".peri.json")
 
 default_conf = {
     "fftw_wisdom": os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl"),

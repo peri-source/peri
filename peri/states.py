@@ -7,7 +7,7 @@ import cPickle as pickle
 from functools import partial
 from contextlib import contextmanager
 
-from peri import const, util, comp, models
+from peri import util, comp, models
 from peri.logger import log as baselog
 log = baselog.getChild('state')
 
@@ -330,7 +330,7 @@ class PolyFitState(State):
 #=============================================================================
 class ImageState(State, comp.ComponentCollection):
     def __init__(self, image, comps, mdl=models.ConfocalImageModel(), sigma=0.04,
-            priors=None, nlogs=True, pad=const.PAD, model_as_data=False):
+            priors=None, nlogs=True, pad=24, model_as_data=False):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle

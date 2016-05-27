@@ -5,8 +5,6 @@ to a model and its parameters
 from copy import deepcopy
 import numpy as np
 
-from peri.const import PRIORCUT
-
 class Sampler(object):
     def __init__(self, block=None):
         self.block = block
@@ -16,14 +14,12 @@ class Sampler(object):
         return state
 
     def loglikelihood(self, state, substate):
-        if state.update(self.block, substate):
-            return state.loglikelihood
-        return PRIORCUT/2
+        state.update(self.block, substate)
+        return state.loglikelihood
 
     def gradloglikelihood(self, state, substate):
-        if state.update(self.block, substate):
-            return state.gradloglikelihood()
-        return PRIORCUT/2
+        state.update(self.block, substate)
+        return state.gradloglikelihood()
 
     def sample(self, state):
         pass
@@ -89,10 +85,6 @@ class SliceSampler(Sampler):
 
         pl = self.loglikelihood(state, xl)
         pr = self.loglikelihood(state, xr)
-
-        if px < PRIORCUT:
-            print "Starting with bad state"
-            raise IOError
 
         stepl = np.floor(self.maxsteps * np.random.rand())
         stepr = self.maxsteps - 1 - stepl

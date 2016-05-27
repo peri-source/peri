@@ -5,8 +5,6 @@ from PIL import Image
 import numpy as np
 import scipy.ndimage as nd
 
-from peri import const
-
 #=======================================================================
 # Image loading functions
 #=======================================================================

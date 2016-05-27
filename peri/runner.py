@@ -1,8 +1,7 @@
 import numpy as np
 import scipy.ndimage as nd
 
-from peri import const, util
-from peri import states, initializers
+from peri import util, states, initializers
 from peri.mc import sample
 
 # poly fit function, because I can
@@ -159,7 +158,7 @@ def create_state(image, pos, rad, sigma=0.05, slab=None, pad_extra_particles=Fal
         rad = rad*np.ones(pos.shape[0])
 
     # let's create the padded image required of the state
-    pad = stateargs.get('pad', const.PAD)
+    pad = stateargs.get('pad', 24)
     image, pos, rad = states.prepare_for_state(image, pos, rad, pad=pad)
 
     # create some default arguments for the image components

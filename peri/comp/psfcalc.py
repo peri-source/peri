@@ -3,7 +3,7 @@ import numpy as np
 from numpy.lib.scimath import sqrt as csqrt
 from scipy.special import j0,j1, la_roots
 
-from peri import const, util
+from peri import util
 from peri import interpolation
 from peri.comp import psfs
 

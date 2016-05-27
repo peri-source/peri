@@ -10,7 +10,7 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 from matplotlib.patches import Circle, Rectangle
 
 from peri.test import analyze
-from peri import util, const
+from peri import util
 
 import numpy as np
 import time
@@ -723,10 +723,9 @@ def crb_rad(state0, samples0, state1, samples1, crb0, crb1):
     pp(ax, drad, sim, crb, 'a')
 
 
-def twoslice(field, pad=const.PAD, zlayer=None, xlayer=None, size=6.0,
+def twoslice(field, inner, zlayer=None, xlayer=None, size=6.0,
         cmap='bone_r', vmin=0, vmax=1):
-    trim = (np.s_[pad:-pad],)*3
-    field = field[trim]
+    field = field[inner]
 
     slicez = zlayer or field.shape[0]/2
     slicex = xlayer or field.shape[2]/2
