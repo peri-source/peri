@@ -28,7 +28,6 @@ class PSF(Component):
             execute : apply the psf to an image
         """
         self.shape = shape
-        self.tile = Tile((0,0,0))
         super(PSF, self).__init__(params, values)
 
         if self.shape:
@@ -64,7 +63,7 @@ class PSF(Component):
         if any(tile.shape < self.min_support):
             raise IndexError("PSF tile size is less than minimum support size")
 
-        if (self.tile.shape != tile.shape).any():
+        if not hasattr(self, 'tile') or (self.tile.shape != tile.shape).any():
             self.tile = tile
 
         self.kpsf = self.calculate_kpsf(self.tile.shape)
@@ -76,6 +75,9 @@ class PSF(Component):
         # clean out the cache since it is no longer useful
         if hasattr(self, '_memoize_clear'):
             self._memoize_clear()
+
+        if hasattr(self, 'tile'):
+            self.set_tile(self.tile)
 
     def execute(self, field):
         if any(field.shape != self.tile.shape):
@@ -234,7 +236,7 @@ class PSF4D(PSF):
         return rpsf, kpsf
 
     def set_tile(self, tile):
-        if (self.tile.shape != tile.shape).any():
+        if not hasattr(self, 'tile') or (self.tile.shape != tile.shape).any():
             self.tile = tile
 
         self.rpsf, self.kpsf = self._calc_tile_2d_psf(self.tile)
@@ -247,6 +249,9 @@ class PSF4D(PSF):
         # clean out the cache since it is no longer useful
         if hasattr(self, '_memoize_clear'):
             self._memoize_clear()
+
+        if hasattr(self, 'tile'):
+            self.set_tile(self.tile)
 
     def execute(self, field):
         if any(field.shape != self.tile.shape):
