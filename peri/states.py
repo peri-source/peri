@@ -492,6 +492,8 @@ class ImageState(State, comp.ComponentCollection):
         if otile is None:
             return False
 
+        print otile, itile, iotile
+
         # have all components update their tiles
         self.set_tile(otile)
 
@@ -507,8 +509,9 @@ class ImageState(State, comp.ComponentCollection):
             model1 = copy.copy(comp.get())
 
             diff = model1 - model0
-            evar = self.mdl.map_vars(self.comps, 'get', diffvar=comp.category)
-            diff = eval(self.mdl.get_difference_model(comp.category), evar)
+            diff = self.mdl.evaluate(
+                self.comps, 'get', diffmap={comp.category: diff}
+            )
 
             if isinstance(model0, (float, int)):
                 self._model[itile.slicer] += diff
@@ -519,8 +522,7 @@ class ImageState(State, comp.ComponentCollection):
 
             # unpack a few variables to that this is easier to read, nice compact
             # formulas coming up, B = bkg, I = ilm, C = off
-            evar = self.mdl.map_vars(self.comps, 'get')
-            diff = eval(self.mdl.get_base_model(), evar)
+            diff = self.mdl.evaluate(self.comps, 'get')
             self._model[itile.slicer] = diff[iotile.slicer]
 
         newmodel = self._model[itile.slicer].copy()
@@ -539,8 +541,7 @@ class ImageState(State, comp.ComponentCollection):
 
     def _calc_model(self):
         self.set_tile(self.oshape)
-        var = self.mdl.map_vars(self.comps, 'get')
-        return eval(self.mdl.get_base_model(), var)
+        return self.mdl.evaluate(self.comps, 'get')
 
     def _calc_residuals(self):
         return self._model - self._data

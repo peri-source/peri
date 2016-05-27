@@ -90,27 +90,36 @@ class Model(object):
         name = self.diffname(self.ivarmap[category])
         return self.modelstr.get(name)
 
-    def map_vars(self, comps, funcname, diffvar=None, **kwargs):
+    def map_vars(self, comps, funcname, diffmap=None, **kwargs):
         """
         Map component function `funcname` result into model variables
-        dictionary for use in eval of the model. If diffvar is provided then
-        that symbol is translated into 'd'+symbol. **kwargs are passed
-        to the comp.funcname(**kwargs).
+        dictionary for use in eval of the model. If `diffmap` is provided then
+        that symbol is translated into 'd'+diffmap.key and is replaced by
+        diffmap.value. **kwargs are passed to the comp.funcname(**kwargs).
         """
         out = {}
+        diffmap = diffmap or {}
 
         for c in comps:
             cat = c.category
 
-            if cat == diffvar:
+            if cat in diffmap:
                 symbol = self.diffname(self.ivarmap[cat])
+                out[symbol] = diffmap[cat]
             else:
                 symbol = self.ivarmap[cat]
-
-            out[symbol] = getattr(c, funcname)(**kwargs)
+                out[symbol] = getattr(c, funcname)(**kwargs)
 
         return out
 
+    def evaluate(self, comps, funcname, diffmap=None, **kwargs):
+        evar = self.map_vars(comps, funcname, diffmap=diffmap)
+
+        if diffmap is None:
+            return eval(self.get_base_model(), evar)
+        else:
+            compname = diffmap.keys()[0]
+            return eval(self.get_difference_model(compname), evar)
 
 class ConfocalImageModel(Model):
     def __init__(self):
