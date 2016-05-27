@@ -340,7 +340,8 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 class BarnesStreakLegPoly2P1D(Component):
     category = 'ilm'
 
-    def __init__(self, shape=None, npts=(40,20), zorder=7, op='*', barnes_dist=1.75):
+    def __init__(self, shape=None, npts=(40,20), zorder=7, op='*',
+            barnes_dist=1.75, local_updates=True):
         """
         A Barnes interpolant. This one is of the form
 
@@ -367,8 +368,12 @@ class BarnesStreakLegPoly2P1D(Component):
 
         barnes_dist : float
             Fractional distance to use for the barnes interpolator
+
+        local_updates : boolean
+            Whether to perform local updates on the ILM
         """
         self.shape = shape
+        self.local_updates = local_updates
         self.barnes_dist = barnes_dist
         self.zorder = zorder
         self.npts = npts
@@ -422,7 +427,7 @@ class BarnesStreakLegPoly2P1D(Component):
 
         b = BarnesInterpolation1D(
             b_in, coeffs, filter_size=fdst, damp=0.9, iterations=3,
-            clip=True, clipsize=3
+            clip=self.local_updates, clipsize=3
         )
         return b(y)
 
@@ -492,18 +497,23 @@ class BarnesStreakLegPoly2P1D(Component):
         return self.field[self.tile.slicer]
 
     def get_update_tile(self, params, values):
+        if not self.local_updates:
+            return self.shape.copy()
+
         params = util.listify(params)
         values = util.listify(values)
 
+        # check for global update requiring parameters:
+        for p in params:
+            if p in self.poly_params or p == 'ilm-scale' or p == 'ilm-off':
+                return self.shape.copy()
+
+        # now look for the local update sizes
         orig_values = self.get_values(params)
 
         tiles = []
         for p,v in zip(params, values):
-            # global parameters get global tiles
-            if p in self.poly_params or p == 'ilm-scale' or p == 'ilm-off':
-                return self.shape.copy()
-
-            # figure out hte barnes local update size
+            # figure out the barnes local update size
             for n, grp in enumerate(self.barnes_params):
                 if not p in grp:
                     continue
@@ -514,7 +524,7 @@ class BarnesStreakLegPoly2P1D(Component):
 
                 inds = np.arange(self.b_out.shape[0])
                 inds = inds[(val1 - val0) > 1e-12]
-                if len(inds) <= 1:
+                if len(inds) < 2:
                     continue
 
                 l, r = inds.min(), inds.max()
@@ -522,9 +532,6 @@ class BarnesStreakLegPoly2P1D(Component):
                 tile = self.shape.copy()
                 tile.l[2] = l
                 tile.r[2] = r
-                if tile.shape[2] == 0:
-                    tile.r[2] = tile.r[2] + 1
-
                 tiles.append(util.Tile(tile.l, tile.r))
 
         self.set_values(params, orig_values)
