@@ -326,7 +326,7 @@ class Image(object):
     def __init__(self, image, tile=None, filters=None):
         self.filters = filters or []
         self.image = image
-        self.tile = tile or Tile(image.shape)
+        self.tile = tile
 
     def get_image(self):
         im = self.image[self.tile.slicer]
@@ -376,19 +376,22 @@ class RawImage(Image):
         self.invert = invert
         self.filters = None
         self.exposure = exposure
-        self.tile = tile or Tile(image.shape)
 
-        super(RawImage, self).__init__(self.load_image())
+        image = self.load_image()
+        tile = tile or Tile(image.shape)
+
+        super(RawImage, self).__init__(image, tile=tile)
 
     def load_image(self):
         try:
             image = initializers.load_tiff(self.filename)
             image = initializers.normalize(
-                self.image, invert=self.invert, scale=self.exposure
+                image, invert=self.invert, scale=self.exposure
             )
         except IOError as e:
             print "Could not find image '%s'" % self.filename
             raise e
+
         return image
 
     def get_scale(self):
