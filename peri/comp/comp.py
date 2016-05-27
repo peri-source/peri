@@ -189,7 +189,7 @@ class GlobalScalar(Component):
 # Component class == model components for an image
 #=============================================================================
 class ComponentCollection(Component):
-    def __init__(self, comps, field_reduce_func=None):
+    def __init__(self, comps, field_reduce_func=None, category=None):
         """
         Group a number of components into a single coherent object which a
         single interface for each function. Obvious reductions are performed in
@@ -207,6 +207,7 @@ class ComponentCollection(Component):
             Reduction function for get_field object of collection
         """
         self.comps = comps
+        self.category = category
 
         if not field_reduce_func:
             field_reduce_func = lambda x: reduce(add, x)
@@ -347,6 +348,11 @@ class ComponentCollection(Component):
         for c in self.comps:
             c.set_tile(tile)
 
+    def set_shape(self, shape, inner):
+        """ Set the shape for all components """
+        for c in self.comps:
+            c.set_shape(shape, inner)
+
     def sync_params(self):
         """ Ensure that shared parameters are the same value everywhere """
         pass # FIXME
@@ -374,6 +380,17 @@ class ComponentCollection(Component):
             for func in funcs:
                 newname = c.category + '_' + func.im_func.func_name
                 setattr(self, newname, func)
+
+    def exports(self):
+        return [i for c in self.comps for i in c.exports()]
+
+    def __str__(self):
+        return "{} [\n    {}\n]".format(self.__class__.__name__, 
+            '\n    '.join([c.category+': '+str(c) for c in self.comps])
+        )
+
+    def __repr__(self):
+        return self.__str__()
 
 util.patch_docs(GlobalScalar, Component)
 util.patch_docs(ComponentCollection, Component)
