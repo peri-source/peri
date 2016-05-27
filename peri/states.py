@@ -9,7 +9,7 @@ from contextlib import contextmanager
 
 from peri import util, comp, models
 from peri.logger import log as baselog
-log = baselog.getChild('state')
+log = baselog.getChild('states')
 
 class UpdateError(Exception):
     pass
@@ -632,9 +632,9 @@ def save(state, filename=None, desc='', extra=None):
     extra : list of pickleable objects
         if provided, will be saved with the state
     """
-    if state.rawimage is not None:
+    if isinstance(state.image, util.RawImage):
         desc = desc or 'save'
-        filename = filename or state.rawimage.filename + '-peri-' + desc + '.pkl'
+        filename = filename or state.image.filename + '-peri-' + desc + '.pkl'
     else:
         if not filename:
             raise AttributeError, "Must provide filename since RawImage is not used"
