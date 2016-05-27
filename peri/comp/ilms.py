@@ -4,6 +4,7 @@ from numpy.polynomial.legendre import legval
 from numpy.polynomial.chebyshev import chebval
 import scipy.optimize as opt
 
+from collections import OrderedDict
 from operator import add, mul
 from itertools import product, chain
 
@@ -383,7 +384,7 @@ class BarnesStreakLegPoly2P1D(Component):
         # distinguish them quickly from one another
         params, values = ['ilm-scale', 'ilm-off'], [1.0, 0.0]
         self.barnes_params = []
-        self.poly_params = {}
+        self.poly_params = OrderedDict()
         for i, npt in enumerate(npts):
             tparams = ['ilm-b%i-%i' % (i, j) for j in xrange(npt)]
             tvalues = [0.0]*len(tparams)
@@ -402,6 +403,17 @@ class BarnesStreakLegPoly2P1D(Component):
 
         if self.shape:
             self.initialize()
+
+    def param_barnes_scales(self):
+        return ['ilm-scale', 'ilm-off']
+
+    def param_barnes_pts(self, ind=None):
+        if ind is None:
+            return [l for b in self.barnes_params for l in b]
+        return self.barnes_params[ind]
+
+    def param_barnes_poly(self):
+        return self.poly_params.keys()
 
     def _setup_rvecs(self):
         o = self.shape.shape
