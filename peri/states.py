@@ -492,8 +492,6 @@ class ImageState(State, comp.ComponentCollection):
         if otile is None:
             return False
 
-        print otile, itile, iotile
-
         # have all components update their tiles
         self.set_tile(otile)
 
