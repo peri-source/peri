@@ -1,7 +1,8 @@
 """
 s.get('...').??? -- probably bad form (e.g. s.get('obj').N to get particle pos
 is bad because you could have more than 1 particle. 
-fix_error
+Right now I'm doing s.obj_get_radii().size but when Mattycakes implements
+s.obj_get_npart() you should implement. 
 """
 import os
 import sys
@@ -110,32 +111,10 @@ def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwar
 #=============================================================================#
 #               ~~~~~        Single particle stuff    ~~~~~
 #=============================================================================#
-def find_particles_in_box(s, bounds):
-    """
-    Finds the particles in a box.
-
-    Parameters
-    -----------
-    s : State
-        The peri state to find the particle in.
-    bounds: 2-element list-like of lists.
-        bounds[0] is the lower left corner of the box, bounds[1] the upper
-        right corner. Each of those are 3-element list-likes of the coords.
-
-    Returns
-    --------
-    inds: numpy.ndarray
-        The indices of the particles in the box.
-
-    """
-    tile = Tile(left=bounds[0], right=bounds[1])
-    is_in_region = lambda i: tile.contains(s.state[s.param_particle_pos(i)])
-    inds = np.arange(s.get('obj').N)
-    particles = []
-    for a in xrange(s.get('obj').N):
-        if is_in_region(1*a):
-            particles.append(a)
-    return np.array(particles)
+def find_particles_in_tile(state, tile):
+    """Finds the particles in a tile, as numpy.ndarray of ints."""
+    bools = tile.contains(state.obj_get_positions())
+    return np.arange(bools.size)[bools]
 
 def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
     """
@@ -169,26 +148,24 @@ def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
         to a given image region.
     """
     if bounds is None:
-        bounds = (s.oshape.l, s.oshape.r)
-    if type(region_size) == int:
-        rs = [region_size, region_size, region_size]
+        bounding_tile = s.oshape
     else:
-        rs = region_size
-
-    pts = [range(bounds[0][i], bounds[1][i], rs[i]) for i in xrange(3)]
-
-    all_boxes = []
-    for start_0 in pts[0]:
-        for start_1 in pts[1]:
-            for start_2 in pts[2]:
-                all_boxes.append([[start_0, start_1, start_2],
-                        [start_0+rs[0], start_1+rs[1], start_2+rs[2]]])
-
+        bounding_tile = Tile(left=bounds[0], right=bounds[1])
+    if type(region_size) == int:
+        rs = np.array([region_size, region_size, region_size])
+    else:
+        rs = np.array(region_size)
+        
+    n_translate = np.ceil(bounding_tile.shape.astype('float')/rs).astype('int')
     particle_groups = []
-    for box in all_boxes:
-        cur_group = find_particles_in_box(s, box)
-        if cur_group.size > 0:
-            particle_groups.append(cur_group)
+    tile = Tile(left=bounding_tile.l, right=bounding_tile.l + rs)
+    for d0 in xrange(n_translate[0]):
+        for d1 in xrange(n_translate[1]):
+            for d2 in xrange(n_translate[2]):
+                new_tile = tile.translate(np.array([d0,d1,d2])*rs)
+                a_group = find_particles_in_tile(s, new_tile)
+                if a_group.size != 0:
+                    particle_groups.append(a_group)
 
     return particle_groups
 
@@ -1215,7 +1192,7 @@ class AugmentedState(object): #FIXME when blocks work....
         if any of the particle radii or positions have been changed
         external to the augmented state.
         """
-        inds = range(self.state.get('obj').N)
+        inds = range(self.state.obj_get_radii().size)
         self._rad_nms = self.state.param_particle_rad(inds)
         self._pos_nms = self.state.param_particle_pos(inds)
         self._initial_rad = np.copy(self.state.state[self._rad_nms])
