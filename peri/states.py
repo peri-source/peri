@@ -113,10 +113,6 @@ class State(comp.ParameterGroup):
     dl : float
         Derivative step size for numerical deriv
 
-    f0 : ndarray or float (optional)
-        Value at the current parameters. Useful when evaluating many derivs
-        so that it is not recalculated for every parameter.
-
     rts : boolean
         Return To Start. Return the state to how you found it when done,
         needs another update call, so can be ommitted sometimes (small dl).
@@ -141,30 +137,28 @@ class State(comp.ParameterGroup):
         Whether to flatten the sampled item before returning
     """
 
-    def _grad_one_param(self, funct, p, dl=2e-5, f0=None, rts=False, **kwargs):
+    def _grad_one_param(self, funct, p, dl=2e-5, rts=False, **kwargs):
         """
         Gradient of `func` wrt a single parameter `p`. (see _graddoc)
         """
         vals = self.get_values(p)[0]
-        f0 = funct(**kwargs) if f0 is None else f0
+        f0 = funct(**kwargs)
 
         self.update(p, vals+dl)
         f1 = funct(**kwargs)
 
         if rts:
             self.update(p, vals)
-            return (f1 - f0) / dl
-        else:
-            return (f1 - f0) / dl , f1
+        return (f1 - f0) / dl
 
-    def _hess_two_param(self, funct, p0, p1, dl=2e-5, f0=None, rts=False, **kwargs):
+    def _hess_two_param(self, funct, p0, p1, dl=2e-5, rts=False, **kwargs):
         """
         Hessian of `func` wrt two parameters `p0` and `p1`. (see _graddoc)
         """
         vals0 = self.get_values(p0)[0]
         vals1 = self.get_values(p1)[0]
 
-        f00 = funct(**kwargs) if f0 is None else f0
+        f00 = funct(**kwargs)
 
         self.update(p0, vals0+dl)
         f10 = funct(**kwargs)
@@ -178,9 +172,7 @@ class State(comp.ParameterGroup):
         if rts:
             self.update(p0, vals0)
             self.update(p1, vals1)
-            return (f11 - f10 - f01 + f00) / (dl**2)
-        else:
-            return (f11 - f10 - f01 + f00) / (dl**2), f01
+        return (f11 - f10 - f01 + f00) / (dl**2)
 
     def _grad(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
         """
@@ -192,19 +184,13 @@ class State(comp.ParameterGroup):
         ps = util.listify(params)
         f0 = funct(**kwargs)
 
+        # get the shape of the entire gradient to return and make an array
         shape = f0.shape if isinstance(f0, np.ndarray) else (1,)
         shape = (len(ps),) + shape
-
         grad = np.zeros(shape)
+
         for i, p in enumerate(ps):
-            tgrad = self._grad_one_param(
-                funct, p, dl=dl, f0=f0, rts=rts, **kwargs
-            )
-
-            if not rts:
-                tgrad, f0 = tgrad
-
-            grad[i] = tgrad
+            grad[i] = self._grad_one_param(funct, p, dl=dl, rts=rts, **kwargs)
         return np.squeeze(grad)
 
     def _jtj(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
@@ -224,20 +210,15 @@ class State(comp.ParameterGroup):
         ps = util.listify(params)
         f0 = funct(**kwargs)
 
+        # get the shape of the entire hessian, allocate an array
         shape = f0.shape if isinstance(f0, np.ndarray) else (1,)
         shape = (len(ps), len(ps)) + shape
-
         hess = np.zeros(shape)
+
         for i, pi in enumerate(ps):
             for j, pj in enumerate(ps[i:]):
                 J = j + i
-                thess = self._hess_two_param(
-                    funct, pi, pj, dl=dl, f0=f0, rts=rts, **kwargs
-                )
-
-                if not rts:
-                    thess, f0 = thess
-
+                thess = self._hess_two_param(funct, pi, pj, dl=dl, rts=rts, **kwargs)
                 hess[i][J] = thess
                 hess[J][i] = thess
         return np.squeeze(hess)
