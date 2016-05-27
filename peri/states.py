@@ -1,5 +1,4 @@
 import os
-import re
 import copy
 import json
 import types
@@ -9,12 +8,9 @@ import cPickle as pickle
 from functools import partial
 from contextlib import contextmanager
 
-from peri import const, util, comp
+from peri import const, util, comp, models
 from peri.logger import log as baselog
 log = baselog.getChild('state')
-
-class ModelError(Exception):
-    pass
 
 class UpdateError(Exception):
     pass
@@ -246,16 +242,16 @@ class State(comp.ParameterGroup):
         self.hessloglikelihood = partial(self._hess, funct=l)
         self.gradmodel = partial(self._grad, funct=m)
         self.hessmodel = partial(self._hess, funct=m)
-        self.J = partial(self._grad, funct=r)
         self.JTJ = partial(self._jtj, funct=r)
+        self.J = partial(self._grad, funct=r)
 
         self.fisherinformation.__doc__ = self.graddoc + self.sampledoc
         self.gradloglikelihood.__doc__ = self.graddoc
         self.hessloglikelihood.__doc__ = self.graddoc
         self.gradmodel.__doc__ = self.graddoc + self.sampledoc
         self.hessmodel.__doc__ = self.graddoc + self.sampledoc
-        self.J.__doc__ = self.graddoc + self.sampledoc
         self.JTJ.__doc__ = self.graddoc + self.sampledoc
+        self.J.__doc__ = self.graddoc + self.sampledoc
 
         self._graddoc(self._grad_one_param)
         self._graddoc(self._hess_two_param)
@@ -322,9 +318,8 @@ class PolyFitState(State):
 # Image state which specializes to components with regions, etc.
 #=============================================================================
 class ImageState(State, comp.ComponentCollection):
-    def __init__(self, image, comps, offset=0, sigma=0.04, priors=None,
-            nlogs=True, pad=const.PAD, modelnum=0, catmap=None, modelstr=None,
-            model_as_data=False):
+    def __init__(self, image, comps, mdl=models.ConfocalImageModel(), sigma=0.04,
+            priors=None, nlogs=True, pad=const.PAD, model_as_data=False):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -334,11 +329,11 @@ class ImageState(State, comp.ComponentCollection):
         Parameters:
         -----------
         image : `peri.util.Image` object
-            The raw image with which to compare the model image from this class.
-            This image should have been prepared through prepare_for_state, which
-            does things such as padding necessary for this class. In the case of the
-            RawImage, paths are used to keep track of the image object to save
-            on pickle size.
+            The raw image with which to compare the model image from this
+            class.  This image should have been prepared through
+            prepare_for_state, which does things such as padding necessary for
+            this class. In the case of the RawImage, paths are used to keep
+            track of the image object to save on pickle size.
 
         comp : list of `peri.comp.Component`s or `peri.comp.ComponentCollection`s
             Components used to make up the model image. Each separate component
@@ -351,8 +346,9 @@ class ImageState(State, comp.ComponentCollection):
             ImageState.catmap which tells how components are matched to
             parts of the model equation.
 
-        offset : float, typically (0, 1) [default: 1]
-            The level that particles inset into the illumination field
+        mdl : `peri.models.Model` object
+            Model defining how to combine different Components into a single
+            model.
 
         priors: list of `peri.priors` [default: ()]
             Whether or not to turn on overlap priors using neighborlists
@@ -363,28 +359,8 @@ class ImageState(State, comp.ComponentCollection):
                 LL = -(p_i - I_i)^2/(2*\sigma^2) - \log{\sqrt{2\pi} \sigma}
 
         pad : integer or tuple of integers (optional)
-            No recommended to set by hand.  The padding level of the raw image needed
-            by the PSF support.
-
-        modelnum : integer
-            Use of the supplied models given by an index. Currently there is:
-
-                0 : H(I*(1-P) + C*P) + B
-                1 : H(I*(1-P) + C*P + B)
-
-        catmap : dict
-            (Using a custom model) The mapping of variables in the modelstr
-            equations to actual component types. For example:
-
-                {'P': 'obj', 'H': 'psf'}
-
-        modelstr : dict of strings
-            (Using a custom model) The actual equations used to defined the model.
-            At least one eq. is required under the key `full`. Other partial
-            update equations can be added where the variable name (e.g. 'dI')
-            denotes a partial update of I, for example:
-
-                {'full': 'H(P)', 'dP': 'H(dP)'}
+            No recommended to set by hand.  The padding level of the raw image
+            needed by the PSF support.
 
         model_as_data : boolean
             Whether to use the model image as the true image after initializing
@@ -392,106 +368,26 @@ class ImageState(State, comp.ComponentCollection):
         self.sigma = sigma
         self.priors = priors
         self.pad = util.a3(pad)
-        self.offset = offset
 
         comp.ComponentCollection.__init__(self, comps=comps)
 
-        self.set_model(modelnum=modelnum, catmap=catmap, modelstr=modelstr)
+        self.set_model(mdl=mdl)
         self.set_image(image)
         self.build_funcs()
 
         if model_as_data:
             self.model_to_data(self.sigma)
 
-    def set_model(self, modelnum=None, catmap=None, modelstr=None):
+    def set_model(self, mdl):
         """
         Setup the image model formation equation and corresponding objects into
-        their various objects. See the ImageState __init__ docstring
-        for information on these parameters.
+        their various objects. `mdl` is a `peri.models.Model` object
         """
-        N = 2
-        catmaps = [0]*N
-        modelstrs = [0]*N
-
-        catmaps[0] = {
-            'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'obj', 'C': 'offset'
-        }
-        modelstrs[0] = {
-            'full' : 'H(I*(1-P)+C*P) + B',
-            'dI' : 'H(dI*(1-P))',
-            'dP' : 'H((C-I)*dP)',
-            'dC' : 'H(dC*P)',
-            'dB' : 'dB',
-        }
-
-        catmaps[1] = {
-            'P': 'obj', 'H': 'psf', 'C': 'offset'
-        }
-        modelstrs[1] = {
-            'full': 'H(P) + C',
-            'dP': 'H(dP)',
-            'dC': 'dC'
-        }
-
-        if catmap is not None and modelstr is not None:
-            self.catmap = catmap
-            self.modelstr = modelstr
-        elif catmap is not None or modelstr is not None:
-            raise AttributeError('If catmap or modelstr is supplied, the other must as well')
-        else:
-            self.catmap = catmaps[modelnum]
-            self.modelstr = modelstrs[modelnum]
-
-        self.mapcat = {v:k for k,v in self.catmap.iteritems()}
-        self.check_inputs(self.catmap, self.modelstr, self.comps)
+        self.mdl = mdl
+        self.mdl.check_inputs(self.comps)
 
         for c in self.comps:
             setattr(self, '_comp_'+c.category, c)
-
-    def check_inputs(self, catmap, model, comps):
-        """
-        Make sure that the required comps are included in the list of
-        components supplied by the user. Also check that the parameters are
-        consistent across the many components.
-        """
-        error = False
-        compcats = [c.category for c in comps]
-        regex = re.compile('([a-zA-Z_][a-zA-Z0-9_]*)')
-
-        # there at least must be the full model, not necessarily partial updates
-        if not model.has_key('full'):
-            raise ModelError(
-                'Model must contain a `full` key describing '
-                'the entire image formation'
-            )
-
-        # Check that the two model descriptors are consistent
-        for name, eq in model.iteritems():
-            var = regex.findall(eq)
-            for v in var:
-                # remove the derivative signs if there (dP -> P)
-                v = re.sub(r"^d", '', v)
-                if v not in catmap:
-                    log.error(
-                        "Variable '%s' (eq. '%s': '%s') not found in category map %r" %
-                        (v, name, eq, catmap)
-                    )
-                    error = True
-
-        if error:
-            raise ModelError('Inconsistent catmap and model descriptions')
-
-        # Check that the components are all provided, given the categories
-        for k,v in catmap.iteritems():
-            if k not in model['full']:
-                log.warn('Component (%s : %s) not used in model.' % (k,v))
-
-            if not v in compcats:
-                log.error('Map component (%s : %s) not found in list of components.' % (k,v))
-                error = True
-
-        if error:
-            raise ModelError('Component list incomplete or incorrect')
 
     def set_image(self, image):
         """
@@ -557,15 +453,15 @@ class ImageState(State, comp.ComponentCollection):
         otile = self.get_update_tile(params, values)
         if otile is None:
             return [None]*3
-
         ptile = self.get_padding_size(otile)
-        if ptile is None:
-            return [None]*3
 
-        if (otile.l < 0).any() or (otile.r > self.oshape.r).any() or (otile.shape <= 0).any():
-            raise UpdateError("update triggered negative block size")
-        if (ptile.l < 0).any() or (ptile.r > self.oshape.r).any() or (ptile.shape <= 0).any():
-            raise UpdateError("update triggered negative padding size")
+        if ((otile.l < 0).any() or (otile.r > self.oshape.r).any() or
+                (otile.shape <= 0).any()):
+            raise UpdateError("update triggered invalid tile size")
+
+        if ((ptile.l < 0).any() or (ptile.r > self.oshape.r).any() or
+                (ptile.shape <= 0).any()):
+            raise UpdateError("update triggered invalid padding tile size")
 
         # now remove the part of the tile that is outside the image and pad the
         # interior part with that overhang. reflect the necessary padding back
@@ -577,17 +473,6 @@ class ImageState(State, comp.ComponentCollection):
         outer = util.Tile.intersection(outer, self.oshape)
         inner = util.Tile.intersection(inner, self.oshape)
         return outer, inner, iotile
-
-    def _map_vars(self, funcname, extra=None, *args, **kwargs):
-        out = {}
-        extra = extra or {}
-
-        for c in self.comps:
-            cat = c.category
-            out[self.mapcat[cat]] = getattr(c, funcname)(*args, **kwargs)
-
-        out.update(extra)
-        return out
 
     def update(self, params, values):
         """
@@ -610,21 +495,20 @@ class ImageState(State, comp.ComponentCollection):
         # have all components update their tiles
         self.set_tile(otile)
 
-        dcompname = 'd'+self.mapcat[comps[0].category]
         oldmodel = self._model[itile.slicer].copy()
 
         # here we diverge depending if there is only one component update
         # (so that we may calculate a variation / difference image) or if many
         # parameters are being update (should just update the whole model).
-        if (len(comps) == 1 and self.modelstr.has_key(dcompname)):
+        if len(comps) == 1 and self.mdl.get_difference_model(comps[0].category):
             comp = comps[0]
             model0 = copy.copy(comp.get())
             super(ImageState, self).update(params, values)
             model1 = copy.copy(comp.get())
 
             diff = model1 - model0
-            evar = self._map_vars('get', extra={dcompname: diff})
-            diff = eval(self.modelstr[dcompname], evar)
+            evar = self.mdl.map_vars(self.comps, 'get', diffvar=comp.category)
+            diff = eval(self.mdl.get_difference_model(comp), evar)
 
             if isinstance(model0, (float, int)):
                 self._model[itile.slicer] += diff
@@ -635,8 +519,8 @@ class ImageState(State, comp.ComponentCollection):
 
             # unpack a few variables to that this is easier to read, nice compact
             # formulas coming up, B = bkg, I = ilm, C = off
-            evar = self._map_vars('get')
-            diff = eval(self.modelstr['full'], evar)
+            evar = self.mdl.map_vars(self.comps, 'get')
+            diff = eval(self.mdl.get_base_model(), evar)
             self._model[itile.slicer] = diff[iotile.slicer]
 
         newmodel = self._model[itile.slicer].copy()
@@ -655,8 +539,8 @@ class ImageState(State, comp.ComponentCollection):
 
     def _calc_model(self):
         self.set_tile(self.oshape)
-        var = self._map_vars('get')
-        return eval(self.modelstr['full'], var)
+        var = self.mdl.map_vars(self.comps, 'get')
+        return eval(self.mdl.get_base_model(), var)
 
     def _calc_residuals(self):
         return self._model - self._data
@@ -670,8 +554,9 @@ class ImageState(State, comp.ComponentCollection):
         else:
             res = model - self._data[tile.slicer]
 
-        nlogs = -np.log(np.sqrt(2*np.pi)*self.sigma)*res.size
-        return -0.5*((res/self.sigma)**2).sum() + nlogs
+        sig, isig = self.sigma, 1.0/self.sigma
+        nlogs = -np.log(np.sqrt(2*np.pi)*sig)*res.size
+        return -0.5*isig*isig*np.dot(res.flat, res.flat) + nlogs
 
     def update_from_model_change(self, oldmodel, newmodel, tile):
         """
