@@ -289,7 +289,7 @@ class OrthoManipulator(object):
     def key_press_event(self, event):
         self.event = event
 
-        if event.key == 'p':
+        if event.key == 'c':
             self.component = self.cycle(self.component, self.components)
             self.set_field()
             self.draw()
