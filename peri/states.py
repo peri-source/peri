@@ -475,12 +475,12 @@ class ImageState(State, comp.ComponentCollection):
             return [None]*3
         ptile = self.get_padding_size(otile)
 
-        if ((otile.l < 0).any() or (otile.r > self.oshape.r).any() or
-                (otile.shape <= 0).any()):
+        otile = util.Tile.intersection(otile, self.oshape)
+
+        if (otile.shape <= 0).any():
             raise UpdateError("update triggered invalid tile size")
 
-        if ((ptile.l < 0).any() or (ptile.r > self.oshape.r).any() or
-                (ptile.shape <= 0).any()):
+        if (ptile.shape < 0).any() or (ptile.shape > self.oshape.shape).any():
             raise UpdateError("update triggered invalid padding tile size")
 
         # now remove the part of the tile that is outside the image and pad the
