@@ -539,6 +539,7 @@ class PlatonicSpheresCollection(Component):
         # update the parameters globally
         self.setup_variables()
         self.trigger_parameter_change()
+        return pos, rad
 
     def get_positions(self):
         return self.pos
