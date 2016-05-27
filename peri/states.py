@@ -312,6 +312,12 @@ class PolyFitState(State):
             params=params, values=values, ordered=False
         )
 
+        self.update(self.params, self.values)
+
+    def update(self, params, values):
+        super(PolyFitState, self).update(params, values)
+        self._model =  np.polyval(self.values, self._xpts)
+
     @property
     def data(self):
         """ Get the raw data of the model fit """
@@ -320,7 +326,7 @@ class PolyFitState(State):
     @property
     def model(self):
         """ Get the current model fit to the data """
-        return np.polyval(self.values, self._xpts)
+        return self._model
 
     @property
     def loglikelihood(self):
