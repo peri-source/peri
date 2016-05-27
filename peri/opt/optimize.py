@@ -1,6 +1,8 @@
 """
 block_globals
 aug_state
+s.get('...').??? -- probably bad form (e.g. s.get('obj').N to get particle pos
+is bad because you could have more than 1 particle. 
 """
 import os
 import sys
@@ -956,7 +958,6 @@ class LMGlobals(LMEngine):
         self.max_mem = max_mem
         self.num_pix = get_num_px_jtj(state, len(param_names), max_mem=max_mem,
                 **self.kwargs)
-        # self.blocks = state.explode(block) ???
         self.param_names = param_names
         super(LMGlobals, self).__init__(**kwargs)
 
@@ -968,7 +969,7 @@ class LMGlobals(LMEngine):
 
     def calc_J(self):
         del self.J
-        self.J, self._inds, self._slicer = get_rand_Japprox(self.state,
+        self.J, self._inds, _ = get_rand_Japprox(self.state,
                 self.param_names, num_inds=self.num_pix, **self.kwargs)
 
     def calc_residuals(self):
@@ -980,11 +981,10 @@ class LMGlobals(LMEngine):
 
     def set_params(self, new_param_names, new_damping=None):
         self.param_names = new_param_names
-        # self.blocks = self.state.explode(new_block) #???
         self._set_err_paramvals()
         self.reset(new_damping=new_damping)
 
-class LMParticles(LMEngine): #UPDATE ME when you know how the particle labels work
+class LMParticles(LMEngine):
     def __init__(self, state, particles, include_rad=True, **kwargs):
         self.state = state
         self.particles = particles
@@ -1028,7 +1028,7 @@ class LMParticles(LMEngine): #UPDATE ME when you know how the particle labels wo
         self._set_err_paramvals()
         self.reset(new_damping=new_damping)
 
-class LMParticleGroupCollection(object): #UPDATE ME when LMParticles diftile changes
+class LMParticleGroupCollection(object):
     """
     Convenience wrapper for LMParticles. This generates a separate instance
     for the particle groups each time and optimizes with that, since storing
@@ -1176,22 +1176,25 @@ class AugmentedState(object): #FIXME when blocks work....
         """
         #FIXME block -> param_names
 
-        if np.any(block & state.b_rad) or np.any(block & state.create_block('rscale')):
-            raise ValueError('block must not contain any radii blocks.')
+        rad_nms = state.param_radii()
+        has_rad = map(lambda x: x in param_names, rad_nms)
+        if np.any(has_rad):# or np.any(block & state.create_block('rscale')):
+            raise ValueError('param_names must not contain any radii.')
 
         self.state = state
         self.param_names = param_names
+        self.n_st_params = len(param_names)
         self.rz_order = rz_order
 
         #Controling which params are globals, which are r(xyz) parameters
-        globals_mask = np.zeros(block.sum() + rz_order, dtype='bool')
-        globals_mask[:block.sum()] = True
+        globals_mask = np.zeros(self.n_st_params + rz_order, dtype='bool')
+        globals_mask[:self.n_st_params] = True
         rscale_mask = -globals_mask
         self.globals_mask = globals_mask
         self.rscale_mask = rscale_mask
 
         param_vals = np.zeros(globals_mask.size, dtype='float')
-        param_vals[:block.sum()] = self.state.state[block].copy()
+        param_vals[:self.n_st_params] = np.copy(self.state.state[param_names])
         self.param_vals = param_vals
         self.reset()
 
@@ -1201,11 +1204,12 @@ class AugmentedState(object): #FIXME when blocks work....
         if any of the particle radii or positions have been changed
         external to the augmented state.
         """
-        self._particle_mask = self.state.obj.typ == 1
-        self._initial_rad = self.state.obj.rad[self._particle_mask].copy()
-        self._initial_pos = self.state.obj.pos[self._particle_mask].copy()
+        inds = range(self.state.get('obj').N)
+        self._rad_nms = self.state.param_particle_rad(inds)
+        self._pos_nms = self.state.param_particle_pos(inds)
+        self._initial_rad = np.copy(self.state.state[self._rad_nms])
+        self._initial_pos = np.copy(self.state.state[self._pos_nms]).reshape((-1,3))
         self.param_vals[self.rscale_mask] = 0
-        self._st_rad_blk = self._get_rad_block()
 
     def set_block(self, new_block):
         """
@@ -1215,15 +1219,15 @@ class AugmentedState(object): #FIXME when blocks work....
         raise NotImplementedError
 
     def rad_func(self, pos):
-        """Right now exp(legval(z))"""
+        """Right now exp(self._poly(z))"""
         return np.exp(self._poly(pos[:,2]))
 
     def _poly(self, z):
         """Right now legval(z)"""
-        shp = self.state.image.shape
+        shp = self.state.oshape.shape
         zmax = float(shp[0])
         zmin = 0.0
-        zmid = zmax / 2
+        zmid = zmax * 0.5
 
         coeffs = self.param_vals[self.rscale_mask].copy()
         if coeffs.size == 0:
@@ -1233,18 +1237,10 @@ class AugmentedState(object): #FIXME when blocks work....
                     self.param_vals[self.rscale_mask])
         return ans
 
-    def _get_rad_block(self):
-        s = self.state
-        block = s.block_none()
-        for a in xrange(s.obj.typ.size):
-            if s.obj.typ[a] == 1:
-                block |= s.block_particle_rad(1*a)
-        return block
-
     def update(self, param_vals):
         """Updates all the parameters of the state + rscale(z)"""
         self.update_rscl_x_params(param_vals[self.rscale_mask], do_reset=False)
-        self.state.update(self.params, param_vals[self.globals_mask])
+        self.state.update(self.param_names, param_vals[self.globals_mask])
         self.param_vals[:] = param_vals.copy()
 
     def update_rscl_x_params(self, new_rscl_params, do_reset=True):
@@ -1257,10 +1253,11 @@ class AugmentedState(object): #FIXME when blocks work....
 
         rnew = self._initial_rad * new_scale
         if do_reset:
-            update_state_global(self.state, self._st_rad_blk, rnew)
+            self.state.update(self._rad_nms, rnew)
         else:
-            self.state.obj.rad[self._particle_mask] = rnew
-            self.state.obj.initialize(zscale=self.state.zscale)
+            #FIXME you can do this without the extra convolution if you pass
+            #all at once... right now don't worry about it
+            self.state.update(self._rad_nms, rnew)
 
 class LMAugmentedState(LMEngine):
     def __init__(self, aug_state, max_mem=3e9, opt_kwargs={}, **kwargs):
@@ -1283,30 +1280,26 @@ class LMAugmentedState(LMEngine):
         self.aug_state = aug_state
         self.kwargs = opt_kwargs
         self.max_mem = max_mem
-        self.num_pix = get_num_px_jtj(aug_state.state, aug_state.block.sum() +
-                aug_state.rz_order, max_mem=max_mem, **self.kwargs)
+        self.num_pix = get_num_px_jtj(aug_state.state, aug_state.param_vals.size,
+                max_mem=max_mem, **self.kwargs)
         super(LMAugmentedState, self).__init__(**kwargs)
 
     def _set_err_paramvals(self):
         self.error = self.aug_state.state.error
         self._last_error = self.aug_state.state.error
-        self.param_vals = self.aug_state.params.copy()
+        self.param_vals = self.aug_state.param_vals.copy()
         self._last_values = self.param_vals.copy()
 
     def calc_J(self):
         #0.
-        del self.J, self._inds
+        del self.J
 
         #1. J for the state:
         s = self.aug_state.state
-        param_names = self.aug_state.param_names
-        blocks = s.explode(self.aug_state.block)
-        J_st, inds, slicer = get_rand_Japprox(s, param_names, num_inds=
-                self.num_pix, **self.kwargs)
-        J_st, inds = get_rand_Japprox(s, blocks, num_inds=self.num_pix,
-                **self.kwargs)
+        sa = self.aug_state
+        J_st, inds, _ = get_rand_Japprox(s, self.aug_state.param_names,
+                num_inds=self.num_pix, **self.kwargs)
         self._inds = inds
-        self._slicer = slicer
 
         #2. J for the augmented portion:
         old_aug_vals = sa.param_vals[sa.rscale_mask].copy()
@@ -1319,7 +1312,7 @@ class LMAugmentedState(LMEngine):
             sa.update_rscl_x_params(old_aug_vals + dl, do_reset=True)
             i1 = s.residuals
             der = (i1-i0)/dl
-            J_aug.append(der[self._inds].ravel())
+            J_aug.append(der[self._inds].copy().ravel())
 
         if J_st.size == 0:
             self.J = np.array(J_aug)
@@ -1329,7 +1322,7 @@ class LMAugmentedState(LMEngine):
             self.J = np.append(J_st, np.array(J_aug), axis=0)
 
     def calc_residuals(self):
-        return self.aug_state.state.residuals[self._inds].ravel()
+        return self.aug_state.state.residuals[self._inds].copy().ravel()
 
     def update_function(self, params):
         self.aug_state.update(params)
