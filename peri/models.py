@@ -135,16 +135,27 @@ class ConfocalImageModel(Model):
         }
         Model.__init__(self, modelstr=modelstr, varmap=varmap)
 
-class ParticlesModel(Model):
+class BlurredParticlesModel(Model):
     def __init__(self):
         varmap = {
-            'P': 'obj', 'H': 'psf', 'C': 'offset'
+            'P': 'obj', 'H': 'psf', 'S': 'scale', 'C': 'offset'
         }
         modelstr = {
-            'full': 'H(P) + C',
-            'dP': 'H(dP)',
-            'dC': 'dC'
+            'full': 'H(S*P) + C',
+            'dP': 'H(S*dP)',
+            'dS': 'H(dS*P)',
+            'dC': 'dC',
         }
         Model.__init__(self, modelstr=modelstr, varmap=varmap)
 
+class TestModel(Model):
+    def __init__(self):
+        varmap = {
+            'P': 'obj', 'H': 'psf'
+        }
+        modelstr = {
+            'full': 'H(P)',
+            'dP': 'H(dP)',
+        }
+        Model.__init__(self, modelstr=modelstr, varmap=varmap)
 
