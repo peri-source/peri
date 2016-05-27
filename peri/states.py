@@ -119,7 +119,9 @@ class State(comp.ParameterGroup):
 
     rts : boolean
         Return To Start. Return the state to how you found it when done,
-        needs another update call, so can be ommitted sometimes (small dl)
+        needs another update call, so can be ommitted sometimes (small dl).
+        If True, functions return the final answer along with the final func
+        evaluation so that it may be passed onto other calls.
 
     **kwargs :
         Arguments to `func`
@@ -151,8 +153,9 @@ class State(comp.ParameterGroup):
 
         if rts:
             self.update(p, vals)
-
-        return (f1 - f0) / dl
+            return (f1 - f0) / dl
+        else:
+            return (f1 - f0) / dl , f1
 
     def _hess_two_param(self, funct, p0, p1, dl=2e-5, f0=None, rts=False, **kwargs):
         """
@@ -175,8 +178,9 @@ class State(comp.ParameterGroup):
         if rts:
             self.update(p0, vals0)
             self.update(p1, vals1)
-
-        return (f11 - f10 - f01 + f00) / (dl**2)
+            return (f11 - f10 - f01 + f00) / (dl**2)
+        else:
+            return (f11 - f10 - f01 + f00) / (dl**2), f01
 
     def _grad(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
         """
@@ -193,9 +197,14 @@ class State(comp.ParameterGroup):
 
         grad = np.zeros(shape)
         for i, p in enumerate(ps):
-            grad[i] = self._grad_one_param(
+            tgrad = self._grad_one_param(
                 funct, p, dl=dl, f0=f0, rts=rts, **kwargs
             )
+
+            if not rts:
+                tgrad, f0 = tgrad
+
+            grad[i] = tgrad
         return np.squeeze(grad)
 
     def _jtj(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
@@ -225,6 +234,10 @@ class State(comp.ParameterGroup):
                 thess = self._hess_two_param(
                     funct, pi, pj, dl=dl, f0=f0, rts=rts, **kwargs
                 )
+
+                if not rts:
+                    thess, f0 = thess
+
                 hess[i][J] = thess
                 hess[J][i] = thess
         return np.squeeze(hess)
