@@ -18,13 +18,14 @@ from peri.interpolation import BarnesInterpolation1D
 class Polynomial3D(Component):
     category = 'ilm'
 
-    def __init__(self, shape=None, order=(1,1,1), tileinfo=None, constval=None):
+    def __init__(self, order=(1,1,1), tileinfo=None, constval=None,
+            category='ilm', shape=None):
         """
         A polynomial 3D class for updating large fields of polys.
 
         Parameters:
         -----------
-        shape : tuple
+        shape : `peri.util.Tile`
             shape of the field (z,y,x)
 
         order : tuple
@@ -43,6 +44,7 @@ class Polynomial3D(Component):
         self.shape = shape
         self.order = order
         self.tileinfo = tileinfo
+        self.category = category
 
         # set up the parameter mappings and values
         params, values = [], []
@@ -159,8 +161,8 @@ class LegendrePoly3D(Polynomial3D):
 # 2+1d functional representations of ILMs, p(x,y)+q(z)
 #=============================================================================
 class Polynomial2P1D(Polynomial3D):
-    def __init__(self, shape=None, order=(1,1,1), tileinfo=None, constval=None,
-            operation='*'):
+    def __init__(self, order=(1,1,1), tileinfo=None, constval=None,
+            operation='*', category='ilm', shape=None):
         """
         A polynomial 2+1D class for updating large fields of polys.  The form
         of these polynomials if P(x,y) () Q(z), separated in the z-direction.
@@ -192,6 +194,7 @@ class Polynomial2P1D(Polynomial3D):
         self.operation = operation
         self.order = order
         self.tileinfo = tileinfo
+        self.category = category
 
         # set up the parameter mappings and values
         params, values = [], []
@@ -298,8 +301,8 @@ class Polynomial2P1D(Polynomial3D):
         self.initialize()
 
 class LegendrePoly2P1D(Polynomial2P1D):
-    def __init__(self, shape=None, order=(1,1,1), **kwargs):
-        super(LegendrePoly2P1D, self).__init__(shape=shape, order=order, **kwargs)
+    def __init__(self, order=(1,1,1), **kwargs):
+        super(LegendrePoly2P1D, self).__init__(order=order, **kwargs)
 
     def rvecs(self):
         vecs = super(LegendrePoly2P1D, self).rvecs()
@@ -319,8 +322,8 @@ class LegendrePoly2P1D(Polynomial2P1D):
             return legval(self.r[0], ck)
 
 class ChebyshevPoly2P1D(Polynomial2P1D):
-    def __init__(self, shape=None, order=(1,1,1), **kwargs):
-        super(ChebyshevPoly2P1D, self).__init__(shape=shape, order=order, **kwargs)
+    def __init__(self, order=(1,1,1), **kwargs):
+        super(ChebyshevPoly2P1D, self).__init__(order=order, **kwargs)
 
     def term_ijk(self, index):
         if len(index) == 2:
@@ -341,8 +344,8 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 class BarnesStreakLegPoly2P1D(Component):
     category = 'ilm'
 
-    def __init__(self, shape=None, npts=(40,20), zorder=7, op='*',
-            barnes_dist=1.75, local_updates=True):
+    def __init__(self, npts=(40,20), zorder=7, op='*', barnes_dist=1.75,
+            local_updates=True, category='ilm', shape=None):
         """
         A Barnes interpolant. This one is of the form
 
@@ -376,6 +379,7 @@ class BarnesStreakLegPoly2P1D(Component):
         self.shape = shape
         self.local_updates = local_updates
         self.barnes_dist = barnes_dist
+        self.category = category
         self.zorder = zorder
         self.npts = npts
         self.op = op

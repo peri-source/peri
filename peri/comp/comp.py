@@ -336,6 +336,8 @@ class ComponentCollection(Component):
             if pad is not None:
                 sizes.append(pad)
 
+        if len(sizes) == 0:
+            return None
         return util.Tile.boundingtile(sizes)
 
     def get_field(self):
