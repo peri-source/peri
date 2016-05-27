@@ -246,6 +246,15 @@ class State(comp.ParameterGroup):
         f.im_func.func_doc += self._graddoc
 
     def build_funcs(self):
+        """
+        Here, we build gradient and hessian functions based on the properties
+        of a state that are generally wanted. For each one, we fill in _grad or
+        _hess with a function that takes care of various options such as
+        slicing and flattening. For example, `m` below takes the model, selects
+        different indices from it, maybe flattens it and copies it. This is
+        then used in the fisherinformation, gradmodel, and hessmodel functions.
+        """
+        # create essentially lambda functions, but with a nice signature
         def m(inds=None, slicer=None, flat=True):
             return sample(self.model, inds=inds, slicer=slicer, flat=flat).copy()
 
@@ -254,6 +263,7 @@ class State(comp.ParameterGroup):
 
         l = lambda: self.loglikelihood
 
+        # set the member functions using partial
         self.fisherinformation = partial(self._jtj, funct=m)
         self.gradloglikelihood = partial(self._grad, funct=l)
         self.hessloglikelihood = partial(self._hess, funct=l)
@@ -262,6 +272,7 @@ class State(comp.ParameterGroup):
         self.JTJ = partial(self._jtj, funct=r)
         self.J = partial(self._grad, funct=r)
 
+        # add the appropriate documentation to the following functions
         self.fisherinformation.__doc__ = self._graddoc + self._sampledoc
         self.gradloglikelihood.__doc__ = self._graddoc
         self.hessloglikelihood.__doc__ = self._graddoc
@@ -270,6 +281,8 @@ class State(comp.ParameterGroup):
         self.JTJ.__doc__ = self._graddoc + self._sampledoc
         self.J.__doc__ = self._graddoc + self._sampledoc
 
+        # add documentation to the private functions as well. this is done
+        # slightly differently, hence the function call
         self._dograddoc(self._grad_one_param)
         self._dograddoc(self._hess_two_param)
         self._dograddoc(self._grad)
@@ -280,8 +293,10 @@ class State(comp.ParameterGroup):
         class _Statewrap(object):
             def __init__(self, obj):
                 self.obj = obj
-            def __getitem__(self, d):
-                return self.obj.get_values(d)
+            def __getitem__(self, d=None):
+                if d is None:
+                    d = self.obj.params
+                return util.delistify(self.obj.get_values(d))
 
         self.state = _Statewrap(self)
 
@@ -542,8 +557,7 @@ class ImageState(State, comp.ComponentCollection):
         else:
             super(ImageState, self).update(params, values)
 
-            # unpack a few variables to that this is easier to read, nice compact
-            # formulas coming up, B = bkg, I = ilm, C = off
+            # allow the model to be evaluated using our components
             diff = self.mdl.evaluate(self.comps, 'get')
             self._model[itile.slicer] = diff[iotile.slicer]
 
