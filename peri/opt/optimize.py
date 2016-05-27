@@ -1,8 +1,7 @@
 """
-block_globals
-aug_state
 s.get('...').??? -- probably bad form (e.g. s.get('obj').N to get particle pos
 is bad because you could have more than 1 particle. 
+fix_error
 """
 import os
 import sys
@@ -992,6 +991,10 @@ class LMParticles(LMEngine):
                 else state.param_particle_pos(particles))
         self.error = self.state.error
         self._dif_tile = self._get_diftile()
+        #Max, min rads, distance from edge for allowed updates
+        self._MINRAD = 1e-3
+        self._MAXRAD = 2e2
+        self._MINDIST= 1e-3
         super(LMParticles, self).__init__(**kwargs)
 
     def _get_diftile(self):
@@ -1015,9 +1018,17 @@ class LMParticles(LMEngine):
         return self.state.residuals[self._dif_tile.slicer].ravel()
 
     def update_function(self, values):
+        #1. Clipping values:
+        rad_nms = self.state.param_radii()
+        pos_nms = self.state.param_positions()
+        is_rad = np.array(map(lambda x: x in rad_nms, self.param_names))
+        is_pos = np.array(map( lambda x: x in pos_nms, self.param_names))
+        
+        values[is_rad] = np.clip(values[is_rad], self._MINRAD, self._MAXRAD)
+        values[is_pos] = np.clip(values[is_pos], self._MINDIST, 
+                self.state.oshape.shape - self._MINDIST)
+        
         self.state.update(self.param_names, values) 
-        #UPDATE ME you need to be able to add these options below:
-                # relative=False, fix_errors=True, **self.particle_kwargs)
         return self.state.error
 
     def set_particles(self, new_particles, new_damping=None):

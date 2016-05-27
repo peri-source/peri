@@ -221,7 +221,7 @@ def add_subtract(st, max_iter=5, **kwargs):
     Parameters
     ----------
         st: ConfocalImagePython
-            The state to add and subtract particle too. 
+            The state to add and subtract particles to.
         max_iter : Int
             The maximum number of add-subtract loops to use. Default is 5.
             Terminates after either max_iter loops or when nothing has
