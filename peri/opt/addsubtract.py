@@ -52,44 +52,43 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
     accepts = 0
     new_inds = []
     if rad == 'calc':
-        rad = np.median(st.obj.rad[st.obj.typ==1])
-    message = '-'*30 + 'ADDING' + '-'*30 + '\n  R\t  Z\t  Y\t  X\t|\t ERR0\t\t ERR1'
+        rad = np.median(st.obj_get_radii())
+    message = '-'*30 + 'ADDING' + '-'*30 + '\n  Z\t  Y\t  X\t  R\t|\t ERR0\t\t ERR1'
     with log.noformat():
         CLOG.info(message)
     for a in xrange(guess.shape[0]):
         p = guess[a]
         old_err = st.error
-        ind = st.add_particle(p, rad)
+        ind = st.obj_add_particle(p, rad)
         if do_opt:
             opt.do_levmarq_particles(st, np.array([ind],dtype='int'), 
                     damping=1.0, max_iter=2, run_length=3, eig_update=False, 
-                    particle_kwargs={'include_rad':False})
+                    include_rad=False)
         did_kill = check_remove_particle(st, ind, **kwargs)
         if not did_kill:
             accepts += 1
             new_inds.append(ind)
             part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
-                    st.obj.rad[ind], st.obj.pos[ind,0], st.obj.pos[ind,1], 
-                    st.obj.pos[ind,2], old_err, st.error)
+                    tuple(st.state[st.param_particle(ind)]) + (old_err, st.error))
             with log.noformat():
                 CLOG.info(part_msg)
     return accepts, new_inds
     
-def check_remove_particle(st, n, im_change_frac=0.2, min_derr='3sig', **kwargs):
+def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs):
     """
-    Checks whether to remove particle 'n' from state 'st'. If removing the
+    Checks whether to remove particle 'ind' from state 'st'. If removing the
     particle increases the error by less than max( min_derr, change in image *
             im_change_frac), then the particle is removed. 
     """
     if min_derr == '3sig':
         min_derr = 3 * st.sigma
     present_err = st.error; present_d = st.residuals.copy()
-    p, r = st.remove_particle(n)
+    p, r = st.obj_remove_particle(ind)
     absent_err = st.error; absent_d = st.residuals.copy()
     
     im_change = np.sum((present_d - absent_d)**2)
     if (absent_err - present_err) >= max([im_change_frac * im_change, min_derr]):
-        st.add_particle(p, r)
+        st.obj_add_particle(p, r)
         killed = False
     else:
         killed = True
@@ -100,7 +99,7 @@ def sample_n_add(st, rad='calc', tries=20, **kwargs):
     do_opt=True, im_change_frac=0.2, opt_box_scale=3,
     """
     if rad == 'calc':
-        rad = np.median(st.obj.rad[st.obj.typ==1])
+        rad = np.median(st.obj_get_radii())
     
     guess, npart = feature_guess(st, rad, **kwargs)
     tries = np.min([tries, npart])
@@ -108,13 +107,13 @@ def sample_n_add(st, rad='calc', tries=20, **kwargs):
     accepts, new_inds = check_add_particles(st, guess[:tries], rad=rad, **kwargs)
     return accepts, new_inds
 
-def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0, 
+def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0, 
         check_rad_cutoff=[3.5,15], check_outside_im=True, tries=100, 
         im_change_frac=0.2, **kwargs):
     """
     Same syntax as before, but here I'm just trying to kill the smallest particles...
     I don't think this is good because you only check the same particles each time
-    Updates a single particle (labeled ind) in the state s. 
+    Updates a single particle (labeled ind) in the state st. 
     
     Parameters
     -----------
@@ -156,73 +155,63 @@ def remove_bad_particles(s, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
         The cumulative number of particles removed. 
     
     """
-    if s.varyn == False:
-        raise ValueError('s.varyn must be True')
-
     is_near_im_edge = lambda pos, pad: ((pos < pad) | (pos > 
-            np.array(s.image.shape) - pad)).any(axis=1)
+            np.array(st.oshape.shape) - pad)).any(axis=1)
     removed = 0
     attempts = 0
-    typ = s.obj.typ.astype('bool')
     
-    q10 = int(0.1 * typ.sum())#10% quartile
-    r_sig = np.sort(s.obj.rad[typ])[q10:-q10].std()
-    r_med = np.median(s.obj.rad[typ])
+    n_tot_part = st.get('obj').N
+    q10 = int(0.1 * n_tot_part)#10% quartile
+    r_sig = np.sort(st.obj_get_radii())[q10:-q10].std()
+    r_med = np.median(st.obj_get_radii())
     if max_rad == 'calc':
         max_rad = r_med + 15*r_sig
     if min_rad == 'calc':
-        # min_rad = r_med - 5*r_sig
         min_rad = r_med - 25*r_sig
     if check_rad_cutoff == 'calc':
-        check_rad_cutoff = [r_med - 7.6*r_sig, r_med + 7.5*r_sig]
+        check_rad_cutoff = [r_med - 7.5*r_sig, r_med + 7.5*r_sig]
     
     #1. Automatic deletion:
-    rad_wrong_size = np.nonzero(((s.obj.rad < min_rad) | 
-            (s.obj.rad > max_rad)) & typ)[0]
-    near_im_edge = np.nonzero(is_near_im_edge(s.obj.pos, min_edge_dist) & typ)[0]
+    rad_wrong_size = np.nonzero((st.obj_get_radii() < min_rad) | 
+            (st.obj_get_radii() > max_rad))[0]
+    near_im_edge = np.nonzero(is_near_im_edge(st.obj_get_positions(), 
+            min_edge_dist))[0]
     delete_inds = np.unique(np.append(rad_wrong_size, near_im_edge)).tolist()
-    message = '-'*27 + 'SUBTRACTING' + '-'*28 + '\n  R\t  Z\t  Y\t  X\t|\t ERR0\t\t ERR1'
+    message = '-'*27 + 'SUBTRACTING' + '-'*28 + '\n  Z\t  Y\t  X\t  R\t|\t ERR0\t\t ERR1'
     with log.noformat():
         CLOG.info(message)
 
     for ind in delete_inds:
-        er0 = s.error
-        p, r = s.remove_particle(ind)
-        er1 = s.error
-        prt_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
-                s.obj.rad[ind], s.obj.pos[ind,0], s.obj.pos[ind,1], 
-                s.obj.pos[ind,2], er0, er1)
+        old_err = st.error
+        p, r = st.obj_remove_particle(ind)
+        part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
+                tuple(st.state[st.param_particle(ind)]) + (old_err, st.error))
         with log.noformat():
-            CLOG.info(prt_msg)
+            CLOG.info(part_msg)
         removed += 1
     
     #2. Conditional deletion:
-    typ = s.obj.typ.astype('bool') #since we've updated particles
-    check_rad_inds = np.nonzero(((s.obj.rad < check_rad_cutoff[0]) | 
-            (s.obj.rad > check_rad_cutoff[1])) & typ)[0]
+    check_rad_inds = np.nonzero((st.obj_get_radii() < check_rad_cutoff[0]) | 
+            (st.obj_get_radii() > check_rad_cutoff[1]))[0]
     if check_outside_im:
-        check_edge_inds= np.nonzero(is_near_im_edge(s.obj.pos, s.pad) & typ)[0]
+        check_edge_inds= np.nonzero(is_near_im_edge(st.obj_get_positions(),
+                st.pad))[0]
         check_inds = np.unique(np.append(check_rad_inds, check_edge_inds))
     else:
         check_inds = check_rad_inds
-    
-    
-    check_inds = check_inds[np.argsort(s.obj.rad[check_inds])]
+
+    check_inds = check_inds[np.argsort(st.obj_get_radii()[check_inds])]
     tries = np.max([tries, check_inds.size])
     for ind in check_inds[:tries]:
-        if s.obj.typ[ind] == 0:
-            raise RuntimeError('you messed up coding this')
-        er0 = s.error
-        killed = check_remove_particle(s, ind, im_change_frac=im_change_frac)
+        old_err = st.error
+        killed = check_remove_particle(st, ind, im_change_frac=im_change_frac)
         if killed:
             removed += 1
             delete_inds.append(ind)
-            er1 = s.error
-            prt_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
-                    s.obj.rad[ind], s.obj.pos[ind,0], s.obj.pos[ind,1], 
-                    s.obj.pos[ind,2], er0, er1)
+            part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
+                    tuple(st.state[st.param_particle(ind)]) + (old_err, st.error))
             with log.noformat():
-                CLOG.info(prt_msg)
+                CLOG.info(part_msg)
     return removed, delete_inds
 
 def add_subtract(st, max_iter=5, **kwargs):
@@ -291,7 +280,7 @@ def add_subtract(st, max_iter=5, **kwargs):
         changed_inds : np.ndarray of ints
             The particle indices that were added and/or subtracted during
             the fit. 
-    
+
     Comments
     --------
         Occasionally after the intial featuring a cluster of particles
