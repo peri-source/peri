@@ -668,28 +668,6 @@ def patch_docs(subclass, superclass):
             func = getattr(subclass, name)
             func.im_func.__doc__ = getattr(superclass, name).im_func.__doc__
 
-def copydoc(obj0, obj1):
-    pass
-
-#=============================================================================
-# debugging / python interpreter / logging
-#=============================================================================
-def debug(sig, frame):
-    """Interrupt running process, and provide a python prompt for
-    interactive debugging."""
-    d={'_frame':frame}         # Allow access to frame object.
-    d.update(frame.f_globals)  # Unless shadowed by global
-    d.update(frame.f_locals)
-
-    i = code.InteractiveConsole(d)
-    message  = "Signal received : entering python shell.\nTraceback:\n"
-    message += ''.join(traceback.format_stack(frame))
-    i.interact(message)
-
-def listen():
-    # register handler
-    signal.signal(signal.SIGUSR1, debug)
-
 #=============================================================================
 # misc helper functions
 #=============================================================================
