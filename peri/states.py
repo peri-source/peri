@@ -1,4 +1,5 @@
 import os
+import re
 import copy
 import json
 import numpy as np
@@ -601,8 +602,11 @@ class ImageState(State, comp.ComponentCollection):
         raise NotImplemented('inherited but not relevant')
 
     def __str__(self):
+        def _pad(s):
+            return re.subn('(\n)', '\n   ', s)[0]
+
         return "{} [\n    {}\n]".format(self.__class__.__name__,
-            '\n    '.join([c.category+': '+str(c) for c in self.comps])
+            _pad('\n'.join([c.category+': '+str(c) for c in self.comps]))
         )
 
     def __getstate__(self):

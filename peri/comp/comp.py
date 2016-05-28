@@ -1,3 +1,4 @@
+import re
 import inspect
 from operator import add
 from collections import OrderedDict, defaultdict
@@ -387,8 +388,11 @@ class ComponentCollection(Component):
         return [i for c in self.comps for i in c.exports()]
 
     def __str__(self):
+        def _pad(s):
+            return re.subn('(\n)', '\n   ', s)[0]
+
         return "{} [\n    {}\n]".format(self.__class__.__name__, 
-            '\n    '.join([c.category+': '+str(c) for c in self.comps])
+            _pad('\n'.join([c.category+': '+str(c) for c in self.comps]))
         )
 
     def __repr__(self):
