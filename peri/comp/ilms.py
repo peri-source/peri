@@ -45,12 +45,13 @@ class Polynomial3D(Component):
         self.order = order
         self.tileinfo = tileinfo
         self.category = category
+        c = self.category
 
         # set up the parameter mappings and values
         params, values = [], []
         self.param_term = {}
         for order in product(*(xrange(o) for o in self.order)):
-            p = 'ilm-%i-%i-%i' % order
+            p = c+'-%i-%i-%i' % order
             self.param_term[p] = order
 
             params.append(p)
@@ -195,6 +196,7 @@ class Polynomial2P1D(Polynomial3D):
         self.order = order
         self.tileinfo = tileinfo
         self.category = category
+        c = self.category
 
         # set up the parameter mappings and values
         params, values = [], []
@@ -202,14 +204,14 @@ class Polynomial2P1D(Polynomial3D):
         self.z_param = {}
 
         for order in product(*(xrange(o) for o in self.order[1::-1])):
-            p = 'ilm-xy-%i-%i' % order
+            p = c+'-xy-%i-%i' % order
             self.xy_param[p] = order
 
             params.append(p)
             values.append(0.0)
 
         for order in xrange(self.order[0]):
-            p = 'ilm-z-%i' % order
+            p = c+'-z-%i' % order
             self.z_param[p] = (order,)
 
             params.append(p)
@@ -222,10 +224,10 @@ class Polynomial2P1D(Polynomial3D):
         # parameter if there.
         if constval:
             if operation == '*':
-                self.set_values('ilm-xy-0-0', constval)
-                self.set_values('ilm-z-0', 1.0)
+                self.set_values(c+'-xy-0-0', constval)
+                self.set_values(c+'-z-0', 1.0)
             else:
-                self.set_values('ilm-xy-0-0', constval)
+                self.set_values(c+'-xy-0-0', constval)
 
         if self.shape:
             self.initialize()
@@ -384,13 +386,14 @@ class BarnesStreakLegPoly2P1D(Component):
         self.npts = npts
         self.op = op
 
+        c = self.category
         # set up the various parameter mappings and out local cache of how to
         # distinguish them quickly from one another
-        params, values = ['ilm-scale', 'ilm-off'], [1.0, 0.0]
+        params, values = [c+'-scale', c+'-off'], [1.0, 0.0]
         self.barnes_params = []
         self.poly_params = OrderedDict()
         for i, npt in enumerate(npts):
-            tparams = ['ilm-b%i-%i' % (i, j) for j in xrange(npt)]
+            tparams = [c+'-b%i-%i' % (i, j) for j in xrange(npt)]
             tvalues = [0.0]*len(tparams)
 
             params.extend(tparams)
@@ -399,7 +402,7 @@ class BarnesStreakLegPoly2P1D(Component):
             self.barnes_params.append(tparams)
 
         # tack on the z-poly parameters on the end
-        self.poly_params = {'ilm-z-%i':i for i in xrange(zorder)}
+        self.poly_params = {c+'-z-%i' % i:i for i in xrange(zorder)}
         params.extend(self.poly_params)
         values.extend([0.0]*len(self.poly_params))
 
@@ -409,7 +412,7 @@ class BarnesStreakLegPoly2P1D(Component):
             self.initialize()
 
     def param_barnes_scales(self):
-        return ['ilm-scale', 'ilm-off']
+        return [self.category+'-scale', self.category+'-off']
 
     def param_barnes_pts(self, ind=None):
         if ind is None:
@@ -463,11 +466,11 @@ class BarnesStreakLegPoly2P1D(Component):
 
     @property
     def off(self):
-        return self.get_values('ilm-off')
+        return self.get_values(self.category+'-off')
 
     @property
     def scale(self):
-        return self.get_values('ilm-scale')
+        return self.get_values(self.category+'-scale')
 
     def calc_field(self):
         op = {'*': mul, '+': add}[self.op]
@@ -519,9 +522,10 @@ class BarnesStreakLegPoly2P1D(Component):
         params = util.listify(params)
         values = util.listify(values)
 
+        c = self.category
         # check for global update requiring parameters:
         for p in params:
-            if p in self.poly_params or p == 'ilm-scale' or p == 'ilm-off':
+            if p in self.poly_params or p == c+'-scale' or p == c+'-off':
                 return self.shape.copy()
 
         # now look for the local update sizes
@@ -571,8 +575,8 @@ class BarnesStreakLegPoly2P1D(Component):
             vmax = 1.0
             vmin = vmax - ptp
 
-        self.update('ilm-scale', 1.0)
-        self.update('ilm-off', 0.0)
+        self.update(self.category+'-scale', 1.0)
+        self.update(self.category+'-off', 0.0)
 
         for k, v in self.poly_params.iteritems():
             norm = (self.zorder + 1.0)*2
@@ -595,11 +599,11 @@ class BarnesStreakLegPoly2P1D(Component):
 
         ptp0 = self.get_field().ptp()
         scale = ptp / ptp0
-        self.update('ilm-scale', scale)
+        self.update(self.category+'-scale', scale)
 
         min0 = self.get_field().min()
         off = vmin - min0
-        self.update('ilm-off', off)
+        self.update(self.category+'-off', off)
 
     def __str__(self):
         return "{} [{} {}]".format(
