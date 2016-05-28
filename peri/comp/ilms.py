@@ -543,7 +543,7 @@ class BarnesStreakLegPoly2P1D(Component):
                 val1 = self._barnes(self.b_out, n=n)
 
                 inds = np.arange(self.b_out.shape[0])
-                inds = inds[(val1 - val0) > 1e-12]
+                inds = inds[np.abs(val1 - val0) > 1e-12]
                 if len(inds) < 2:
                     continue
 
