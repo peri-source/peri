@@ -1,5 +1,8 @@
 import re
 
+from peri.logger import log as baselog
+log = baselog.getChild('models')
+
 class ModelError(Exception):
     pass
 
@@ -27,7 +30,7 @@ class Model(object):
         """
         self.modelstr = modelstr
         self.varmap = varmap
-        self.ivarmap = {v:k for k,v in self.varmap.iteritems()}
+        self.ivarmap = {v:k for k, v in self.varmap.iteritems()}
         self.check_consistency()
 
     def check_consistency(self):
@@ -40,7 +43,7 @@ class Model(object):
         regex = re.compile('([a-zA-Z_][a-zA-Z0-9_]*)')
 
         # there at least must be the full model, not necessarily partial updates
-        if not self.modelstr.has_key('full'):
+        if 'full' not in self.modelstr:
             raise ModelError(
                 'Model must contain a `full` key describing '
                 'the entire image formation'
@@ -55,7 +58,7 @@ class Model(object):
                 if v not in self.varmap:
                     log.error(
                         "Variable '%s' (eq. '%s': '%s') not found in category map %r" %
-                        (v, name, eq, varmap)
+                        (v, name, eq, self.varmap)
                     )
                     error = True
 
@@ -67,11 +70,11 @@ class Model(object):
         compcats = [c.category for c in comps]
 
         # Check that the components are all provided, given the categories
-        for k,v in self.varmap.iteritems():
+        for k, v in self.varmap.iteritems():
             if k not in self.modelstr['full']:
                 log.warn('Component (%s : %s) not used in model.' % (k,v))
 
-            if not v in compcats:
+            if v not in compcats:
                 log.error('Map component (%s : %s) not found in list of components.' % (k,v))
                 error = True
 

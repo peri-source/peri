@@ -81,15 +81,15 @@ class Logger(object):
         Add another handler to the logging system if not present already.
         Available handlers are currently: ['console-bw', 'console-color', 'rotating-log']
         """
-        if self.handlers.has_key(name):
+        if name in self.handlers:
             return
 
         # make sure the the log file has a name
-        if name == 'rotating-log' and not kwargs.has_key('filename'):
+        if name == 'rotating-log' and 'filename' not in kwargs:
             kwargs.update({'filename': self.logfilename})
 
         # make sure the the log file has a name
-        if name == 'stringio' and not kwargs.has_key('stringio'):
+        if name == 'stringio' and 'stringio' not in kwargs:
             kwargs.update({'stringio': StringIO.StringIO()})
 
         handler = types[name](**kwargs)
@@ -103,7 +103,7 @@ class Logger(object):
         Remove handler from the logging system if present already.
         Available handlers are currently: ['console-bw', 'console-color', 'rotating-log']
         """
-        if self.handlers.has_key(name):
+        if name in self.handlers:
             self.log.removeHandler(self.handlers[name])
 
     @contextmanager

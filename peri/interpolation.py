@@ -1,7 +1,8 @@
 import numpy as np
 
 class BarnesInterpolation1D(object):
-    def __init__(self, x, d, filter_size=None, iterations=4, clip=False, clipsize=3, damp=0.95):
+    def __init__(self, x, d, filter_size=None, iterations=4, clip=False,
+            clipsize=3, damp=0.95):
         """
         A class for 1-d barnes interpolation. Give data points d at locations x.
 
