@@ -637,7 +637,7 @@ class Slab(Component):
         self.set_tile(self.shape)
         params = [self.lbl_zpos, self.lbl_theta, self.lbl_phi]
         values = [zpos, angles[0], angles[1]]
-        super(Slab, self).__init__(params, values)
+        super(Slab, self).__init__(params, values, ordered=False)
 
         if self.shape:
             self.initialize()
