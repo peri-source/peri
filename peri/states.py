@@ -243,7 +243,8 @@ class State(comp.ParameterGroup):
         def r(inds=None, slicer=None, flat=True):
             return sample(self.residuals, inds=inds, slicer=slicer, flat=flat).copy()
 
-        l = lambda: self.loglikelihood
+        def l():
+            return self.loglikelihood
 
         # set the member functions using partial
         self.fisherinformation = partial(self._jtj, funct=m)
@@ -317,7 +318,7 @@ class PolyFitState(State):
 
     def update(self, params, values):
         super(PolyFitState, self).update(params, values)
-        self._model =  np.polyval(self.values, self._xpts)
+        self._model = np.polyval(self.values, self._xpts)
 
     @property
     def data(self):
@@ -346,7 +347,7 @@ class PolyFitState(State):
 #=============================================================================
 class ImageState(State, comp.ComponentCollection):
     def __init__(self, image, comps, mdl=models.ConfocalImageModel(), sigma=0.04,
-            priors=None, nlogs=True, pad=24, model_as_data=False):
+            priors=None, pad=24, model_as_data=False):
         """
         The state object to create a confocal image.  The model is that of
         a spatially varying illumination field, from which platonic particle
@@ -379,11 +380,6 @@ class ImageState(State, comp.ComponentCollection):
 
         priors: list of `peri.priors` [default: ()]
             Whether or not to turn on overlap priors using neighborlists
-
-        nlogs: boolean [default: True]
-            Include in the Loglikelihood calculate the term:
-
-                LL = -(p_i - I_i)^2/(2*\sigma^2) - \log{\sqrt{2\pi} \sigma}
 
         pad : integer or tuple of integers (optional)
             No recommended to set by hand.  The padding level of the raw image
@@ -593,13 +589,13 @@ class ImageState(State, comp.ComponentCollection):
         self._residuals[tile.slicer] = newmodel - self._data[tile.slicer]
 
     def get_field(self):
-        raise NotImplemented('inherited but not relevant')
+        raise NotImplementedError('inherited but not relevant')
 
     def exports(self):
-        raise NotImplemented('inherited but not relevant')
+        raise NotImplementedError('inherited but not relevant')
 
-    def register(self):
-        raise NotImplemented('inherited but not relevant')
+    def register(self, parent):
+        raise NotImplementedError('inherited but not relevant')
 
     def __str__(self):
         def _pad(s):
@@ -641,7 +637,7 @@ def save(state, filename=None, desc='', extra=None):
         filename = filename or state.image.filename + '-peri-' + desc + '.pkl'
     else:
         if not filename:
-            raise AttributeError, "Must provide filename since RawImage is not used"
+            raise AttributeError("Must provide filename since RawImage is not used")
 
     if extra is None:
         save = state
