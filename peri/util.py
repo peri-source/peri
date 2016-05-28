@@ -2,9 +2,7 @@ import os
 import sys
 import time
 import inspect
-import datetime
 import numpy as np
-import code, traceback, signal
 from contextlib import contextmanager
 
 from peri import initializers
@@ -18,7 +16,7 @@ def callif(f, *args, **kwargs):
 # Tiling utilities
 #=============================================================================
 def oddify(a):
-    return a + (a%2==0)
+    return a + (a % 2 == 0)
 
 def listify(a):
     if a is None:
@@ -424,7 +422,7 @@ def cdd(d, k):
     if not isinstance(k, list):
         k = [k]
     for i in k:
-        if d.has_key(i):
+        if i in d:
             d.pop(i)
 
 #=============================================================================
@@ -580,7 +578,6 @@ class ProgressBar(object):
 #=============================================================================
 # useful decorators
 #=============================================================================
-import collections
 import functools
 import types
 
