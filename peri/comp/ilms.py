@@ -409,6 +409,10 @@ class BarnesStreakLegPoly2P1D(Component):
 
         super(BarnesStreakLegPoly2P1D, self).__init__(params=params, values=values)
 
+        # this next variable is to allow for randomize_parameters before the
+        # object has a shape by leaving a breadcrumb for normalization
+        self._norm_stat = None
+
         if self.shape:
             self.initialize()
 
@@ -489,6 +493,19 @@ class BarnesStreakLegPoly2P1D(Component):
 
         self.poly = self.calc_poly()
         self.field = self.calc_field()
+
+        if self._norm_stat:
+            ptp, vmin = self._norm_stat
+
+            ptp0 = self.get_field().ptp()
+            scale = ptp / ptp0
+            self.update(self.category+'-scale', scale)
+
+            min0 = self.get_field().min()
+            off = vmin - min0
+            self.update(self.category+'-off', off)
+
+            self._norm_stat = None
 
     def set_tile(self, tile):
         self.tile = tile
@@ -576,8 +593,8 @@ class BarnesStreakLegPoly2P1D(Component):
             vmax = 1.0
             vmin = vmax - ptp
 
-        self.update(self.category+'-scale', 1.0)
-        self.update(self.category+'-off', 0.0)
+        self.set_values(self.category+'-scale', 1.0)
+        self.set_values(self.category+'-off', 0.0)
 
         for k, v in self.poly_params.iteritems():
             norm = (self.zorder + 1.0)*2
@@ -596,15 +613,10 @@ class BarnesStreakLegPoly2P1D(Component):
             q -= q.mean()
             self.set_values(p, q)
 
-        self.initialize()
+        self._norm_stat = [ptp, vmin]
 
-        ptp0 = self.get_field().ptp()
-        scale = ptp / ptp0
-        self.update(self.category+'-scale', scale)
-
-        min0 = self.get_field().min()
-        off = vmin - min0
-        self.update(self.category+'-off', off)
+        if self.shape:
+            self.initialize()
 
     def __str__(self):
         return "{} [{} {}]".format(
