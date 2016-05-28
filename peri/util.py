@@ -322,11 +322,14 @@ class Tile(object):
         return inner, outer
 
 
+#=============================================================================
+# Image classes
+#=============================================================================
 class Image(object):
     def __init__(self, image, tile=None, filters=None):
         self.filters = filters or []
         self.image = image
-        self.tile = tile
+        self.tile = tile or Tile(image.shape)
 
     def get_image(self):
         im = self.image[self.tile.slicer]
@@ -378,8 +381,6 @@ class RawImage(Image):
         self.exposure = exposure
 
         image = self.load_image()
-        tile = tile or Tile(image.shape)
-
         super(RawImage, self).__init__(image, tile=tile)
 
     def load_image(self):
