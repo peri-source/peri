@@ -124,7 +124,7 @@ def remove_overlaps_naive(pos, rad, zscale=1, doprint=False):
     for i in xrange(N):
         for j in xrange(N):
             if i == j:
-                continue;
+                continue
             d = np.sqrt(( (z*(pos[i] - pos[j]))**2 ).sum())
             r = rad[i] + rad[j]
             diff = d - r
