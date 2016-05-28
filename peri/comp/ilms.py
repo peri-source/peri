@@ -347,7 +347,7 @@ class BarnesStreakLegPoly2P1D(Component):
     category = 'ilm'
 
     def __init__(self, npts=(40,20), zorder=7, op='*', barnes_dist=1.75,
-            local_updates=True, category='ilm', shape=None):
+            barnes_clip_size=3, local_updates=True, category='ilm', shape=None):
         """
         A Barnes interpolant. This one is of the form
 
@@ -380,6 +380,7 @@ class BarnesStreakLegPoly2P1D(Component):
         """
         self.shape = shape
         self.local_updates = local_updates
+        self.barnes_clip_size = barnes_clip_size
         self.barnes_dist = barnes_dist
         self.category = category
         self.zorder = zorder
@@ -446,7 +447,7 @@ class BarnesStreakLegPoly2P1D(Component):
 
         b = BarnesInterpolation1D(
             b_in, coeffs, filter_size=fdst, damp=0.9, iterations=3,
-            clip=self.local_updates, clipsize=3
+            clip=self.local_updates, clipsize=self.barnes_clip_size
         )
         return b(y)
 
