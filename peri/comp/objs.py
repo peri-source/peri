@@ -203,7 +203,7 @@ class PlatonicSpheresCollection(Component):
     def __init__(self, pos, rad, shape=None, zscale=1.0, support_pad=2,
             method='exact-gaussian-fast', alpha=None, user_method=None,
             exact_volume=True, volume_error=1e-5, max_radius_change=1e-2,
-            param_prefix='sph'):
+            param_prefix='sph', grouping='particle'):
         """
         A collection of spheres in real-space with positions and radii, drawn
         not necessarily on a uniform grid (i.e. scale factor associated with
@@ -257,6 +257,10 @@ class PlatonicSpheresCollection(Component):
         max_radius_change : float
             maximum relative radius change allowed during iteration (due to
             edge particles and other confounding factors)
+
+        grouping : string
+            Either 'particle' or 'parameter' parameter grouping. If 'particle'
+            then grouped by xyza,xyza if 'parameter' then xyz,xyz,a,a
         """
         self.support_pad = support_pad
         self.pos = pos.astype('float')
@@ -267,6 +271,7 @@ class PlatonicSpheresCollection(Component):
         self.max_radius_change = max_radius_change
         self.user_method = user_method
         self.param_prefix = param_prefix
+        self.grouping = grouping
 
         self.set_draw_method(method=method, alpha=alpha, user_method=user_method)
 
@@ -285,8 +290,14 @@ class PlatonicSpheresCollection(Component):
 
     def setup_variables(self):
         self._params = []
-        for i, (p0, r0) in enumerate(zip(self.pos, self.rad)):
-            self._params.extend([self._i2p(i, c) for c in ['x','y','z','a']])
+        if self.grouping == 'parameter':
+            for i, p0 in enumerate(self.pos):
+                self._params.extend([self._i2p(i, c) for c in ['z','y','x']])
+            for i, r0 in enumerate(self.rad):
+                self._params.extend([self._i2p(i, c) for c in ['a']])
+        else:
+            for i, (p0, r0) in enumerate(zip(self.pos, self.rad)):
+                self._params.extend([self._i2p(i, c) for c in ['z','y','x','a']])
         self._params += ['zscale']
 
     def update(self, params, values):
