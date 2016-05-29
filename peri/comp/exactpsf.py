@@ -169,6 +169,8 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self.num_line_pts = 1
         pinhole_width = pinhole_width if (pinhole_width is not None) else 1.0
 
+        if shape and zrange is None:
+            zrange = (0, shape.shape[0])
         self.zrange = zrange
 
         # text location of parameters for ease of extraction
@@ -202,7 +204,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             params[i] = 'psf-' + params[i]
 
         super(ExactLineScanConfocalPSF, self).__init__(
-            *args, params=params, values=values, **kwargs
+            *args, params=params, values=values, shape=shape, **kwargs
         )
 
     def set_shape(self, shape, inner):
