@@ -10,3 +10,5 @@ try:
         logging.root.removeHandler(logging.root.handlers[0])
 except ImportError as e:
     pass
+
+__version__ = "0.1.1"

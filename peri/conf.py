@@ -5,6 +5,7 @@ import copy
 CONF_FILE = os.path.join(os.path.expanduser("~"), ".peri.json")
 
 default_conf = {
+    "fftw_threads": -1,
     "fftw_wisdom": os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl"),
     "log-filename": os.path.join(os.path.expanduser("~"), '.peri.log'),
     "log-to-file": False,
