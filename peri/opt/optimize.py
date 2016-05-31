@@ -77,12 +77,14 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     if num_inds < tot_pix:
         inds = np.random.choice(tot_pix, size=num_inds, replace=False)
         slicer = None
+        return_inds = inds
     else:
         inds = None
+        return_inds = slice(0, None)
         slicer = [slice(0, None), slice(0, None), slice(0, None)]
-    J = s.gradmodel(params=params, inds=inds, slicer=slicer, **kwargs)
+    J = s.gradmodel(params=params, inds=inds, slicer=slicer, flat=False, **kwargs)
     CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
-    return J, inds, slicer
+    return J, return_inds
 
 def name_globals(s):
     all_params = s.params
@@ -946,7 +948,7 @@ class LMGlobals(LMEngine):
 
     def calc_J(self):
         del self.J
-        self.J, self._inds, _ = get_rand_Japprox(self.state,
+        self.J, self._inds = get_rand_Japprox(self.state,
                 self.param_names, num_inds=self.num_pix, **self.kwargs)
 
     def calc_residuals(self):
@@ -1292,7 +1294,7 @@ class LMAugmentedState(LMEngine):
         #1. J for the state:
         s = self.aug_state.state
         sa = self.aug_state
-        J_st, inds, _ = get_rand_Japprox(s, self.aug_state.param_names,
+        J_st, inds = get_rand_Japprox(s, self.aug_state.param_names,
                 num_inds=self.num_pix, **self.kwargs)
         self._inds = inds
 
@@ -1447,11 +1449,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     glbl_run_length = 6 if mode != 'do-particles' else 3
 
     if mode == 'do-particles':
-        raise NotImplementedError('You need to add the global ilm, bkg scales')
-        glbl_nms = (s.explode(s.create_block('ilm'))[0] |
-                    s.explode(s.create_block('off'))[0])
-        if s.bkg is not None:
-            glbl_nms |= s.create_block('off')
+        glbl_nms = ['ilm-scale', 'offset']  #bkg?
     else:
         glbl_nms = name_globals(s)#, include_rscale=(not use_aug), include_sigma=False)
 
