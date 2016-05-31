@@ -142,7 +142,7 @@ class State(comp.ParameterGroup):
         """
         Gradient of `func` wrt a single parameter `p`. (see _graddoc)
         """
-        vals = self.get_values(p)[0]
+        vals = self.get_values(p)
         f0 = funct(**kwargs)
 
         self.update(p, vals+dl)
@@ -156,8 +156,8 @@ class State(comp.ParameterGroup):
         """
         Hessian of `func` wrt two parameters `p0` and `p1`. (see _graddoc)
         """
-        vals0 = self.get_values(p0)[0]
-        vals1 = self.get_values(p1)[0]
+        vals0 = self.get_values(p0)
+        vals1 = self.get_values(p1)
 
         f00 = funct(**kwargs)
 

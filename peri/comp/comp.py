@@ -292,7 +292,7 @@ class ComponentCollection(Component):
             if not p in self.lmap:
                 raise NotAParameterError("%r does not belong to %r" % (p, self))
             vals.append(self.lmap[p][0].get_values(p))
-        return vals
+        return util.delistify(vals)
 
     def set_values(self, params, values):
         plist, vlist = self.split_params(params, values)

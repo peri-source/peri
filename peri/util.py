@@ -26,7 +26,7 @@ def listify(a):
     return list(a)
 
 def delistify(a):
-    if isinstance(a, (tuple, list)) and len(a) == 1:
+    if isinstance(a, (tuple, list, np.ndarray)) and len(a) == 1:
         return a[0]
     return a
 
