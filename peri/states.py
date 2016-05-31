@@ -192,7 +192,7 @@ class State(comp.ParameterGroup):
 
         for i, p in enumerate(ps):
             grad[i] = self._grad_one_param(funct, p, dl=dl, rts=rts, **kwargs)
-        return np.squeeze(grad)
+        return grad #was np.squeeze(grad)
 
     def _jtj(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
         """
