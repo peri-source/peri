@@ -1,8 +1,8 @@
 """
 s.get('...').??? -- probably bad form (e.g. s.get('obj').N to get particle pos
-is bad because you could have more than 1 particle. 
+is bad because you could have more than 1 particle.
 Right now I'm doing s.obj_get_radii().size but when Mattycakes implements
-s.obj_get_npart() you should implement. 
+s.obj_get_npart() you should implement.
 """
 import os
 import sys
@@ -109,7 +109,7 @@ def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwar
     return num_px
 
 #=============================================================================#
-#               ~~~~~        Single particle stuff    ~~~~~
+#               ~~~~~  Particle Optimization stuff  ~~~~~
 #=============================================================================#
 def find_particles_in_tile(state, tile):
     """Finds the particles in a tile, as numpy.ndarray of ints."""
@@ -135,7 +135,7 @@ def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
         The sub-region of the image over which to look for particles.
             bounds[0]: The lower-left  corner of the image region.
             bounds[1]: The upper-right corner of the image region.
-        Default (None -> ([0,0,0], s.image.shape)) is a box of the entire
+        Default (None -> ([0,0,0], s.oshape.shape)) is a box of the entire
         image size, i.e. the default places every particle in the image
         somewhere in the groups.
 
@@ -147,27 +147,22 @@ def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
         number of particles, so the elements don't necessarily correspond
         to a given image region.
     """
-    if bounds is None:
-        bounding_tile = s.oshape
-    else:
-        bounding_tile = Tile(left=bounds[0], right=bounds[1])
-    if type(region_size) == int:
-        rs = np.array([region_size, region_size, region_size])
-    else:
-        rs = np.array(region_size)
-        
+    bounding_tile = s.oshape if bounds is None else Tile(bounds[0], bounds[1])
+    rs = (np.array([region_size, region_size, region_size]).ravel() if
+            np.size(region_size) == 1 else np.array(region_size))
+
     n_translate = np.ceil(bounding_tile.shape.astype('float')/rs).astype('int')
     particle_groups = []
     tile = Tile(left=bounding_tile.l, right=bounding_tile.l + rs)
-    for d0 in xrange(n_translate[0]):
-        for d1 in xrange(n_translate[1]):
-            for d2 in xrange(n_translate[2]):
-                new_tile = tile.translate(np.array([d0,d1,d2])*rs)
-                a_group = find_particles_in_tile(s, new_tile)
-                if a_group.size != 0:
-                    particle_groups.append(a_group)
+    d0s, d1s, d2s = np.meshgrid(*[np.arange(i) for i in n_translate])
 
-    return particle_groups
+    groups = map(lambda d0, d1, d2: find_particles_in_tile(s, tile.translate(
+            np.array([d0,d1,d2]) * rs)), d0s.ravel(), d1s.ravel(), d2s.ravel())
+    for i in xrange(len(groups)-1, -1, -1):
+        if groups[i].size == 0:
+            groups.pop(i)
+
+    return groups
 
 def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
     """
@@ -598,21 +593,11 @@ class LMEngine(object):
         Given a fixed damping, J, JTJ, iterates calculating steps, with
         optional Broyden or eigendirection updates.
         Called internally by do_run_2() but might also be useful on its own.
-
-        When I update the function, I need to update:
-            self.update_param_vals()
-            self._last_residuals
-            self._last_error
-            self.error
         """
         self._inner_run_counter = 0; good_step = True
         CLOG.debug('Running...')
 
-        #Things we need defined in the loop:
-        grad = self.calc_grad()
         _last_residuals = self.calc_residuals().copy()
-        _last_error = 1*self.error
-
         while ((self._inner_run_counter < self.run_length) & good_step &
                 (not self.check_terminate())):
             #1. Checking if we update J
@@ -623,7 +608,8 @@ class LMEngine(object):
 
             #2. Getting parameters, error
             er0 = 1*self.error
-            delta_vals = self.find_LM_updates(grad, do_correct_damping=False)
+            delta_vals = self.find_LM_updates(self.calc_grad(), 
+                    do_correct_damping=False)
             er1 = self.update_function(self.param_vals + delta_vals)
             good_step = er1 < er0
 
@@ -635,10 +621,7 @@ class LMEngine(object):
                 self._last_error = er0
                 self.error = er1
 
-                #and updating the things we need in the loop
-                grad = self.calc_grad()
                 _last_residuals = self.calc_residuals().copy()
-                _last_error = 1*self.error
             else:
                 er0_0 = self.update_function(self.param_vals)
                 CLOG.debug('Bad step!')
@@ -868,7 +851,8 @@ class LMEngine(object):
         return corr
 
 class LMFunction(LMEngine):
-    def __init__(self, data, func, p0, func_args=(), func_kwargs={}, **kwargs):
+    def __init__(self, data, func, p0, func_args=(), func_kwargs={}, dl=1e-8,
+            **kwargs):
         """
         Levenberg-Marquardt engine for a user-supplied function with all
         the options from the M. Transtrum J. Sethna 2012 ArXiV paper. See
@@ -880,9 +864,13 @@ class LMFunction(LMEngine):
                 The measured data to fit.
             func: Function
                 The function to evaluate. Syntax must be
-                func(p0, *func_args, **func_kwargs)
+                func(param_values, *func_args, **func_kwargs), and return a
+                numpy.ndarray of the same shape as data
             p0 : numpy.ndarray
-                The initial guess.
+                The initial parameter guess.
+            dl : Float
+                The fractional amount to use for finite-difference derivatives,
+                i.e. (f(x*(1+dl)) - f(x)) / (x*dl) in each direction.
             func_args : List-like
                 Extra *args to pass to the function. Optional.
             func_kargs : Dictionary
@@ -890,9 +878,11 @@ class LMFunction(LMEngine):
             **kwargs : Any keyword args passed to LMEngine.
         """
         self.data = data
-        self.function = function
+        self.func = func
         self.func_args = func_args
         self.func_kargs = func_kargs
+        self.param_vals = p0
+        self.dl = dl
         super(LMFunction, self).__init__(**kwargs)
 
     def _set_err_paramvals(self):
@@ -900,14 +890,32 @@ class LMFunction(LMEngine):
         Must update:
             self.error, self._last_error, self.param_vals, self._last_vals
         """
-        raise NotImplementedError('implement in subclass')
+        self.param_vals = p0 #sloppy...
+        self._last_vals = self.param_vals.copy()
+        self.error = self.update_function(self.param_vals)
+        self._last_error = 1.001*self.error
 
     def calc_J(self):
         """Updates self.J, returns nothing"""
-        raise NotImplementedError('implement in subclass')
+        del self.J
+        self.J = np.zeros([self.param_vals.size, self.data.size])
+        dp = np.zeros_like(self.param_vals)
+        f0 = self.model.copy()
+        for a in xrange(self.param_vals.size):
+            dp *= 0
+            dp[a] = param_vals[a] * self.dl
+            f1 = self.func(param_vals, *self.func_args, **self.func_kwargs)
+            self.J[a] = (f1 - f0) / dp[a]
 
     def calc_residuals(self):
         return self.model - self.data
+
+    def update_function(self, param_vals):
+        """Takes an array param_vals, updates function, returns the new error"""
+        self.model = self.func(param_vals, *self.func_args, **self.func_kwargs)
+        d = self.calc_residuals()
+        return np.dot(d.flat, d.flat) #faster for large arrays than (d*d).sum()
+
 
 class LMGlobals(LMEngine):
     def __init__(self, state, param_names, max_mem=3e9, opt_kwargs={}, **kwargs):
@@ -964,7 +972,7 @@ class LMParticles(LMEngine):
     def __init__(self, state, particles, include_rad=True, **kwargs):
         self.state = state
         self.particles = particles
-        self.param_names = (state.param_particle(particles) if include_rad 
+        self.param_names = (state.param_particle(particles) if include_rad
                 else state.param_particle_pos(particles))
         self.error = self.state.error
         self._dif_tile = self._get_diftile()
@@ -1000,17 +1008,17 @@ class LMParticles(LMEngine):
         pos_nms = self.state.param_positions()
         is_rad = np.array(map(lambda x: x in rad_nms, self.param_names))
         is_pos = np.array(map( lambda x: x in pos_nms, self.param_names))
-        
+
         values[is_rad] = np.clip(values[is_rad], self._MINRAD, self._MAXRAD)
-        values[is_pos] = np.clip(values[is_pos], self._MINDIST, 
+        values[is_pos] = np.clip(values[is_pos], self._MINDIST,
                 self.state.oshape.shape - self._MINDIST)
-        
-        self.state.update(self.param_names, values) 
+
+        self.state.update(self.param_names, values)
         return self.state.error
 
     def set_particles(self, new_particles, new_damping=None):
         self.particles = new_particles
-        self.param_names = (state.param_particle(particles) if include_rad 
+        self.param_names = (state.param_particle(particles) if include_rad
                 else state.param_particle_pos(particles))
         self._dif_tile = self._get_diftile()
         self._set_err_paramvals()
@@ -1357,18 +1365,6 @@ def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
     the defaults to what I've found to be useful values for optimizing
     particles. See LMParticles and LMEngine for documentation.
     """
-    #Backwards compatibility stuff:
-    #(although right now I'm not including
-    if 'damp' in kwargs.keys():
-        damping = kwargs.pop('damp')
-        kwargs.update({'damping':damping})
-    if 'ddamp' in kwargs.keys():
-        decrease_damp_factor = kwargs.pop('ddamp')
-        kwargs.update({'decrease_damp_factor':decrease_damp_factor})
-    if 'num_iter' in kwargs.keys():
-        max_iter = kwargs.pop('num_iter')
-        kwargs.update({'max_iter':max_iter})
-
     lp = LMParticles(s, particles, damping=damping, run_length=run_length,
             decrease_damp_factor=decrease_damp_factor, **kwargs)
     lp.do_run_2()
@@ -1382,20 +1378,6 @@ def do_levmarq_all_particle_groups(s, region_size=40, damping=1.0,
     but I've set the defaults to what I've found to be useful values for
     optimizing particles. See LMParticleGroupCollection for documentation.
     """
-    #Backwards compatibility stuff:
-    if 'damp' in kwargs.keys():
-        damping = kwargs.pop('damp')
-        kwargs.update({'damping':damping})
-    if 'ddamp' in kwargs.keys():
-        decrease_damp_factor = kwargs.pop('ddamp')
-        kwargs.update({'decrease_damp_factor':decrease_damp_factor})
-    if 'num_iter' in kwargs.keys():
-        max_iter = kwargs.pop('num_iter')
-        kwargs.update({'max_iter':max_iter})
-    if 'calc_region_size' in kwargs.keys():
-        do_calc_size = kwargs.pop('calc_region_size')
-        kwargs.update({'do_calc_size':do_calc_size})
-
     lp = LMParticleGroupCollection(s, region_size=region_size, damping=damping,
             run_length=run_length, decrease_damp_factor=decrease_damp_factor,
             get_cos=collect_stats, **kwargs)
@@ -1432,8 +1414,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
             global parameter) vs. with the normal global parameters.
             Default is False (no augmented).
 
-        ftol : Float or None.
-            If not None, the change in error at which to terminate.
+        ftol : Float
+            The change in error at which to terminate.
 
         mode : 'burn' or 'do-particles'
             What mode to optimize with.
@@ -1445,7 +1427,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
         max_mem : Numeric
             The maximum amount of memory allowed for the optimizers' J's,
-            for both particles & globals. Default is 3e9, i.e. 3GB per 
+            for both particles & globals. Default is 3e9, i.e. 3GB per
             optimizer.
 
     Comments
@@ -1462,12 +1444,6 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     if desc is '':
         desc = mode + 'ing' if mode != 'do-particles' else 'doing-particles'
 
-    #For now, I'm calculating the region size. This might be a bad idea
-    #because 1 bad particle can spoil the whole group.
-    region_size = 40 #until we calculate it
-    do_calc_size = True
-
-    glbl_dmp = 0.3
     eig_update = mode != 'do-particles'
     glbl_run_length = 6 if mode != 'do-particles' else 3
 
@@ -1484,10 +1460,10 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     all_lm_stats = []
 
     #2. Burn.
+    CLOG.info('Start of loop %d:\t%f' % (0, s.error))
     for a in xrange(n_loop):
         start_err = s.error
         #2a. Globals
-        CLOG.info('Start of loop %d:\t%f' % (a, s.error))
         glbl_dmp = 0.3 if a == 0 else 3e-2
         if a != 0 or mode != 'do-particles':
             gstats = do_levmarq(s, glbl_nms, max_iter=1, run_length=
@@ -1502,11 +1478,12 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
         #2b. Particles
         prtl_dmp = 1.0 if a==0 else 1e-2
-        pstats = do_levmarq_all_particle_groups(s, region_size=
-                region_size, max_iter=1, do_calc_size=do_calc_size, run_length=4,
-                eig_update=False, damping=prtl_dmp, ftol=0.1*ftol,
-                collect_stats=collect_stats, max_mem=max_mem,
-                include_rad=include_rad)
+        #For now, I'm calculating the region size. This might be a bad idea
+        #because 1 bad particle can spoil the whole group.
+        pstats = do_levmarq_all_particle_groups(s, region_size=40, max_iter=1,
+                do_calc_size=True, run_length=4, eig_update=False, 
+                damping=prtl_dmp, ftol=0.1*ftol, collect_stats=collect_stats, 
+                max_mem=max_mem, include_rad=include_rad)
         all_lp_stats.append(pstats)
         if desc is not None:
             states.save(s, desc=desc)
@@ -1514,10 +1491,9 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         gc.collect()
 
         #2c. terminate?
-        if ftol is not None:
-            new_err = s.error
-            if (start_err - new_err) < ftol:
-                break
+        new_err = s.error
+        if (start_err - new_err) < ftol:
+            break
 
     if collect_stats:
         return all_lp_stats, all_lm_stats
