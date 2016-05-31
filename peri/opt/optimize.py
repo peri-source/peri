@@ -43,10 +43,6 @@ To fix:
         particle group collections. Save LMPartilceGroupCollection's lp's J's
         with numpy.save and a tmp file (standard library).
         -- this is implemented, but it doesn't work too well.
-    b.
-3. do_conjgrad_jtj is terrible / wrong / doesn't use JTJ for anything except
-    eigendirections.
-
 
 Algorithm is:
 1. Evaluate J_ia = df(xi,mu)/dmu_a
@@ -66,6 +62,7 @@ rather than for all the pixels (in addition to leastsq solution instead of
 linalg.solve
 """
 
+
 def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     """
     Generates
@@ -82,7 +79,7 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
         slicer = None
     else:
         inds = None
-        slicer = [slice(0,None), slice(0,None), slice(0,None)]
+        slicer = [slice(0, None), slice(0, None), slice(0, None)]
     J = s.gradmodel(params=params, inds=inds, slicer=slicer, **kwargs)
     CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
     return J, inds, slicer
@@ -98,7 +95,7 @@ def name_globals(s):
 def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwargs):
     #1. Max for a given max_mem:
     px_mem = int(max_mem / 8 / nparams) #1 float = 8 bytes
-    #2. # for a given
+    #2. num_pix for a given redundancy
     px_red = min_redundant*nparams
     #3. And # desired for decimation
     px_dec = s.residuals.size/decimate
@@ -214,7 +211,6 @@ def get_residuals_update_tile(st, padded_tile):
 #=============================================================================#
 #               ~~~~~           Fit ilm???         ~~~~~
 #=============================================================================#
-
 def fit_ilm(new_ilm, old_ilm, **kwargs):
     """
     Fits a new peri.comp.ilms instance to (mostly) match the get_field
@@ -608,7 +604,7 @@ class LMEngine(object):
 
             #2. Getting parameters, error
             er0 = 1*self.error
-            delta_vals = self.find_LM_updates(self.calc_grad(), 
+            delta_vals = self.find_LM_updates(self.calc_grad(),
                     do_correct_damping=False)
             er1 = self.update_function(self.param_vals + delta_vals)
             good_step = er1 < er0
@@ -631,17 +627,14 @@ class LMEngine(object):
             self._inner_run_counter += 1
 
     def _calc_damped_jtj(self):
-        diag = 0*self.JTJ
-        mid = np.arange(diag.shape[0], dtype='int')
-
         if self.marquardt_damping:
-            diag[mid, mid] = self.JTJ[mid, mid].copy()
+            diag_vals = np.diag(self.JTJ)
         elif self.transtrum_damping is not None:
-            diag[mid, mid] = np.clip(self.JTJ[mid, mid].copy(),
-                    self.transtrum_damping, np.inf)
+            diag_vals = np.clip(np.diag(self.JTJ), self.transtrum_damping, np.inf)
         else:
-            diag[mid, mid] = 1.0
+            diag_vals = np.ones(self.JTJ.shape[0])
 
+        diag = np.diagflat(diag_vals)
         damped_JTJ = self.JTJ + self.damping*diag
         return damped_JTJ
 
@@ -948,7 +941,7 @@ class LMGlobals(LMEngine):
     def _set_err_paramvals(self):
         self.error = self.state.error
         self._last_error = self.state.error
-        self.param_vals = np.array(self.state.state[self.param_names]).copy()
+        self.param_vals = np.ravel(self.state.state[self.param_names])
         self._last_values = self.param_vals.copy()
 
     def calc_J(self):
@@ -957,7 +950,7 @@ class LMGlobals(LMEngine):
                 self.param_names, num_inds=self.num_pix, **self.kwargs)
 
     def calc_residuals(self):
-        return self.state.residuals[self._inds].ravel()
+        return self.state.residuals.ravel()[self._inds]
 
     def update_function(self, values):
         self.state.update(self.param_names, values)
@@ -980,17 +973,26 @@ class LMParticles(LMEngine):
         self._MINRAD = 1e-3
         self._MAXRAD = 2e2
         self._MINDIST= 1e-3
+
+        #is_rad, is_pos masks:
+        rad_nms = self.state.param_radii()
+        self._is_rad = np.array(map(lambda x: x in rad_nms, self.param_names))
+        pos_nms = self.state.param_positions()
+        self._is_pos = []
+        for a in xrange(3):
+            self._is_pos.append(np.array(map(lambda x: (x in pos_nms) &
+                    (x[-1] == 'zyx'[a]), self.param_names)))
         super(LMParticles, self).__init__(**kwargs)
 
     def _get_diftile(self):
-        vals = self.state.state[self.param_names]
+        vals = np.ravel(self.state.state[self.param_names])
         itile = self.state.get_update_io_tiles(self.param_names, vals)[1]
         return get_residuals_update_tile(self.state, itile)
 
     def _set_err_paramvals(self):
         self.error = self.state.error
         self._last_error = self.state.error
-        self.param_vals = np.array(self.state.state[self.param_names])
+        self.param_vals = np.ravel(self.state.state[self.param_names])
         self._last_vals = self.param_vals.copy()
 
     def calc_J(self):
@@ -1004,14 +1006,11 @@ class LMParticles(LMEngine):
 
     def update_function(self, values):
         #1. Clipping values:
-        rad_nms = self.state.param_radii()
-        pos_nms = self.state.param_positions()
-        is_rad = np.array(map(lambda x: x in rad_nms, self.param_names))
-        is_pos = np.array(map( lambda x: x in pos_nms, self.param_names))
-
-        values[is_rad] = np.clip(values[is_rad], self._MINRAD, self._MAXRAD)
-        values[is_pos] = np.clip(values[is_pos], self._MINDIST,
-                self.state.oshape.shape - self._MINDIST)
+        values[self._is_rad] = np.clip(values[self._is_rad], self._MINRAD,
+                self._MAXRAD)
+        for a in xrange(3):
+            values[self._is_pos[a]] = np.clip(values[self._is_pos[a]],
+                    self._MINDIST, self.state.oshape.shape[a] - self._MINDIST)
 
         self.state.update(self.param_names, values)
         return self.state.error
@@ -1318,7 +1317,7 @@ class LMAugmentedState(LMEngine):
             self.J = np.append(J_st, np.array(J_aug), axis=0)
 
     def calc_residuals(self):
-        return self.aug_state.state.residuals[self._inds].copy().ravel()
+        return self.aug_state.state.residuals.ravel()[self._inds]
 
     def update_function(self, params):
         self.aug_state.update(params)
@@ -1481,8 +1480,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         #For now, I'm calculating the region size. This might be a bad idea
         #because 1 bad particle can spoil the whole group.
         pstats = do_levmarq_all_particle_groups(s, region_size=40, max_iter=1,
-                do_calc_size=True, run_length=4, eig_update=False, 
-                damping=prtl_dmp, ftol=0.1*ftol, collect_stats=collect_stats, 
+                do_calc_size=True, run_length=4, eig_update=False,
+                damping=prtl_dmp, ftol=0.1*ftol, collect_stats=collect_stats,
                 max_mem=max_mem, include_rad=include_rad)
         all_lp_stats.append(pstats)
         if desc is not None:
