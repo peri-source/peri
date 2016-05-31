@@ -3,6 +3,7 @@ from scipy.special import erf
 from scipy.weave import inline
 from scipy.linalg import expm3
 
+from peri.special import functions
 from peri.comp import Component
 from peri.util import Tile, cdd, amin, amax, listify, delistify
 
@@ -86,43 +87,6 @@ def sphere_analytical_gaussian_fast(dr, a, alpha=0.2765, cut=1.20):
         A Fast, Compact Approximation of the Exponential Function
 
     The default cut 1.25 was chosen based on the accuracy of fast_erf
-    """
-
-    functions = """
-    double fast_erf(double x){
-        double sgn = 1.0;
-
-        if (x < 0){
-            sgn = -1.0;
-            x = -x;
-        }
-
-        double p = 0.47047;
-        double a1 =  0.3480242;
-        double a2 = -0.0958798;
-        double a3 =  0.7478556;
-        double t1 = 1.0/(1 + p*x);
-        double t2 = t1*t1;
-        double t3 = t1*t2;
-        return sgn*(1 - (a1*t1 + a2*t2 + a3*t3)*exp(-x*x));
-    }
-
-    static union
-    {
-        double d;
-        struct
-        {
-            #ifdef LITTLE_ENDIAN
-                int j, i;
-            #else
-                int i, j;
-            #endif
-        } n;
-    } _eco;
-
-    #define EXP_A (1048576 /M_LN2)
-    #define EXP_C 60801
-    #define fast_exp(y) (_eco.n.i = EXP_A*(y) + (1072693248 - EXP_C), _eco.d)
     """
 
     code = """
