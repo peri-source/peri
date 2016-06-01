@@ -470,8 +470,8 @@ class PlatonicSpheresCollection(Component):
         Add a particle at position pos (3 element list or numpy array) and
         radius rad (scalar float). Returns index of new particle.
         """
-        if len(self.rad) == 0:
-            self.pos = pos.reshape(-1, 3)
+        if self.N == 0:
+            self.pos = np.array(pos).reshape(-1, 3)
             self.rad = np.array([rad])
         else:
             self.pos = np.vstack([self.pos, pos])
@@ -493,31 +493,37 @@ class PlatonicSpheresCollection(Component):
         self.trigger_update(params, values)
         return ind
 
-    def remove_particle(self, ind):
-        """ Remove the particle at index `ind` """
+    def remove_particle(self, inds):
+        """ Remove the particle at index `inds`, may be a list """
         if self.rad.shape[0] == 0:
             return
 
-        pos = self.pos[ind].copy()
-        rad = self.rad[ind].copy()
+        allpos, allrad = [], []
 
-        # draw it as zero size particle before changing parameters
-        params = self.param_particle(ind)
-        values = self.get_values(params)
-        values[-1] = 0.0
-        self.trigger_update(params, values)
+        for ind in listify(inds):
+            pos = self.pos[ind].copy()
+            rad = self.rad[ind].copy()
 
-        self.pos = np.delete(self.pos, ind, axis=0)
-        self.rad = np.delete(self.rad, ind, axis=0)
+            # draw it as zero size particle before changing parameters
+            params = self.param_particle(ind)
+            values = self.get_values(params)
+            values[-1] = 0.0
+            self.trigger_update(params, values)
 
-        # if we are not part of the system, go ahead and draw
-        if not self._parent and self.shape:
-            self._draw_particle(pos, rad, -1)
+            self.pos = np.delete(self.pos, ind, axis=0)
+            self.rad = np.delete(self.rad, ind, axis=0)
+
+            # if we are not part of the system, go ahead and draw
+            if not self._parent and self.shape:
+                self._draw_particle(pos, rad, -1)
+
+            allpos.append(pos)
+            allrad.append(rad)
 
         # update the parameters globally
         self.setup_variables()
         self.trigger_parameter_change()
-        return pos, rad
+        return np.squeeze(np.array(allpos)), np.squeeze(np.array(allrad))
 
     def get_positions(self):
         return self.pos
