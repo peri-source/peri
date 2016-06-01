@@ -203,7 +203,7 @@ class Polynomial2P1D(Polynomial3D):
         self.xy_param = {}
         self.z_param = {}
 
-        for order in product(*(xrange(o) for o in self.order[1::-1])):
+        for order in product(*(xrange(o) for o in self.order[1:][::-1])):
             p = c+'-xy-%i-%i' % order
             self.xy_param[p] = order
 
