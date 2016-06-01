@@ -552,8 +552,8 @@ class LMEngine(object):
                     #Good step => Update params, error:
                     self.update_param_vals(delta_vals, incremental=True)
                     self.error = er_new
-                    CLOG.debug('Sufficiently increased damping\t%f\t%f' %
-                            (triplet[0], self.error))
+                    CLOG.debug('Sufficiently increased damping')
+                    CLOG.debug('%f\t%f' % (triplet[0], self.error))
 
             elif er1 <= er2:
                 good_step = True
@@ -663,6 +663,9 @@ class LMEngine(object):
                 delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, -grad, \
                         rcond=self.min_eigval)
 
+        if np.any(np.isnan(delta0)):
+            CLOG.fatal('Calculated steps have nans!?')
+            raise RuntimeError('Calculated steps have nans!?')
         return delta0
 
     def increase_damping(self):
