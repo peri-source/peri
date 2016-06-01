@@ -9,7 +9,42 @@ class OrthoManipulator(object):
     def __init__(self, state, size=8, cmap_abs='bone', cmap_diff='RdBu',
             incsize=18.0, orientation=None, vrange_img=1.0, vrange_diff=0.1):
         """
-        An interactive viewer for states with a model in 3D.
+        An interactive viewer for states for a model in 3D. Can work with
+        any 3D state with a set of components. This viewer relies heavily on
+        hotkeys. The various modes that can be accessed are by pressing
+        these keys:
+
+            'Q' : switch between 'model', 'residual', and 'component' views
+            'A' : add particle mode (click position to add)
+            'R' : remove particle mode (click position to remove)
+            'E' : optimize particle (click particle to optimize)
+            'W' : switch to fourier views
+            'V' : switch to view mode (click window to move view)
+            'C' : If in 'component' views, cycles through components
+
+        Parameters:
+        -----------
+        state : `peri.states.State` object
+            The state object to look at
+
+        size : float
+            Relative window size, this is based on matplotlib.figure(figsize)
+            and has some units which I don't understand.
+
+        cmap_abs : string
+            Colormap to use for the one sided scales such as data and model
+
+        cmap_dff : string
+            Colormap to use for difference images, such as residuals
+
+        orientation : one of ['h', 'v', 'horizontal', 'vertical']
+            The orientation of the two views
+
+        vrange_img : float
+            vmax for imshow for absolute images
+
+        vrange_diff : float
+            vmax - vmin for imshow for difference images
         """
         self.incsize = incsize
         self.modes = ['view', 'add', 'remove', 'grab', 'optimize']
@@ -328,7 +363,11 @@ class OrthoManipulator(object):
 class OrthoViewer(object):
     def __init__(self, field, onesided=True, vmin=None, vmax=None, cmap='bone',
             dohist=False, fourier=False):
-        """ Easy interactive viewing of 3D ndarray with view selection """
+        """
+        Easy interactive viewing of 3D ndarray with view selection. Navigate in
+        3D by clicking on the three panels which are slices through the array
+        at a given position.
+        """
         self.vmin = vmin
         self.vmax = vmax
         self.field = field
