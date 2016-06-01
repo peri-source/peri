@@ -184,7 +184,7 @@ class PlatonicSpheresCollection(Component):
         pos : ndarray [N,3]
             Initial positions of the spheres
 
-        rad : ndarray [N]
+        rad : ndarray [N] or float
             Initial radii of the spheres
 
         shape : tuple
@@ -226,6 +226,9 @@ class PlatonicSpheresCollection(Component):
             Either 'particle' or 'parameter' parameter grouping. If 'particle'
             then grouped by xyza,xyza if 'parameter' then xyz,xyz,a,a
         """
+        if isinstance(rad, (float, int)):
+            rad = rad*np.ones(pos.shape[0])
+
         self.support_pad = support_pad
         self.pos = pos.astype('float')
         self.rad = rad.astype('float')
