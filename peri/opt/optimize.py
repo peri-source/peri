@@ -1010,9 +1010,11 @@ class LMParticles(LMEngine):
         #1. Clipping values:
         values[self._is_rad] = np.clip(values[self._is_rad], self._MINRAD,
                 self._MAXRAD)
+        pd = self.state.pad
         for a in xrange(3):
             values[self._is_pos[a]] = np.clip(values[self._is_pos[a]],
-                    self._MINDIST, self.state.oshape.shape[a] - self._MINDIST)
+                    self._MINDIST - pd[a], self.state.ishape.shape[a] + 
+                    pd[a] - self._MINDIST)
 
         self.state.update(self.param_names, values)
         return self.state.error
