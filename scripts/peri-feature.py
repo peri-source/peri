@@ -14,7 +14,7 @@ import peri.opt.addsubtract as addsub
 # is a short name for use in the save files -- e.g. 1.tif-peri-description.pkl
 filename = '1.tif'
 description = 'featured'
-region = util.Tile(l=[0,0,0], r=[64,64,64])
+region = util.Tile(left=[0,0,0], right=[64,64,64])
 im = util.RawImage(filename, tile=region)
 
 # Next, fill in some information that you already know. For example, a guess
