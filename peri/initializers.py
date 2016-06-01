@@ -134,9 +134,3 @@ def remove_overlaps_naive(pos, rad, zscale=1, doprint=False):
                 if doprint:
                     print diff, rad[i], rad[j]
 
-def remove_background(im, order=(5,5,4), mask=None):
-    from peri.comp import ilms
-    ilm = ilms.Polynomial3D(order=order, shape=im.shape) 
-    ilm.from_data(im, mask=mask)
-
-    return im - ilm.get_field()
