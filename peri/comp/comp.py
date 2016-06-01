@@ -162,7 +162,9 @@ class Component(ParameterGroup):
 
     def trigger_update(self, params, values):
         if self._parent:
-            self._parent.update(params, values)
+            self._parent.trigger_update(params, values)
+        else:
+            self.update(params, values)
 
     def __call__(self, field):
         return self.execute(field)
@@ -190,6 +192,8 @@ class GlobalScalar(Component):
 # Component class == model components for an image
 #=============================================================================
 class ComponentCollection(Component):
+    category = 'comp'
+
     def __init__(self, comps, field_reduce_func=None, category=None):
         """
         Group a number of components into a single coherent object which a
@@ -216,6 +220,7 @@ class ComponentCollection(Component):
 
         self.setup_params()
         self._passthrough_func()
+        self._parent = None
 
     def initialize(self):
         for c in self.comps:
@@ -362,6 +367,9 @@ class ComponentCollection(Component):
 
     def trigger_parameter_change(self):
         self.setup_params()
+
+        if self._parent:
+            self._parent.trigger_parameter_change()
 
     def _passthrough_func(self):
         """
