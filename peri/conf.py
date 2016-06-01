@@ -5,8 +5,8 @@ import copy
 CONF_FILE = os.path.join(os.path.expanduser("~"), ".peri.json")
 
 default_conf = {
-    "fftw_threads": -1,
-    "fftw_wisdom": os.path.join(os.path.expanduser("~"), ".fftw_wisdom.pkl"),
+    "fftw-threads": -1,
+    "fftw-wisdom": os.path.join(os.path.expanduser("~"), ".peri-wisdom.pkl"),
     "log-filename": os.path.join(os.path.expanduser("~"), '.peri.log'),
     "log-to-file": False,
     "log-colors": False,
@@ -47,7 +47,7 @@ def load_conf():
 
 def get_wisdom():
     conf = load_conf()
-    return conf['fftw_wisdom']
+    return conf['fftw-wisdom']
 
 def get_logfile():
     conf = load_conf()
