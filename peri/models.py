@@ -1,7 +1,36 @@
 import re
 
+from peri.comp import GlobalScalar, ilms, psfs, objs, exactpsf
 from peri.logger import log as baselog
 log = baselog.getChild('models')
+
+allfields = [
+    GlobalScalar,
+    ilms.Polynomial3D,
+    ilms.LegendrePoly3D,
+    ilms.Polynomial2P1D,
+    ilms.LegendrePoly2P1D,
+    ilms.ChebyshevPoly2P1D,
+    ilms.BarnesStreakLegPoly2P1D
+]
+
+allpsfs = [
+    psfs.IdentityPSF,
+    psfs.AnisotropicGaussian,
+    psfs.AnisotropicGaussianXYZ,
+    psfs.Gaussian4D,
+    psfs.Gaussian4DPoly,
+    psfs.Gaussian4DLegPoly,
+    psfs.GaussianMomentExpansion,
+    exactpsf.ExactLineScanConfocalPSF,
+    exactpsf.ChebyshevLineScanConfocalPSF,
+    exactpsf.FixedSSChebLinePSF
+]
+
+allobjs = [
+    objs.PlatonicSpheresCollection,
+    objs.Slab
+]
 
 class ModelError(Exception):
     pass
@@ -136,6 +165,24 @@ class ConfocalImageModel(Model):
             'dC' : 'H(dC*P)',
             'dB' : 'dB',
         }
+        registry = {
+            'bkg': allfields,
+            'ilm': allfields,
+            'psf': allpsfs,
+            'obj': allobjs,
+            'offset': [GlobalScalar]
+        }
+        Model.__init__(self, modelstr=modelstr, varmap=varmap)
+
+class SmoothFieldModel(Model):
+    def __init__(self):
+        varmap = {
+            'I': 'ilm'
+        }
+        modelstr = {
+            'full': 'I',
+            'dI': 'dI',
+        }
         Model.__init__(self, modelstr=modelstr, varmap=varmap)
 
 class BlurredParticlesModel(Model):
@@ -161,4 +208,11 @@ class TestModel(Model):
             'dP': 'H(dP)',
         }
         Model.__init__(self, modelstr=modelstr, varmap=varmap)
+
+models = {
+    'confocal-dyedfluid': ConfocalImageModel,
+    'confocal-dyedobjects': BlurredParticlesModel,
+    'smooth-field': SmoothFieldModel,
+}
+
 
