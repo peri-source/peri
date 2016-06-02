@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 import time
@@ -6,11 +8,8 @@ import numpy as np
 from contextlib import contextmanager
 
 from peri import initializers
-
-def callif(f, *args, **kwargs):
-    if hasattr(f, '__call__'):
-        return np.array(f(*args, **kwargs))
-    return np.array(f)
+from peri.logger import log
+log = log.getChild('util')
 
 #=============================================================================
 # Tiling utilities
@@ -325,6 +324,9 @@ class Tile(object):
 #=============================================================================
 class Image(object):
     def __init__(self, image, tile=None, filters=None):
+        """
+        Create an image object from a raw np.ndarray.
+        """
         self.filters = filters or []
         self.image = image
         self.tile = tile or Tile(image.shape)
@@ -388,7 +390,7 @@ class RawImage(Image):
                 image, invert=self.invert, scale=self.exposure
             )
         except IOError as e:
-            print "Could not find image '%s'" % self.filename
+            log.error("Could not find image '%s'" % self.filename)
             raise e
 
         return image
@@ -540,7 +542,7 @@ class ProgressBar(object):
     def _draw(self):
         """ Interal draw method, simply prints to screen """
         if self.display:
-            print self._formatstr.format(**self.__dict__),
+            print(self._formatstr.format(**self.__dict__), end='')
             sys.stdout.flush()
 
     def increment(self):
@@ -572,7 +574,7 @@ class ProgressBar(object):
 
     def end(self):
         if self.display:
-            print '\r{lett:>{screen}}'.format(**{'lett':'', 'screen': self.screen})
+            print('\r{lett:>{screen}}'.format(**{'lett':'', 'screen': self.screen}))
 
 
 #=============================================================================
