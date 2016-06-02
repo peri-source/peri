@@ -60,7 +60,7 @@ class OrthoManipulator(object):
         self.modifier = self.modifiers[0]
 
         self.components = [
-            c.category for c in state.comps if isinstance(c.get_field(), np.ndarray)
+            c.category for c in state.comps if isinstance(c.get(), np.ndarray)
         ]
         self.component = self.components[0]
 
@@ -125,7 +125,7 @@ class OrthoManipulator(object):
             cmap = self.cmap_diff
 
         if self.view == 'comp':
-            out = self.state.get(self.component).get_field()[self.state.inner]
+            out = self.state.get(self.component).get()[self.state.inner]
             vmin, vmax = 0.0, self.vrange_img
             cmap = self.cmap_abs
 

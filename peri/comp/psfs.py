@@ -28,7 +28,7 @@ class PSF(Component):
             execute : apply the psf to an image
         """
         self.shape = shape
-        super(PSF, self).__init__(params, values)
+        super(PSF, self).__init__(params, values, category='psf')
 
         if self.shape:
             self.initialize()
@@ -99,21 +99,25 @@ class PSF(Component):
     def get_padding_size(self, tile):
         raise NotImplemented('subclasses must implement `get_padding_size`')
 
+    def nopickle(self):
+        return super(PSF, self).nopickle() + [
+            '_memoize_clear', '_memoize_caches',
+            'rpsf', 'kpsf', 'min_rpsf'
+        ]
+
     def _rvecs(self, shape, centered=True):
         tile = Tile(shape)
         return tile.kvectors(norm=1.0/tile.shape, shift=centered)
 
     def __getstate__(self):
         odict = self.__dict__.copy()
-        cdd(odict, ['_memoize_clear', '_memoize_caches'])
-        cdd(odict, ['rpsf', 'kpsf', 'min_rpsf'])
+        cdd(odict, self.nopickle())
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self.tile = Tile((0,0,0))
-        self.update(self.params, self.values)
-        self.set_tile(self.shape)
+        if self.shape:
+            self.initialize()
 
     def __str__(self):
         return self.__repr__()

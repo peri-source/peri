@@ -162,12 +162,10 @@ def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
 # Actual sphere collection (and slab)
 #=============================================================================
 class PlatonicSpheresCollection(Component):
-    category = 'obj'
-
     def __init__(self, pos, rad, shape=None, zscale=1.0, support_pad=2,
             method='exact-gaussian-fast', alpha=None, user_method=None,
             exact_volume=True, volume_error=1e-5, max_radius_change=1e-2,
-            param_prefix='sph', grouping='particle'):
+            param_prefix='sph', grouping='particle', category='obj'):
         """
         A collection of spheres in real-space with positions and radii, drawn
         not necessarily on a uniform grid (i.e. scale factor associated with
@@ -229,6 +227,7 @@ class PlatonicSpheresCollection(Component):
         if isinstance(rad, (float, int)):
             rad = rad*np.ones(pos.shape[0])
 
+        self.category = category
         self.support_pad = support_pad
         self.pos = pos.astype('float')
         self.rad = rad.astype('float')
@@ -244,6 +243,7 @@ class PlatonicSpheresCollection(Component):
 
         self.shape = shape
         self.setup_variables()
+
         if self.shape:
             self.initialize()
 
@@ -436,7 +436,7 @@ class PlatonicSpheresCollection(Component):
     def set_tile(self, tile):
         self.tile = tile
 
-    def get_field(self):
+    def get(self):
         return self.particles[self.tile.slicer]
 
     def _vps(self, inds):
@@ -585,12 +585,15 @@ class PlatonicSpheresCollection(Component):
 
     def __getstate__(self):
         odict = self.__dict__.copy()
+        cdd(odict, super(PlatonicSpheresCollection, self).nopickle())
         cdd(odict, ['rvecs', 'particles', '_params'])
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self.initialize()
+        self.setup_variables()
+        if self.shape:
+            self.initialize()
 
 #=============================================================================
 # Coverslip half plane class
@@ -662,7 +665,7 @@ class Slab(Component):
         super(Slab, self).update(params, values)
         self._draw_slab()
 
-    def get_field(self):
+    def get(self):
         return self.image[self.tile.slicer]
 
     def get_update_tile(self, params, values):
@@ -670,12 +673,14 @@ class Slab(Component):
 
     def __getstate__(self):
         odict = self.__dict__.copy()
+        cdd(odict, super(Slab, self).nopickle())
         cdd(odict, ['rvecs', 'image'])
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self._setup()
+        if self.shape:
+            self.initialize()
 
     def __str__(self):
         return self.__repr__()

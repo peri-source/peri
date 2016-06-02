@@ -479,16 +479,23 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
         return outfield
 
+    def nopickle(self):
+        return super(ExactLineScanConfocalPSF, self).nopickle() + [
+            '_rx', '_ry', '_rz', '_rlen',
+            '_memoize_clear', '_memoize_caches',
+            'rpsf', 'kpsf',
+            'cheb', 'slices'
+        ]
+
     def __getstate__(self):
         odict = self.__dict__.copy()
-        util.cdd(odict, ['_rx', '_ry', '_rz', '_rlen'])
-        util.cdd(odict, ['_memoize_clear', '_memoize_caches'])
-        util.cdd(odict, ['rpsf', 'kpsf'])
-        util.cdd(odict, ['cheb', 'slices'])
+        util.cdd(odict, self.nopickle())
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
+        if self.shape:
+            self.initialize()
 
 class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
     def __init__(self, cheb_degree=6, cheb_evals=8, *args, **kwargs):
@@ -541,17 +548,6 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
             outfield += self.cheb.tk(k, zc)[:,None,None] * cov
 
         return outfield
-
-    def __getstate__(self):
-        odict = self.__dict__.copy()
-        util.cdd(odict, ['_rx', '_ry', '_rz', '_rlen'])
-        util.cdd(odict, ['_memoize_clear', '_memoize_caches'])
-        util.cdd(odict, ['rpsf', 'kpsf'])
-        util.cdd(odict, ['cheb'])
-        return odict
-
-    def __setstate__(self, idict):
-        self.__dict__.update(idict)
 
 class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
     def __init__(self, support_size=[35,17,25], *args, **kwargs):
