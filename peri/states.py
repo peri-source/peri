@@ -391,6 +391,7 @@ class ImageState(State, comp.ComponentCollection):
         self.sigma = sigma
         self.priors = priors
         self.pad = util.a3(pad)
+        self.model_as_data = model_as_data
 
         comp.ComponentCollection.__init__(self, comps=comps)
 
@@ -398,7 +399,7 @@ class ImageState(State, comp.ComponentCollection):
         self.set_image(image)
         self.build_funcs()
 
-        if model_as_data:
+        if self.model_as_data:
             self.model_to_data(self.sigma)
 
     def set_model(self, mdl):
@@ -416,8 +417,13 @@ class ImageState(State, comp.ComponentCollection):
         """
         Update the current comparison (real) image
         """
-        if not isinstance(image, util.Image):
+        if isinstance(image, np.ndarray):
             image = util.Image(image)
+
+        if isinstance(image, util.NullImage):
+            self.model_as_data = True
+        else:
+            self.model_as_data = False
 
         self.image = image
         self._data = self.image.get_padded_image(self.pad)
@@ -436,7 +442,7 @@ class ImageState(State, comp.ComponentCollection):
         """ Switch out the data for the model's recreation of the data. """
         im = self.model.copy()
         im += sigma*np.random.randn(*im.shape)
-        self.set_image(im)
+        self.set_image(util.NullImage(image=im))
 
     def reset(self):
         for c in self.comps:
@@ -588,9 +594,6 @@ class ImageState(State, comp.ComponentCollection):
         self._loglikelihood += self._calc_loglikelihood(newmodel, tile=tile)
         self._residuals[tile.slicer] = newmodel - self._data[tile.slicer]
 
-    def get_field(self):
-        raise NotImplementedError('inherited but not relevant')
-
     def exports(self):
         raise NotImplementedError('inherited but not relevant')
 
@@ -606,14 +609,12 @@ class ImageState(State, comp.ComponentCollection):
         )
 
     def __getstate__(self):
-        odict = super(ImageState, self).__getstate__()
-        util.cdd(odict, ['_model', '_data', '_residuals'])
-        return odict
+        return {'image': self.image, 'comps': self.comps, 'mdl': self.mdl,
+                'sigma': self.sigma, 'priors': self.priors, 'pad': self.pad,
+                'model_as_data': self.model_as_data}
 
     def __setstate__(self, idct):
-        self.__dict__.update(idict)
-        self.set_image(self.image)
-
+        self.__init__(**idct)
 
 def save(state, filename=None, desc='', extra=None):
     """

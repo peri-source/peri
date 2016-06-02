@@ -6,7 +6,7 @@ from peri.comp import psfs, objs, ilms, exactpsf, GlobalScalar
 from peri.viz import interaction
 from peri.test import nbody
 
-im = util.Image(np.zeros((32,)*3))
+im = util.NullImage(np.zeros((32,)*3))
 pos, rad = nbody.create_configuration(30, im.tile)
 
 def make_image_0():

@@ -16,8 +16,6 @@ from peri.interpolation import BarnesInterpolation1D
 # Pure 3d functional representations of ILMs
 #=============================================================================
 class Polynomial3D(Component):
-    category = 'ilm'
-
     def __init__(self, order=(1,1,1), tileinfo=None, constval=None,
             category='ilm', shape=None):
         """
@@ -60,7 +58,9 @@ class Polynomial3D(Component):
         if constval:
             values[0] = constval
 
-        super(Polynomial3D, self).__init__(params=params, values=values)
+        super(Polynomial3D, self).__init__(
+            params=params, values=values, category=category
+        )
 
         if self.shape:
             self.initialize()
@@ -114,7 +114,7 @@ class Polynomial3D(Component):
             for p,v in zip(self.params, self.values):
                 self.field += v * self.term(self.param_term[p])
 
-    def get_field(self):
+    def get(self):
         return self.field[self.tile.slicer]
 
     def get_params(self):
@@ -122,6 +122,11 @@ class Polynomial3D(Component):
 
     def get_update_tile(self, params, values):
         return self.shape.copy()
+
+    def nopickle(self):
+        return super(Polynomial3D, self).nopickle() + [
+            'r', 'field', '_last_term', '_last_index'
+        ]
 
     def __str__(self):
         return "{} [{}]".format(
@@ -133,17 +138,18 @@ class Polynomial3D(Component):
 
     def __getstate__(self):
         odict = self.__dict__.copy()
-        util.cdd(odict, ['r', 'field', '_last_term', '_last_index'])
+        util.cdd(odict, self.nopickle())
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self.initialize()
+        if self.shape:
+            self.initialize()
 
 class LegendrePoly3D(Polynomial3D):
-    def __init__(self, shape=None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """ Same arguments are Polynomial3D """
-        super(LegendrePoly3D, self).__init__(shape=shape, *args, **kwargs)
+        super(LegendrePoly3D, self).__init__(*args, **kwargs)
 
     def rvecs(self):
         vecs = super(LegendrePoly3D, self).rvecs()
@@ -289,18 +295,24 @@ class Polynomial2P1D(Polynomial3D):
             self.set_values(params, values)
             self.field = self.calc_field()
 
-    def get_field(self):
+    def get(self):
         return self.field[self.tile.slicer]
+
+    def nopickle(self):
+        return super(Polynomial2P1D, self).nopickle() + [
+            'r', 'field', 'field_xy', 'field_z',
+            '_last_term', '_last_index'
+        ]
 
     def __getstate__(self):
         odict = self.__dict__.copy()
-        util.cdd(odict, ['r', 'field', 'field_xy', 'field_z'])
-        util.cdd(odict, ['_last_term', '_last_index'])
+        util.cdd(odict, self.nopickle())
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self.initialize()
+        if self.shape:
+            self.initialize()
 
 class LegendrePoly2P1D(Polynomial2P1D):
     def __init__(self, order=(1,1,1), **kwargs):
@@ -407,7 +419,9 @@ class BarnesStreakLegPoly2P1D(Component):
         params.extend(self.poly_params)
         values.extend([0.0]*len(self.poly_params))
 
-        super(BarnesStreakLegPoly2P1D, self).__init__(params=params, values=values)
+        super(BarnesStreakLegPoly2P1D, self).__init__(
+            params=params, values=values, category=category
+        )
 
         # this next variable is to allow for randomize_parameters before the
         # object has a shape by leaving a breadcrumb for normalization
@@ -497,11 +511,11 @@ class BarnesStreakLegPoly2P1D(Component):
         if self._norm_stat:
             ptp, vmin = self._norm_stat
 
-            ptp0 = self.get_field().ptp()
+            ptp0 = self.get().ptp()
             scale = ptp / ptp0
             self.update(self.category+'-scale', scale)
 
-            min0 = self.get_field().min()
+            min0 = self.get().min()
             off = vmin - min0
             self.update(self.category+'-off', off)
 
@@ -530,7 +544,7 @@ class BarnesStreakLegPoly2P1D(Component):
             self.set_values(params, values)
             self.field = self.calc_field()
 
-    def get_field(self):
+    def get(self):
         return self.field[self.tile.slicer]
 
     def get_update_tile(self, params, values):
@@ -616,6 +630,12 @@ class BarnesStreakLegPoly2P1D(Component):
 
         if self.shape:
             self.initialize()
+    
+    def nopickle(self):
+        return super(BarnesStreakLegPoly2P1D, self).nopickle() + [
+            'poly', 'b_in', 'b_out', 'r', 'field',
+            '_last_term', '_last_index'
+        ]
 
     def __str__(self):
         return "{} [{} {}]".format(
@@ -627,12 +647,12 @@ class BarnesStreakLegPoly2P1D(Component):
 
     def __getstate__(self):
         odict = self.__dict__.copy()
-        util.cdd(odict, ['poly', 'b_in', 'b_out', 'r', 'field'])
-        util.cdd(odict, ['_last_term', '_last_index'])
+        util.cdd(odict, self.nopickle())
         return odict
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self.initialize()
+        if self.shape:
+            self.initialize()
 
 
