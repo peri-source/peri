@@ -584,7 +584,6 @@ class BarnesStreakLegPoly2P1D(Component):
         """
         if vmin is not None and vmax is not None:
             ptp = vmax - vmin
-            print "Warning: vmin and vmax set, using those for ptp"
         elif vmax is not None and vmin is None:
             vmin = vmax - ptp
         elif vmin is not None and vmax is None:
