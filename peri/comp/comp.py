@@ -214,6 +214,7 @@ class ComponentCollection(Component):
         self.setup_params()
         self._passthrough_func()
         self._parent = None
+        self._nopickle = []
 
     def initialize(self):
         for c in self.comps:
@@ -378,12 +379,14 @@ class ComponentCollection(Component):
             for func in funcs:
                 if func[0].startswith('param_'):
                     setattr(self, func[0], func[1])
+                    self._nopickle.append(func[0])
 
             # add everything from exports
             funcs = c.exports()
             for func in funcs:
                 newname = c.category + '_' + func.im_func.func_name
                 setattr(self, newname, func)
+                self._nopickle.append(newname)
 
     def exports(self):
         return [i for c in self.comps for i in c.exports()]
@@ -398,6 +401,18 @@ class ComponentCollection(Component):
 
     def __repr__(self):
         return self.__str__()
+
+    def __getstate__(self):
+        odict = self.__dict__().copy()
+        util.cdd(odict, self._nopickle)
+        return odict
+
+    def __setstate__(self, idct):
+        self.__dict__.update(idict)
+        self.setup_params()
+        self._passthrough_func()
+        self._parent = None
+        self._nopickle = []
 
 util.patch_docs(GlobalScalar, Component)
 util.patch_docs(ComponentCollection, Component)

@@ -606,10 +606,13 @@ class ImageState(State, comp.ComponentCollection):
         )
 
     def __getstate__(self):
-        return {}
+        odict = super(ImageState, self).__getstate__()
+        util.cdd(odict, ['_model', '_data', '_residuals'])
+        return odict
 
     def __setstate__(self, idct):
-        pass
+        self.__dict__.update(idict)
+        self.set_image(self.image)
 
 
 def save(state, filename=None, desc='', extra=None):
