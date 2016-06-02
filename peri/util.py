@@ -268,6 +268,16 @@ class Tile(object):
             r = amax(r, tile.r)
         return Tile(l, r)
 
+    def __eq__(self, other):
+        if other is None:
+            return False
+        return (self.l == other.l).all() and (self.r == other.r).all()
+
+    def __ne__(self, other):
+        if other is None:
+            return True
+        return ~self.__eq__(other)
+
     def __and__(self, other):
         return Tile.intersection(self, other)
 
@@ -326,7 +336,16 @@ class Image(object):
     def __init__(self, image, tile=None, filters=None):
         """
         Create an image object from a raw np.ndarray.
-        """
+
+        Parameters:
+        -----------
+        image : ndarray
+            The image in float format with dimensions arranged as [z,y,x]
+
+        tile : `peri.util.Tile`
+            the region of the image to crop out to use for the actual featuring, etc
+
+         """
         self.filters = filters or []
         self.image = image
         self.tile = tile or Tile(image.shape)
@@ -351,6 +370,36 @@ class Image(object):
 
     def set_filter(self, slices, values):
         self.filters = [[sl,values[sl]] for sl in slices]
+
+
+class NullImage(Image):
+    def __init__(self, image=None, shape=None):
+        """
+        An image object that doesn't actual store any information so that small
+        save states can be created for pure model states
+
+        Parameters:
+        -----------
+        shape : tuple
+            Size of the image which will be mocked
+        """
+        if image is not None:
+            self.shape = image.shape
+            super(NullImage, self).__init__(image)
+        elif shape is not None:
+            self.shape = shape
+            super(NullImage, self).__init__(np.zeros(self.shape))
+        else:
+            raise AttributeError("Must provide either image or shape")
+
+    def __getstate__(self):
+        d = self.__dict__.copy()
+        cdd(d, ['image'])
+        return d
+
+    def __setstate__(self, idct):
+        self.__dict__.update(idct)
+        super(NullImage, self).__init__(np.zeros(self.shape))
 
 class RawImage(Image):
     def __init__(self, filename, tile=None, invert=False, exposure=None):
