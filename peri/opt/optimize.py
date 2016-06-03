@@ -438,6 +438,7 @@ class LMEngine(object):
         raise NotImplementedError('implement in subclass')
 
     def calc_residuals(self):
+        """Function that, when called, returns data - model."""
         raise NotImplementedError('implement in subclass')
 
     def update_function(self, param_vals):
@@ -776,7 +777,7 @@ class LMEngine(object):
 
     def calc_grad(self):
         residuals = self.calc_residuals()
-        return np.dot(self.J, residuals)
+        return -np.dot(self.J, residuals)
 
     def _rank_1_J_update(self, direction, values):
         """
@@ -836,7 +837,7 @@ class LMEngine(object):
         _ = self.update_function(self.param_vals + delta0*dh)
         rm1 = self.calc_residuals()
         term1 = (rm1 - rm0) / dh
-        #and putting back the parameters:
+        #and putting back the parameters: - necessary? FIXME
         _ = self.update_function(self.param_vals)
 
         term2 = np.dot(self.J.T, delta0)
