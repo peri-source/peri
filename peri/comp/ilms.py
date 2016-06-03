@@ -494,7 +494,7 @@ class BarnesStreakLegPoly2P1D(Component):
 
     def calc_field(self):
         op = {'*': mul, '+': add}[self.op]
-        return self.scale * op(1 + self._barnes_full(), 1 + self.poly) + self.off
+        return self.scale * op(1.0 + self._barnes_full(), 1.0 + self.poly) + self.off
 
     def calc_poly(self):
         return np.sum([
@@ -532,21 +532,17 @@ class BarnesStreakLegPoly2P1D(Component):
         values = util.listify(values)
 
         if len(params) < len(self.params)/2:
-            calcpoly = False
-
             for p,v1 in zip(params, values):
                 if p in self.poly_params:
-                    calcpoly = True
-                    #tm = self._term(self.poly_params[p])
-                    #v0 = self.get_values(p)
-                    #self.poly += (v1-v0) * tm
+                    tm = self._term(self.poly_params[p])
+                    v0 = self.get_values(p)
+                    self.poly += (v1-v0) * tm
 
             self.set_values(params, values)
-            if calcpoly:
-                self.poly = self.calc_poly()
             self.field = self.calc_field()
         else:
             self.set_values(params, values)
+            self.poly = self.calc_poly()
             self.field = self.calc_field()
 
     def get(self):
