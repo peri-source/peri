@@ -43,7 +43,7 @@ class Polynomial3D(Component):
         self.order = order
         self.tileinfo = tileinfo
         self.category = category
-        c = self.category
+        c = category
 
         # set up the parameter mappings and values
         params, values = [], []
@@ -105,11 +105,13 @@ class Polynomial3D(Component):
         if len(params) < len(self.params)/2:
             for p,v1 in zip(params, values):
                 v0 = self.get_values(p)
+                tm = self.param_term[p]
 
-                self.field -= v0 * self.term(self.param_term[p])
+                self.field -= v0 * self.term(tm)
                 self.set_values(p, v1)
-                self.field += v1 * self.term(self.param_term[p])
+                self.field += v1 * self.term(tm)
         else:
+            self.set_values(params, values)
             self.field = np.zeros(self.shape.shape)
             for p,v in zip(self.params, self.values):
                 self.field += v * self.term(self.param_term[p])
@@ -224,7 +226,7 @@ class Polynomial2P1D(Polynomial3D):
             values.append(0.0)
 
         # setup the basics of the component now
-        Component.__init__(self, params, values)
+        Component.__init__(self, params, values, category=category)
 
         # set up the appropriate zero terms for the supplied constant value
         # parameter if there.
@@ -404,7 +406,6 @@ class BarnesStreakLegPoly2P1D(Component):
         # distinguish them quickly from one another
         params, values = [c+'-scale', c+'-off'], [1.0, 0.0]
         self.barnes_params = []
-        self.poly_params = OrderedDict()
         for i, npt in enumerate(npts):
             tparams = [c+'-b%i-%i' % (i, j) for j in xrange(npt)]
             tvalues = [0.0]*len(tparams)
@@ -416,7 +417,7 @@ class BarnesStreakLegPoly2P1D(Component):
 
         # tack on the z-poly parameters on the end
         self.poly_params = {c+'-z-%i' % i:i for i in xrange(zorder)}
-        params.extend(self.poly_params)
+        params.extend(self.poly_params.keys())
         values.extend([0.0]*len(self.poly_params))
 
         super(BarnesStreakLegPoly2P1D, self).__init__(
@@ -531,14 +532,18 @@ class BarnesStreakLegPoly2P1D(Component):
         values = util.listify(values)
 
         if len(params) < len(self.params)/2:
+            calcpoly = False
+
             for p,v1 in zip(params, values):
                 if p in self.poly_params:
-                    tm = self._term(self.poly_params[p])
-                    v0 = self.get_values(p)
-
-                    self.poly += (v1-v0) * tm
+                    calcpoly = True
+                    #tm = self._term(self.poly_params[p])
+                    #v0 = self.get_values(p)
+                    #self.poly += (v1-v0) * tm
 
             self.set_values(params, values)
+            if calcpoly:
+                self.poly = self.calc_poly()
             self.field = self.calc_field()
         else:
             self.set_values(params, values)
