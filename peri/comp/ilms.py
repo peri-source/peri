@@ -231,11 +231,7 @@ class Polynomial2P1D(Polynomial3D):
         # set up the appropriate zero terms for the supplied constant value
         # parameter if there.
         if constval:
-            if operation == '*':
-                self.set_values(c+'-xy-0-0', constval)
-                self.set_values(c+'-z-0', 1.0)
-            else:
-                self.set_values(c+'-xy-0-0', constval)
+            self.set_values(c+'-xy-0-0', constval)
 
         if self.shape:
             self.initialize()
