@@ -65,6 +65,11 @@ class ParameterGroup(object):
         return self.param_dict.values()
 
     def nopickle(self):
+        """
+        Elements of the class that should not be included in pickled objects.
+        If inheriting a new class, should be:
+            super(Class, self).nopickle() + ['other1', 'other2', ...]
+        """
         return []
 
     def __str__(self):
@@ -119,7 +124,7 @@ class Component(ParameterGroup):
     def get_padding_size(self, tile):
         """
         Get the amount of padding required for this object when calculating
-        about a tile `tile`. Padding size is the total size, so twice that
+        about a tile `tile`. Padding size is the total size, so half that
         on each side.
 
         Parameters:
@@ -239,8 +244,9 @@ class ComponentCollection(Component):
     def initargs(self):
         """ Return arguments that are passed to init to setup the class again """
         return {
-            'comps': self.comps, 'field_reduce_func': self.field_reduce_func,
-            'category': self.category
+            'comps': self.comps,
+            'category': self.category,
+            'field_reduce_func': self.field_reduce_func,
         }
 
     def initialize(self):
@@ -432,6 +438,7 @@ class ComponentCollection(Component):
     def __repr__(self):
         return self.__str__()
 
+util.patch_docs(Component, ParameterGroup)
 util.patch_docs(GlobalScalar, Component)
 util.patch_docs(ComponentCollection, Component)
 
