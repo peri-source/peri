@@ -220,7 +220,7 @@ class Polynomial2P1D(Polynomial3D):
 
         for order in xrange(self.order[0]):
             p = c+'-z-%i' % order
-            self.z_param[p] = (order,)
+            self.z_param[p] = (order+1,)
 
             params.append(p)
             values.append(0.0)
@@ -261,7 +261,7 @@ class Polynomial2P1D(Polynomial3D):
             term += v * self.term(order)
 
         op = {'*': mul, '+': add}[self.operation]
-        self.field = op(self.field_xy, self.field_z)
+        self.field = op(self.field_xy, 1.0 + self.field_z)
         return self.field
 
     def term_ijk(self, index):
@@ -292,7 +292,7 @@ class Polynomial2P1D(Polynomial3D):
                 term += v1 * self.term(order)
 
             op = {'*': mul, '+': add}[self.operation]
-            self.field = op(self.field_xy, self.field_z)
+            self.field = op(self.field_xy, 1.0 + self.field_z)
         else:
             self.set_values(params, values)
             self.field = self.calc_field()
@@ -365,7 +365,7 @@ class BarnesStreakLegPoly2P1D(Component):
         """
         A Barnes interpolant. This one is of the form
 
-            I = (1 + (\sum b_k(x) (o) L_k(y))) * (1 + q(z)) + c
+            I = (1 + (\sum b_k(x) (o) L_k(y))) * (1 + z*q(z)) + c
 
         where b_k are independent barnes interpolants and L_k are legendre
         polynomials. q is a polynomial strictly in z. Additionally, the
@@ -416,7 +416,7 @@ class BarnesStreakLegPoly2P1D(Component):
             self.barnes_params.append(tparams)
 
         # tack on the z-poly parameters on the end
-        self.poly_params = {c+'-z-%i' % i:i for i in xrange(zorder)}
+        self.poly_params = {c+'-z-%i' % i:i+1 for i in xrange(zorder)}
         params.extend(self.poly_params.keys())
         values.extend([0.0]*len(self.poly_params))
 
