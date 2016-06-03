@@ -65,7 +65,7 @@ class State(comp.ParameterGroup):
     @property
     def residuals(self):
         """ Get the model residuals wrt data """
-        return self.model - self.data
+        return self.data - self.model
 
     @property
     def error(self):
@@ -570,7 +570,7 @@ class ImageState(State, comp.ComponentCollection):
         return self.mdl.evaluate(self.comps, 'get')
 
     def _calc_residuals(self):
-        return self._model - self._data
+        return self._data - self._model
 
     def _calc_logprior(self):
         return 1.0 # FIXME
@@ -592,7 +592,7 @@ class ImageState(State, comp.ComponentCollection):
         """
         self._loglikelihood -= self._calc_loglikelihood(oldmodel, tile=tile)
         self._loglikelihood += self._calc_loglikelihood(newmodel, tile=tile)
-        self._residuals[tile.slicer] = newmodel - self._data[tile.slicer]
+        self._residuals[tile.slicer] = self._data[tile.slicer] - newmodel
 
     def exports(self):
         raise NotImplementedError('inherited but not relevant')
