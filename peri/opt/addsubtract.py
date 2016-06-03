@@ -48,7 +48,7 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
 
     """
     accepts = 0
-    new_inds = []
+    new_poses = []
     if rad == 'calc':
         rad = np.median(st.obj_get_radii())
     message = '-'*30 + 'ADDING' + '-'*30 + '\n  Z\t  Y\t  X\t  R\t|\t ERR0\t\t ERR1'
@@ -62,15 +62,15 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
             opt.do_levmarq_particles(st, np.array([ind],dtype='int'),
                     damping=1.0, max_iter=2, run_length=3, eig_update=False,
                     include_rad=False)
-        did_kill = check_remove_particle(st, ind, **kwargs)
+        did_kill, p, r = check_remove_particle(st, ind, **kwargs)
         if not did_kill:
             accepts += 1
-            new_inds.append(ind)
+            new_poses.append(p)
             part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
-                    tuple(st.state[st.param_particle(ind)]) + (old_err, st.error))
+                    p + r + (old_err, st.error))
             with log.noformat():
                 CLOG.info(part_msg)
-    return accepts, new_inds
+    return accepts, new_poses
 
 def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs):
     """
@@ -90,7 +90,7 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
         killed = False
     else:
         killed = True
-    return killed
+    return killed, tuple(p), (r,)
 
 def sample_n_add(st, rad='calc', tries=20, **kwargs):
     """
@@ -102,8 +102,9 @@ def sample_n_add(st, rad='calc', tries=20, **kwargs):
     guess, npart = feature_guess(st, rad, **kwargs)
     tries = np.min([tries, npart])
 
-    accepts, new_inds = check_add_particles(st, guess[:tries], rad=rad, **kwargs)
-    return accepts, new_inds
+    accepts, new_poses = check_add_particles(st, guess[:tries], rad=rad,
+            **kwargs)
+    return accepts, new_poses
 
 def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
         check_rad_cutoff=[3.5,15], check_outside_im=True, tries=100,
@@ -175,15 +176,17 @@ def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
     near_im_edge = np.nonzero(is_near_im_edge(st.obj_get_positions(),
             min_edge_dist))[0]
     delete_inds = np.unique(np.append(rad_wrong_size, near_im_edge)).tolist()
+    delete_poses = st.obj_get_positions()[delete_inds].tolist()
     message = '-'*27 + 'SUBTRACTING' + '-'*28 + '\n  Z\t  Y\t  X\t  R\t|\t ERR0\t\t ERR1'
     with log.noformat():
         CLOG.info(message)
 
-    for ind in delete_inds:
+    for pos in delete_poses:
+        ind = st.obj_closest_particle(pos)
         old_err = st.error
         p, r = st.obj_remove_particle(ind)
         part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
-                tuple(st.state[st.param_particle(ind)]) + (old_err, st.error))
+                tuple(p) + (r,) + (old_err, st.error))
         with log.noformat():
             CLOG.info(part_msg)
         removed += 1
@@ -200,21 +203,24 @@ def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
 
     check_inds = check_inds[np.argsort(st.obj_get_radii()[check_inds])]
     tries = np.max([tries, check_inds.size])
-    for ind in check_inds[:tries]:
+    check_poses = st.obj_get_positions()[check_inds[:tries]].copy()
+    for pos in check_poses:
         old_err = st.error
-        killed = check_remove_particle(st, ind, im_change_frac=im_change_frac)
+        ind = st.obj_closest_particle(pos)
+        killed, p, r = check_remove_particle(st, ind, im_change_frac=im_change_frac)
         if killed:
             removed += 1
-            delete_inds.append(ind)
+            check_inds[check_inds > ind] -= 1  #cleaning up indices....
+            delete_poses.append(pos)
             part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
-                    tuple(st.state[st.param_particle(ind)]) + (old_err, st.error))
+                    p + r + (old_err, st.error))
             with log.noformat():
                 CLOG.info(part_msg)
-    return removed, delete_inds
+    return removed, delete_poses
 
 def add_subtract(st, max_iter=5, **kwargs):
     """
-    Adds and subtracts particles.
+    Automatically adds and subtracts missing & extra particles.
 
     Parameters
     ----------
@@ -275,9 +281,12 @@ def add_subtract(st, max_iter=5, **kwargs):
             The total number of adds and subtracts done on the data.
             Not the same as changed_inds.size since the same particle
             or particle index can be added/subtracted multiple times.
-        changed_inds : np.ndarray of ints
-            The particle indices that were added and/or subtracted during
-            the fit.
+        added_positions : [N_added,3] numpy.ndarray
+            The positions of particles that have been added at any point in
+            the add-subtract cycle.
+        removed_positions : [N_added,3] numpy.ndarray
+            The positions of particles that have been removed at any point in
+            the add-subtract cycle.
 
     Comments
     --------
@@ -286,6 +295,9 @@ def add_subtract(st, max_iter=5, **kwargs):
         to set max_rad to a physical value. This removes the big particle
         and allows it to be re-featured by (several passes of) the adding
         portion.
+        The added/removed positions returned are whether or not the position
+        has been added or removed ever. It's possible that a position is
+        added, then removed during a later iteration.
 
     To implement
     ------------
@@ -293,19 +305,23 @@ def add_subtract(st, max_iter=5, **kwargs):
         hunt).
     """
     total_changed = 0
-    added_inds = []
-    removed_inds = []
+    removed_poses = []
+    added_poses0 = []
+    added_poses = []
 
     for _ in xrange(max_iter):
-        nr, rinds = remove_bad_particles(st, **kwargs)
-        na, ainds = sample_n_add(st, **kwargs)
+        nr, rposes = remove_bad_particles(st, **kwargs)
+        na, aposes = sample_n_add(st, **kwargs)
         current_changed = na + nr
-        added_inds.extend(ainds)
-        removed_inds.extend(rinds)
+        removed_poses.extend(rposes)
+        added_poses0.extend(aposes)
         total_changed += current_changed
         if current_changed == 0:
             break
+
     #Now we optimize the radii too:
-    for i in added_inds:
+    for p in added_poses0:
+        i = s.obj_closest_particle(p)
         opt.do_levmarq_particles(st, np.array([i]), max_iter=2, damping=0.3)
-    return total_changed, np.unique(added_inds + removed_inds)
+        added_poses.append(st.obj_get_positions()[i])
+    return total_changed, np.array(removed_poses), np.array(added_poses)
