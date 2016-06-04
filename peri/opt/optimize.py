@@ -567,7 +567,7 @@ class LMEngine(object):
                 self.update_param_vals(delta_params_1, incremental=True)
                 self.error = er1
 
-            else: #er2 < er1
+            elif er2 < er1:
                 good_step = True
                 self.error = er2
                 CLOG.debug('Good step, decreasing damping')
@@ -575,6 +575,8 @@ class LMEngine(object):
                 #-we're already at the correct parameters
                 self.update_param_vals(delta_params_2, incremental=True)
                 self.decrease_damping()
+            else:
+                raise RuntimeError('wtf? maybe nans?')
 
             #3. Run with current J, damping; update what we need to::
             if good_step:
@@ -654,7 +656,7 @@ class LMEngine(object):
             accel_correction = self.calc_accel_correction(damped_JTJ, delta0)
             nrm_d0 = np.sqrt(np.sum(delta0**2))
             nrm_corr = np.sqrt(np.sum(accel_correction**2))
-            CLOG.debug('|correction term| / |initial vector|\t%e' % (nrm_corr/nrm_d0))
+            CLOG.debug('|correction| / |LM step|\t%e' % (nrm_corr/nrm_d0))
             if nrm_corr/nrm_d0 < self.max_accel_correction:
                 delta0 += accel_correction
             elif do_correct_damping:
@@ -879,7 +881,7 @@ class LMFunction(LMEngine):
         self.data = data
         self.func = func
         self.func_args = func_args
-        self.func_kargs = func_kargs
+        self.func_kwargs = func_kwargs
         self.param_vals = p0
         self.dl = dl
         super(LMFunction, self).__init__(**kwargs)
@@ -889,7 +891,7 @@ class LMFunction(LMEngine):
         Must update:
             self.error, self._last_error, self.param_vals, self._last_vals
         """
-        self.param_vals = p0 #sloppy...
+        # self.param_vals = p0 #sloppy...
         self._last_vals = self.param_vals.copy()
         self.error = self.update_function(self.param_vals)
         self._last_error = 1.001*self.error
@@ -902,12 +904,12 @@ class LMFunction(LMEngine):
         f0 = self.model.copy()
         for a in xrange(self.param_vals.size):
             dp *= 0
-            dp[a] = param_vals[a] * self.dl
-            f1 = self.func(param_vals, *self.func_args, **self.func_kwargs)
+            dp[a] = (1+self.param_vals[a]) * self.dl
+            f1 = self.func(self.param_vals + dp, *self.func_args, **self.func_kwargs)
             self.J[a] = (f1 - f0) / dp[a]
 
     def calc_residuals(self):
-        return self.model - self.data
+        return self.data - self.model
 
     def update_function(self, param_vals):
         """Takes an array param_vals, updates function, returns the new error"""
