@@ -1,9 +1,3 @@
-"""
-s.get('...').??? -- probably bad form (e.g. s.get('obj').N to get particle pos
-is bad because you could have more than 1 particle.
-Right now I'm doing s.obj_get_radii().size but when Mattycakes implements
-s.obj_get_npart() you should implement.
-"""
 import os
 import sys
 import time
@@ -22,6 +16,9 @@ from peri.logger import log
 CLOG = log.getChild('opt')
 
 """
+accel_correction is wrong as checked by a rosenbrock banana function; the
+suggested accel steps are (1) always rejected and (2) in the wrong direction.
+
 To fix:
 1. opt.burn() -- right now it seems that the globals aren't fully optimized
     but the particles are after a few loops. So you might want to spend 1 more
@@ -250,6 +247,15 @@ def fit_ilm(new_ilm, old_ilm, **kwargs):
 #=============================================================================#
 #         ~~~~~        Class/Engine LM minimization Stuff     ~~~~~
 #=============================================================================#
+
+def find_best_step(err_vals):
+    """
+    Returns the index of the lowest of the passed values. Catches nans etc.
+    """
+    if np.all(np.isnan(err_vals)):
+        raise ValueError('All err_vals are nans!')
+    return np.nanargmin(err_vals)
+
 class LMEngine(object):
     """
     The engine for running levenberg-marquardt optimization on anything.
@@ -465,21 +471,20 @@ class LMEngine(object):
 
             #2. Increase damping until we get a good step:
             er1 = self.update_function(self.param_vals + delta_vals)
-            good_step = er1 < self.error
+            good_step = (find_best_step([self.error, er1]) == 1)
             if not good_step:
                 er0 = self.update_function(self.param_vals)
                 if np.abs(er0 -self.error) > 1e-7:
                     raise RuntimeError('ARG!!!') #FIXME
+                CLOG.debug('Bad step, increasing damping')
+                CLOG.debug('\t\t%f\t%f' % (self.error, er1))
             _try = 0
-            if (not good_step):
-                CLOG.debug('Bad step, increasing damping\t%f\t%f' %
-                        (self.error, er1))
             while (_try < self._max_inner_loop) and (not good_step):
                 _try += 1
                 self.increase_damping()
                 delta_vals = self.find_LM_updates(self.calc_grad())
                 er1 = self.update_function(self.param_vals + delta_vals)
-                good_step = er1 < self.error
+                good_step = (find_best_step([self.error, er1]) == 1)
                 if not good_step:
                     er0 = self.update_function(self.param_vals)
                     if np.abs(er0 -self.error) > 1e-7:
@@ -492,9 +497,8 @@ class LMEngine(object):
                 self._last_error = self.error
                 self.error = er1
                 CLOG.debug('Good step\t%f\t%f' % (self._last_error, self.error))
-
-            self.update_param_vals(delta_vals, incremental=True)
-            self.decrease_damping()
+                self.update_param_vals(delta_vals, incremental=True)
+                self.decrease_damping()
             self._num_iter += 1; self._inner_run_counter += 1
 
     def do_run_2(self):
@@ -532,7 +536,8 @@ class LMEngine(object):
             er2 = self.update_function(self.param_vals + delta_params_2)
 
             triplet = (self.error, er1, er2)
-            if self.error < min([er1, er2]):
+            best_step = find_best_step(triplet)
+            if best_step == 0:
                 #Both bad steps, put back & increase damping:
                 _ = self.update_function(self.param_vals.copy())
                 _try = 0
@@ -556,7 +561,8 @@ class LMEngine(object):
                     CLOG.debug('Sufficiently increased damping')
                     CLOG.debug('%f\t%f' % (triplet[0], self.error))
 
-            elif er1 <= er2:
+            elif best_step == 1:
+                #er1 <= er2:
                 good_step = True
                 CLOG.debug('Good step, same damping')
                 CLOG.debug('%f\t%f\t%f' % triplet)
@@ -567,7 +573,8 @@ class LMEngine(object):
                 self.update_param_vals(delta_params_1, incremental=True)
                 self.error = er1
 
-            elif er2 < er1:
+            elif best_step == 2:
+                #er2 < er1:
                 good_step = True
                 self.error = er2
                 CLOG.debug('Good step, decreasing damping')
@@ -575,8 +582,6 @@ class LMEngine(object):
                 #-we're already at the correct parameters
                 self.update_param_vals(delta_params_2, incremental=True)
                 self.decrease_damping()
-            else:
-                raise RuntimeError('wtf? maybe nans?')
 
             #3. Run with current J, damping; update what we need to::
             if good_step:
@@ -834,6 +839,10 @@ class LMEngine(object):
         _ = self.update_function(self.param_vals)
 
     def calc_accel_correction(self, damped_JTJ, delta0):
+        """
+        This is currently wrong.... I think that there is an error in
+        the Transtrum paper or I am interpreting it incorrectly....
+        """
         dh = 0.1
         rm0 = self.calc_residuals()
         _ = self.update_function(self.param_vals + delta0*dh)
