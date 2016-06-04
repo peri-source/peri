@@ -174,7 +174,7 @@ def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
     rad_wrong_size = np.nonzero((st.obj_get_radii() < min_rad) |
             (st.obj_get_radii() > max_rad))[0]
     near_im_edge = np.nonzero(is_near_im_edge(st.obj_get_positions(),
-            min_edge_dist))[0]
+            min_edge_dist - st.pad))[0]
     delete_inds = np.unique(np.append(rad_wrong_size, near_im_edge)).tolist()
     delete_poses = st.obj_get_positions()[delete_inds].tolist()
     message = '-'*27 + 'SUBTRACTING' + '-'*28 + '\n  Z\t  Y\t  X\t  R\t|\t ERR0\t\t ERR1'
@@ -321,7 +321,7 @@ def add_subtract(st, max_iter=5, **kwargs):
 
     #Now we optimize the radii too:
     for p in added_poses0:
-        i = s.obj_closest_particle(p)
+        i = st.obj_closest_particle(p)
         opt.do_levmarq_particles(st, np.array([i]), max_iter=2, damping=0.3)
         added_poses.append(st.obj_get_positions()[i])
     return total_changed, np.array(removed_poses), np.array(added_poses)
