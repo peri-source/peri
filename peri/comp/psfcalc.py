@@ -36,7 +36,7 @@ def calc_pts_lag(npts=20, scl=0.051532):
     (15, 0.072144)      :       0.002193
     (20, 0.051532)      :       0.001498
     (25, 0.043266)      :       0.001209
-    
+
     The previous HG(20) error was ~0.13ish
     """
     pts0, wts0 = np.polynomial.laguerre.laggauss(npts)
@@ -49,17 +49,17 @@ def f_theta(cos_theta, zint, z, n2n1=0.95, sph6_ab=None, **kwargs):
     Calculates the portions of the wavefront "aberration" due to z, theta
     only. (the rho portion I've integrated analytically to Bessels.)
     Inputs
-        cos_theta: N-element numpy.ndarray. 
-            The values of cos(theta) at which to compute f_theta. 
+        cos_theta: N-element numpy.ndarray.
+            The values of cos(theta) at which to compute f_theta.
         zint: Float
-            The position of the lens relative to the interface. 
+            The position of the lens relative to the interface.
         z: M-element numpy.ndarray
             The z-values to compute f_theta at. z.size is unrelated to
-            cos_theta.size. 
+            cos_theta.size.
         n2n1: Float
             The ratio of the index of the immersed medium to the optics.
-        sph6_ab: Float or None. 
-            Set sph6_ab to a nonzero value to add residual 6th-order 
+        sph6_ab: Float or None.
+            Set sph6_ab to a nonzero value to add residual 6th-order
             spherical aberration that is proportional to sph6_ab. Default
             is None (i.e. doesn't calculate).
     """
@@ -68,6 +68,9 @@ def f_theta(cos_theta, zint, z, n2n1=0.95, sph6_ab=None, **kwargs):
     if (sph6_ab is not None) and (not np.isnan(sph6_ab)):
         sec2_theta = 1.0/(cos_theta*cos_theta)
         wvfront += sph6_ab * (sec2_theta-1)*(sec2_theta-2)*cos_theta
+    #Ensuring evanescent waves are always suppressed:
+    if wvfront.dtype == np.dtype('complex128'):
+        wvfront.imag = -np.abs(wvfront.imag)
     return wvfront
 
 def get_taus(cos_theta, n2n1=1./1.05):
@@ -98,7 +101,7 @@ def get_taup(cos_theta, n2n1=1./1.05):
     """
     return 2*n2n1/(n2n1**2+csqrt(1-(1-n2n1**2)*cos_theta**-2))
 
-def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False, 
+def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False,
         **kwargs):
     """
     Internal function called by get_K; gets the prefactor in the integrand
@@ -106,13 +109,13 @@ def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False,
     """
 
     phase = f_theta(cos_theta, zint, z, n2n1=n2n1, **kwargs)
-    to_return = np.exp(-1j*phase)    
+    to_return = np.exp(-1j*phase)
     if not get_hdet:
         to_return *= np.outer(np.ones_like(z),np.sqrt(cos_theta))
 
     return to_return
 
-def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1, 
+def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
         Kprefactor=None, return_Kprefactor=False, **kwargs):
     """
     Internal function for calculating psf's. Returns various integrals that
@@ -131,17 +134,17 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
         -get_hdet: Boolean. Set to True to get the detection portion of the
             psf; False to get the illumination portion of the psf.
         -K: 1, 2, or 3. Which of the 3 integrals to evaluate. Internal.
-        - Kprefactor: numpy.ndarray calculated internally. Pass it to 
-            avoid recalculation. 
+        - Kprefactor: numpy.ndarray calculated internally. Pass it to
+            avoid recalculation.
         - return_Kprefactor: Bool
             Set to True to also return the Kprefactor (parameter above)
-            to speed up the calculation for the next values of K. 
+            to speed up the calculation for the next values of K.
     Outputs:
         -integrand: The integral K_i; rho.shape numpy.array
     Optional outputs:
-        Kprefactor: The prefactor for the Jn(....)*(taus+-taup) portion. 
+        Kprefactor: The prefactor for the Jn(....)*(taus+-taup) portion.
             Since it's used repeatedly, can be returned to be re-passed
-            as Kprefactor for speed. 
+            as Kprefactor for speed.
     Comments:
         This is the only function that relies on rho,z being numpy.arrays,
         and it's just in a flag that I've added.... move to psf?
@@ -157,7 +160,7 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
     #Getting the array of points to quad at
     cos_theta = 0.5*(1-np.cos(alpha))*PTS+0.5*(1+np.cos(alpha))
     #[cosTheta,rho,z]
-    
+
     if Kprefactor is None:
         Kprefactor = get_Kprefactor(z, cos_theta, zint=zint, \
             n2n1=n2n1,get_hdet=get_hdet, **kwargs)
@@ -326,7 +329,7 @@ def get_psf_scalar(x, y, z, kfki=1., zint=100.0, normalize=False, **kwargs):
     hilm = np.real( K1*K1.conj() )
 
     if np.abs(kfki - 1.0) > 1e-13:
-        Kdet = get_K(rho*kfki, z*kfki, K=1, zint=zint*kfki, get_hdet=True, 
+        Kdet = get_K(rho*kfki, z*kfki, K=1, zint=zint*kfki, get_hdet=True,
                 **kwargs)
         hdet = np.real( Kdet*Kdet.conj() )
     else:
@@ -358,9 +361,9 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
         - nlpts: The number of points to use for Hermite-gauss quadrature over
             the line's width. Default is 1, corresponding to an infinitesmally
             thin line.
-        - use_laggauss:     Bool 
+        - use_laggauss:     Bool
             Set to True to use a more-accurate sinh'd Laguerre-Gauss quadrature
-            for integration over the line's length (more accurate in the 
+            for integration over the line's length (more accurate in the
             same amount of time). Default is False for backwards compatibility.
         - **kwargs: Paramters such as alpha, n2n1 that are passed to
             get_hsym_hasym
@@ -440,13 +443,13 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
         ypts = vec_to_halfvec(y)
         x3, y3, z3 = np.meshgrid(xpts, ypts, z, indexing='ij')
     else:
-        x3,y3,z3 = np.meshgrid(x, y, z, indexing='ij')        
+        x3,y3,z3 = np.meshgrid(x, y, z, indexing='ij')
     rho3 = np.sqrt(x3*x3 + y3*y3)
-    
+
     #1. Hilm
     if wrap:
         y2,z2 = np.meshgrid(ypts, z, indexing='ij')
-        hilm0 = calculate_linescan_ilm_psf(y2, z2, zint=zint, 
+        hilm0 = calculate_linescan_ilm_psf(y2, z2, zint=zint,
                 polar_angle=polar_angle, **kwargs)
         if ypts[0] == 0:
             hilm = np.append(hilm0[-1:0:-1], hilm0, axis=0)
@@ -454,19 +457,19 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
             hilm = np.append(hilm0[::-1], hilm0, axis=0)
     else:
         y2,z2 = np.meshgrid(y, z, indexing='ij')
-        hilm = calculate_linescan_ilm_psf(y2, z2, zint=zint, 
+        hilm = calculate_linescan_ilm_psf(y2, z2, zint=zint,
                 polar_angle=polar_angle, **kwargs)
 
     #2. Hdet
     if wrap:
         #Lambda function that ignores its args but still returns correct values
-        func = lambda *args: get_hsym_asym(rho3*kfki, z3*kfki, zint=kfki*zint, 
+        func = lambda *args: get_hsym_asym(rho3*kfki, z3*kfki, zint=kfki*zint,
                     get_hdet=True, **kwargs)[0]
         hdet = wrap_and_calc_psf(xpts, ypts, z, func)
     else:
-        hdet, toss = get_hsym_asym(rho3*kfki, z3*kfki, zint=kfki*zint, 
+        hdet, toss = get_hsym_asym(rho3*kfki, z3*kfki, zint=kfki*zint,
                 get_hdet=True, **kwargs)
-    
+
     if normalize:
         hilm /= hilm.sum()
         hdet /= hdet.sum()
@@ -477,7 +480,7 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
     return hdet if normalize else hdet / hdet.sum()
 
 def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
-        sigkf=0.1, zint=100., nkpts=3, dist_type='gaussian', wrap=True, 
+        sigkf=0.1, zint=100., nkpts=3, dist_type='gaussian', wrap=True,
         **kwargs):
     """
     Calculates the full PSF for a line-scanning confocal with a polydisperse
@@ -493,7 +496,7 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
             Default is 0.889
         - sigkf: Float scalar; sigma of kfki -- kfki values are kfki +- sigkf.
         - zint: The position of the optical interface, in units of 1/k_incoming
-        - dist_type: The distribution type of the polychromatic light. 
+        - dist_type: The distribution type of the polychromatic light.
             Can be one of 'laguerre'/'gamma' or 'gaussian.' If 'gaussian'
             the resulting k-values are taken in absolute value. Default
             is 'gaussian.'
@@ -513,10 +516,10 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
     Comments:
         Neither distribution type is perfect. If sigkf/k0 is big (>0.5ish)
         then part of the Gaussian is negative. To avoid issues an abs() is
-        taken, but then the actual mean and variance are not what is 
+        taken, but then the actual mean and variance are not what is
         supplied. Conversely, if sigkf/k0 is small (<0.0815), then the
         requisite associated Laguerre quadrature becomes unstable. To
-        prevent this sigkf/k0 is effectively clipped to be > 0.0815. 
+        prevent this sigkf/k0 is effectively clipped to be > 0.0815.
     """
     if dist_type.lower() == 'gaussian':
         pts, wts = np.polynomial.hermite.hermgauss(nkpts)
@@ -525,7 +528,7 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
         k_scale = sigkf**2/kfki
         associated_order = kfki**2/sigkf**2 - 1
         #Associated Laguerre with alpha >~170 becomes numerically unstable, so:
-        max_order=150 
+        max_order=150
         if associated_order > max_order or associated_order < (-1+1e-3):
             warnings.warn('Numerically unstable sigk, clipping', RuntimeWarning)
             associated_order = np.clip(associated_order, -1+1e-3, max_order)
@@ -541,7 +544,7 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
         ypts = vec_to_halfvec(y)
         x3, y3, z3 = np.meshgrid(xpts, ypts, z, indexing='ij')
     else:
-        x3,y3,z3 = np.meshgrid(x, y, z, indexing='ij')        
+        x3,y3,z3 = np.meshgrid(x, y, z, indexing='ij')
     rho3 = np.sqrt(x3*x3 + y3*y3)
 
     #1. Hilm
@@ -559,11 +562,11 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
     #2. Hdet
     if wrap:
         #Lambda function that ignores its args but still returns correct values
-        func = lambda x,y,z, kfki=1.: get_hsym_asym(rho3*kfki, z3*kfki, 
+        func = lambda x,y,z, kfki=1.: get_hsym_asym(rho3*kfki, z3*kfki,
                 zint=kfki*zint, get_hdet=True, **kwargs)[0]
         hdet_func = lambda kfki: wrap_and_calc_psf(xpts,ypts,z, func, kfki=kfki)
     else:
-        hdet_func = lambda kfki: get_hsym_asym(rho3*kfki, z3*kfki, 
+        hdet_func = lambda kfki: get_hsym_asym(rho3*kfki, z3*kfki,
                 zint=kfki*zint, get_hdet=True, **kwargs)[0]
     #####
     inner = [wts[a] * hdet_func(kfkipts[a]) for a in xrange(nkpts)]
@@ -623,10 +626,10 @@ def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
     Speeds up psf calculations by a factor of 4 for free / some broadcasting.
     Doesn't work for linescan psf because of the hdet bit...
     Inputs:
-        - xpts: 1D N-element numpy.array of the x-points to evaluate func at. 
+        - xpts: 1D N-element numpy.array of the x-points to evaluate func at.
         - ypts: "   "           "   "     "  "  y-points  "     "      "   "
         - zpts: "   "           "   "     "  "  y-points  "     "      "   "
-        - func: function to evaluate. 
+        - func: function to evaluate.
     """
 
     #1. Checking that everything is hunky-dory:
@@ -663,7 +666,7 @@ def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
         to_return[:xs-dx,:ys-dy,:] = up_corner_psf[-1:0:-1,-1:0:-1,:].copy()#x<0,y<0
 
     return to_return
-    
+
 def vec_to_halfvec(vec):
     """Transforms a vector np.arange(-N, M, dx) to np.arange(min(|vec|), max(N,M),dx)]"""
     d = vec[1:] - vec[:-1]
@@ -673,5 +676,5 @@ def vec_to_halfvec(vec):
     lowest = np.abs(vec).min()
     highest = np.abs(vec).max()
     return np.arange(lowest, highest + 0.1*dx, dx).astype(vec.dtype)
-    
+
 
