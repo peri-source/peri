@@ -537,7 +537,8 @@ class LMEngine(object):
 
             triplet = (self.error, er1, er2)
             #OK wtf. FIXME
-            if ((er1 - self.error) > self.error) or ((er2 - self.error) > self.error):
+            if ((er1 - self.error) > 10*self.error) or ((er2 - self.error) > 10*self.error):
+                self.update_function(self.param_vals)
                 raise RuntimeError('Serious mis-step. Investigate?')
 
             best_step = find_best_step(triplet)
