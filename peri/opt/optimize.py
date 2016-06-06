@@ -292,7 +292,7 @@ class LMEngine(object):
     partial updates.
     """
     def __init__(self, damping=1., increase_damp_factor=3., decrease_damp_factor=8.,
-                min_eigval=1e-13, marquardt_damping=True, transtrum_damping=None,
+                min_eigval=1e-13, marquardt_damping=False, transtrum_damping=None,
                 use_accel=False, max_accel_correction=1., ptol=1e-6,
                 ftol=1e-5, costol=None, max_iter=5, run_length=5,
                 update_J_frequency=1, broyden_update=False, eig_update=False,
@@ -322,7 +322,7 @@ class LMEngine(object):
                 Set to False to use Levenberg damping (damping matrix
                 proportional to the identiy) instead of Marquardt damping
                 (damping matrix proportional to the diagonal terms of JTJ).
-                Default is True.
+                Default is False.
             transtrum_damping: Float or None
                 If not None, then clips the Marquardt damping diagonal
                 entries to be at least transtrum_damping. Default is None.
@@ -536,6 +536,10 @@ class LMEngine(object):
             er2 = self.update_function(self.param_vals + delta_params_2)
 
             triplet = (self.error, er1, er2)
+            #OK wtf. FIXME
+            if ((er1 - self.error) > self.error) or ((er2 - self.error) > self.error):
+                raise RuntimeError('Serious mis-step. Investigate?')
+
             best_step = find_best_step(triplet)
             if best_step == 0:
                 #Both bad steps, put back & increase damping:
@@ -842,17 +846,27 @@ class LMEngine(object):
         """
         This is currently wrong.... I think that there is an error in
         the Transtrum paper or I am interpreting it incorrectly....
+        FIXME
         """
         dh = 0.1
-        rm0 = self.calc_residuals()
-        _ = self.update_function(self.param_vals + delta0*dh)
-        rm1 = self.calc_residuals()
-        term1 = (rm1 - rm0) / dh
-        #and putting back the parameters: - necessary? FIXME
+        #Get the derivative:
         _ = self.update_function(self.param_vals)
+        rm0 = self.calc_residuals()
+        _ = self.update_function(self.param_vals + dh * delta0)
+        rm1 = self.calc_residuals()
+        _ = self.update_function(self.param_vals - dh * delta0)
+        rm2 = self.calc_residuals()
+        der2 = (rm2 + rm1 - 2*rm0) / dh
+        #Old version:
+        # rm0 = self.calc_residuals()
+        # _ = self.update_function(self.param_vals + delta0*dh)
+        # rm1 = self.calc_residuals()
+        # term1 = (rm1 - rm0) / dh
+        # #and putting back the parameters: - necessary? FIXME
+        # _ = self.update_function(self.param_vals)
 
-        term2 = np.dot(self.J.T, delta0)
-        der2 = 2./dh*(term1 - term2)
+        # term2 = np.dot(self.J.T, delta0)
+        # der2 = 2./dh*(term1 - term2)
 
         damped_JTJ = self._calc_damped_jtj()
         corr, res, rank, s = np.linalg.lstsq(damped_JTJ, np.dot(self.J, der2),
@@ -925,7 +939,6 @@ class LMFunction(LMEngine):
         self.model = self.func(param_vals, *self.func_args, **self.func_kwargs)
         d = self.calc_residuals()
         return np.dot(d.flat, d.flat) #faster for large arrays than (d*d).sum()
-
 
 class LMGlobals(LMEngine):
     def __init__(self, state, param_names, max_mem=3e9, opt_kwargs={}, **kwargs):
