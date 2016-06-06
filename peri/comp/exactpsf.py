@@ -404,7 +404,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         #Clipping params to computable values:
         alpha = self.param_dict['psf-alpha']
         zscale = self.param_dict['psf-zscale']
-        wavelength = self.param_dict['laser-wavelength']
+        wavelength = self.param_dict['psf-laser-wavelength']
         max_alpha, max_zscale = np.pi/2, 100.
 
         if alpha < 1e-3 or alpha > max_alpha:
@@ -415,7 +415,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self.param_dict['psf-zscale'] = np.clip(zscale, 1e-3, max_zscale-1e-3)
         if wavelength < 1e-3:
             warnings.warn('Invalid laser wavelength, clipping', RuntimeWarning)
-            self.param_dict['laser-wavelength'] = np.clip(wavelength, 1e-3, np.inf)
+            self.param_dict['psf-laser-wavelength'] = np.clip(wavelength, 1e-3, np.inf)
 
     def set_tile(self, tile):
         if not hasattr(self, 'tile') or (self.tile.shape != tile.shape).any():
