@@ -478,19 +478,19 @@ class LMEngine(object):
                     raise RuntimeError('ARG!!!') #FIXME
                 CLOG.debug('Bad step, increasing damping')
                 CLOG.debug('\t\t%f\t%f' % (self.error, er1))
-            _try = 0
-            while (_try < self._max_inner_loop) and (not good_step):
-                _try += 1
-                self.increase_damping()
-                delta_vals = self.find_LM_updates(self.calc_grad())
-                er1 = self.update_function(self.param_vals + delta_vals)
-                good_step = (find_best_step([self.error, er1]) == 1)
-                if not good_step:
+                grad = self.calc_grad()
+                for _try in xrange(self._max_inner_loop):
+                    self.increase_damping()
+                    delta_vals = self.find_LM_updates(grad)
+                    er1 = self.update_function(self.param_vals + delta_vals)
+                    good_step = (find_best_step([self.error, er1]) == 1)
+                    if good_step:
+                        break
+                else:
                     er0 = self.update_function(self.param_vals)
+                    CLOG.warn('Stuck!')
                     if np.abs(er0 -self.error) > 1e-7:
                         raise RuntimeError('ARG!!!') #FIXME
-            if _try == (self._max_inner_loop-1):
-                CLOG.warn('Stuck!')
 
             #state is updated, now params:
             if good_step:
@@ -541,8 +541,6 @@ class LMEngine(object):
                 #Both bad steps, put back & increase damping:
                 _ = self.update_function(self.param_vals.copy())
                 grad = self.calc_grad()
-                _try = 0
-                good_step = False
                 CLOG.debug('Bad step, increasing damping')
                 CLOG.debug('%f\t%f\t%f' % triplet)
                 for _try in xrange(self._max_inner_loop):
