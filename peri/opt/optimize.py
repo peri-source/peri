@@ -536,35 +536,31 @@ class LMEngine(object):
             er2 = self.update_function(self.param_vals + delta_params_2)
 
             triplet = (self.error, er1, er2)
-            #OK wtf. FIXME
-            if ((er1 - self.error) > 10*self.error) or ((er2 - self.error) > 10*self.error):
-                self.update_function(self.param_vals)
-                raise RuntimeError('Serious mis-step. Investigate?')
-
             best_step = find_best_step(triplet)
             if best_step == 0:
                 #Both bad steps, put back & increase damping:
                 _ = self.update_function(self.param_vals.copy())
+                grad = self.calc_grad()
                 _try = 0
                 good_step = False
                 CLOG.debug('Bad step, increasing damping')
                 CLOG.debug('%f\t%f\t%f' % triplet)
-                while (_try < self._max_inner_loop) and (not good_step):
+                for _try in xrange(self._max_inner_loop):
                     self.increase_damping()
-                    delta_vals = self.find_LM_updates(self.calc_grad())
+                    delta_vals = self.find_LM_updates(grad)
                     er_new = self.update_function(self.param_vals + delta_vals)
                     good_step = er_new < self.error
-                    _try += 1
-                if not good_step:
+                    if good_step:
+                        #Update params, error, break:
+                        self.update_param_vals(delta_vals, incremental=True)
+                        self.error = er_new
+                        CLOG.debug('Sufficiently increased damping')
+                        CLOG.debug('%f\t%f' % (triplet[0], self.error))
+                        break
+                else: #for-break-else
                     #Throw a warning, put back the parameters
                     CLOG.warn('Stuck!')
                     self.error = self.update_function(self.param_vals.copy())
-                else:
-                    #Good step => Update params, error:
-                    self.update_param_vals(delta_vals, incremental=True)
-                    self.error = er_new
-                    CLOG.debug('Sufficiently increased damping')
-                    CLOG.debug('%f\t%f' % (triplet[0], self.error))
 
             elif best_step == 1:
                 #er1 <= er2:
@@ -1190,7 +1186,7 @@ class LMParticleGroupCollection(object):
             raise RuntimeError('J, JTJ have not been pre-computed. Call do_run_1 or do_run_2')
         self._do_run(mode='internal')
 
-class AugmentedState(object): #FIXME when blocks work....
+class AugmentedState(object):
     """
     A state that, in addition to having normal state update options,
     allows for updating all the particle R, xyz's depending on their
@@ -1202,11 +1198,9 @@ class AugmentedState(object): #FIXME when blocks work....
         block can be an array of False, that's OK
         However it cannot have any radii blocks
         """
-        #FIXME block -> param_names
-
         rad_nms = state.param_radii()
         has_rad = map(lambda x: x in param_names, rad_nms)
-        if np.any(has_rad):# or np.any(block & state.create_block('rscale')):
+        if np.any(has_rad):
             raise ValueError('param_names must not contain any radii.')
 
         self.state = state
