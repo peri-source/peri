@@ -83,12 +83,16 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
     return J, return_inds
 
-def name_globals(s):
+def name_globals(s, include_psf=True):
     all_params = s.params
     for p in s.param_positions():
         all_params.remove(p)
     for p in s.param_radii():
         all_params.remove(p)
+    if include_psf == False:
+        for p in all_params[::-1]:
+            if p[:3] == 'psf':
+                all_params.remove(p)
     return all_params
 
 def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwargs):
@@ -1459,34 +1463,36 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         - It would be nice if some of these magic #'s (region size, num_eig_dirs,
             etc) were calculated in a good way.
 
-    burn            : lm.do_run_2(), lp.do_run_2()
+    burn            : lm.do_run_2(), lp.do_run_2(). No psf, 2 loops on lm.
     do-particles    : lp.do_run_2(), scales for ilm, bkg's
+    polish          : lm.do_run_2(), lp.do_run_2(). Everything, 1 loop each.
     """
     mode = mode.lower()
-    if mode not in {'burn', 'do-particles'}:
-        raise ValueError('mode must be one of burn, do-particles')
+    if mode not in {'burn', 'do-particles', 'polish'}:
+        raise ValueError('mode must be one of burn, do-particles, polish')
     if desc is '':
         desc = mode + 'ing' if mode != 'do-particles' else 'doing-particles'
 
     eig_update = mode != 'do-particles'
-    glbl_run_length = 6 if mode != 'do-particles' else 3
+    glbl_run_length = 3 if mode == 'do-particles' else 6
+    glbl_mx_itr = 2 if mode == 'burn' else 1
 
     if mode == 'do-particles':
         glbl_nms = ['ilm-scale', 'offset']  #bkg?
     else:
-        glbl_nms = name_globals(s)#, include_rscale=(not use_aug), include_sigma=False)
+        glbl_nms = name_globals(s, include_psf=(mode != 'burn'))
 
     all_lp_stats = []
     all_lm_stats = []
 
-    #2. Burn.
+    #2. Optimize
     CLOG.info('Start of loop %d:\t%f' % (0, s.error))
     for a in xrange(n_loop):
         start_err = s.error
         #2a. Globals
         glbl_dmp = 0.3 if a == 0 else 3e-2
         if a != 0 or mode != 'do-particles':
-            gstats = do_levmarq(s, glbl_nms, max_iter=1, run_length=
+            gstats = do_levmarq(s, glbl_nms, max_iter=glbl_mx_itr, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
                     partial_update_frequency=3, damping=glbl_dmp,
                     decrease_damp_factor=10., use_aug=use_aug,
