@@ -840,7 +840,7 @@ class LMEngine(object):
             # with larger dl's. Something is wrong.... but it might just be
             # my being an idiot / tired.
             # For now I'm leaving dl=1e-2 which should work for most things.
-            dl = 1e-2
+            dl = 1e-5
             _ = self.update_function(self.param_vals + dl*stif_dir)
             res1 = self.calc_residuals()
 
