@@ -980,7 +980,7 @@ class LMGlobals(LMEngine):
                 self.param_names, num_inds=self.num_pix, **self.kwargs)
 
     def calc_residuals(self):
-        return self.state.residuals.ravel()[self._inds]
+        return self.state.residuals.ravel()[self._inds].copy()
 
     def update_function(self, values):
         self.state.update(self.param_names, values)
@@ -1032,7 +1032,7 @@ class LMParticles(LMEngine):
             slicer=self._dif_tile.slicer)
 
     def calc_residuals(self):
-        return self.state.residuals[self._dif_tile.slicer].ravel()
+        return self.state.residuals[self._dif_tile.slicer].ravel().copy()
 
     def update_function(self, values):
         #1. Clipping values:
