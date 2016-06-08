@@ -20,6 +20,9 @@ accel_correction is wrong as checked by a rosenbrock banana function; the
 suggested accel steps are (1) always rejected and (2) in the wrong direction.
 
 To fix:
+0. LMEngine: JTJ -- Right now I think you're doing it with J = derivative of
+    model, instead of derivative of residuals.... either is fine but make it
+    consistent throughout and COMMENT it.
 1. opt.burn() -- right now it seems that the globals aren't fully optimized
     but the particles are after a few loops. So you might want to spend 1 more
     iteration updating the globals. Another eig update? More run length?
@@ -809,7 +812,7 @@ class LMEngine(object):
         Broyden update of jacobian.
         """
         delta_vals = self.param_vals - self._last_vals
-        delta_residuals = self.calc_residuals() - self._last_residuals
+        delta_residuals = self._last_residuals - self.calc_residuals()
         nrm = np.sqrt(delta_vals*delta_vals)
         direction = delta_vals / nrm
         vals = delta_residuals / nrm
@@ -829,13 +832,21 @@ class LMEngine(object):
             stif_dir = vcs[-(a+1)] #already normalized
 
             #2. Evaluating derivative along that direction, we'll use dl=5e-4:
-            dl = 5e-4
-            _ = self.update_function(self.param_vals+dl*stif_dir)
+            #FIXME
+            #What the fuck. Right now, for the ilm (1) dl=9e-1 works the best,
+            # (2) dl=9e-1 and 5e-2 work _way_ better than dl=2e-5, which is
+            # what the J is calculated with, and (3) plotting the calculated
+            # derivative vs. pixel with dl=2e-5 is a different sign than those
+            # with larger dl's. Something is wrong.... but it might just be
+            # my being an idiot / tired.
+            # For now I'm leaving dl=1e-2 which should work for most things.
+            dl = 1e-2
+            _ = self.update_function(self.param_vals + dl*stif_dir)
             res1 = self.calc_residuals()
 
             #3. Updating
             grad_stif = (res1-res0)/dl
-            self._rank_1_J_update(stif_dir, grad_stif)
+            self._rank_1_J_update(stif_dir, -grad_stif)
 
         self.JTJ = np.dot(self.J, self.J.T)
         #Putting the parameters back:
@@ -843,9 +854,7 @@ class LMEngine(object):
 
     def calc_accel_correction(self, damped_JTJ, delta0):
         """
-        This is currently wrong.... I think that there is an error in
-        the Transtrum paper or I am interpreting it incorrectly....
-        FIXME
+        I'm not sure if this is correct... FIXME
         """
         dh = 0.1
         #Get the derivative:
@@ -1041,7 +1050,7 @@ class LMParticles(LMEngine):
         pd = self.state.pad
         for a in xrange(3):
             values[self._is_pos[a]] = np.clip(values[self._is_pos[a]],
-                    self._MINDIST - pd[a], self.state.ishape.shape[a] + 
+                    self._MINDIST - pd[a], self.state.ishape.shape[a] +
                     pd[a] - self._MINDIST)
 
         self.state.update(self.param_names, values)
@@ -1361,9 +1370,9 @@ class LMAugmentedState(LMEngine):
 #=============================================================================#
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
-def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10., run_length=6,
-        eig_update=True, collect_stats=False, use_aug=False, run_type=2,
-        **kwargs):
+def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10.,
+        run_length=6, eig_update=True, collect_stats=False, use_aug=False,
+        run_type=2, **kwargs):
     """
     Convenience wrapper for LMGlobals. Same keyword args, but I've set
     the defaults to what I've found to be useful values for optimizing globals.
@@ -1446,11 +1455,12 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         ftol : Float
             The change in error at which to terminate.
 
-        mode : 'burn' or 'do-particles'
+        mode : 'burn', 'do-particles', or 'polish'
             What mode to optimize with.
                 'burn'          : Your state is far from the minimum.
                 'do-particles'  : Positions are far from the minimum,
                                   globals are well-fit.
+                'polish'        : The state is close to the minimum.
             'burn' is the default and will optimize any scenario, but the
             others will be faster for their specific scenarios.
 
@@ -1477,6 +1487,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     eig_update = mode != 'do-particles'
     glbl_run_length = 3 if mode == 'do-particles' else 6
     glbl_mx_itr = 2 if mode == 'burn' else 1
+    use_accel = (mode == 'burn')
 
     if mode == 'do-particles':
         glbl_nms = ['ilm-scale', 'offset']  #bkg?
@@ -1495,8 +1506,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         if a != 0 or mode != 'do-particles':
             gstats = do_levmarq(s, glbl_nms, max_iter=glbl_mx_itr, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
-                    partial_update_frequency=3, damping=glbl_dmp,
-                    decrease_damp_factor=10., use_aug=use_aug,
+                    partial_update_frequency=3, use_aug=use_aug, damping=
+                    glbl_dmp, decrease_damp_factor=10., use_accel=use_accel,
                     collect_stats=collect_stats, ftol=0.1*ftol, max_mem=max_mem)
             all_lm_stats.append(gstats)
         if desc is not None:
