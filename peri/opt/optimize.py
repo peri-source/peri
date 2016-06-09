@@ -679,7 +679,7 @@ class LMEngine(object):
 
         if np.any(np.isnan(delta0)):
             CLOG.fatal('Calculated steps have nans!?')
-            raise RuntimeError('Calculated steps have nans!?')
+            raise FloatingPointError('Calculated steps have nans!?')
         return delta0
 
     def increase_damping(self):
@@ -787,6 +787,8 @@ class LMEngine(object):
         self.JTJ = np.dot(self.J, self.J.T)
         self._fresh_JTJ = True
         self._J_update_counter = 0
+        if np.any(np.isnan(self.J)) or np.any(np.isnan(self.JTJ)):
+            raise FloatingPointError('J, JTJ have nans.')
 
     def calc_grad(self):
         residuals = self.calc_residuals()
@@ -993,6 +995,8 @@ class LMGlobals(LMEngine):
 
     def update_function(self, values):
         self.state.update(self.param_names, values)
+        if np.any(np.isnan(self.state.residuals)):
+            raise FloatingPointError('state update caused nans in residuals')
         return self.state.error
 
     def set_params(self, new_param_names, new_damping=None):
@@ -1054,6 +1058,8 @@ class LMParticles(LMEngine):
                     pd[a] - self._MINDIST)
 
         self.state.update(self.param_names, values)
+        if np.any(np.isnan(self.state.residuals)):
+            raise FloatingPointError('state update caused nans in residuals')
         return self.state.error
 
     def set_particles(self, new_particles, new_damping=None):
@@ -1276,6 +1282,8 @@ class AugmentedState(object):
         self.update_rscl_x_params(param_vals[self.rscale_mask], do_reset=False)
         self.state.update(self.param_names, param_vals[self.globals_mask])
         self.param_vals[:] = param_vals.copy()
+        if np.any(np.isnan(self.state.residuals)):
+            raise FloatingPointError('state update caused nans in residuals')
 
     def update_rscl_x_params(self, new_rscl_params, do_reset=True):
         #1. What to change:
