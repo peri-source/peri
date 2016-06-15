@@ -1,3 +1,26 @@
+"""
+To do:
+Looking at Neil's data, subtracting isn't as important as adding, because it's
+easier to miss particles than to overfeature.
+So either (1) rebuild add-subtract, or (2) rename sample_n_add to something
+better that says `I'm adding missing particles' and leave add-subtract for
+what it is (clusters etc).
+
+Also, for add-subtract, it might be better to do 1 loop of subtraction, or
+every other loop of subtraction, rather than spend time every loop subtracting.
+
+Adding / subtracting : rather than doing a fixed number of tries, you might
+want to run until (either a fixed # of tries or you reject N in a row)
+
+For a large # of adds, the ilm scale and offset are off. Optimize?
+
+Is addsubtract automatically removing particles inside the image?
+
+There is a secondary problem which is that it's possible to fit the bkg in
+regions of the image such that adding a particle there is unfavorable.
+
+So you really need a wrapper that calls protocols in order.
+"""
 import numpy as np
 
 import peri
