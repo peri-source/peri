@@ -231,7 +231,7 @@ class Tile(object):
         pad : integer or ndarray [3]
             anisotropic padding to apply in the contain test
         """
-        o = ((items > self.l-pad) & (items < self.r+pad))
+        o = ((items >= self.l-pad) & (items < self.r+pad))
         if len(o.shape) == 2:
             o = o.all(axis=-1)
         elif len(o.shape) == 1:
