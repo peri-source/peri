@@ -16,8 +16,12 @@ from peri.logger import log
 CLOG = log.getChild('opt')
 
 """
-accel_correction is wrong as checked by a rosenbrock banana function; the
-suggested accel steps are (1) always rejected and (2) in the wrong direction.
+accel_correction may be wrong as checked by rosenbrock function, taking >1 step
+to find the minimum.
+
+If the LMEngine gets 'stuck' on the first loop attempt, since _last_vals ==
+param_vals the LM will check completion and terminate. Leaving as is since I've
+only got this to happen when it's at the minimum...
 
 To fix:
 0. LMEngine: JTJ -- Right now I think you're doing it with J = derivative of
@@ -150,7 +154,8 @@ def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
         number of particles, so the elements don't necessarily correspond
         to a given image region.
     """
-    bounding_tile = s.oshape if bounds is None else Tile(bounds[0], bounds[1])
+    bounding_tile = (s.oshape.translate(-s.pad) if bounds is None else
+            Tile(bounds[0], bounds[1]))
     rs = (np.array([region_size, region_size, region_size]).ravel() if
             np.size(region_size) == 1 else np.array(region_size))
 
@@ -928,7 +933,7 @@ class LMFunction(LMEngine):
         # self.param_vals = p0 #sloppy...
         self._last_vals = self.param_vals.copy()
         self.error = self.update_function(self.param_vals)
-        self._last_error = 1.001*self.error
+        self._last_error = (1 + 2*self.ftol) * self.error
 
     def calc_J(self):
         """Updates self.J, returns nothing"""
@@ -981,7 +986,7 @@ class LMGlobals(LMEngine):
 
     def _set_err_paramvals(self):
         self.error = self.state.error
-        self._last_error = self.state.error
+        self._last_error = (1 + 2*self.ftol) * self.state.error
         self.param_vals = np.ravel(self.state.state[self.param_names])
         self._last_vals = self.param_vals.copy()
 
@@ -1034,7 +1039,7 @@ class LMParticles(LMEngine):
 
     def _set_err_paramvals(self):
         self.error = self.state.error
-        self._last_error = self.state.error
+        self._last_error = (1 + 2*self.ftol) * self.state.error
         self.param_vals = np.ravel(self.state.state[self.param_names])
         self._last_vals = self.param_vals.copy()
 
@@ -1328,7 +1333,7 @@ class LMAugmentedState(LMEngine):
 
     def _set_err_paramvals(self):
         self.error = self.aug_state.state.error
-        self._last_error = self.aug_state.state.error
+        self._last_error = (1 + 2*self.ftol) * self.aug_state.state.error
         self.param_vals = self.aug_state.param_vals.copy()
         self._last_vals = self.param_vals.copy()
 
