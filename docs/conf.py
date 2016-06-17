@@ -12,6 +12,14 @@
 # serve to show the default.
 
 import sys, os
+import warnings
+
+try:
+    import alabaster
+except ImportError as e:
+    warnings.warn("Theme alabaster not found, style will be altered")
+    alabaster = None
+
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -89,9 +97,31 @@ pygments_style = 'sphinx'
 
 # -- Options for HTML output ---------------------------------------------------
 
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
-html_theme = 'nature'
+if alabaster:
+    html_theme_path = [alabaster.get_path()]
+    extensions = ['alabaster']
+    html_theme = 'alabaster'
+    html_sidebars = {
+        '**': [
+            'about.html',
+            'navigation.html',
+            'relations.html',
+            'searchbox.html',
+            'donate.html',
+        ]
+    }
+
+    html_theme_options = {
+        #'logo': 'logo.png',
+        'github_user': 'mattbierbaum',
+        'github_repo': 'peri',
+        'github_button': True,
+        'github_type': 'star',
+        'github_count': False,
+        'github_banner': True,
+    }
+else:
+    html_theme = 'nature'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the

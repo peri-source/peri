@@ -1,16 +1,21 @@
-.. PERI documentation master file, created by
-   sphinx-quickstart on Fri Jun 17 12:12:07 2016.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Welcome to PERI's documentation!
 ================================
+
+Parameter Extraction from Reconstruction of Images (PERI) is a package that
+extracts features from microscope images by fitting a physics-based model to
+data. It is a set of models and components that are used to recreate the
+physics of image formation in order to extract desired quantities such as
+particle sizes and positions at the information theoretic limit.
 
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
 
+   overview
+   crb
+   confocal
+   brightfield
 
 
 Indices and tables
