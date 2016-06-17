@@ -245,6 +245,8 @@ class PlatonicSpheresCollection(Component):
         self.setup_variables()
 
         if self.shape:
+            self.inner = self.shape.copy()
+            self.tile = self.inner.copy()
             self.initialize()
 
     def initialize(self):

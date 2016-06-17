@@ -5,7 +5,7 @@ import scipy as sp
 
 from peri.priors import overlap
 from peri.util import Tile
-from peri.comp.objs import PlatonicSphereCollection
+from peri.comp.objs import PlatonicSpheresCollection
 
 def sorted_files(globber, num_sort=True, num_indices=None, return_num=False):
     """
@@ -111,7 +111,7 @@ def gofr_surfaces(pos, rad, zscale):
         d = np.sqrt( ((z*(pos[i] - pos[o]))**2).sum(axis=-1) )
         r = rad[i] + rad[o]
 
-        diff = (d-r) / r
+        diff = (d-r)
         seps.extend(diff[diff != 0])
     return np.array(seps)
 
@@ -171,7 +171,7 @@ def gofr(pos, rad, zscale, diameter=None, resolution=3e-2, rmax=10, method='norm
     return x/diameter, y/(resolution * num_density * float(len(rad)))
 
 def packing_fraction_obj(pos, rad, shape, inner, zscale=1):
-    obj = PlatonicSphereCollection(pos, rad, shape=shape, zscale=zscale)
+    obj = PlatonicSpheresCollection(pos, rad, shape=shape, zscale=zscale)
     return obj.get_field()[inner].mean()
 
 def packing_fraction_state(state):
