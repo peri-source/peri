@@ -177,8 +177,9 @@ def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
         The cumulative number of particles removed.
 
     """
-    is_near_im_edge = lambda pos, pad: ((pos < pad) | (pos >
-            np.array(st.oshape.shape) - pad)).any(axis=1)
+    is_near_im_edge = lambda pos, pad: (((pos + st.pad) < pad) | (pos >
+            np.array(st.ishape.shape) + st.pad - pad)).any(axis=1)
+    #returns True if the position is within 'pad' of the _outer_ image edge
     removed = 0
     attempts = 0
 
@@ -225,7 +226,7 @@ def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
         check_inds = check_rad_inds
 
     check_inds = check_inds[np.argsort(st.obj_get_radii()[check_inds])]
-    tries = np.max([tries, check_inds.size])
+    tries = np.min([tries, check_inds.size])
     check_poses = st.obj_get_positions()[check_inds[:tries]].copy()
     for pos in check_poses:
         old_err = st.error
