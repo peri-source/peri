@@ -516,6 +516,7 @@ class LMEngine(object):
         updates.
         """
         while not self.check_terminate():
+            self._has_run = True
             if self.check_update_J():
                 self.update_J()
             else:
@@ -595,7 +596,6 @@ class LMEngine(object):
                 self._last_error = _last_error
                 self._last_vals = _last_vals
                 self.error
-                self._has_run = True
                 self.do_internal_run()
             #1 loop
             self._num_iter += 1
@@ -983,7 +983,7 @@ class LMGlobals(LMEngine):
         self.error = self.state.error
         self._last_error = self.state.error
         self.param_vals = np.ravel(self.state.state[self.param_names])
-        self._last_values = self.param_vals.copy()
+        self._last_vals = self.param_vals.copy()
 
     def calc_J(self):
         del self.J
@@ -1330,7 +1330,7 @@ class LMAugmentedState(LMEngine):
         self.error = self.aug_state.state.error
         self._last_error = self.aug_state.state.error
         self.param_vals = self.aug_state.param_vals.copy()
-        self._last_values = self.param_vals.copy()
+        self._last_vals = self.param_vals.copy()
 
     def calc_J(self):
         #0.
