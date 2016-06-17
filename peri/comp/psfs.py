@@ -131,7 +131,15 @@ class IdentityPSF(PSF):
         Delta-function PSF; returns the field passed to execute identically. 
         Params is an N-element numpy.ndarray, doesn't do anything. 
         """
+        self.min_support = 0
         super(IdentityPSF, self).__init__(params=['psf'], values=[0])
+
+    def set_tile(self, tile):
+        if any(tile.shape < self.min_support):
+            raise IndexError("PSF tile size is less than minimum support size")
+
+        if not hasattr(self, 'tile') or (self.tile.shape != tile.shape).any():
+            self.tile = tile
 
     def execute(self, field):
         return field
@@ -141,10 +149,6 @@ class IdentityPSF(PSF):
     
     def update(self, params, values):
         self.set_values(params, values)
-    
-    def set_tile(self, tile):
-        if (self.tile.shape != tile.shape).any():
-            self.tile = tile
 
 class AnisotropicGaussian(PSF):
     def __init__(self, sigmas=(2.0, 1.0), error=1.0/255, shape=None):
