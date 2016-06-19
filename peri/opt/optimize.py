@@ -1404,19 +1404,20 @@ def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10.,
         return lm.get_termination_stats()
 
 def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
-        run_length=4, collect_stats=False, **kwargs):
+        run_length=4, collect_stats=False, max_iter=2, **kwargs):
     """
     Convenience wrapper for LMParticles. Same keyword args, but I've set
     the defaults to what I've found to be useful values for optimizing
     particles. See LMParticles and LMEngine for documentation.
     """
     lp = LMParticles(s, particles, damping=damping, run_length=run_length,
-            decrease_damp_factor=decrease_damp_factor, **kwargs)
+            decrease_damp_factor=decrease_damp_factor, max_iter=max_iter,
+            **kwargs)
     lp.do_run_2()
     if collect_stats:
         return lp.get_termination_stats()
 
-def do_levmarq_all_particle_groups(s, region_size=40, damping=1.0,
+def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
         decrease_damp_factor=10., run_length=4, collect_stats=False, **kwargs):
     """
     Convenience wrapper for LMParticleGroupCollection. Same keyword args,
@@ -1425,7 +1426,7 @@ def do_levmarq_all_particle_groups(s, region_size=40, damping=1.0,
     """
     lp = LMParticleGroupCollection(s, region_size=region_size, damping=damping,
             run_length=run_length, decrease_damp_factor=decrease_damp_factor,
-            get_cos=collect_stats, **kwargs)
+            get_cos=collect_stats, max_iter=max_iter, **kwargs)
     lp.do_run_2()
     if collect_stats:
         return lp.stats
