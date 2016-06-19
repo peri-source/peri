@@ -837,14 +837,6 @@ class LMEngine(object):
             stif_dir = vcs[-(a+1)] #already normalized
 
             #2. Evaluating derivative along that direction, we'll use dl=5e-4:
-            #FIXME
-            #What the fuck. Right now, for the ilm (1) dl=9e-1 works the best,
-            # (2) dl=9e-1 and 5e-2 work _way_ better than dl=2e-5, which is
-            # what the J is calculated with, and (3) plotting the calculated
-            # derivative vs. pixel with dl=2e-5 is a different sign than those
-            # with larger dl's. Something is wrong.... but it might just be
-            # my being an idiot / tired.
-            # For now I'm leaving dl=1e-2 which should work for most things.
             dl = 1e-5
             _ = self.update_function(self.param_vals + dl*stif_dir)
             res1 = self.calc_residuals()
@@ -1499,7 +1491,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     if desc is '':
         desc = mode + 'ing' if mode != 'do-particles' else 'doing-particles'
 
-    eig_update = mode != 'do-particles'
+    eig_update = False  #mode != 'do-particles'
     glbl_run_length = 3 if mode == 'do-particles' else 6
     glbl_mx_itr = 2 if mode == 'burn' else 1
     use_accel = (mode == 'burn')
