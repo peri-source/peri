@@ -24,9 +24,6 @@ param_vals the LM will check completion and terminate. Leaving as is since I've
 only got this to happen when it's at the minimum...
 
 To fix:
-0. LMEngine: JTJ -- Right now I think you're doing it with J = derivative of
-    model, instead of derivative of residuals.... either is fine but make it
-    consistent throughout and COMMENT it.
 1. opt.burn() -- right now it seems that the globals aren't fully optimized
     but the particles are after a few loops. So you might want to spend 1 more
     iteration updating the globals. Another eig update? More run length?
@@ -86,7 +83,8 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
         inds = None
         return_inds = slice(0, None)
         slicer = [slice(0, None), slice(0, None), slice(0, None)]
-    J = s.gradmodel(params=params, inds=inds, slicer=slicer, flat=False, **kwargs)
+    #J = d/dx( residuals ) = d/dx( data - model) = -d/dx( model)
+    J = -s.gradmodel(params=params, inds=inds, slicer=slicer, flat=False, **kwargs)
     CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
     return J, return_inds
 
@@ -664,7 +662,7 @@ class LMEngine(object):
         Calculates LM updates, with or without the acceleration correction.
         """
         damped_JTJ = self._calc_damped_jtj()
-        delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, -grad, rcond=self.min_eigval)
+        delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, grad, rcond=self.min_eigval)
         if self._fresh_JTJ:
             CLOG.debug('%d degenerate of %d total directions' % (delta0.size-rank, delta0.size))
 
@@ -907,7 +905,7 @@ class LMFunction(LMEngine):
                 func(param_values, *func_args, **func_kwargs), and return a
                 numpy.ndarray of the same shape as data
             p0 : numpy.ndarray
-                The initial parameter guess.
+                Float array of the initial parameter guess.
             dl : Float
                 The fractional amount to use for finite-difference derivatives,
                 i.e. (f(x*(1+dl)) - f(x)) / (x*dl) in each direction.
@@ -921,7 +919,7 @@ class LMFunction(LMEngine):
         self.func = func
         self.func_args = func_args
         self.func_kwargs = func_kwargs
-        self.param_vals = p0
+        self.param_vals = p0.astype('float')
         self.dl = dl
         super(LMFunction, self).__init__(**kwargs)
 
@@ -943,9 +941,11 @@ class LMFunction(LMEngine):
         f0 = self.model.copy()
         for a in xrange(self.param_vals.size):
             dp *= 0
-            dp[a] = (1+self.param_vals[a]) * self.dl
+            dp[a] = self.dl
             f1 = self.func(self.param_vals + dp, *self.func_args, **self.func_kwargs)
-            self.J[a] = (f1 - f0) / dp[a]
+            grad_func = (f1 - f0) / dp[a]
+            #J = grad(residuals) = -grad(model)
+            self.J[a] = -grad_func
 
     def calc_residuals(self):
         return self.data - self.model
@@ -1046,7 +1046,8 @@ class LMParticles(LMEngine):
     def calc_J(self):
         self._dif_tile = self._get_diftile()
         del self.J
-        self.J = self.state.gradmodel(params=self.param_names, rts=False,
+        #J = grad(residuals) = -grad(model)
+        self.J = -self.state.gradmodel(params=self.param_names, rts=False,
             slicer=self._dif_tile.slicer)
 
     def calc_residuals(self):
@@ -1359,7 +1360,8 @@ class LMAugmentedState(LMEngine):
             sa.update_rscl_x_params(old_aug_vals + dl, do_reset=True)
             i1 = s.residuals
             der = (i1-i0)/dl
-            J_aug.append(der[self._inds].copy().ravel())
+            #J = grad(residuals) = -grad(model)
+            J_aug.append(-der[self._inds].copy().ravel())
 
         if J_st.size == 0:
             self.J = np.array(J_aug)
