@@ -306,7 +306,7 @@ class LMEngine(object):
                 use_accel=False, max_accel_correction=1., ptol=1e-6,
                 ftol=1e-5, costol=None, max_iter=5, run_length=5,
                 update_J_frequency=1, broyden_update=False, eig_update=False,
-                partial_update_frequency=3, num_eig_dirs=8):
+                partial_update_frequency=3, num_eig_dirs=8, eig_dl=1e-5):
         """
         Levenberg-Marquardt engine with all the options from the
         M. Transtrum J. Sethna 2012 ArXiV paper.
@@ -428,6 +428,8 @@ class LMEngine(object):
         #Finally we set the error and parameter values:
         self._set_err_paramvals()
         self._has_run = False
+        
+        self.eig_dl = eig_dl
 
     def reset(self, new_damping=None):
         """
@@ -837,7 +839,7 @@ class LMEngine(object):
             stif_dir = vcs[-(a+1)] #already normalized
 
             #2. Evaluating derivative along that direction, we'll use dl=5e-4:
-            dl = 1e-5
+            dl = self.eig_dl #1e-5
             _ = self.update_function(self.param_vals + dl*stif_dir)
             res1 = self.calc_residuals()
 
