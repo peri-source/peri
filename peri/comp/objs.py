@@ -528,10 +528,10 @@ class PlatonicSpheresCollection(Component):
         return np.squeeze(np.array(allpos)), np.squeeze(np.array(allrad))
 
     def get_positions(self):
-        return self.pos
+        return self.pos.copy()
 
     def get_radii(self):
-        return self.rad
+        return self.rad.copy()
 
     def closest_particle(self, x):
         """ Get the index of the particle closest to vector `x` """
