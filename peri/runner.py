@@ -57,7 +57,7 @@ def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
         max_mem=1e9):
     """
     Gets a completely-optimized state from an initial image of single-sized
-    particles. The user interactively selects the state.
+    particles. The user interactively selects the image.
 
     Parameters
     ----------
@@ -145,19 +145,90 @@ def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
 
     RLOG.info('Initial burn:')
     opt.burn(s, mode='burn', n_loop=4, ftol=1, desc=desc+'initial-burn',
-        max_mem=max_mem)
+            max_mem=max_mem)
 
     RLOG.info('Start add-subtract')
-    addsub.add_subtract(s, tries=30, min_rad=min_rad, max_rad=max_rad)
+    addsub.add_subtract(s, tries=30, min_rad=min_rad, max_rad=max_rad,
+            invert=invert)
     states.save(s, desc=desc+'initial-addsub')
 
     RLOG.info('Final burn:')
     opt.burn(s, mode='burn', n_loop=2, ftol=1, desc=desc+'addsub-burn',
-        max_mem=max_mem)
+            max_mem=max_mem)
     RLOG.info('Final polish:')
     opt.burn(s, mode='polish', n_loop=7, ftol=1e-3, desc=desc+'addsub-polish',
-        max_mem=max_mem)
+            max_mem=max_mem)
 
     os.chdir(initial_dir)
     return s
 
+def translate_featuring(desc='', invert=True, min_rad='calc', max_rad='calc',
+        max_mem=1e9):
+    """
+    Translates one optimized state into another image where the particles
+    have moved by a small amount (~1 particle radius).
+    Returns a completely-optimized state. The user interactively selects the
+    initial state and the second raw image.
+
+    Parameters
+    ----------
+        desc : String
+            A description to be inserted in saved state. The save name will
+            be, e.g., '0.tif-peri-' + desc + 'initial-burn.pkl'. Default is ''
+
+        invert : Bool
+            Whether to invert the image for featuring, as passed to
+            addsubtract.add_subtract. Default is True.
+        min_rad : Float
+            The minimum particle radius, as passed to addsubtract.add_subtract.
+            Default is 'calc', but a known physical value will give better
+            answers.
+        max_rad : Float
+            The maximum particle radius, as passed to addsubtract.add_subtract.
+            Default is 'calc', but a known physical value will give better
+            answers.
+
+        max_mem : Numeric
+            The maximum additional memory to use for the optimizers, as
+            passed to optimize.burn. Default is 1e9.
+    """
+    initial_dir = os.getcwd()
+    wid = tk.Tk()
+    wid.withdraw()
+    state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+            'Select pre-featured state')
+    os.chdir(os.path.dirname(state_name))
+
+    im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+            'Select new image')
+
+    s = states.load(state_name)
+    im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
+
+    s.set_image(im)
+    _translate_particles(s, desc, max_mem, min_rad, max_rad, invert)
+
+def get_particles_featuring():
+    """
+    Runs trackpy.locate on an image, sets the globals from a previous state,
+    calls _translate_particles
+    """
+    raise NotImplementedError('check translate_featuring first')
+
+def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert):
+    RLOG.info('Translate Particles:')
+    opt.burn(s, mode='do-particles', n_loop=2, ftol=1, desc=desc+
+            'translate-particles', max_mem=max_mem, include_rad=False)
+    opt.burn(s, mode='do-particles', n_loop=2, ftol=1, desc=desc+
+            'translate-particles', max_mem=max_mem, include_rad=True)
+
+    RLOG.info('Start add-subtract')
+    addsub.add_subtract(s, tries=30, min_rad=min_rad, max_rad=max_rad,
+        invert=invert)
+    states.save(s, desc=desc+'translate-addsub')
+
+    RLOG.info('Final polish:')
+    opt.burn(s, mode='polish', n_loop=6, ftol=1e-3, desc=desc+'addsub-polish',
+        max_mem=max_mem)
+
+    return s
