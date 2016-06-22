@@ -54,7 +54,7 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=False):
 
 def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
         invert=True, minmass=100.0, slab=None, min_rad=None, max_rad=None,
-        max_mem=1e9):
+        max_mem=1e9, zscale=0.9):
     """
     Gets a completely-optimized state from an initial image of single-sized
     particles. The user interactively selects the image.
@@ -124,13 +124,13 @@ def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
     if slab is not None:
         o = comp.ComponentCollection(
                 [
-                    objs.PlatonicSpheresCollection(pos, rad, zscale=0.9),
+                    objs.PlatonicSpheresCollection(pos, rad, zscale=zscale),
                     slab
                 ],
                 category='obj'
             )
     else:
-        o = objs.PlatonicSpheresCollection(pos, rad, zscale=0.9)
+        o = objs.PlatonicSpheresCollection(pos, rad, zscale=zscale)
 
     p = exactpsf.FixedSSChebLinePSF()
     i = ilms.BarnesStreakLegPoly2P1D(npts=(200,120,80,50,30,30,30,30,30,30,30),
@@ -162,13 +162,13 @@ def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
     os.chdir(initial_dir)
     return s
 
-def translate_featuring(desc='', invert=True, min_rad='calc', max_rad='calc',
-        max_mem=1e9):
+def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
+        min_rad='calc', max_rad='calc', max_mem=1e9):
     """
     Translates one optimized state into another image where the particles
     have moved by a small amount (~1 particle radius).
-    Returns a completely-optimized state. The user interactively selects the
-    initial state and the second raw image.
+    Returns a completely-optimized state. The user can interactively selects
+    the initial state and the second raw image.
 
     Parameters
     ----------
@@ -195,12 +195,14 @@ def translate_featuring(desc='', invert=True, min_rad='calc', max_rad='calc',
     initial_dir = os.getcwd()
     wid = tk.Tk()
     wid.withdraw()
-    state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-            'Select pre-featured state')
+    if state_name is None:
+        state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+                'Select pre-featured state')
     os.chdir(os.path.dirname(state_name))
 
-    im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-            'Select new image')
+    if im_name is None:
+        im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+                'Select new image')
 
     s = states.load(state_name)
     im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
@@ -209,12 +211,58 @@ def translate_featuring(desc='', invert=True, min_rad='calc', max_rad='calc',
     _translate_particles(s, desc, max_mem, min_rad, max_rad, invert)
     return s
 
-def get_particles_featuring():
+def get_particles_featuring(feature_diam, actual_rad=None, desc='',
+        invert=True, min_rad='calc', max_rad='calc', max_mem=1e9, zscale=0.9):
     """
     Runs trackpy.locate on an image, sets the globals from a previous state,
     calls _translate_particles
+
+    Basically I'm trying to cover 4 options, one of each:
+        (Previously featured state,     No previously featured state)
+        (using previous positions,      no previous positions)
+    (no, no)    = get_initial_featuring
+    (yes, no)   = get_particle_featuring
+    (yes, yes)  = translate_featuring
+    (no, yes)   = stupid, not doing. Or should I???
+
+    These do:
+        (use globals to start,          start from nothing)
+        (use positions to start,        start from trackpy)
     """
-    raise NotImplementedError('check translate_featuring first')
+    raise NotImplementedError('Not implemented yet....')
+    initial_dir = os.getcwd()
+    # here to xxx in a sub-function? It's in this, translate_featuring
+    wid = tk.Tk()
+    wid.withdraw()
+    state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+            'Select pre-featured state')
+    os.chdir(os.path.dirname(state_name))
+
+    im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+            'Select new image')
+    # xxx
+
+    s = states.load(state_name)
+    if actual_rad == None:
+        actual_rad = np.median(s.obj_get_radii())  #or 2 x feature_diam?
+    im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
+    f = peri.trackpy.locate(im.get_image()*255, feature_diam, invert=invert,
+            minmass=minmass)
+    npart = f['x'].size
+    pos = np.zeros([npart,3])
+    pos[:,0] = f['z']
+    pos[:,1] = f['y']
+    pos[:,2] = f['x']
+    #Right now there is not a good way to translate, so:
+    while s.obj_get_radii().size > 0:
+        s.obj_remove_particle(0)
+    for p in pos:
+        s.obj_add_particle(p, actual_rad)
+    particles = objs.PlatonicSpheresCollection(pos, rad, zscale=zscale)
+
+    s.set_image(im)
+    _translate_particles(s, desc, max_mem, min_rad, max_rad, invert)
+    return s
 
 def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert):
     RLOG.info('Translate Particles:')
