@@ -11,8 +11,6 @@ want to run until (either a fixed # of tries or you reject N in a row)
 
 For a large # of adds, the ilm scale and offset are off. Optimize?
 
-Is addsubtract automatically removing particles inside the image?
-
 There is a secondary problem which is that it's possible to fit the bkg in
 regions of the image such that adding a particle there is unfavorable.
 
@@ -112,7 +110,7 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
         killed = True
     return killed, tuple(p), (r,)
 
-def add_missing_particles(st, rad='calc', tries=20, **kwargs):
+def add_missing_particles(st, rad='calc', tries=50, **kwargs):
     """
     do_opt=True, im_change_frac=0.2, opt_box_scale=3,
     """
@@ -127,7 +125,7 @@ def add_missing_particles(st, rad='calc', tries=20, **kwargs):
     return accepts, new_poses
 
 def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
-        check_rad_cutoff=[3.5,15], check_outside_im=True, tries=100,
+        check_rad_cutoff=[3.5,15], check_outside_im=True, tries=50,
         im_change_frac=0.2, **kwargs):
     """
     Same syntax as before, but here I'm just trying to kill the smallest particles...
@@ -162,7 +160,7 @@ def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
     tries : Int
         The maximum number of particles with radii < check_rad_cutoff
         to try to remove. Checks in increasing order of radius size.
-        Default is 100.
+        Default is 50.
 
     im_change_frac : Float, between 0 and 1.
         If removing a particle decreases the error less than im_change_frac*
@@ -280,21 +278,30 @@ def add_subtract(st, max_iter=5, **kwargs):
             are not fit until the end of add_subtract. Default is 'calc',
             which uses the median radii of active particles.
 
-        tries :
-        im_change_frac
+        tries : Int
+            The number of particles to attempt to remove or add, per
+            iteration. Default is 50.
+
+        im_change_frac : Float, between 0 and 1.
+            If adding or removing a particle decreases the error less than
+            im_change_frac*the change in the image, the particle is deleted.
+            Default is 0.2.
+
         min_derr : Float
-            The minimum Default is '3sig' which uses 3*st.sigma.
+            The minimum change in the state's error to keep a particle in the
+            image. Default is '3sig' which uses 3*st.sigma.
 
         do_opt : Bool
             Set to False to avoid optimizing particle positions after
             adding them.
         minmass : Float
+            The minimum mass for a particle to be identified as a feature,
+            as used by trackpy. Defaults to a decent guess.
 
         use_tp : Bool
             Set to True to use trackpy to find missing particles inside
             the image. Not recommended since it trackpy deliberately
             cuts out particles at the edge of the image. Default is False.
-
 
     Outputs
     -------
@@ -331,7 +338,7 @@ def add_subtract(st, max_iter=5, **kwargs):
     added_poses = []
 
     for _ in xrange(max_iter):
-        nr, rposes = remove_bad_particles(st, **kwargs)
+        nr, rposes = remove_bad_particles(st, **kwargs)  #should this be done only once?
         na, aposes = add_missing_particles(st, **kwargs)
         current_changed = na + nr
         removed_poses.extend(rposes)
