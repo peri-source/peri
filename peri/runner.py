@@ -198,7 +198,7 @@ def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
     if state_name is None:
         state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
                 'Select pre-featured state')
-    os.chdir(os.path.dirname(state_name))
+        os.chdir(os.path.dirname(state_name))
 
     if im_name is None:
         im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
