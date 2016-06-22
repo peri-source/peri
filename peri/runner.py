@@ -163,7 +163,7 @@ def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
     return s
 
 def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
-        min_rad='calc', max_rad='calc', max_mem=1e9):
+        min_rad='calc', max_rad='calc', max_mem=1e9, do_polish=True):
     """
     Translates one optimized state into another image where the particles
     have moved by a small amount (~1 particle radius).
@@ -208,7 +208,8 @@ def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
     im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
 
     s.set_image(im)
-    _translate_particles(s, desc, max_mem, min_rad, max_rad, invert)
+    _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
+            do_polish=do_polish)
     return s
 
 def get_particles_featuring(feature_diam, actual_rad=None, desc='',
@@ -264,7 +265,8 @@ def get_particles_featuring(feature_diam, actual_rad=None, desc='',
     _translate_particles(s, desc, max_mem, min_rad, max_rad, invert)
     return s
 
-def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert):
+def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
+        do_polish=True):
     RLOG.info('Translate Particles:')
     opt.burn(s, mode='do-particles', n_loop=2, ftol=1, desc=desc+
             'translate-particles', max_mem=max_mem, include_rad=False)
@@ -276,6 +278,7 @@ def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert):
         invert=invert)
     states.save(s, desc=desc+'translate-addsub')
 
-    RLOG.info('Final polish:')
-    opt.burn(s, mode='polish', n_loop=6, ftol=1e-3, desc=desc+'addsub-polish',
-        max_mem=max_mem)
+    if do_polish:
+        RLOG.info('Final polish:')
+        opt.burn(s, mode='polish', n_loop=6, ftol=1e-3, desc=desc+
+            'addsub-polish', max_mem=max_mem)
