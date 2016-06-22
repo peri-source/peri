@@ -207,6 +207,7 @@ def translate_featuring(desc='', invert=True, min_rad='calc', max_rad='calc',
 
     s.set_image(im)
     _translate_particles(s, desc, max_mem, min_rad, max_rad, invert)
+    return s
 
 def get_particles_featuring():
     """
@@ -230,5 +231,3 @@ def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert):
     RLOG.info('Final polish:')
     opt.burn(s, mode='polish', n_loop=6, ftol=1e-3, desc=desc+'addsub-polish',
         max_mem=max_mem)
-
-    return s
