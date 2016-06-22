@@ -122,7 +122,7 @@ def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
 
     rad = np.ones(npart, dtype='float') * actual_rad
     if slab is not None:
-        o = ComponentCollection(
+        o = comp.ComponentCollection(
                 [
                     objs.PlatonicSpheresCollection(pos, rad, zscale=0.9),
                     slab
@@ -136,7 +136,7 @@ def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
     i = ilms.BarnesStreakLegPoly2P1D(npts=(200,120,80,50,30,30,30,30,30,30,30),
             zorder=9)
     b = ilms.LegendrePoly2P1D(order=(9,3,5), category='bkg')
-    c = GlobalScalar('offset', 0.0)
+    c = comp.GlobalScalar('offset', 0.0)
     s = states.ImageState(im, [o, i, b, c, p])
     RLOG.info('State Created.')
 
