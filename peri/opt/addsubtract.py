@@ -2,9 +2,6 @@
 To do:
 Looking at Neil's data, subtracting isn't as important as adding, because it's
 easier to miss particles than to overfeature.
-So either (1) rebuild add-subtract, or (2) rename sample_n_add to something
-better that says `I'm adding missing particles' and leave add-subtract for
-what it is (clusters etc).
 
 Also, for add-subtract, it might be better to do 1 loop of subtraction, or
 every other loop of subtraction, rather than spend time every loop subtracting.
@@ -115,7 +112,7 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
         killed = True
     return killed, tuple(p), (r,)
 
-def sample_n_add(st, rad='calc', tries=20, **kwargs):
+def add_missing_particles(st, rad='calc', tries=20, **kwargs):
     """
     do_opt=True, im_change_frac=0.2, opt_box_scale=3,
     """
@@ -335,7 +332,7 @@ def add_subtract(st, max_iter=5, **kwargs):
 
     for _ in xrange(max_iter):
         nr, rposes = remove_bad_particles(st, **kwargs)
-        na, aposes = sample_n_add(st, **kwargs)
+        na, aposes = add_missing_particles(st, **kwargs)
         current_changed = na + nr
         removed_poses.extend(rposes)
         added_poses0.extend(aposes)
