@@ -436,7 +436,10 @@ class ImageState(State, comp.ComponentCollection):
         for c in self.comps:
             c.set_shape(self.oshape, self.ishape)
 
-        self.reset()
+        self.calculate_model()
+
+    def set_tile_full(self):
+        self.set_tile(self.oshape)
 
     def model_to_data(self, sigma=0.0):
         """ Switch out the data for the model's recreation of the data. """
@@ -447,7 +450,9 @@ class ImageState(State, comp.ComponentCollection):
     def reset(self):
         for c in self.comps:
             c.initialize()
+        self.calculate_model()
 
+    def calculate_model(self):
         self._model = self._calc_model()
         self._residuals = self._calc_residuals()
         self._loglikelihood = self._calc_loglikelihood()
@@ -531,9 +536,9 @@ class ImageState(State, comp.ComponentCollection):
         # parameters are being update (should just update the whole model).
         if len(comps) == 1 and self.mdl.get_difference_model(comps[0].category):
             comp = comps[0]
-            model0 = copy.copy(comp.get())
+            model0 = copy.deepcopy(comp.get())
             super(ImageState, self).update(params, values)
-            model1 = copy.copy(comp.get())
+            model1 = copy.deepcopy(comp.get())
 
             diff = model1 - model0
             diff = self.mdl.evaluate(
@@ -566,7 +571,7 @@ class ImageState(State, comp.ComponentCollection):
         return None
 
     def _calc_model(self):
-        self.set_tile(self.oshape)
+        self.set_tile_full()
         return self.mdl.evaluate(self.comps, 'get')
 
     def _calc_residuals(self):
