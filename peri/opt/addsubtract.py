@@ -15,6 +15,9 @@ There is a secondary problem which is that it's possible to fit the bkg in
 regions of the image such that adding a particle there is unfavorable.
 
 So you really need a wrapper that calls protocols in order.
+
+1. Problem with updates not being exact for adding/removing
+2. WHY THE FUCK IS THIS ADDING PARTICLES AT Z=-8!!!! AND DECREASING THE ERROR!
 """
 import numpy as np
 
@@ -73,9 +76,9 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
     with log.noformat():
         CLOG.info(message)
     for a in xrange(guess.shape[0]):
-        p = guess[a]
+        p0 = guess[a]
         old_err = st.error
-        ind = st.obj_add_particle(p, rad)
+        ind = st.obj_add_particle(p0, rad)
         if do_opt:
             opt.do_levmarq_particles(st, np.array([ind],dtype='int'),
                     damping=1.0, max_iter=2, run_length=3, eig_update=False,
@@ -88,6 +91,9 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
                     p + r + (old_err, st.error))
             with log.noformat():
                 CLOG.info(part_msg)
+        else:
+            if np.abs(old_err - st.error) > 1e-4:
+                raise RuntimeError('updates not exact?')
     return accepts, new_poses
 
 def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs):
