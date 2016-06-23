@@ -70,6 +70,8 @@ class OrthoManipulator(object):
         self.vrange_img = vrange_img
         self.vrange_diff = vrange_diff
 
+        self.state.set_tile(self.state.oshape)
+
         z,y,x = [float(i) for i in self.state.data.shape]
         w = float(x + z)
         h = float(y + z)
