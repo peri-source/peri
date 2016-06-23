@@ -162,7 +162,7 @@ def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
 # Actual sphere collection (and slab)
 #=============================================================================
 class PlatonicSpheresCollection(Component):
-    def __init__(self, pos, rad, shape=None, zscale=1.0, support_pad=2,
+    def __init__(self, pos, rad, shape=None, zscale=1.0, support_pad=4,
             method='exact-gaussian-fast', alpha=None, user_method=None,
             exact_volume=True, volume_error=1e-5, max_radius_change=1e-2,
             param_prefix='sph', grouping='particle', category='obj'):
@@ -501,7 +501,8 @@ class PlatonicSpheresCollection(Component):
             return
 
         # make sure we remove them in reverse order
-        inds = np.sort(inds)[::-1]
+        if hasattr(inds, '__iter__'):
+            inds = np.sort(inds)[::-1]
 
         allpos, allrad = [], []
 
