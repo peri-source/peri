@@ -500,6 +500,9 @@ class PlatonicSpheresCollection(Component):
         if self.rad.shape[0] == 0:
             return
 
+        # make sure we remove them in reverse order
+        inds = np.sort(inds)[::-1]
+
         allpos, allrad = [], []
 
         for ind in listify(inds):
