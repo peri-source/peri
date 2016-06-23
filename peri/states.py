@@ -570,6 +570,14 @@ class ImageState(State, comp.ComponentCollection):
                 return c
         return None
 
+    def set(self, name, obj):
+        for i, c in enumerate(self.comps):
+            if c.category == name:
+                self.comps[i] = obj
+
+                obj.set_shape(self.oshape, self.ishape)
+                self.calculate_model()
+
     def _calc_model(self):
         self.set_tile_full()
         return self.mdl.evaluate(self.comps, 'get')
