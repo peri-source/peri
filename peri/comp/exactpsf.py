@@ -418,7 +418,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self.param_dict['psf-laser-wavelength'] = np.clip(wavelength, 1e-3, np.inf)
 
     def set_tile(self, tile):
-        if not hasattr(self, 'tile') or (self.tile.shape != tile.shape).any():
+        if not hasattr(self, 'tile') or (self.tile != tile).any():
             self.tile = tile
 
     def _kpad(self, field, finalshape, zpad=False, norm=True):
