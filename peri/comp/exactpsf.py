@@ -448,7 +448,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         kpsf = fft.rfft.fftn(rpsf)
 
         if norm:
-            kpsf[0,0,0] = 1.0
+            kpsf /= kpsf[0,0,0]
         return kpsf
 
     def execute(self, field):
