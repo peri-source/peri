@@ -58,9 +58,9 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=False):
 
     return addsub.feature_guess(s, radius, invert=not invert)[0]
 
-def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
-        invert=True, minmass=100.0, slab=None, min_rad=None, max_rad=None,
-        max_mem=1e9, zscale=0.9):
+def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
+        tile=None, invert=True, minmass=100.0, slab=None, min_rad=None,
+         max_rad=None, max_mem=1e9, zscale=0.9):
     """
     Gets a completely-optimized state from an initial image of single-sized
     particles. The user interactively selects the image.
@@ -113,10 +113,11 @@ def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
     initial_dir = os.getcwd()
     wid = tk.Tk()
     wid.withdraw()
-    fname = tkfd.askopenfilename(initialdir=initial_dir, title=
-            'Select initial image for featuring')
-    os.chdir(os.path.dirname(fname))
-    im = util.RawImage(fname, tile=tile)
+    if im_name is None:
+        im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+                'Select initial image for featuring')
+        os.chdir(os.path.dirname(im_name))
+    im = util.RawImage(im_name, tile=tile)
 
     f = peri.trackpy.locate(im.get_image()*255, feature_diam, invert=invert,
             minmass=minmass)
