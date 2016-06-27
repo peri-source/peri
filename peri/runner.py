@@ -212,8 +212,9 @@ def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
             do_polish=do_polish)
     return s
 
-def get_particles_featuring(feature_diam, actual_rad=None, desc='',
-        invert=True, min_rad='calc', max_rad='calc', max_mem=1e9, zscale=0.9):
+def get_particles_featuring(feature_diam, state_name=None, im_name=None,
+        actual_rad=None, desc='', invert=True, min_rad='calc', max_rad='calc',
+         max_mem=1e9, zscale=0.9, minmass=100):
     """
     Runs trackpy.locate on an image, sets the globals from a previous state,
     calls _translate_particles
@@ -230,20 +231,23 @@ def get_particles_featuring(feature_diam, actual_rad=None, desc='',
         (use globals to start,          start from nothing)
         (use positions to start,        start from trackpy)
     """
-    raise NotImplementedError('Not implemented yet....')
     initial_dir = os.getcwd()
     # here to xxx in a sub-function? It's in this, translate_featuring
+    initial_dir = os.getcwd()
     wid = tk.Tk()
     wid.withdraw()
-    state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-            'Select pre-featured state')
-    os.chdir(os.path.dirname(state_name))
+    if state_name is None:
+        state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+                'Select pre-featured state')
+        os.chdir(os.path.dirname(state_name))
 
-    im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-            'Select new image')
-    # xxx
+    if im_name is None:
+        im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+                'Select new image')
 
     s = states.load(state_name)
+    # xxx
+
     if actual_rad == None:
         actual_rad = np.median(s.obj_get_radii())  #or 2 x feature_diam?
     im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
@@ -255,14 +259,16 @@ def get_particles_featuring(feature_diam, actual_rad=None, desc='',
     pos[:,1] = f['y']
     pos[:,2] = f['x']
     #Right now there is not a good way to translate, so:
-    while s.obj_get_radii().size > 0:
-        s.obj_remove_particle(0)
-    for p in pos:
-        s.obj_add_particle(p, actual_rad)
-    particles = objs.PlatonicSpheresCollection(pos, rad, zscale=zscale)
+
+    slab = s.get('obj').comps[1] #FIXME I don't think this will always be correct
+    sph = objs.PlatonicSpheresCollection(pos=pos, rad=actual_rad, zscale=
+            s.state['zscale'])
+    o = comp.ComponentCollection([sph, slab], category='obj')
+    s.set('obj', o); s.reset()
 
     s.set_image(im)
-    _translate_particles(s, desc, max_mem, min_rad, max_rad, invert)
+    _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
+        do_polish=True)
     return s
 
 def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
