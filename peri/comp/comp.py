@@ -373,6 +373,12 @@ class ComponentCollection(Component):
             return None
         return util.Tile.boundingtile(sizes)
 
+    def set(self, name, obj):
+        for i, c in enumerate(self.comps):
+            if c.category == name:
+                self.comps[i] = obj
+        self.trigger_parameter_change()
+
     def get(self):
         """ Combine the fields from all components """
         fields = [c.get() for c in self.comps]

@@ -571,12 +571,9 @@ class ImageState(State, comp.ComponentCollection):
         return None
 
     def set(self, name, obj):
-        for i, c in enumerate(self.comps):
-            if c.category == name:
-                self.comps[i] = obj
-
-                obj.set_shape(self.oshape, self.ishape)
-                self.calculate_model()
+        super(ImageState, self).set(name, obj)
+        obj.set_shape(self.oshape, self.ishape)
+        self.calculate_model()
 
     def _calc_model(self):
         self.set_tile_full()
