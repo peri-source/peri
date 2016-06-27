@@ -1,3 +1,9 @@
+"""
+Comments:
+If you start from featured globals it seems that slab etc is off enough where
+particles get added in regions they shouldn't be (e.g. below the slab).
+So maybe you do a polish or a burn before an addsubtract?
+"""
 import os
 import Tkinter as tk
 import tkFileDialog as tkfd
@@ -152,9 +158,6 @@ def get_initial_featuring(feature_diam, actual_rad=None, desc='', tile=None,
             invert=invert)
     states.save(s, desc=desc+'initial-addsub')
 
-    RLOG.info('Final burn:')
-    opt.burn(s, mode='burn', n_loop=2, ftol=1, desc=desc+'addsub-burn',
-            max_mem=max_mem)
     RLOG.info('Final polish:')
     opt.burn(s, mode='polish', n_loop=7, ftol=1e-3, desc=desc+'addsub-polish',
             max_mem=max_mem)
