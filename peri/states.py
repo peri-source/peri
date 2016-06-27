@@ -571,7 +571,7 @@ class ImageState(State, comp.ComponentCollection):
         return None
 
     def set(self, name, obj):
-        super(ImageState, self).set(name, obj)
+        comp.ComponentCollection.set(self, name, obj)
         obj.set_shape(self.oshape, self.ishape)
         self.calculate_model()
 
