@@ -60,7 +60,7 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=False):
 
 def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
         tile=None, invert=True, minmass=100.0, slab=None, min_rad=None,
-         max_rad=None, max_mem=1e9, zscale=0.9):
+         max_rad=None, max_mem=1e9, zscale=0.9, use_aug=False):
     """
     Gets a completely-optimized state from an initial image of single-sized
     particles. The user interactively selects the image.
@@ -161,7 +161,7 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
 
     RLOG.info('Final polish:')
     opt.burn(s, mode='polish', n_loop=7, ftol=1e-3, desc=desc+'addsub-polish',
-            max_mem=max_mem)
+            max_mem=max_mem, use_aug=False)
 
     os.chdir(initial_dir)
     return s
@@ -235,7 +235,6 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
         (use globals to start,          start from nothing)
         (use positions to start,        start from trackpy)
     """
-    initial_dir = os.getcwd()
     # here to xxx in a sub-function? It's in this, translate_featuring
     initial_dir = os.getcwd()
     wid = tk.Tk()
@@ -243,11 +242,11 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
     if state_name is None:
         state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
                 'Select pre-featured state')
-        os.chdir(os.path.dirname(state_name))
 
     if im_name is None:
-        im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-                'Select new image')
+        im_name = tkfd.askopenfilename(initialdir=os.chdir(os.path.dirname(
+                state_name)), title='Select new image')
+        os.chdir(os.path.dirname(im_name))
 
     s = states.load(state_name)
     # xxx
@@ -268,7 +267,7 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
     sph = objs.PlatonicSpheresCollection(pos=pos, rad=actual_rad, zscale=
             s.state['zscale'])
     o = comp.ComponentCollection([sph, slab], category='obj')
-    s.set('obj', o); s.reset()
+    s.set('obj', o)
 
     s.set_image(im)
     _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
