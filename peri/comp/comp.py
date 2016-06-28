@@ -237,8 +237,7 @@ class ComponentCollection(Component):
         self.field_reduce_func = field_reduce_func
 
         self.setup_params()
-        self._nopickle = []
-        self._passthrough_func()
+        self.setup_passthroughs()
         self._parent = None
 
     def initargs(self):
@@ -302,6 +301,10 @@ class ComponentCollection(Component):
         if returnvalues:
             return pc, vc
         return pc
+
+    def setup_passthroughs(self):
+        self._nopickle = []
+        self._passthrough_func()
 
     def affected_components(self, params):
         comps = []
@@ -378,8 +381,6 @@ class ComponentCollection(Component):
             if c.category == name:
                 self.comps[i] = obj
         self.trigger_parameter_change()
-        self._nopickle = []
-        self._passthrough_func()
 
     def get(self):
         """ Combine the fields from all components """
@@ -402,6 +403,7 @@ class ComponentCollection(Component):
 
     def trigger_parameter_change(self):
         self.setup_params()
+        self.setup_passthroughs()
 
         if self._parent:
             self._parent.trigger_parameter_change()
