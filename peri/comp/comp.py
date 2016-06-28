@@ -378,6 +378,8 @@ class ComponentCollection(Component):
             if c.category == name:
                 self.comps[i] = obj
         self.trigger_parameter_change()
+        self._nopickle = []
+        self._passthrough_func()
 
     def get(self):
         """ Combine the fields from all components """
