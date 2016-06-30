@@ -15,10 +15,40 @@ def _toarr(i):
         i = np.array((i,)*3)
     return np.array(i)
 
+conf_cohen_hot = {
+    'model': 'confocal-dyedfluid',
+    'comps': {
+        'psf': 'cheb-linescan-fixedss',
+        'ilm': 'barnesleg2p1d',
+        'bkg': 'leg2p1d',
+        'offset': 'const',
+    },
+    'args': {
+        'ilm': {'npts': (180,100,70,50,30,20,10,10,10), 'zorder': 7},
+        'bkg': {'order': (9, 3, 5), 'category': 'bkg'},
+        'offset': {'name': 'offset', 'value': 0}
+    }
+}
+
+conf_simple = {
+    'model': 'confocal-dyedfluid',
+    'comps': {
+        'psf': 'gauss3d',
+        'ilm': 'barnesleg2p1d',
+        'bkg': 'const',
+        'offset': 'const',
+    },
+    'args': {
+        'ilm': {'npts': (20,10,5), 'zorder': 5},
+        'bkg': {'name': 'bkg', 'value': 0},
+        'offset': {'name': 'offset', 'value': 0},
+    }
+}
+
 #=============================================================================
 # Initialization methods to go full circle
 #=============================================================================
-def create_state(image, pos, rad, slab=None, sigma=0.05, conf=models.conf_confocal):
+def create_state(image, pos, rad, slab=None, sigma=0.05, conf=conf_simple):
     """
     Create a state from a blank image, set of pos and radii
 
