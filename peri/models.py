@@ -180,16 +180,16 @@ class ConfocalImageModel(Model):
 
 class SmoothFieldModel(Model):
     def __init__(self):
-        varmap = {
-            'I': 'ilm'
-        }
-        modelstr = {
-            'full': 'I',
-            'dI': 'dI',
-        }
-        registry = {
-            'ilm': allfields,
-        }
+        varmap = {'I': 'ilm'}
+        modelstr = {'full': 'I', 'dI': 'dI'}
+        registry = {'ilm': allfields}
+        Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
+
+class BlurredFieldModel(Model):
+    def __init__(self):
+        varmap = {'H': 'psf', 'I': 'ilm'}
+        modelstr = {'full': 'H(I)', 'dI': 'H(dI)'}
+        registry = {'psf': allpsfs, 'ilm': allfields}
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
 class BlurredParticlesModel(Model):
@@ -217,17 +217,3 @@ models = {
     'smooth-field': SmoothFieldModel,
 }
 
-conf_confocal = {
-    'model': 'confocal-dyedfluid',
-    'comps': {
-        'psf': 'cheb-linescan-fixedss',
-        'ilm': 'barnesleg2p1d',
-        'bkg': 'leg2p1d',
-        'offset': 'const',
-    },
-    'args': {
-        'ilm': {'npts': (180,100,70,50,30,20,10,10,10), 'zorder': 7},
-        'bkg': {'order': (9, 3, 5), 'category': 'bkg'},
-        'offset': {'name': 'offset', 'value': 0}
-    }
-}
