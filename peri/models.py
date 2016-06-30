@@ -1,42 +1,45 @@
 import re
 
-from peri.comp import GlobalScalar, ilms, psfs, objs, exactpsf
+from peri.comp import (
+    ComponentCollection, GlobalScalar, ilms, psfs, objs, exactpsf
+)
 from peri.logger import log as baselog
 log = baselog.getChild('models')
 
-allfields = [
-    GlobalScalar,
-    ilms.Polynomial3D,
-    ilms.LegendrePoly3D,
-    ilms.Polynomial2P1D,
-    ilms.LegendrePoly2P1D,
-    ilms.ChebyshevPoly2P1D,
-    ilms.BarnesStreakLegPoly2P1D
-]
+allfields = {
+    'const': GlobalScalar,
+    'poly3d': ilms.Polynomial3D,
+    'leg3d': ilms.LegendrePoly3D,
+    'poly2p1d': ilms.Polynomial2P1D,
+    'leg2p1d': ilms.LegendrePoly2P1D,
+    'cheb2p1d': ilms.ChebyshevPoly2P1D,
+    'barnesleg2p1d': ilms.BarnesStreakLegPoly2P1D,
+    'combo': ComponentCollection,
+}
 
-allpsfs = [
-    psfs.IdentityPSF,
-    psfs.AnisotropicGaussian,
-    psfs.AnisotropicGaussianXYZ,
-    psfs.Gaussian4D,
-    psfs.Gaussian4DPoly,
-    psfs.Gaussian4DLegPoly,
-    psfs.GaussianMomentExpansion,
-    exactpsf.ExactLineScanConfocalPSF,
-    exactpsf.ChebyshevLineScanConfocalPSF,
-    exactpsf.FixedSSChebLinePSF
-]
+allpsfs = {
+    'identity': psfs.IdentityPSF,
+    'gauss2d': psfs.AnisotropicGaussian,
+    'gauss3d': psfs.AnisotropicGaussianXYZ,
+    'gauss4d': psfs.Gaussian4DPoly,
+    'gauss4d-leg': psfs.Gaussian4DLegPoly,
+    'gauss4d-mom': psfs.GaussianMomentExpansion,
+    'linescan': exactpsf.ExactLineScanConfocalPSF,
+    'cheb-linescan': exactpsf.ChebyshevLineScanConfocalPSF,
+    'cheb-linescan-fixedss': exactpsf.FixedSSChebLinePSF,
+}
 
-allobjs = [
-    objs.PlatonicSpheresCollection,
-    objs.Slab
-]
+allobjs = {
+    'spheres': objs.PlatonicSpheresCollection,
+    'slab': objs.Slab,
+    'combo': ComponentCollection,
+}
 
 class ModelError(Exception):
     pass
 
 class Model(object):
-    def __init__(self, modelstr, varmap):
+    def __init__(self, modelstr, varmap, registry={}):
         """
         An abstraction for defining how to combine components into a complete
         model as well as derivatives with respect to different variables.
@@ -59,6 +62,7 @@ class Model(object):
         """
         self.modelstr = modelstr
         self.varmap = varmap
+        self.registry = registry
         self.ivarmap = {v:k for k, v in self.varmap.iteritems()}
         self.check_consistency()
 
@@ -170,9 +174,9 @@ class ConfocalImageModel(Model):
             'ilm': allfields,
             'psf': allpsfs,
             'obj': allobjs,
-            'offset': [GlobalScalar]
+            'offset': {'const': GlobalScalar}
         }
-        Model.__init__(self, modelstr=modelstr, varmap=varmap)
+        Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
 class SmoothFieldModel(Model):
     def __init__(self):
@@ -183,7 +187,10 @@ class SmoothFieldModel(Model):
             'full': 'I',
             'dI': 'dI',
         }
-        Model.__init__(self, modelstr=modelstr, varmap=varmap)
+        registry = {
+            'ilm': allfields,
+        }
+        Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
 class BlurredParticlesModel(Model):
     def __init__(self):
@@ -196,18 +203,13 @@ class BlurredParticlesModel(Model):
             'dS': 'H(dS*P)',
             'dC': 'dC',
         }
-        Model.__init__(self, modelstr=modelstr, varmap=varmap)
-
-class TestModel(Model):
-    def __init__(self):
-        varmap = {
-            'P': 'obj', 'H': 'psf'
+        registry = {
+            'psf': allpsfs,
+            'obj': allobjs,
+            'scale': {'const': GlobalScalar},
+            'offset': {'const': GlobalScalar},
         }
-        modelstr = {
-            'full': 'H(P)',
-            'dP': 'H(dP)',
-        }
-        Model.__init__(self, modelstr=modelstr, varmap=varmap)
+        Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
 models = {
     'confocal-dyedfluid': ConfocalImageModel,
@@ -215,4 +217,17 @@ models = {
     'smooth-field': SmoothFieldModel,
 }
 
-
+conf_confocal = {
+    'model': 'confocal-dyedfluid',
+    'comps': {
+        'psf': 'cheb-linescan-fixedss',
+        'ilm': 'barnesleg2p1d',
+        'bkg': 'leg2p1d',
+        'offset': 'const',
+    },
+    'args': {
+        'ilm': {'npts': (180,100,70,50,30,20,10,10,10), 'zorder': 7},
+        'bkg': {'order': (9, 3, 5), 'category': 'bkg'},
+        'offset': {'name': 'offset', 'value': 0}
+    }
+}
