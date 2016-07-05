@@ -627,6 +627,10 @@ class BarnesStreakLegPoly2P1D(Component):
 
         if self.shape:
             self.initialize()
+
+        if self._parent:
+            param = self.category+'-scale'
+            self.trigger_update(param, self.get_values(param))
     
     def nopickle(self):
         return super(BarnesStreakLegPoly2P1D, self).nopickle() + [
