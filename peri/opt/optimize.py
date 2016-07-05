@@ -845,7 +845,7 @@ class LMEngine(object):
 
             #3. Updating
             grad_stif = (res1-res0)/dl
-            self._rank_1_J_update(stif_dir, -grad_stif)
+            self._rank_1_J_update(stif_dir, grad_stif)
 
         self.JTJ = np.dot(self.J, self.J.T)
         #Putting the parameters back:
