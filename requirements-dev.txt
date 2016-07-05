@@ -1,0 +1,9 @@
+numpy>=1.8.1
+scipy>=0.14.0
+matplotlib>=1.0.0
+pyfftw>=0.9.1
+pillow>=1.1.7
+
+# extras for development purposes
+sphinx>=1.4.0
+alabaster>=0.7.8

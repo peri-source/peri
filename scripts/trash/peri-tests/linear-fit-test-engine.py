@@ -3,8 +3,8 @@ mpl.use('Agg')
 import numpy as np
 import pylab as pl
 
-from cbamf import states
-from cbamf.mc import observers, samplers, engines
+from peri import states
+from peri.mc import observers, samplers, engines
 
 x = np.linspace(1, 10, 100)
 y = 1.0*x + 4 + np.random.normal(0, 0.15, *x.shape)

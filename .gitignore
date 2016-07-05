@@ -1,5 +1,8 @@
 build
+docs/_build
+docs/twistd.pid
 dist
+venv
 *.o
 *.pyc
 *~

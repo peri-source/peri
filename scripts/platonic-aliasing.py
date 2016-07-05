@@ -6,7 +6,7 @@ import scipy.ndimage as nd
 from scipy.special import j1, erf
 from scipy.optimize import leastsq
 
-from cbamf.viz import util
+from peri.viz import util
 
 discs = [0]*3
 discs[0] = lambda k,R: 2*R*np.sin(k)/k

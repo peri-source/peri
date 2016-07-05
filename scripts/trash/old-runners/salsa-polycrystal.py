@@ -4,9 +4,9 @@ import numpy as np
 import pylab as pl
 import pickle
 
-from cbamf import states, runner, initializers
-from cbamf.comp import objs, psfs, ilms
-from cbamf.viz import plots
+from peri import states, runner, initializers
+from peri.comp import objs, psfs, ilms
+from peri.viz import plots
 
 def sample(s, sweeps, burn):
     h = []

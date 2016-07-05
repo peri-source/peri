@@ -3,8 +3,8 @@ import pickle
 import numpy as np
 import scipy as sp
 
-from cbamf import const, runner, initializers
-from cbamf.test import init
+from peri import const, runner, initializers
+from peri.test import init
 
 RADIUS = 5.0
 

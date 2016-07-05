@@ -2,9 +2,9 @@ import matplotlib as mpl
 mpl.use('Agg')
 import numpy as np
 import pylab as pl
-from cbamf import states, runner, initializers
-from cbamf.comp import objs, psfs, ilms
-from cbamf.viz import plots
+from peri import states, runner, initializers
+from peri.comp import objs, psfs, ilms
+from peri.viz import plots
 
 ORDER = (3,3,2)
 sweeps = 30

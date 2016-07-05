@@ -9,9 +9,9 @@ from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 from mpl_toolkits.axes_grid1 import ImageGrid
 
 import common
-from cbamf.viz import base
-from cbamf.util import Tile
-from cbamf.comp.objs import exact_volume_sphere, sphere_analytical_gaussian_fast
+from peri.viz import base
+from peri.util import Tile
+from peri.comp.objs import exact_volume_sphere, sphere_analytical_gaussian_fast
 
 def calc(N=28, scale=41):
     pos = np.array([(N-1)/2.0]*3)
