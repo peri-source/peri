@@ -110,13 +110,7 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
     if max_rad is None:
         max_rad = 1.5 * actual_rad
 
-    initial_dir = os.getcwd()
-    if im_name is None:
-        wid = tk.Tk()
-        wid.withdraw()
-        im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-                'Select initial image for featuring')
-        os.chdir(os.path.dirname(im_name))
+    _,  im_name = _pick_state_im_name('', im_name, use_full_path=use_full_path)
     im = util.RawImage(im_name, tile=tile)
 
     f = peri.trackpy.locate(im.get_image()*255, feature_diam, invert=invert,
@@ -128,6 +122,19 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
     pos[:,2] = f['x']
 
     rad = np.ones(npart, dtype='float') * actual_rad
+    s = _optimize_from_centroid(pos, rad, im, slab, max_mem=max_mem, desc=desc)
+    #FIXME kwargs
+    return s
+
+def feature_from_pos_rad(pos, rad, im_name, desc='', tile=None, invert=True,
+        minmass=100.0, slab=None, min_rad=None, max_rad=None, max_mem=1e9,
+        zscale=0.9, use_aug=False):
+    im = util.RawImage(im_name, tile=tile)
+    s = _optimize_from_centroid(pos, rad, im, slab, max_mem=max_mem, desc=desc)
+    return s
+
+def _optimize_from_centroid(pos, rad, im, slab, max_mem=1e9, desc='',
+        min_rad=None, max_rad=None, invert=None, use_aug=False):
     if slab is not None:
         o = comp.ComponentCollection(
                 [
@@ -141,8 +148,8 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
 
     p = exactpsf.FixedSSChebLinePSF()
     i = ilms.BarnesStreakLegPoly2P1D(npts=(200,120,80,50,30,30,30,30,30,30,30),
-            zorder=9)
-    b = ilms.LegendrePoly2P1D(order=(9,3,5), category='bkg')
+            zorder=9) #FIXME npts needs to be based on image size
+    b = ilms.LegendrePoly2P1D(order=(9,3,5), category='bkg') #FIXME order needs to be based on image size, slab
     c = comp.GlobalScalar('offset', 0.0)
     s = states.ImageState(im, [o, i, b, c, p])
     RLOG.info('State Created.')
@@ -161,9 +168,9 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
 
     RLOG.info('Final polish:')
     opt.burn(s, mode='polish', n_loop=7, ftol=1e-3, desc=desc+'addsub-polish',
-            max_mem=max_mem, use_aug=False)
+            max_mem=max_mem, use_aug=use_aug)
 
-    os.chdir(initial_dir)
+    # os.chdir(initial_dir) ???
     return s
 
 def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
