@@ -3,16 +3,16 @@ from peri import util
 import numpy as np
 import scipy as sp
 
-def create_configuration(N, tile, radius=5.0):
+def create_configuration(N, tile, radius=5.0, **kwargs):
     """
     Quick configuration creation with `N` particles in a tile of size `tile`.
     """
-    pos, rad, tile = initialize_particles(N, tile, radius=radius)
+    pos, rad, tile = initialize_particles(N, tile, radius=radius, **kwargs)
     sim = BrownianHardSphereSimulation(pos, rad, tile)
     sim.relax(1000)
     sim.step(1000)
     sim.relax(1000)
-    return sim.pos, sim.rad
+    return sim.pos, sim.rad, tile
 
 def initialize_particles(N=None, tile=None, phi=None, radius=5., polydispersity=0.):
     """
@@ -31,6 +31,12 @@ def initialize_particles(N=None, tile=None, phi=None, radius=5., polydispersity=
         vbox = N * vparticle / phi
         side = vbox**(1./3)
         tile = util.Tile(side)
+
+    elif N and tile is not None:
+        pass
+
+    else:
+        raise AttributeError("Any pair of (phi, tile, N) must be specified")
 
     pos = np.random.rand(N, 3)*tile.shape + tile.l
     rad = np.abs(np.random.normal(

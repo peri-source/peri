@@ -2,7 +2,8 @@ import numpy as np
 import scipy as sp
 
 from peri import states, models, util
-from peri.comp import objs
+from peri.comp import objs, ilms
+from peri.test import nbody
 
 def _seed_or_not(seed=None):
     if seed is None:
@@ -91,17 +92,29 @@ def create_state(image, pos, rad, slab=None, sigma=0.05, conf=conf_simple):
 #=======================================================================
 # Generating fake data
 #=======================================================================
-def create_state_random_packing(imsize, radius=5.0, phi=0.5, seed=None, **kwargs):
+def create_many_particle_state(imsize=None, N=None, phi=None, radius=5.0,
+        polydispersity=0.0, seed=None, **kwargs):
     """
-    Creates a random packing of spheres and generates the state
+    Creates a random packing of spheres and generates the state. In order to
+    specify the state, either (phi, imsize) or (N, phi) or (N, imsize) must be
+    given. Any more than that and it would be over-specified.
 
     Parameters:
     -----------
     imsize : tuple, array_like, or integer
         the unpadded image size to fill with particles
 
+    N : integer
+        number of particles
+
+    phi : float
+        packing fraction
+
     radius : float
         radius of particles to add
+
+    N : integer
+        Number of particles
 
     seed : integer
         set the seed if desired
@@ -109,12 +122,24 @@ def create_state_random_packing(imsize, radius=5.0, phi=0.5, seed=None, **kwargs
     *args, **kwargs : see create_state
     """
     _seed_or_not(seed)
-    imsize = _toarr(imsize)
 
-    disks = poissondisks.DiskCollection(imsize-radius, 2*radius)
-    pos = disks.get_positions() + radius/4
-    
-    return create_state(util.NullImage(shape=imsize), pos, rad, **kwargs)
+    if imsize is not None:
+        imsize = _toarr(imsize)
+        tile = util.Tile(imsize)
+    else:
+        tile = None
+
+    pos, rad, tile = nbody.create_configuration(
+        N, tile, radius=radius, phi=phi, polydispersity=polydispersity
+    )
+    s = create_state(util.NullImage(shape=tile.shape), pos, rad, **kwargs)
+
+    if isinstance(s.get('ilm'), ilms.BarnesStreakLegPoly2P1D):
+        ilm = s.get('ilm')
+        ilm.randomize_parameters()
+        s.reset()
+        s.model_to_data(s.sigma)
+    return s
 
 def create_single_particle_state(imsize, radius=5.0, seed=None, **kwargs):
     """
