@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import inspect
+import itertools
 import numpy as np
 from contextlib import contextmanager
 
@@ -134,6 +135,14 @@ class Tile(object):
             np.abs(np.fft.fftshift(np.fft.fftfreq(q))).argmin()
             for q in self.shape
         ]).astype('float')
+
+    @property
+    def corners(self):
+        corners = []
+        for ind in itertools.product(*((0,1),)*3):
+            ind = np.array(ind)
+            corners.append(self.l + ind*self.r)
+        return np.array(corners)
 
     def _format_vector(self, z, y, x, form='broadcast'):
         """
