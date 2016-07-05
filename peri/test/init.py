@@ -25,8 +25,8 @@ conf_cohen_hot = {
         'offset': 'const',
     },
     'args': {
-        'ilm': {'npts': (180,100,70,50,30,20,10,10,10), 'zorder': 7},
-        'bkg': {'order': (9, 3, 5), 'category': 'bkg'},
+        'ilm': {'npts': (50,30,20,12,12,12,12), 'zorder': 7},
+        'bkg': {'order': (15, 3, 5), 'category': 'bkg'},
         'offset': {'name': 'offset', 'value': 0}
     }
 }
