@@ -215,5 +215,6 @@ models = {
     'confocal-dyedfluid': ConfocalImageModel,
     'confocal-dyedobjects': BlurredParticlesModel,
     'smooth-field': SmoothFieldModel,
+    'blurred-field': BlurredFieldModel
 }
 
