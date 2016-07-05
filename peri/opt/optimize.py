@@ -898,11 +898,13 @@ class LMFunction(LMEngine):
                 The function to evaluate. Syntax must be
                 func(param_values, *func_args, **func_kwargs), and return a
                 numpy.ndarray of the same shape as data
-            p0 : numpy.ndarray
+            p0 : P-elemnet numpy.ndarray
                 Float array of the initial parameter guess.
-            dl : Float
-                The fractional amount to use for finite-difference derivatives,
-                i.e. (f(x*(1+dl)) - f(x)) / (x*dl) in each direction.
+            dl : Float or P-element numpy.ndarray
+                The dl used for finite-difference derivatives, i.e. 
+                (f(x+dl[i])) - f(x)) / (dl[i]) in each direction. If dl is
+                a scalar, it is transformed internally to a list. Default is
+                1e-8.
             func_args : List-like
                 Extra *args to pass to the function. Optional.
             func_kargs : Dictionary
@@ -914,7 +916,10 @@ class LMFunction(LMEngine):
         self.func_args = func_args
         self.func_kwargs = func_kwargs
         self.param_vals = p0.astype('float')
-        self.dl = dl
+        if np.size(dl) == 1:
+            self.dl = np.ones_like(self.param_vals) * dl
+        else:
+            self.dl = npj.array(dl)
         super(LMFunction, self).__init__(**kwargs)
 
     def _set_err_paramvals(self):
@@ -935,7 +940,7 @@ class LMFunction(LMEngine):
         f0 = self.model.copy()
         for a in xrange(self.param_vals.size):
             dp *= 0
-            dp[a] = self.dl
+            dp[a] = self.dl[a]
             f1 = self.func(self.param_vals + dp, *self.func_args, **self.func_kwargs)
             grad_func = (f1 - f0) / dp[a]
             #J = grad(residuals) = -grad(model)
