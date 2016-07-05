@@ -105,10 +105,6 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
     """
     if actual_rad is None:
         actual_rad = feature_diam * 0.5
-    if min_rad is None:
-        min_rad = 0.5 * actual_rad
-    if max_rad is None:
-        max_rad = 1.5 * actual_rad
 
     _,  im_name = _pick_state_im_name('', im_name, use_full_path=use_full_path)
     im = util.RawImage(im_name, tile=tile)
@@ -122,19 +118,21 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
     pos[:,2] = f['x']
 
     rad = np.ones(npart, dtype='float') * actual_rad
-    s = _optimize_from_centroid(pos, rad, im, slab, max_mem=max_mem, desc=desc)
+    s = _optimize_from_centroid(pos, rad, im, invert=invert, **kwargs)
     #FIXME kwargs
     return s
 
-def feature_from_pos_rad(pos, rad, im_name, desc='', tile=None, invert=True,
-        minmass=100.0, slab=None, min_rad=None, max_rad=None, max_mem=1e9,
-        zscale=0.9, use_aug=False):
+def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
     im = util.RawImage(im_name, tile=tile)
-    s = _optimize_from_centroid(pos, rad, im, slab, max_mem=max_mem, desc=desc)
+    s = _optimize_from_centroid(pos, rad, im, **kwargs)
     return s
 
-def _optimize_from_centroid(pos, rad, im, slab, max_mem=1e9, desc='',
-        min_rad=None, max_rad=None, invert=None, use_aug=False):
+def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
+        min_rad=None, max_rad=None, invert=True, use_aug=False, zscale=1.0):
+    if min_rad is None:
+        min_rad = 0.5 * rad.mean()
+    if max_rad is None:
+        max_rad = 1.5 * rad.mean() #FIXME these could be problem for bidisperse suspensions
     if slab is not None:
         o = comp.ComponentCollection(
                 [
