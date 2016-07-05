@@ -111,9 +111,9 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
         max_rad = 1.5 * actual_rad
 
     initial_dir = os.getcwd()
-    wid = tk.Tk()
-    wid.withdraw()
     if im_name is None:
+        wid = tk.Tk()
+        wid.withdraw()
         im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
                 'Select initial image for featuring')
         os.chdir(os.path.dirname(im_name))
@@ -167,7 +167,8 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
     return s
 
 def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
-        min_rad='calc', max_rad='calc', max_mem=1e9, do_polish=True):
+        min_rad='calc', max_rad='calc', max_mem=1e9, do_polish=True,
+        use_full_path=False):
     """
     Translates one optimized state into another image where the particles
     have moved by a small amount (~1 particle radius).
@@ -196,17 +197,8 @@ def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
             The maximum additional memory to use for the optimizers, as
             passed to optimize.burn. Default is 1e9.
     """
-    initial_dir = os.getcwd()
-    wid = tk.Tk()
-    wid.withdraw()
-    if state_name is None:
-        state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-                'Select pre-featured state')
-        os.chdir(os.path.dirname(state_name))
-
-    if im_name is None:
-        im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-                'Select new image')
+    state_name, im_name = _pick_state_im_name(state_name, im_name,
+                use_full_path=use_full_path)
 
     s = states.load(state_name)
     im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
@@ -218,7 +210,7 @@ def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
 
 def get_particles_featuring(feature_diam, state_name=None, im_name=None,
         actual_rad=None, desc='', invert=True, min_rad='calc', max_rad='calc',
-         max_mem=1e9, zscale=0.9, minmass=100):
+         max_mem=1e9, zscale=0.9, minmass=100, use_full_path=False):
     """
     Runs trackpy.locate on an image, sets the globals from a previous state,
     calls _translate_particles
@@ -235,21 +227,9 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
         (use globals to start,          start from nothing)
         (use positions to start,        start from trackpy)
     """
-    # here to xxx in a sub-function? It's in this, translate_featuring
-    initial_dir = os.getcwd()
-    wid = tk.Tk()
-    wid.withdraw()
-    if state_name is None:
-        state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-                'Select pre-featured state')
-
-    if im_name is None:
-        im_name = tkfd.askopenfilename(initialdir=os.chdir(os.path.dirname(
-                state_name)), title='Select new image')
-        os.chdir(os.path.dirname(im_name))
-
+    state_name, im_name = _pick_state_im_name(state_name, im_name,
+            use_full_path=use_full_path)
     s = states.load(state_name)
-    # xxx
 
     if actual_rad == None:
         actual_rad = np.median(s.obj_get_radii())  #or 2 x feature_diam?
@@ -273,6 +253,28 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
     _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
         do_polish=True)
     return s
+
+def _pick_state_im_name(state_name, im_name, use_full_path=False):
+    initial_dir = os.getcwd()
+    if (state_name is None) or (im_name is None):
+        wid = tk.Tk()
+        wid.withdraw()
+    if state_name is None:
+        state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+                'Select pre-featured state')
+        os.chdir(os.path.dirname(state_name))
+
+    if im_name is None:
+        im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
+                'Select new image')
+
+    if not use_full_path:
+        im_path = os.path.dirname(im_name)
+        os.chdir(im_path)
+        im_name = os.path.basename(im_name)
+    else:
+        os.chdir(initial_dir)
+    return state_name, im_name
 
 def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
         do_polish=True):
