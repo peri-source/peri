@@ -224,8 +224,8 @@ class PSF4D(PSF):
 
     @memoize()
     def _calc_tile_2d_psf(self, tile):
-        rpsf = np.zeros(shape=self.tile.shape)
-        kpsf = np.zeros(shape=self.tile.shape, dtype='complex')
+        rpsf = np.zeros(shape=tile.shape)
+        kpsf = np.zeros(shape=tile.shape, dtype='complex')
 
         vecs = self.rvecs(tile)
         zs = self._zpos(tile)
@@ -244,7 +244,7 @@ class PSF4D(PSF):
         return rpsf, kpsf
 
     def set_tile(self, tile):
-        if not hasattr(self, 'tile') or (self.tile.shape != tile.shape).any():
+        if not hasattr(self, 'tile') or (self.tile != tile).any():
             self.tile = tile
 
         self.rpsf, self.kpsf = self._calc_tile_2d_psf(self.tile)
@@ -363,7 +363,7 @@ class Gaussian4D(PSF4D):
         return gauss * mask
 
 class Gaussian4DPoly(Gaussian4D):
-    def __init__(self, shape, sigmas=(2.0,0.5,1.0), order=(1,1,1),
+    def __init__(self, sigmas=(2.0,0.5,1.0), order=(1,1,1), shape=None,
             error=1.0/255, zrange=128):
         super(Gaussian4DPoly, self).__init__(
             shape=shape, sigmas=sigmas, order=order, error=error, zrange=zrange
@@ -535,7 +535,7 @@ class FromArray(PSF):
         super(FromArray, self).__init__(*args, params=['dummy'], values=[0], **kwargs)
 
     def set_tile(self, tile):
-        if (self.tile.shape != tile.shape).any():
+        if (self.tile != tile).any():
             self.tile = tile
 
     def _pad(self, field):
