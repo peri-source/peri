@@ -372,12 +372,34 @@ class Image(object):
         return np.pad(self.get_image(), pad, mode='constant', constant_values=padval)
 
     def filtered_image(self, im):
+        """Returns a filtered image after applying the Fourier-space filters"""
         q = np.fft.fftn(im)
         for k,v in self.filters:
             q[k] -= v
         return np.real(np.fft.ifftn(q))
 
     def set_filter(self, slices, values):
+        """
+        Sets Fourier-space filters for the image. The image is filtered by
+        subtracting values from the image at slices.
+
+        Inputs
+        ------
+            slices : List of indices or slice objects.
+                The q-values in Fourier space to filter.
+            values : np.ndarray
+                The complete array of Fourier space peaks to subtract off.
+                values should be the same size as the FFT of the image;
+                only the portions of values at slices will be removed.
+
+        Example:
+        -------
+        To remove a two Fourier peaks in the data at q=(10, 10, 10) &
+        (245, 245, 245), where im is an Image object:
+            slices = [(10,10,10), (245, 245, 245)]
+            values = np.fft.fftn(im.get_image())
+            im.set_filter(slices, values)
+        """
         self.filters = [[sl,values[sl]] for sl in slices]
 
 
