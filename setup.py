@@ -10,8 +10,9 @@ setup(name='peri',
 
       packages=[
           'peri', 'peri.mc', 'peri.comp', 'peri.viz',
-          'peri.priors', 'peri.test', 'peri.opt'
+          'peri.priors', 'peri.test', 'peri.opt', 'peri.gui'
       ],
+      package_data={'peri': ['gui/*.ui']},
       install_requires=reqs,
       scripts=['bin/peri']
 )
