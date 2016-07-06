@@ -119,7 +119,6 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
 
     rad = np.ones(npart, dtype='float') * actual_rad
     s = _optimize_from_centroid(pos, rad, im, invert=invert, **kwargs)
-    #FIXME kwargs
     return s
 
 def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
@@ -132,7 +131,7 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     if min_rad is None:
         min_rad = 0.5 * rad.mean()
     if max_rad is None:
-        max_rad = 1.5 * rad.mean() #FIXME these could be problem for bidisperse suspensions
+        max_rad = 1.5 * rad.mean() #FIXME this could be a problem for bidisperse suspensions
     if slab is not None:
         o = comp.ComponentCollection(
                 [
@@ -145,8 +144,8 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
         o = objs.PlatonicSpheresCollection(pos, rad, zscale=zscale)
 
     p = exactpsf.FixedSSChebLinePSF()
-    i = ilms.BarnesStreakLegPoly2P1D(npts=(200,120,80,50,30,30,30,30,30,30,30),
-            zorder=9) #FIXME npts needs to be based on image size
+    npts, iorder = _calc_ilm_order(im.get_image().shape)
+    i = ilms.BarnesStreakLegPoly2P1D(npts=npts, zorder=iorder)
     b = ilms.LegendrePoly2P1D(order=(9,3,5), category='bkg') #FIXME order needs to be based on image size, slab
     c = comp.GlobalScalar('offset', 0.0)
     s = states.ImageState(im, [o, i, b, c, p])
@@ -170,6 +169,21 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
 
     # os.chdir(initial_dir) ???
     return s
+
+def _calc_ilm_order(imshape):
+    """
+    Right now I'm calculating as if imshape is the unpadded shape but
+    perhaps it should be the padded shape?
+    """
+    zorder = int(imshape[0] / 6.25) + 1 #might be overkill for big z images
+    l_npts = int(imshape[1] / 42.5)+1
+    npts = ()
+    for a in xrange(l_npts):
+        if a < 5:
+            npts += ( int(imshape[2] * [59,39,29,19,14][a]/512.) + 1,)
+        else:
+            npts += ( int(imshape[2] * 11/512.) + 1,)
+    return npts, zorder
 
 def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
         min_rad='calc', max_rad='calc', max_mem=1e9, do_polish=True,
