@@ -5,7 +5,7 @@ from pkg_resources import resource_filename, Requirement
 
 def get_ui_file(uiname):
     return resource_filename(
-        Requirement.parse("peri"), "peri/gui/{}".format(uiname)
+        'peri', "gui/{}".format(uiname)
     )
 
 def get_filename(path, parent=None):
@@ -15,10 +15,11 @@ def get_filename(path, parent=None):
 class MyWindow(QtGui.QMainWindow):
     def __init__(self):
         super(MyWindow, self).__init__()
-        uic.loadUi('mywindow.ui', self)
+        uic.loadUi(get_ui_file('main.ui'), self)
         self.show()
 
-if __name__ == '__main__':
+def launch_gui():
+    import sys
     app = QtGui.QApplication(sys.argv)
     window = MyWindow()
-    sys.exit(app.exec_())
+    app.exec_()
