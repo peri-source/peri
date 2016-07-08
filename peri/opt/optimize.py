@@ -1360,7 +1360,7 @@ class LMAugmentedState(LMEngine):
             i1 = s.residuals
             der = (i1-i0)/dl
             #J = grad(residuals) = -grad(model)
-            J_aug.append(-der[self._inds].copy().ravel())
+            J_aug.append(-der.ravel()[self._inds].copy())
 
         if J_st.size == 0:
             self.J = np.array(J_aug)
