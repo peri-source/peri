@@ -57,8 +57,7 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
     inds = np.argsort(mass)[::-1] #biggest mass first
     return guess[inds].copy(), npart
 
-def check_add_particles(st, guess, rad='calc', do_opt=True, opt_box_scale=2.5,
-        **kwargs):
+def check_add_particles(st, guess, rad='calc', do_opt=True, **kwargs):
     """
     comments
     st = state
