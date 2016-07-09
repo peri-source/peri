@@ -1499,7 +1499,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     if desc is '':
         desc = mode + 'ing' if mode != 'do-particles' else 'doing-particles'
 
-    eig_update = False  #mode != 'do-particles'
+    eig_update = (mode != 'do-particles')
     glbl_run_length = 3 if mode == 'do-particles' else 6
     glbl_mx_itr = 2 if mode == 'burn' else 1
     use_accel = (mode == 'burn')
