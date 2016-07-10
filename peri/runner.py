@@ -58,9 +58,8 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=False):
 
     return addsub.feature_guess(s, radius, invert=not invert)[0]
 
-def get_initial_featuring(feature_diam, actual_rad=None, im_name=None, desc='',
-        tile=None, invert=True, minmass=100.0, slab=None, min_rad=None,
-         max_rad=None, max_mem=1e9, zscale=0.9, use_aug=False):
+def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
+        tile=None, invert=True, use_full_path=False, minmass=100.0, **kwargs):
     """
     Gets a completely-optimized state from an initial image of single-sized
     particles. The user interactively selects the image.
