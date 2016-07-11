@@ -15,6 +15,7 @@ from peri import util
 import numpy as np
 import time
 import pickle
+plt = mpl.pyplot
 
 def lbl(axis, label, size=22):
     """ Put a figure label in an axis """
