@@ -405,6 +405,111 @@ def generative_model(s,x,y,z,r, factor=1.1):
     #zoom2.set_yticks([])
     #mark_inset(zoom1, zoom2, loc1=1, loc2=3, fc="none", ec="0.5")
 
+def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
+         res_vmin=-0.1, res_vmax=0.1, edgepts='calc', do_imshow=True):
+    """
+    Makes an image of any 2D slice of a state that compares the data,
+    model, and residuals. The upper left portion of the image is the raw
+    data, the central portion the model, and the lower right portion
+    the image.
+    Either plots the image using plt.imshow() or returns a np.ndarray of
+    the image pixels for later use.
+
+    Inputs
+    ------
+        st : peri.ImageState object
+            The state to plot.
+        tile : peri.util.Tile object
+            The slice of the image to plot. Can be any xy, xz, or yz
+            projection, but it must return a valid 2D slice (the slice is
+            squeezed internally).
+
+        data_vmin : Float
+            vmin for the imshow for the data and generative model (shared).
+            Default is 'calc' = 0.5(data.min() + model.min())
+        data_vmax : Float
+            vmax for the imshow for the data and generative model (shared).
+            Default is 'calc' = 0.5(data.max() + model.max())
+        res_vmin : Float
+            vmin for the imshow for the residuals. Default is -0.1
+            Default is 'calc' = 0.5(data.min() + model.min())
+        res_vmax : Float
+            vmax for the imshow for the residuals. Default is +0.1
+        edgepts : Nested list-like
+            The vertices of the triangles which determine the splitting of
+            the image. The vertices are at (image corner, (edge, y), and
+            (x,edge), where edge is the appropriate edge of the image.
+                edgepts[0] : (x,y) points for the lower/upper edge
+                edgepts[1] : (x,y) points for the upper/lower edge
+            Default is 'calc' which calculates edge points by splitting the
+            image into 3 regions of equal area.
+        do_imshow : Bool
+            If True, imshow's and returns the returned handle.
+            If False, returns the array as a [M,N,4] array.
+
+    Outputs
+    -------
+        If imshow == True, the returned handle from imshow.
+        If imshow == False, an [M,N,4] np.ndarray.
+
+    Comments
+    --------
+    This could be modified to take colormaps nicely... or to alpha the
+    borderline... or to embiggen the image and slice it more finely
+    """
+    residuals = s.residuals[tile.slicer].squeeze()
+    data = s.data[tile.slicer].squeeze()
+    model = s.model[tile.slicer].squeeze()
+    if len(data.shape) != 2:
+        raise ValueError('tile does not give a 2D slice')
+
+    im = np.zeros([data.shape[0], data.shape[1], 4])
+    im_x, im_y = np.meshgrid(np.arange(im.shape[0]), np.arange(im.shape[1]),
+            indexing='ij')
+    if edgepts == 'calc':
+        #Gets equal-area sections, at sqrt(2/3) of the sides
+        f = np.sqrt(2./3.)
+        lower_edge = (im.shape[0] * (1-f),  im.shape[1] * f)
+        upper_edge = (im.shape[0] * f,      im.shape[1] * (1-f))
+    else:
+        upper_edge, lower_edge = edgepts
+    if data_vmin == 'calc':
+        data_vmin = 0.5*(data.min() + model.min())
+    if data_vmax == 'calc':
+        data_vmax = 0.5*(data.max() + model.max())
+
+    #1. Get masks
+    upper_region = im_y - (upper_edge[1] + (data.shape[1] - upper_edge[1]) *
+            im_x / float(upper_edge[0]))
+    upper_mask = np.round(upper_region) > 0
+    lower_region = im_y - lower_edge[1] * ((im_x - lower_edge[0]) /
+            (data.shape[0]-lower_edge[0]))
+    lower_mask = np.round(lower_region) < 0
+
+    center_mask= -(lower_mask | upper_mask)
+
+    #2. Get colorbar'd images
+    gm = plt.cm.bone(center_data(model, data_vmin, data_vmax))
+    dt = plt.cm.bone(center_data(data, data_vmin, data_vmax))
+    rs = plt.cm.RdBu(center_data(residuals, res_vmin, res_vmax))
+
+    for a in xrange(4):
+        im[:,:,a][lower_mask] = dt[:,:,a][lower_mask]
+        im[:,:,a][center_mask] = gm[:,:,a][center_mask]
+        im[:,:,a][upper_mask] = rs[:,:,a][upper_mask]
+    if do_imshow:
+        return plt.imshow(im)
+    else:
+        return im
+
+def center_data(data, vmin, vmax):
+    """Clips data on [vmin, vmax]; then rescales to [0,1]"""
+    ans = data - vmin
+    ans /= (vmax - vmin)
+    return np.clip(ans, 0, 1)
+
+
+
 def sim_crb_diff(std0, std1, N=10000):
     """ each element of std0 should correspond with the element of std1 """
     a = std0*np.random.randn(N, len(std0))
@@ -429,7 +534,7 @@ def diag_crb_particles(state):
 
 def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
         zlayer=None, xlayer=None):
-    """ 
+    """
     To run, do:
 
     s,h = pickle...
@@ -803,8 +908,8 @@ def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
     show(ax1, slicer1)
     show(ax2, slicer2)
 
-    circles(ax1, slicez+pad, 0) 
-    circles(ax2, slicex+pad, 2) 
+    circles(ax1, slicez+pad, 0)
+    circles(ax2, slicex+pad, 2)
 
 def deconstruction(s):
     s.model_to_true_image()
