@@ -433,7 +433,7 @@ class LMEngine(object):
         #Finally we set the error and parameter values:
         self._set_err_paramvals()
         self._has_run = False
-        
+
         self.eig_dl = eig_dl
 
     def reset(self, new_damping=None):
@@ -492,7 +492,7 @@ class LMEngine(object):
             if not good_step:
                 er0 = self.update_function(self.param_vals)
                 if np.abs(er0 -self.error) > 1e-7:
-                    raise RuntimeError('ARG!!!') #FIXME
+                    raise RuntimeError('Function updates are not exact.')
                 CLOG.debug('Bad step, increasing damping')
                 CLOG.debug('\t\t%f\t%f' % (self.error, er1))
                 grad = self.calc_grad()
@@ -507,7 +507,7 @@ class LMEngine(object):
                     er0 = self.update_function(self.param_vals)
                     CLOG.warn('Stuck!')
                     if np.abs(er0 -self.error) > 1e-7:
-                        raise RuntimeError('ARG!!!') #FIXME
+                        raise RuntimeError('Function updates are not exact.')
 
             #state is updated, now params:
             if good_step:
@@ -586,7 +586,7 @@ class LMEngine(object):
                 #Update to er1 params:
                 er1_1 = self.update_function(self.param_vals + delta_params_1)
                 if np.abs(er1_1 - er1) > 1e-6:
-                    raise RuntimeError('GODDAMMIT!') #FIXME
+                    raise RuntimeError('Function updates are not exact.')
                 self.update_param_vals(delta_params_1, incremental=True)
                 self.error = er1
 
@@ -648,7 +648,7 @@ class LMEngine(object):
                 er0_0 = self.update_function(self.param_vals)
                 CLOG.debug('Bad step!')
                 if np.abs(er0 - er0_0) > 1e-6:
-                    raise RuntimeError('GODDAMMIT!') #FIXME
+                    raise RuntimeError('Function updates are not exact.')
 
             self._inner_run_counter += 1
 
@@ -863,16 +863,6 @@ class LMEngine(object):
         _ = self.update_function(self.param_vals - dh * delta0)
         rm2 = self.calc_residuals()
         der2 = (rm2 + rm1 - 2*rm0) / (dh*dh)
-        #Old version:
-        # rm0 = self.calc_residuals()
-        # _ = self.update_function(self.param_vals + delta0*dh)
-        # rm1 = self.calc_residuals()
-        # term1 = (rm1 - rm0) / dh
-        # #and putting back the parameters: - necessary? FIXME
-        # _ = self.update_function(self.param_vals)
-
-        # term2 = np.dot(self.J.T, delta0)
-        # der2 = 2./dh*(term1 - term2)
 
         damped_JTJ = self._calc_damped_jtj()
         corr, res, rank, s = np.linalg.lstsq(damped_JTJ, np.dot(self.J, der2),
@@ -900,7 +890,7 @@ class LMFunction(LMEngine):
             p0 : P-elemnet numpy.ndarray
                 Float array of the initial parameter guess.
             dl : Float or P-element numpy.ndarray
-                The dl used for finite-difference derivatives, i.e. 
+                The dl used for finite-difference derivatives, i.e.
                 (f(x+dl[i])) - f(x)) / (dl[i]) in each direction. If dl is
                 a scalar, it is transformed internally to a list. Default is
                 1e-8.
@@ -929,7 +919,7 @@ class LMFunction(LMEngine):
         # self.param_vals = p0 #sloppy...
         self._last_vals = self.param_vals.copy()
         self.error = self.update_function(self.param_vals)
-        self._last_error = (1 + 2*self.ftol) * self.error #FIXME
+        self._last_error = (1 + 2*self.fractol) * self.error
 
     def calc_J(self):
         """Updates self.J, returns nothing"""
@@ -984,7 +974,7 @@ class LMGlobals(LMEngine):
 
     def _set_err_paramvals(self):
         self.error = self.state.error
-        self._last_error = (1 + 2*self.ftol) * self.state.error #FIXME
+        self._last_error = (1 + 2*self.fractol) * self.state.error
         self.param_vals = np.ravel(self.state.state[self.param_names])
         self._last_vals = self.param_vals.copy()
 
@@ -1037,7 +1027,7 @@ class LMParticles(LMEngine):
 
     def _set_err_paramvals(self):
         self.error = self.state.error
-        self._last_error = (1 + 2*self.ftol) * self.state.error #FIXME
+        self._last_error = (1 + 2*self.fractol) * self.state.error
         self.param_vals = np.ravel(self.state.state[self.param_names])
         self._last_vals = self.param_vals.copy()
 
@@ -1332,7 +1322,7 @@ class LMAugmentedState(LMEngine):
 
     def _set_err_paramvals(self):
         self.error = self.aug_state.state.error
-        self._last_error = (1 + 2*self.ftol) * self.aug_state.state.error #FIXME
+        self._last_error = (1 + 2*self.fractol) * self.aug_state.state.error
         self.param_vals = self.aug_state.param_vals.copy()
         self._last_vals = self.param_vals.copy()
 
@@ -1438,7 +1428,7 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
         return lp.stats
 
 def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
-        ftol=1e-3, mode='burn', max_mem=3e9, include_rad=True):
+        fractol=1e-7, mode='burn', max_mem=3e9, include_rad=True):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
@@ -1466,8 +1456,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
             global parameter) vs. with the normal global parameters.
             Default is False (no augmented).
 
-        ftol : Float
-            The change in error at which to terminate.
+        fractol : Float
+            Fractional change in error at which to terminate. Default 1e-7
 
         mode : 'burn', 'do-particles', or 'polish'
             What mode to optimize with.
@@ -1522,7 +1512,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
                     partial_update_frequency=3, use_aug=use_aug, damping=
                     glbl_dmp, decrease_damp_factor=10., use_accel=use_accel,
-                    collect_stats=collect_stats, ftol=0.1*ftol, max_mem=max_mem)
+                    collect_stats=collect_stats, fractol=0.1*fractol,
+                    max_mem=max_mem)
             all_lm_stats.append(gstats)
         if desc is not None:
             states.save(s, desc=desc)
@@ -1534,8 +1525,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         #because 1 bad particle can spoil the whole group.
         pstats = do_levmarq_all_particle_groups(s, region_size=40, max_iter=1,
                 do_calc_size=True, run_length=4, eig_update=False,
-                damping=prtl_dmp, ftol=0.1*ftol, collect_stats=collect_stats,
-                max_mem=max_mem, include_rad=include_rad)
+                damping=prtl_dmp, fractol=0.1*fractol, collect_stats=
+                collect_stats, max_mem=max_mem, include_rad=include_rad)
         all_lp_stats.append(pstats)
         if desc is not None:
             states.save(s, desc=desc)
@@ -1544,7 +1535,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
         #2c. terminate?
         new_err = s.error
-        if (start_err - new_err) < ftol:
+        if (start_err - new_err)/new_err < fractol:
             break
 
     if collect_stats:
