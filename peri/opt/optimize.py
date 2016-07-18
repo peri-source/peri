@@ -1428,7 +1428,7 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
         return lp.stats
 
 def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
-        fractol=1e-7, mode='burn', max_mem=3e9, include_rad=True):
+        fractol=1e-7, errtol=1e-3, mode='burn', max_mem=3e9, include_rad=True):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
@@ -1458,6 +1458,9 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
         fractol : Float
             Fractional change in error at which to terminate. Default 1e-7
+
+        errtol : Float
+            Absolute change in error at which to terminate. Default 1e-3
 
         mode : 'burn', 'do-particles', or 'polish'
             What mode to optimize with.
@@ -1535,7 +1538,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
         #2c. terminate?
         new_err = s.error
-        if (start_err - new_err)/new_err < fractol:
+        derr = start_err - new_err
+        if (derr/new_err < fractol) or (derr < errtol):
             break
 
     if collect_stats:
