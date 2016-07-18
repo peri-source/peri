@@ -303,8 +303,8 @@ class LMEngine(object):
     """
     def __init__(self, damping=1., increase_damp_factor=3., decrease_damp_factor=8.,
                 min_eigval=1e-13, marquardt_damping=False, transtrum_damping=None,
-                use_accel=False, max_accel_correction=1., ptol=1e-6,
-                ftol=1e-5, costol=None, max_iter=5, run_length=5,
+                use_accel=False, max_accel_correction=1., paramtol=1e-6,
+                errtol=1e-5, fractol=1e-6, costol=None, max_iter=5, run_length=5,
                 update_J_frequency=1, broyden_update=False, eig_update=False,
                 partial_update_frequency=3, num_eig_dirs=8, eig_dl=1e-5):
         """
@@ -346,18 +346,22 @@ class LMEngine(object):
                 decrease in damping. Default is 1.0. Only applies to the
                 do_run_1 method.
 
-            ptol: Float
+            paramtol : Float
                 Algorithm has converged when the none of the parameters
-                have changed by more than ptol. Default is 1e-6.
-            ftol: Float
+                have changed by more than paramtol. Default is 1e-6.
+            errtol : Float
                 Algorithm has converged when the error has changed
-                by less than ptol after 1 step. Default is 1e-6.
-            costol: Float
+                by less than errtol after 1 step. Default is 1e-6.
+            fractol : Float
+                Algorithm has converged when the error has changed
+                by a fractional amount less than fractol after 1 step.
+                Default is 1e-6.
+            costol : Float
                 Algorithm has converged when the cosine of the angle
                 between (residuals projected onto the model manifold)
                 and (the residuals) is < costol. Default is None, i.e.
                 doesn't check the cosine (since it takes a bit of time).
-            max_iter: Int
+            max_iter : Int
                 The maximum number of iterations before the algorithm
                 stops iterating. Default is 5.
 
@@ -402,8 +406,9 @@ class LMEngine(object):
         self.use_accel = use_accel
         self.max_accel_correction = max_accel_correction
 
-        self.ptol = ptol
-        self.ftol = ftol
+        self.paramtol = paramtol
+        self.errtol = errtol
+        self.fractol = fractol
         self.costol = costol
         self.max_iter = max_iter
 
@@ -735,8 +740,9 @@ class LMEngine(object):
         """
         delta_vals = self._last_vals - self.param_vals
         delta_err = self._last_error - self.error
+        frac_err = delta_err / self.error
         to_return = {'delta_vals':delta_vals, 'delta_err':delta_err,
-                'num_iter':1*self._num_iter}
+                'num_iter':1*self._num_iter, 'frac_err':frac_err}
         if get_cos:
             model_cosine = self.calc_model_cosine()
             to_return.update({'model_cosine':model_cosine})
@@ -747,31 +753,24 @@ class LMEngine(object):
         Checks if the algorithm has found a satisfactory minimum
         """
         terminate = False
-
-        #1. change in params small enough?
-        delta_vals = self._last_vals - self.param_vals
-        terminate |= np.all(np.abs(delta_vals) < self.ptol)
-
-        #2. change in err small enough?
-        delta_err = self._last_error - self.error
-        terminate |= (delta_err < self.ftol)
-
-        #3. change in cosine small enough?
+        term_dict = self.get_termination_stats(get_cos=self.costol is not None)
+        terminate |= np.all(np.abs(term_dict['delta_vals']) < self.paramtol)
+        terminate |= (term_dict['delta_err'] < self.errtol)
+        terminate |= (term_dict['frac_err'] < self.fractol)
         if self.costol is not None:
-            curcos = self.calc_model_cosine()
-            terminate |= (curcos < self.costol)
+            terminate |= (curcos < term_dict['model_cosine'])
 
         return terminate
 
     def check_terminate(self):
         """
-        Termination if ftol, ptol, costol are < a certain amount
+        Termination if errtol, paramtol, costol are < a certain amount
         """
 
         if not self._has_run:
             return False
         else:
-            #1-3. ftol, ptol, model cosine low enough?
+            #1-3. errtol, paramtol, model cosine low enough?
             terminate = self.check_completion()
 
             #4. too many iterations??
@@ -930,7 +929,7 @@ class LMFunction(LMEngine):
         # self.param_vals = p0 #sloppy...
         self._last_vals = self.param_vals.copy()
         self.error = self.update_function(self.param_vals)
-        self._last_error = (1 + 2*self.ftol) * self.error
+        self._last_error = (1 + 2*self.ftol) * self.error #FIXME
 
     def calc_J(self):
         """Updates self.J, returns nothing"""
@@ -985,7 +984,7 @@ class LMGlobals(LMEngine):
 
     def _set_err_paramvals(self):
         self.error = self.state.error
-        self._last_error = (1 + 2*self.ftol) * self.state.error
+        self._last_error = (1 + 2*self.ftol) * self.state.error #FIXME
         self.param_vals = np.ravel(self.state.state[self.param_names])
         self._last_vals = self.param_vals.copy()
 
@@ -1038,7 +1037,7 @@ class LMParticles(LMEngine):
 
     def _set_err_paramvals(self):
         self.error = self.state.error
-        self._last_error = (1 + 2*self.ftol) * self.state.error
+        self._last_error = (1 + 2*self.ftol) * self.state.error #FIXME
         self.param_vals = np.ravel(self.state.state[self.param_names])
         self._last_vals = self.param_vals.copy()
 
@@ -1333,7 +1332,7 @@ class LMAugmentedState(LMEngine):
 
     def _set_err_paramvals(self):
         self.error = self.aug_state.state.error
-        self._last_error = (1 + 2*self.ftol) * self.aug_state.state.error
+        self._last_error = (1 + 2*self.ftol) * self.aug_state.state.error #FIXME
         self.param_vals = self.aug_state.param_vals.copy()
         self._last_vals = self.param_vals.copy()
 
