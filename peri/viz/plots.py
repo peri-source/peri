@@ -17,6 +17,10 @@ import time
 import pickle
 plt = mpl.pyplot
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#              Matt's uncommented plots for generating figures
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
 def lbl(axis, label, size=22):
     """ Put a figure label in an axis """
     at = AnchoredText(label, loc=2, prop=dict(size=size), frameon=True)
@@ -28,7 +32,6 @@ def lbl(axis, label, size=22):
     #        bbox_transform=bb,#axis.transAxes
     #    )
     axis.add_artist(at)
-
 
 def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     def MAD(d):
@@ -268,7 +271,6 @@ def sample_compare(N, samples, truestate, burn=0):
     pl.ylim(-0.02, 0.02)
     pl.show()
 
-
 def generative_model(s,x,y,z,r, factor=1.1):
     """
     Samples x,y,z,r are created by:
@@ -406,6 +408,10 @@ def generative_model(s,x,y,z,r, factor=1.1):
     #zoom2.set_yticks([])
     #mark_inset(zoom1, zoom2, loc1=1, loc2=3, fc="none", ec="0.5")
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#                     Visualizations for Quality of Fits
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
 def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
          res_vmin=-0.1, res_vmax=0.1, edgepts='calc', do_imshow=True):
     """
@@ -503,13 +509,15 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
     else:
         return im
 
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#              More of Matt's uncommented plots for generating figures
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 def center_data(data, vmin, vmax):
     """Clips data on [vmin, vmax]; then rescales to [0,1]"""
     ans = data - vmin
     ans /= (vmax - vmin)
     return np.clip(ans, 0, 1)
-
-
 
 def sim_crb_diff(std0, std1, N=10000):
     """ each element of std0 should correspond with the element of std1 """
