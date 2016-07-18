@@ -242,7 +242,8 @@ def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
                 CLOG.info(part_msg)
     return removed, delete_poses
 
-def add_subtract(st, max_iter=5, **kwargs):
+def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
+        always_check_remove=False, **kwargs):
     """
     Automatically adds and subtracts missing & extra particles.
 
@@ -254,6 +255,17 @@ def add_subtract(st, max_iter=5, **kwargs):
             The maximum number of add-subtract loops to use. Default is 5.
             Terminates after either max_iter loops or when nothing has
             changed.
+        max_npart : Int or 'calc'
+            The maximum number of particles to add before optimizing the
+            non-psf globals. Default is 'calc', which uses 5% of the initial
+            number of particles.
+        max_mem : Int
+            The maximum memory to use for optimization after adding max_npart
+            particles. Default is 2e8.
+        always_check_remove : Bool
+            Set to True to always check whether to remove particles. If
+            False, only checks for removal while particles were removed on
+            the previous attempt. Default is False.
 
     **kwargs Parameters
     -------------------
@@ -337,22 +349,36 @@ def add_subtract(st, max_iter=5, **kwargs):
         A way to check regions that are poorly fit (e.g. skew- or kurtosis-
         hunt).
     """
+    if max_npart == 'calc':
+        max_npart = 0.05 * st.obj_get_positions().shape[0]
+
     total_changed = 0
+    _change_since_opt = 0
     removed_poses = []
     added_poses0 = []
     added_poses = []
 
+    nr = 1  #Check removal on the first loop
     for _ in xrange(max_iter):
-        nr, rposes = remove_bad_particles(st, **kwargs)  #should this be done only once?
+        if (nr != 0) or (always_check_remove):
+            nr, rposes = remove_bad_particles(st, **kwargs)
         na, aposes = add_missing_particles(st, **kwargs)
         current_changed = na + nr
         removed_poses.extend(rposes)
         added_poses0.extend(aposes)
         total_changed += current_changed
+        _change_since_opt += current_changed
         if current_changed == 0:
             break
+        elif _change_since_opt > max_npart:
+            _change_since_opt *= 0
+            CLOG.info('Start add_subtract optimization.')
+            opt.do_levmarq(st, opt.name_globals(st, include_psf=False),
+                    max_iter=1, run_length=4, num_eig_dirs=3, max_mem=max_mem,
+                    partial_update_frequency=2, use_aug=False, use_accel=True)
+            CLOG.info('Add_subtract optimization:\t%f' % st.error)
 
-    #Now we optimize the radii too:
+    #Optimize the added particles' radii:
     for p in added_poses0:
         i = st.obj_closest_particle(p)
         opt.do_levmarq_particles(st, np.array([i]), max_iter=2, damping=0.3)
