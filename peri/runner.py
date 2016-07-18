@@ -154,7 +154,7 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     states.save(s, desc=desc+'-initial')
 
     RLOG.info('Initial burn:')
-    opt.burn(s, mode='burn', n_loop=4, ftol=1, desc=desc+'initial-burn',
+    opt.burn(s, mode='burn', n_loop=4, fractol=0.1, desc=desc+'initial-burn',
             max_mem=max_mem)
 
     RLOG.info('Start add-subtract')
@@ -163,10 +163,9 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     states.save(s, desc=desc+'initial-addsub')
 
     RLOG.info('Final polish:')
-    opt.burn(s, mode='polish', n_loop=7, ftol=1e-3, desc=desc+'addsub-polish',
+    opt.burn(s, mode='polish', n_loop=7, fractol=3e-4, desc=desc+'addsub-polish',
             max_mem=max_mem, use_aug=use_aug)
 
-    # os.chdir(initial_dir) ???
     return s
 
 def _calc_ilm_order(imshape):
@@ -297,9 +296,9 @@ def _pick_state_im_name(state_name, im_name, use_full_path=False):
 def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
         do_polish=True):
     RLOG.info('Translate Particles:')
-    opt.burn(s, mode='do-particles', n_loop=2, ftol=1, desc=desc+
+    opt.burn(s, mode='do-particles', n_loop=2, fractol=0.1, desc=desc+
             'translate-particles', max_mem=max_mem, include_rad=False)
-    opt.burn(s, mode='do-particles', n_loop=2, ftol=1, desc=desc+
+    opt.burn(s, mode='do-particles', n_loop=2, fractol=0.05, desc=desc+
             'translate-particles', max_mem=max_mem, include_rad=True)
 
     RLOG.info('Start add-subtract')
@@ -309,5 +308,5 @@ def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
 
     if do_polish:
         RLOG.info('Final polish:')
-        opt.burn(s, mode='polish', n_loop=6, ftol=1e-3, desc=desc+
+        opt.burn(s, mode='polish', n_loop=6, fractol=3e-4, desc=desc+
             'addsub-polish', max_mem=max_mem)
