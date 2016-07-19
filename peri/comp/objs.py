@@ -226,6 +226,8 @@ class PlatonicSpheresCollection(Component):
         """
         if isinstance(rad, (float, int)):
             rad = rad*np.ones(pos.shape[0])
+        if rad.size != pos.shape[0]:
+            raise ValueError('pos, rad must have the same number of particles.')
 
         self.category = category
         self.support_pad = support_pad
