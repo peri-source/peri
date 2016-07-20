@@ -150,23 +150,24 @@ class OrthoManipulator(object):
 
     def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
         slices = self.slices
+        int_slice = np.round(slices).astype('int')
 
         g['xy'].cla()
         g['yz'].cla()
         g['xz'].cla()
         g['in'].cla()
 
-        g['xy'].imshow(im[slices[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
+        g['xy'].imshow(im[int_slice[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
         g['xy'].hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
         g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
         self._format_ax(g['xy'])
 
-        g['yz'].imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
+        g['yz'].imshow(im[:,int_slice[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
         g['yz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
         g['yz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
         self._format_ax(g['yz'])
 
-        g['xz'].imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
+        g['xz'].imshow(im[:,:,int_slice[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
         g['xz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
         g['xz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
         self._format_ax(g['xz'])
