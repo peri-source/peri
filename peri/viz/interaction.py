@@ -421,6 +421,8 @@ class OrthoViewer(object):
             im = np.abs(im)
 
         slices = self.slices
+        int_slice = np.round(slices).astype('int')
+
         if vmin is None:
             vmin = im.min()
         if vmax is None:
@@ -436,17 +438,17 @@ class OrthoViewer(object):
         self.g['xz'].cla()
         self.g['in'].cla()
 
-        self.g['xy'].imshow(im[slices[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
+        self.g['xy'].imshow(im[int_slice[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
         self.g['xy'].hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
         self.g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
         self._format_ax(self.g['xy'])
 
-        self.g['yz'].imshow(im[:,slices[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
+        self.g['yz'].imshow(im[:,int_slice[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
         self.g['yz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
         self.g['yz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
         self._format_ax(self.g['yz'])
 
-        self.g['xz'].imshow(im[:,:,slices[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
+        self.g['xz'].imshow(im[:,:,int_slice[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
         self.g['xz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
         self.g['xz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
         self._format_ax(self.g['xz'])
