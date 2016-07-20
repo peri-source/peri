@@ -428,7 +428,7 @@ class LMEngine(object):
         self._fresh_JTJ = False
 
         #the max # of times trying to decrease damping before giving up
-        self._max_inner_loop = 10
+        self._max_inner_loop = 15
 
         #Finally we set the error and parameter values:
         self._set_err_paramvals()
