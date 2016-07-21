@@ -100,7 +100,7 @@ def name_globals(s, include_psf=True):
                 all_params.remove(p)
     return all_params
 
-def get_num_px_jtj(s, nparams, decimate=1, max_mem=2e9, min_redundant=20, **kwargs):
+def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20, **kwargs):
     #1. Max for a given max_mem:
     px_mem = int(max_mem / 8 / nparams) #1 float = 8 bytes
     #2. num_pix for a given redundancy
@@ -170,7 +170,7 @@ def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
 
     return groups
 
-def calc_particle_group_region_size(s, region_size=40, max_mem=2e9, **kwargs):
+def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
     """
     Finds the biggest region size for LM particle optimization with a
     given memory constraint.
@@ -945,7 +945,7 @@ class LMFunction(LMEngine):
         return np.dot(d.flat, d.flat) #faster for large arrays than (d*d).sum()
 
 class LMGlobals(LMEngine):
-    def __init__(self, state, param_names, max_mem=3e9, opt_kwargs={}, **kwargs):
+    def __init__(self, state, param_names, max_mem=1e9, opt_kwargs={}, **kwargs):
         """
         Levenberg-Marquardt engine for state globals with all the options
         from the M. Transtrum J. Sethna 2012 ArXiV paper. See LMEngine
@@ -1080,7 +1080,7 @@ class LMParticleGroupCollection(object):
         do_run_1: Run do_run_1 for every group of particles
         do_run_2: Run do_run_2 for every group of particles
     """
-    def __init__(self, state, region_size=40, do_calc_size=True, max_mem=2e9,
+    def __init__(self, state, region_size=40, do_calc_size=True, max_mem=1e9,
             get_cos=False, save_J=False, **kwargs):
         """
         Parameters
@@ -1296,7 +1296,7 @@ class AugmentedState(object):
             self.state.update(self._rad_nms, rnew)
 
 class LMAugmentedState(LMEngine):
-    def __init__(self, aug_state, max_mem=3e9, opt_kwargs={}, **kwargs):
+    def __init__(self, aug_state, max_mem=1e9, opt_kwargs={}, **kwargs):
         """
         Levenberg-Marquardt engine for state globals with all the options
         from the M. Transtrum J. Sethna 2012 ArXiV paper. See LMGlobals
@@ -1428,7 +1428,7 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
         return lp.stats
 
 def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
-        fractol=1e-7, errtol=1e-3, mode='burn', max_mem=3e9, include_rad=True):
+        fractol=1e-7, errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
