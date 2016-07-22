@@ -622,7 +622,7 @@ class Slab(Component):
             position of the center of the slab in pixels
 
         angles : tuple of float (2,)
-            angles of rotation of the normal wrt to z
+            (theta, phi) angles of rotation of the normal with respect to z
         """
         self.lbl_zpos = param_prefix+'-zpos'
         self.lbl_theta = param_prefix+'-theta'
