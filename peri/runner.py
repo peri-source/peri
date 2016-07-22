@@ -151,7 +151,7 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     RLOG.info('State Created.')
 
     opt.do_levmarq(s, ['ilm-scale'], max_iter=1, run_length=6, max_mem=max_mem)
-    states.save(s, desc=desc+'-initial')
+    states.save(s, desc=desc+'initial')
 
     RLOG.info('Initial burn:')
     opt.burn(s, mode='burn', n_loop=6, fractol=0.1, desc=desc+'initial-burn',
