@@ -1347,9 +1347,9 @@ class LMAugmentedState(LMEngine):
             dx[a] = dl
             sa.update_rscl_x_params(old_aug_vals + dl, do_reset=True)
             i1 = s.residuals
+            #J = grad(residuals)
             der = (i1-i0)/dl
-            #J = grad(residuals) = -grad(model)
-            J_aug.append(-der.ravel()[self._inds].copy())
+            J_aug.append(der.ravel()[self._inds].copy())
 
         if J_st.size == 0:
             self.J = np.array(J_aug)
