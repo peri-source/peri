@@ -817,6 +817,7 @@ class LMEngine(object):
         """
         Broyden update of jacobian.
         """
+        CLOG.debug('Broyden update.')
         delta_vals = self.param_vals - self._last_vals
         delta_residuals = self._last_residuals - self.calc_residuals()
         nrm = np.sqrt(delta_vals*delta_vals)
@@ -831,6 +832,7 @@ class LMEngine(object):
         return do_update
 
     def update_eig_J(self):
+        CLOG.debug('Eigen update.')
         vls, vcs = np.linalg.eigh(self.JTJ)
         res0 = self.calc_residuals()
         for a in xrange(min([self.num_eig_dirs, vls.size])):
