@@ -86,7 +86,7 @@ def local_max_featuring(im, radius=10, smooth=4, masscut=None):
     pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
     if masscut is not None:
         m = nd.convolve(im, footprint, mode='reflect')
-        mass = np.array(map(lambda x: m[x[0],x[1],x[2]], pos))
+        mass = np.array(map(lambda x: m[x[0],x[1],x[2]], pos.astype('int')))
         good = mass > masscut
         return pos[good].copy(), e, mass[good].copy()
     else:
