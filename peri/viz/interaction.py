@@ -414,7 +414,7 @@ class OrthoViewer(object):
         self.dohist = dohist
         self.fourier = fourier
 
-        if self.onesided is None:
+        if self.cmap is not None:
             self.cmap = cmap
         else:
             self.cmap = 'bone' if self.onesided else 'RdBu_r'
