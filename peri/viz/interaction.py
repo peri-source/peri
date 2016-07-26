@@ -150,7 +150,7 @@ class OrthoManipulator(object):
 
     def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
         slices = self.slices
-        int_slice = np.round(slices).astype('int')
+        int_slice = np.clip(np.round(slices), 0, np.array(im.shape)-1).astype('int')
 
         g['xy'].cla()
         g['yz'].cla()
@@ -457,7 +457,7 @@ class OrthoViewer(object):
             im = np.abs(im)
 
         slices = self.slices
-        int_slice = np.round(slices).astype('int')
+        int_slice = np.clip(np.round(slices), 0, np.array(im.shape)-1).astype('int')
 
         if vmin is None:
             vmin = im.min()
