@@ -360,6 +360,42 @@ class OrthoManipulator(object):
 
         self.register_events()
 
+from peri.comp import ilms, objs, psfs, comp
+from peri import states
+class OrthoPrefeature(OrthoManipulator):
+    def __init__(self, im, pos, rad, slab=None, zscale=1.0, **kwargs):
+        """
+        Parameters
+        ----------
+            im : peri.util.Image or RawImage instance
+                The image to check pre-featuring on. 
+            pos : [N,3] numpy.ndarray
+                The initial guess for the particle positions
+            rad : N-element numpy.ndarray
+                The initial guess for the particle radii
+            slab : peri.comp object or None
+                If not None, the [collection of] any slabs in the image.
+            zscale : Float
+                zscale for object
+            **kwargs : All keyword args to OrthoManipulator. 
+        """
+        if slab is not None:
+            o = comp.ComponentCollection(
+                    [
+                        objs.PlatonicSpheresCollection(pos, rad,zscale=zscale),
+                        slab
+                    ],
+                    category='obj'
+                )
+        else:
+            o = objs.PlatonicSpheresCollection(pos, rad, zscale=zscale)
+        p = psfs.IdentityPSF()
+        i = ilms.LegendrePoly2P1D(order=(1,1,1), category='ilm')
+        b = ilms.LegendrePoly2P1D(order=(1,1,1), category='bkg')
+        c = comp.GlobalScalar('offset', 0.0)
+        st = states.ImageState(im, [o, i, b, c, p])
+        super(OrthoPrefeature, self).__init__(st, **kwargs)
+
 #=============================================================================
 # A simpler version for a single 3D field viewer
 #=============================================================================
