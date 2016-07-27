@@ -285,7 +285,7 @@ def _pick_state_im_name(state_name, im_name, use_full_path=False):
         im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
                 'Select new image')
 
-    if not use_full_path:
+    if (not use_full_path) and (os.path.dirname(im_name) != ''):
         im_path = os.path.dirname(im_name)
         os.chdir(im_path)
         im_name = os.path.basename(im_name)
