@@ -121,6 +121,61 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
     return s
 
 def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
+    """
+    Gets a completely-optimized state from an image and an initial guess of
+    particle positions and radii.
+    Returns a completely-optimized state. The user can interactively selects
+    the image.
+
+    Parameters
+    ----------
+        pos : [N,3] element numpy.ndarray.
+            The initial guess for the N particle positions.
+
+        rad : N element numpy.ndarray.
+            The initial guess for the N particle radii.
+
+        im_name : The filename of the image to feature.
+
+        tile : peri.util.Tile instance
+            A tile of the sub-region of the image to feature. Default is
+            None, i.e. entire image.
+
+        desc : String
+            A description to be inserted in saved state. The save name will
+            be, e.g., '0.tif-peri-' + desc + 'initial-burn.pkl', with
+            different suffixes at different stages of the optimization.
+            Default is ''
+
+        invert : Bool
+            Whether to invert the image for featuring, as passed to
+            addsubtract.add_subtract. Default is True.
+        min_rad : Float
+            The minimum particle radius, as passed to addsubtract.add_subtract.
+            Default is 'calc', but a known physical value will give better
+            answers.
+        max_rad : Float
+            The maximum particle radius, as passed to addsubtract.add_subtract.
+            Default is 'calc', but a known physical value will give better
+            answers.
+
+        max_mem : Numeric
+            The maximum additional memory to use for the optimizers, as
+            passed to optimize.burn. Default is 1e9.
+        zscale : Float
+            The initial z-scale guess for the image. Default is 1.0.
+        slab : peri.comp instance.
+            A slab or other component collection in addition to the particles.
+            Default is None.
+        use_aug : Bool
+            Set to True to use a peri.opt.AugmentedState for optimization,
+            which may or may not have faster convergence.
+    Outputs
+    -------
+        Returns the peri.states instance of the image, after optimization.
+        The state is saved through the optimization.
+
+    """
     im = util.RawImage(im_name, tile=tile)
     s = _optimize_from_centroid(pos, rad, im, **kwargs)
     return s
