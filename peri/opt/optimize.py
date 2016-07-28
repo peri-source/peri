@@ -946,6 +946,86 @@ class LMFunction(LMEngine):
         d = self.calc_residuals()
         return np.dot(d.flat, d.flat) #faster for large arrays than (d*d).sum()
 
+class LMOptObj(LMEngine):
+    """Uses an OptObj instance.... should be the syntax for all LMEngine objects?"""
+    def __init__(self, opt_obj, **kwargs):
+        self.opt_obj = opt_obj
+        super(LMOptObj, self).__init__(**kwargs)
+
+    def _set_err_paramvals(self):
+        self.param_vals = self.opt_obj.param_vals.copy()
+        self._last_vals = self.param_vals.copy()
+        self.error = self.opt_obj.get_error()
+        self._last_error = (1 + 2*self.fractol) * self.error + 2*self.errtol
+
+    def calc_J(self):
+        del self.J
+        self.J = self.opt_obj.calc_J()
+
+    def calc_residuals(self):
+        return self.opt_obj.calc_residuals()
+
+    def update_function(self, param_vals):
+        self.opt_obj.update_function(param_vals)
+        return self.opt_obj.get_error()
+
+class OptObj(object):
+    """Basically an empty class; just laying out the structure for any daughters."""
+    def __init__(self, param_vals):
+        self.param_vals = param_vals
+        pass
+
+    def calc_J(self):
+        pass
+    def calc_residuals(self):
+        pass
+
+    def get_error(self): #@property?
+        pass
+
+    def update_function(self, param_vals):
+        pass
+        return None
+
+class OptState(OptObj):
+    def __init__(self, state, direction, p0=None, dl=1e-7, be_nice=False):
+        """
+        A wrapper for a peri.states instance which allows for optimization
+        along any one direction. (Make it > 1?)
+        """
+        self.state = state
+        self.dl = dl
+        self.be_nice = be_nice
+        if p0 is None:
+            self.p0 = np.array(state.state[state.params]).copy()
+        else:
+            self.p0 = p0.copy()
+            if p0.size != np.size(state.state[state.params]):
+                raise ValueError('direction must have same # of elements as state.size')
+        self.param_vals = np.zeros(1)
+        self.direction = np.array(direction)
+
+    def update_function(self, param_vals):
+        """Updates the state, with param_vals = distance from self.p0 along self.direction."""
+        self.state.update(self.state.params, self.p0 + self.direction * param_vals)
+        self.param_vals[:] = param_vals
+        return None
+
+    def get_error(self):
+        return self.state.error
+
+    def calc_residuals(self):
+        return self.state.residuals.ravel().copy()
+
+    def calc_J(self):
+        """Calculates J along the direction."""
+        r0 = self.state.residuals.copy().ravel()
+        self.update_function(self.param_vals + self.dl)
+        r1 = self.state.residuals.copy().ravel()
+        if self.be_nice:
+            self.update-function(self.param_vals)
+        return np.array([(r1-r0)/self.dl])
+
 class LMGlobals(LMEngine):
     def __init__(self, state, param_names, max_mem=1e9, opt_kwargs={}, **kwargs):
         """
@@ -1429,8 +1509,17 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
     if collect_stats:
         return lp.stats
 
+def do_levmarq_one_direction(s, direction, max_iter=2, run_length=2,
+        damping=0.03, collect_stats=False, **kwargs):
+    obj = OptState(s, direction)
+    lo = LMOptObj(obj, max_iter=max_iter, run_length=run_length, **kwargs)
+    lo.do_run_1()
+    if collect_stats:
+        return lo.get_termination_stats()
+
 def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
-        fractol=1e-7, errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True):
+        fractol=1e-7, errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True,
+        do_line_min=False):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
@@ -1505,11 +1594,13 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
     all_lp_stats = []
     all_lm_stats = []
+    all_line_stats = []
 
     #2. Optimize
     CLOG.info('Start of loop %d:\t%f' % (0, s.error))
     for a in xrange(n_loop):
         start_err = s.error
+        start_params = np.copy(s.state[s.params])
         #2a. Globals
         glbl_dmp = 0.3 if a == 0 else 3e-2
         if a != 0 or mode != 'do-particles':
@@ -1538,11 +1629,20 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         CLOG.info('Particles, loop %d:\t%f' % (a, s.error))
         gc.collect()
 
-        #2c. terminate?
+        #2c. Line min?
+        end_params = np.copy(s.state[s.params])
+        if do_line_min:
+            all_line_stats.append(do_levmarq_one_direction(s, direction,
+                    collect_stats=collect_stats))
+            if desc is not None:
+                states.save(s, desc=desc)
+            CLOG.info('Line min, loop %d:\t%f' % (a, s.error))
+
+        #2d. terminate?
         new_err = s.error
         derr = start_err - new_err
         if (derr/new_err < fractol) or (derr < errtol):
             break
 
     if collect_stats:
-        return all_lp_stats, all_lm_stats
+        return all_lp_stats, all_lm_stats, all_line_stats
