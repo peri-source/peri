@@ -1632,8 +1632,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         #2c. Line min?
         end_params = np.copy(s.state[s.params])
         if do_line_min:
-            all_line_stats.append(do_levmarq_one_direction(s, direction,
-                    collect_stats=collect_stats))
+            all_line_stats.append(do_levmarq_one_direction(s, start_params -
+                     end_params, collect_stats=collect_stats))
             if desc is not None:
                 states.save(s, desc=desc)
             CLOG.info('Line min, loop %d:\t%f' % (a, s.error))
