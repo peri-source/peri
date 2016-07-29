@@ -351,7 +351,7 @@ def _pick_state_im_name(state_name, im_name, use_full_path=False):
 def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
         do_polish=True):
     RLOG.info('Translate Particles:')
-    opt.burn(s, mode='do-particles', n_loop=2, fractol=0.1, desc=desc+
+    opt.burn(s, mode='do-particles', n_loop=4, fractol=0.1, desc=desc+
             'translate-particles', max_mem=max_mem, include_rad=False)
     opt.burn(s, mode='do-particles', n_loop=4, fractol=0.05, desc=desc+
             'translate-particles', max_mem=max_mem, include_rad=True)
