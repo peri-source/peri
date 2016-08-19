@@ -6,6 +6,7 @@ CONF_FILE = os.path.join(os.path.expanduser("~"), ".peri.json")
 
 default_conf = {
     "fftw-threads": -1,
+    "fftw-planning-effort": "FFTW_MEASURE",
     "fftw-wisdom": os.path.join(os.path.expanduser("~"), ".peri-wisdom.pkl"),
     "log-filename": os.path.join(os.path.expanduser("~"), '.peri.log'),
     "log-to-file": False,

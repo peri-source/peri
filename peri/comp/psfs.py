@@ -6,9 +6,9 @@ from multiprocessing import cpu_count
 from numpy.polynomial.legendre import legval
 from numpy.polynomial.chebyshev import chebval
 
+from peri.fft import fft, fftkwargs
 from peri.comp import Component
 from peri.util import Tile, cdd, memoize, listify
-from peri.fft import fft, rfft
 
 #=============================================================================
 # Begin 3-dimensional point spread functions
@@ -47,8 +47,8 @@ class PSF(Component):
 
         pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
         self.rpsf = np.pad(self.min_rpsf, pad, mode='constant', constant_values=0)
-        self.rpsf = np.fft.ifftshift(self.rpsf)
-        self.kpsf = fft.fftn(self.rpsf)
+        self.rpsf = fft.ifftshift(self.rpsf)
+        self.kpsf = fft.fftn(self.rpsf, **fftkwargs)
         self.kpsf /= (np.real(self.kpsf[0,0,0]) + 1e-15)
         return self.kpsf
 
@@ -84,11 +84,11 @@ class PSF(Component):
             raise AttributeError("Field passed to PSF incorrect shape")
 
         if not np.iscomplex(field.ravel()[0]):
-            infield = fft.fftn(field)
+            infield = fft.fftn(field, **fftkwargs)
         else:
             infield = field
 
-        return np.real(fft.ifftn(infield * self.kpsf))
+        return np.real(fft.ifftn(infield * self.kpsf, **fftkwargs))
 
     def get(self):
         return self
@@ -235,7 +235,7 @@ class PSF4D(PSF):
             rpsf[i] = self.rpsf_xy(vecs, z)
 
         # calcualte the psf in k-space using 2d ffts
-        kpsf = fft.fft2(rpsf)
+        kpsf = fft.fft2(rpsf, **fftkwargs)
 
         # need to normalize each x-y slice individually
         for i,z in enumerate(zs):
@@ -266,11 +266,11 @@ class PSF4D(PSF):
             raise AttributeError("Field passed to PSF incorrect shape")
 
         if not np.iscomplexobj(field):
-            infield = fft.fft2(field)
+            infield = fft.fft2(field, **fftkwargs)
         else:
             infield = field
 
-        cov2d = np.real(fft.ifft2(infield * self.kpsf))
+        cov2d = np.real(fft.ifft2(infield * self.kpsf, **fftkwargs))
         cov2dT = np.rollaxis(cov2d, 0, 3)
 
         out = np.zeros_like(cov2d)
@@ -550,8 +550,8 @@ class FromArray(PSF):
 
         pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
         rpsf = np.pad(field, pad, mode='constant', constant_values=0)
-        rpsf = np.fft.ifftshift(rpsf)
-        kpsf = fft.fftn(rpsf)
+        rpsf = fft.ifftshift(rpsf)
+        kpsf = fft.fftn(rpsf, **fftkwargs)
         kpsf /= (np.real(kpsf[0,0,0]) + 1e-15)
         return kpsf
 
@@ -560,7 +560,7 @@ class FromArray(PSF):
             raise AttributeError("Field passed to PSF incorrect shape")
 
         if not np.iscomplex(field.ravel()[0]):
-            infield = fft.fftn(field)
+            infield = fft.fftn(field, **fftkwargs)
         else:
             infield = field
 
@@ -569,7 +569,7 @@ class FromArray(PSF):
         for i in xrange(field.shape[0]):
             z = int(self.tile.l[0] + i)
             kpsf = self._pad(self.array[z])
-            outfield[i] = np.real(fft.ifftn(infield * kpsf))[i]
+            outfield[i] = np.real(fft.ifftn(infield * kpsf, **fftkwargs))[i]
 
         return outfield
 

@@ -4,8 +4,9 @@ import scipy.ndimage as nd
 
 from collections import OrderedDict
 
-from peri import util, interpolation, fft
+from peri import util, interpolation
 from peri.comp import psfs, psfcalc
+from peri.fft import fft, fftkwargs
 
 def moment(p, v, order=1):
     """ Calculates the moments of the probability distribution p with vector v """
@@ -445,7 +446,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         pad = tuple((d[i]+o[i],d[i]) for i in [0,1,2])
         rpsf = np.pad(field, pad, mode='constant', constant_values=0)
         rpsf = np.fft.ifftshift(rpsf, axes=axes)
-        kpsf = fft.rfft.fftn(rpsf)
+        kpsf = fft.rfftn(rpsf, **fftkwargs)
 
         if norm:
             kpsf /= kpsf[0,0,0]
@@ -477,9 +478,10 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             subfield = np.roll(field, middle - i, axis=0)
             subfield = subfield[middle-fs[0]/2:middle+fs[0]/2+1]
 
-            kfield = fft.rfft.fftn(subfield)
+            kshape = subfield.shape
+            kfield = fft.rfftn(subfield, **fftkwargs)
 
-            outfield[i] = np.real(fft.rfft.ifftn(kfield * subpsf))[self.support[0]/2]
+            outfield[i] = np.real(fft.irfftn(kfield * subpsf, s=kshape, **fftkwargs))[self.support[0]/2]
 
         return outfield
 
@@ -544,10 +546,11 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
         outfield = np.zeros_like(field, dtype='float')
         zc,yc,xc = self.tile.coords(form='flat')
 
-        kfield = fft.rfft.fftn(field)
+        kshape = field.shape
+        kfield = fft.rfftn(field, **fftkwargs)
         for k,c in enumerate(self.cheb.coefficients):
             pad = self._kpad(c, finalshape=self.tile.shape, zpad=True, norm=False)
-            cov = np.real(fft.rfft.ifftn(kfield * pad))
+            cov = np.real(fft.irfftn(kfield * pad, s=kshape, **fftkwargs))
 
             outfield += self.cheb.tk(k, zc)[:,None,None] * cov
 
