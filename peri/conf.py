@@ -2,8 +2,6 @@ import os
 import json
 import copy
 
-CONF_FILE = os.path.join(os.path.expanduser("~"), ".peri.json")
-
 default_conf = {
     "fftw-threads": -1,
     "fftw-planning-effort": "FFTW_MEASURE",
@@ -14,9 +12,13 @@ default_conf = {
     "verbosity": 'vvv',
 }
 
+def get_conf_filename():
+    default = os.path.join(os.path.expanduser("~"), ".peri.json")
+    return os.environ.get('PERI_CONF_FILE', default)
+
 # Each of the variables above can be defined on the command line
 def transform(v):
-    return v.lower().replace('_', '-')
+    return v.lower().replace('_', '-').replace('peri-', '')
 
 def read_environment():
     out = {}
@@ -27,7 +29,7 @@ def read_environment():
 
 # variables also defined in the conf file
 def create_default_conf():
-    with open(CONF_FILE, 'w') as f:
+    with open(get_conf_filename(), 'w') as f:
         json.dump(default_conf, f)
 
 def load_conf():
@@ -39,7 +41,7 @@ def load_conf():
     """
     try:
         conf = copy.copy(default_conf)
-        conf.update(json.load(open(CONF_FILE)))
+        conf.update(json.load(open(get_conf_filename())))
         conf.update(read_environment())
         return conf
     except IOError as e:
