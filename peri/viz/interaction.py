@@ -401,7 +401,7 @@ class OrthoPrefeature(OrthoManipulator):
 #=============================================================================
 class OrthoViewer(object):
     def __init__(self, field, onesided=True, vmin=None, vmax=None, cmap='bone',
-            dohist=False, fourier=False):
+            dohist=False, fourier=False, tooltips=False):
         """
         Easy interactive viewing of 3D ndarray with view selection. Navigate in
         3D by clicking on the three panels which are slices through the array
@@ -414,7 +414,7 @@ class OrthoViewer(object):
         self.dohist = dohist
         self.fourier = fourier
 
-        if self.cmap is not None:
+        if cmap is not None:
             self.cmap = cmap
         else:
             self.cmap = 'bone' if self.onesided else 'RdBu_r'
@@ -424,7 +424,8 @@ class OrthoViewer(object):
         h = float(y + z)
 
         tooltip = mpl.rcParams['toolbar']
-        mpl.rcParams['toolbar'] = 'None'
+        if not tooltips:
+            mpl.rcParams['toolbar'] = 'None'
         self.fig = pl.figure(figsize=(10*w/h,10))
         mpl.rcParams['toolbar'] = tooltip
 
