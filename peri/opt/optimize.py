@@ -1595,6 +1595,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     all_lp_stats = []
     all_lm_stats = []
     all_line_stats = []
+    all_loop_values = []
 
     #2. Optimize
     CLOG.info('Start of loop %d:\t%f' % (0, s.error))
@@ -1614,6 +1615,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         if desc is not None:
             states.save(s, desc=desc)
         CLOG.info('Globals, loop %d:\t%f' % (a, s.error))
+        all_loop_values.append(s.values)
 
         #2b. Particles
         prtl_dmp = 1.0 if a==0 else 1e-2
@@ -1628,6 +1630,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
             states.save(s, desc=desc)
         CLOG.info('Particles, loop %d:\t%f' % (a, s.error))
         gc.collect()
+        all_loop_values.append(s.values)
 
         #2c. Line min?
         end_params = np.copy(s.state[s.params])
@@ -1637,6 +1640,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
             if desc is not None:
                 states.save(s, desc=desc)
             CLOG.info('Line min, loop %d:\t%f' % (a, s.error))
+            all_loop_values.append(s.values)
 
         #2d. terminate?
         new_err = s.error
@@ -1645,4 +1649,4 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
             break
 
     if collect_stats:
-        return all_lp_stats, all_lm_stats, all_line_stats
+        return all_lp_stats, all_lm_stats, all_line_stats, all_loop_values
