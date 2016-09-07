@@ -38,6 +38,11 @@ class Polynomial3D(Component):
 
         constval : float
             The initial value of the entire field, if a constant.
+
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
         """
         self.shape = shape
         self.order = order
@@ -175,7 +180,8 @@ class LegendrePoly3D(Polynomial3D):
 #=============================================================================
 class Polynomial2P1D(Polynomial3D):
     def __init__(self, order=(1,1,1), tileinfo=None, constval=None,
-            operation='*', category='ilm', shape=None):
+            operation='*', category='ilm', shape=None,
+            float_precision=np.float64):
         """
         A polynomial 2+1D class for updating large fields of polys.  The form
         of these polynomials if P(x,y) () Q(z), separated in the z-direction.
@@ -201,6 +207,11 @@ class Polynomial2P1D(Polynomial3D):
         operation : string
             Type of joining operation between the (x,y) and (z) poly. Can be
             either '*' or '+'
+
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
         """
 
         self.shape = shape
@@ -209,6 +220,10 @@ class Polynomial2P1D(Polynomial3D):
         self.tileinfo = tileinfo
         self.category = category
         c = self.category
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
 
         # set up the parameter mappings and values
         params, values = [], []
@@ -261,7 +276,7 @@ class Polynomial2P1D(Polynomial3D):
             term += v * self.term(order)
 
         op = {'*': mul, '+': add}[self.operation]
-        self.field = op(self.field_xy, 1.0 + self.field_z)
+        self.field[:] = op(self.field_xy, 1.0 + self.field_z)
         return self.field
 
     def term_ijk(self, index):
@@ -292,10 +307,10 @@ class Polynomial2P1D(Polynomial3D):
                 term += v1 * self.term(order)
 
             op = {'*': mul, '+': add}[self.operation]
-            self.field = op(self.field_xy, 1.0 + self.field_z)
+            self.field[:] = op(self.field_xy, 1.0 + self.field_z)
         else:
             self.set_values(params, values)
-            self.field = self.calc_field()
+            self.field[:] = self.calc_field()
 
     def get(self):
         return self.field[self.tile.slicer]
