@@ -92,7 +92,7 @@ class Component(ParameterGroup):
     def __init__(self, params, values, ordered=True, category='comp'):
         for attr in ['shape', 'inner', '_parent']:
             if not hasattr(self, attr):
-                setattr(self, None)
+                setattr(self, attr, None)
         super(Component, self).__init__(
             params, values, ordered=ordered, category=category
         )
