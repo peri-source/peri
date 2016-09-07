@@ -376,7 +376,8 @@ class BarnesStreakLegPoly2P1D(Component):
     category = 'ilm'
 
     def __init__(self, npts=(40,20), zorder=7, op='*', barnes_dist=1.75,
-            barnes_clip_size=3, local_updates=True, category='ilm', shape=None):
+            barnes_clip_size=3, local_updates=True, category='ilm', shape=None,
+            float_precision=np.float64):
         """
         A Barnes interpolant. This one is of the form
 
@@ -406,6 +407,11 @@ class BarnesStreakLegPoly2P1D(Component):
 
         local_updates : boolean
             Whether to perform local updates on the ILM
+
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
         """
         self.shape = shape
         self.local_updates = local_updates
@@ -415,6 +421,10 @@ class BarnesStreakLegPoly2P1D(Component):
         self.zorder = zorder
         self.npts = npts
         self.op = op
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
 
         c = self.category
         # set up the various parameter mappings and out local cache of how to
@@ -509,7 +519,8 @@ class BarnesStreakLegPoly2P1D(Component):
 
     def calc_field(self):
         op = {'*': mul, '+': add}[self.op]
-        return self.scale * op(1.0 + self._barnes_full(), 1.0 + self.poly) + self.off
+        return self.scale * op(1.0 + self._barnes_full(), 1.0 + self.poly).astype(
+                self.float_precision) + self.off
 
     def calc_poly(self):
         return np.sum([
