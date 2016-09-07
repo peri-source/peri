@@ -165,7 +165,8 @@ class PlatonicSpheresCollection(Component):
     def __init__(self, pos, rad, shape=None, zscale=1.0, support_pad=4,
             method='exact-gaussian-fast', alpha=None, user_method=None,
             exact_volume=True, volume_error=1e-5, max_radius_change=1e-2,
-            param_prefix='sph', grouping='particle', category='obj'):
+            param_prefix='sph', grouping='particle', category='obj',
+            float_precision=np.float64):
         """
         A collection of spheres in real-space with positions and radii, drawn
         not necessarily on a uniform grid (i.e. scale factor associated with
@@ -223,6 +224,12 @@ class PlatonicSpheresCollection(Component):
         grouping : string
             Either 'particle' or 'parameter' parameter grouping. If 'particle'
             then grouped by xyza,xyza if 'parameter' then xyz,xyz,a,a
+
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
+
         """
         if isinstance(rad, (float, int)):
             rad = rad*np.ones(pos.shape[0])
@@ -240,6 +247,10 @@ class PlatonicSpheresCollection(Component):
         self.user_method = user_method
         self.param_prefix = param_prefix
         self.grouping = grouping
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
 
         self.set_draw_method(method=method, alpha=alpha, user_method=user_method)
 
@@ -254,7 +265,7 @@ class PlatonicSpheresCollection(Component):
     def initialize(self):
         """ Start from scratch and initialize all objects """
         self.rvecs = self.shape.coords(form='vector')
-        self.particles = np.zeros(self.shape.shape)
+        self.particles = np.zeros(self.shape.shape, dtype=self.float_precision)
 
         for i, (p0, r0) in enumerate(zip(self.pos, self.rad)):
             self._draw_particle(p0, r0)
@@ -609,7 +620,8 @@ class PlatonicSpheresCollection(Component):
 class Slab(Component):
     category = 'obj'
 
-    def __init__(self, zpos=0, angles=(0,0), param_prefix='slab', shape=None):
+    def __init__(self, zpos=0, angles=(0,0), param_prefix='slab', shape=None,
+            float_precision=np.float64):
         """
         A half plane corresponding to a cover-slip.
 
@@ -623,10 +635,20 @@ class Slab(Component):
 
         angles : tuple of float (2,)
             (theta, phi) angles of rotation of the normal with respect to z
+
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
         """
         self.lbl_zpos = param_prefix+'-zpos'
         self.lbl_theta = param_prefix+'-theta'
         self.lbl_phi = param_prefix+'-phi'
+
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
 
         self.shape = shape
         self.set_tile(self.shape)
@@ -650,7 +672,7 @@ class Slab(Component):
 
     def _setup(self):
         self.rvecs = self.shape.coords(form='vector')
-        self.image = np.zeros(self.shape.shape)
+        self.image = np.zeros(self.shape.shape, dtype=self.float_precision)
 
     def _draw_slab(self):
         # for the position at zpos, and the center in the x-y plane
@@ -660,7 +682,7 @@ class Slab(Component):
         pos = pos + self.inner.l
 
         p = (self.rvecs - pos).dot(self.normal())
-        self.image = 1.0/(1.0 + np.exp(7*p))
+        self.image[:] = 1.0/(1.0 + np.exp(7*p))  #FIXME why is this not an erf???
 
     def initialize(self):
         self._setup()
