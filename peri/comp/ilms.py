@@ -17,7 +17,7 @@ from peri.interpolation import BarnesInterpolation1D
 #=============================================================================
 class Polynomial3D(Component):
     def __init__(self, order=(1,1,1), tileinfo=None, constval=None,
-            category='ilm', shape=None):
+            category='ilm', shape=None, float_precision=np.float64):
         """
         A polynomial 3D class for updating large fields of polys.
 
@@ -44,6 +44,10 @@ class Polynomial3D(Component):
         self.tileinfo = tileinfo
         self.category = category
         c = category
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
 
         # set up the parameter mappings and values
         params, values = [], []
@@ -68,7 +72,7 @@ class Polynomial3D(Component):
     def initialize(self):
         self.r = self.rvecs()
         self.set_tile(self.shape)
-        self.field = np.zeros(self.shape.shape)
+        self.field = np.zeros(self.shape.shape, dtype=self.float_precision)
         self.update(self.params, self.values)
 
     def rvecs(self):
@@ -112,7 +116,7 @@ class Polynomial3D(Component):
                 self.field += v1 * self.term(tm)
         else:
             self.set_values(params, values)
-            self.field = np.zeros(self.shape.shape)
+            self.field = np.zeros(self.shape.shape, dtype=self.float_precision)
             for p,v in zip(self.params, self.values):
                 self.field += v * self.term(self.param_term[p])
 
