@@ -650,11 +650,14 @@ class Slab(Component):
                     'np.float32, np.float16')
         self.float_precision = float_precision
 
-        self.shape = shape
-        self.set_tile(self.shape)
         params = [self.lbl_zpos, self.lbl_theta, self.lbl_phi]
         values = [float(i) for i in [zpos, angles[0], angles[1]]]
         super(Slab, self).__init__(params, values, ordered=False)
+
+        if shape:
+            inner = shape.copy()  #same default as Platonic Sphere Collection
+            self.set_shape(shape, inner)
+        self.set_tile(self.shape)
 
         if self.shape:
             self.initialize()
