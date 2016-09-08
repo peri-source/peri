@@ -610,6 +610,9 @@ class PlatonicSpheresCollection(Component):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
+        ##Compatibility patches...
+        self.float_precision = self.__dict__.get('float_precision', np.float64)
+        ##end compatibility patch
         self.setup_variables()
         if self.shape:
             self.initialize()
@@ -712,6 +715,9 @@ class Slab(Component):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
+        ##Compatibility patches...
+        self.float_precision = self.__dict__.get('float_precision', np.float64)
+        ##end compatibility patch
         if self.shape:
             self.initialize()
 
