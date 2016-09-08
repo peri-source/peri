@@ -315,27 +315,11 @@ class Polynomial2P1D(Polynomial3D):
             self.set_values(params, values)
             self.field[:] = self.calc_field()
 
-    def get(self):
-        return self.field[self.tile.slicer]
-
     def nopickle(self):
         return super(Polynomial2P1D, self).nopickle() + [
             'r', 'field', 'field_xy', 'field_z',
             '_last_term', '_last_index'
         ]
-
-    def __getstate__(self):
-        odict = self.__dict__.copy()
-        util.cdd(odict, self.nopickle())
-        return odict
-
-    def __setstate__(self, idict):
-        self.__dict__.update(idict)
-        ##Compatibility patches...
-        self.float_precision = self.__dict__.get('float_precision', np.float64)
-        ##end compatibility patch
-        if self.shape:
-            self.initialize()
 
 class LegendrePoly2P1D(Polynomial2P1D):
     def __init__(self, order=(1,1,1), **kwargs):
