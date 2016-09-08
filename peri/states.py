@@ -626,6 +626,30 @@ class ImageState(State, comp.ComponentCollection):
     def __setstate__(self, idct):
         self.__init__(**idct)
 
+    def set_mem_level(self, mem_level):
+        """
+        Just something crappy right now to test. Make mem_level a np.dtype
+        Ideally I'd like levels like:
+            hi      : all mem's are np.float64
+            med-hi  : image, platonic are float32, rest are float64
+            med     : all mem's are float32
+            med-lo  : image, platonic are float16, rest float32
+            lo      : all are float16, which is bad for accuracy.
+        Right now the PSF is not affected by the mem-level changes, which is
+        OK for mem but it means that self._model, self._residuals are always
+        float64, which can be a chunk of mem.
+        """
+        self.image.float_precision = mem_level
+        self.image.image = self.image.image.astype(mem_level)
+        self.set_image(self.image)
+
+        for c in ['ilm','bkg']:
+            self.get(c).float_precision = mem_level
+        for c in self.get('obj').comps:
+            c.float_precision = mem_level
+        self.reset()
+
+
 def save(state, filename=None, desc='', extra=None):
     """
     Save the current state with extra information (for example samples and LL
