@@ -650,7 +650,7 @@ class ImageState(State, comp.ComponentCollection):
                         'ml':  [np.float32, np.float16],
                         'l':      [np.float16, np.float16]
                     }
-        hi_lvl, lo_lvl = mem_levels[mem_level]
+        hi_lvl, lo_lvl = mem_levels[key]
 
         self.image.float_precision = hi_lvl
         self.image.image = self.image.image.astype(lo_lvl)
