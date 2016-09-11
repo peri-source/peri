@@ -436,6 +436,8 @@ class ImageState(State, comp.ComponentCollection):
         for c in self.comps:
             c.set_shape(self.oshape, self.ishape)
 
+        self._model = np.zeros(self._data.shape, dtype=np.float64)
+        self._residuals = np.zeros(self._data.shape, dtype=np.float64)
         self.calculate_model()
 
     def set_tile_full(self):
@@ -453,8 +455,8 @@ class ImageState(State, comp.ComponentCollection):
         self.calculate_model()
 
     def calculate_model(self):
-        self._model = self._calc_model()
-        self._residuals = self._calc_residuals()
+        self._model[:] = self._calc_model()
+        self._residuals[:] = self._calc_residuals()
         self._loglikelihood = self._calc_loglikelihood()
         self._logprior = self._calc_logprior()
 
@@ -647,6 +649,8 @@ class ImageState(State, comp.ComponentCollection):
             self.get(c).float_precision = mem_level
         for c in self.get('obj').comps:
             c.float_precision = mem_level
+        self._model = self._model.astype(mem_level)
+        self._residuals = self._model.astype(mem_level)
         self.reset()
 
 
