@@ -628,10 +628,9 @@ class ImageState(State, comp.ComponentCollection):
     def __setstate__(self, idct):
         self.__init__(**idct)
 
-    def set_mem_level(self, mem_level):
+    def set_mem_level(self, mem_level='high'):
         """
-        Just something crappy right now to test. Make mem_level a np.dtype
-        Ideally I'd like levels like:
+        Sets the memory usage level of the state.
             hi      : all mem's are np.float64
             med-hi  : image, platonic are float32, rest are float64
             med     : all mem's are float32
@@ -641,16 +640,28 @@ class ImageState(State, comp.ComponentCollection):
         OK for mem but it means that self._model, self._residuals are always
         float64, which can be a chunk of mem.
         """
-        self.image.float_precision = mem_level
-        self.image.image = self.image.image.astype(mem_level)
+        #A little thing to parse strings for convenience:
+        key = ''.join(map(lambda c: c if c in 'mlh' else '', mem_level))
+        if key not in ['h','mh','m','ml','m', 'l']:
+            raise ValueError('mem_level must be one of hi, med-hi, med, med-lo, lo.')
+        mem_levels = {  'h':     [np.float64, np.float64],
+                        'mh': [np.float64, np.float32],
+                        'm':   [np.float32, np.float32],
+                        'ml':  [np.float32, np.float16],
+                        'l':      [np.float16, np.float16]
+                    }
+        hi_lvl, lo_lvl = mem_levels[mem_level]
+
+        self.image.float_precision = hi_lvl
+        self.image.image = self.image.image.astype(lo_lvl)
         self.set_image(self.image)
 
         for c in ['ilm','bkg']:
-            self.get(c).float_precision = mem_level
+            self.get(c).float_precision = hi_lvl
         for c in self.get('obj').comps:
-            c.float_precision = mem_level
-        self._model = self._model.astype(mem_level)
-        self._residuals = self._model.astype(mem_level)
+            c.float_precision = lo_lvl
+        self._model = self._model.astype(hi_lvl)
+        self._residuals = self._model.astype(hi_lvl)
         self.reset()
 
 
