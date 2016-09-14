@@ -442,14 +442,16 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
             Default is 'calc' = 0.5(data.min() + model.min())
         res_vmax : Float
             vmax for the imshow for the residuals. Default is +0.1
-        edgepts : Nested list-like
+        edgepts : Nested list-like or scalar.
             The vertices of the triangles which determine the splitting of
             the image. The vertices are at (image corner, (edge, y), and
             (x,edge), where edge is the appropriate edge of the image.
                 edgepts[0] : (x,y) points for the lower/upper edge
                 edgepts[1] : (x,y) points for the upper/lower edge
             Default is 'calc' which calculates edge points by splitting the
-            image into 3 regions of equal area.
+            image into 3 regions of equal area. If it's a float scalar, it
+            calculates edge_pts based on a constant fraction of distance from
+            the edge.
         do_imshow : Bool
             If True, imshow's and returns the returned handle.
             If False, returns the array as a [M,N,4] array.
@@ -473,9 +475,10 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
     im = np.zeros([data.shape[0], data.shape[1], 4])
     im_x, im_y = np.meshgrid(np.arange(im.shape[0]), np.arange(im.shape[1]),
             indexing='ij')
-    if edgepts == 'calc':
+    if np.size(edgepts) == 1:
         #Gets equal-area sections, at sqrt(2/3) of the sides
-        f = np.sqrt(2./3.)
+        f = np.sqrt(2./3.) if edgepts == 'calc' else edgepts
+        # f = np.sqrt(2./3.)
         lower_edge = (im.shape[0] * (1-f),  im.shape[1] * f)
         upper_edge = (im.shape[0] * f,      im.shape[1] * (1-f))
     else:
