@@ -413,7 +413,8 @@ def generative_model(s,x,y,z,r, factor=1.1):
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
 def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
-         res_vmin=-0.1, res_vmax=0.1, edgepts='calc', do_imshow=True):
+         res_vmin=-0.1, res_vmax=0.1, edgepts='calc', do_imshow=True,
+         data_cmap=plt.cm.bone, res_cmap=plt.cm.RdBu):
     """
     Makes an image of any 2D slice of a state that compares the data,
     model, and residuals. The upper left portion of the image is the raw
@@ -455,6 +456,10 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
         do_imshow : Bool
             If True, imshow's and returns the returned handle.
             If False, returns the array as a [M,N,4] array.
+        data_cmap : matplotlib colormap instance
+            The colormap to use for the data and model.
+        res_cmap : matplotlib colormap instance
+            The colormap to use for the residuals.
 
     Outputs
     -------
@@ -499,9 +504,9 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
     center_mask= -(lower_mask | upper_mask)
 
     #2. Get colorbar'd images
-    gm = plt.cm.bone(center_data(model, data_vmin, data_vmax))
-    dt = plt.cm.bone(center_data(data, data_vmin, data_vmax))
-    rs = plt.cm.RdBu(center_data(residuals, res_vmin, res_vmax))
+    gm = data_cmap(center_data(model, data_vmin, data_vmax))
+    dt = data_cmap(center_data(data, data_vmin, data_vmax))
+    rs = res_cmap(center_data(residuals, res_vmin, res_vmax))
 
     for a in xrange(4):
         im[:,:,a][lower_mask] = dt[:,:,a][lower_mask]
