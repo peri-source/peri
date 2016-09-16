@@ -134,7 +134,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.polar_angle = polar_angle
         self.support_factor = support_factor
         self.normalize = normalize
-        self.measurement_iterations = measurement_iterations or 1
+        self.measurement_iterations = measurement_iterations or 11
 
         self.polychromatic = False
         self.sigkf = sigkf
