@@ -433,7 +433,8 @@ class NullImage(Image):
         super(NullImage, self).__init__(np.zeros(self.shape))
 
 class RawImage(Image):
-    def __init__(self, filename, tile=None, invert=False, exposure=None):
+    def __init__(self, filename, tile=None, invert=False, exposure=None,
+            float_precision=np.float64):
         """
         An image object which stores information about desired region and padding,
         etc.  There are number of ways to create an image object:
@@ -454,11 +455,19 @@ class RawImage(Image):
             values allows a series of images to be initialized with the same
             ILM, PSF etc. Should be the bit value of the camera.
 
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
         """
         self.filename = filename
         self.invert = invert
         self.filters = None
         self.exposure = exposure
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
 
         image = self.load_image()
         super(RawImage, self).__init__(image, tile=tile)
@@ -467,8 +476,8 @@ class RawImage(Image):
         try:
             image = initializers.load_tiff(self.filename)
             image = initializers.normalize(
-                image, invert=self.invert, scale=self.exposure
-            )
+                    image, invert=self.invert, scale=self.exposure,
+                    dtype=self.float_precision)
         except IOError as e:
             log.error("Could not find image '%s'" % self.filename)
             raise e
@@ -497,6 +506,9 @@ class RawImage(Image):
 
     def __setstate__(self, idct):
         self.__dict__.update(idct)
+        ##Compatibility patches...
+        self.float_precision = self.__dict__.get('float_precision', np.float64)
+        ##end compatibility patch
         self.image = self.load_image()
 
 def cdd(d, k):

@@ -90,9 +90,9 @@ class ParameterGroup(object):
 #=============================================================================
 class Component(ParameterGroup):
     def __init__(self, params, values, ordered=True, category='comp'):
-        self.shape = None
-        self.inner = None
-        self._parent = None
+        for attr in ['shape', 'inner', '_parent']:
+            if not hasattr(self, attr):
+                setattr(self, attr, None)  #Not sure if this is the best, since inner and shape are related
         super(Component, self).__init__(
             params, values, ordered=ordered, category=category
         )

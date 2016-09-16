@@ -17,7 +17,7 @@ from peri.interpolation import BarnesInterpolation1D
 #=============================================================================
 class Polynomial3D(Component):
     def __init__(self, order=(1,1,1), tileinfo=None, constval=None,
-            category='ilm', shape=None):
+            category='ilm', shape=None, float_precision=np.float64):
         """
         A polynomial 3D class for updating large fields of polys.
 
@@ -38,12 +38,21 @@ class Polynomial3D(Component):
 
         constval : float
             The initial value of the entire field, if a constant.
+
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
         """
         self.shape = shape
         self.order = order
         self.tileinfo = tileinfo
         self.category = category
         c = category
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
 
         # set up the parameter mappings and values
         params, values = [], []
@@ -68,7 +77,7 @@ class Polynomial3D(Component):
     def initialize(self):
         self.r = self.rvecs()
         self.set_tile(self.shape)
-        self.field = np.zeros(self.shape.shape)
+        self.field = np.zeros(self.shape.shape, dtype=self.float_precision)
         self.update(self.params, self.values)
 
     def rvecs(self):
@@ -112,7 +121,7 @@ class Polynomial3D(Component):
                 self.field += v1 * self.term(tm)
         else:
             self.set_values(params, values)
-            self.field = np.zeros(self.shape.shape)
+            self.field = np.zeros(self.shape.shape, dtype=self.float_precision)
             for p,v in zip(self.params, self.values):
                 self.field += v * self.term(self.param_term[p])
 
@@ -145,6 +154,9 @@ class Polynomial3D(Component):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
+        ##Compatibility patches...
+        self.float_precision = self.__dict__.get('float_precision', np.float64)
+        ##end compatibility patch
         if self.shape:
             self.initialize()
 
@@ -171,7 +183,8 @@ class LegendrePoly3D(Polynomial3D):
 #=============================================================================
 class Polynomial2P1D(Polynomial3D):
     def __init__(self, order=(1,1,1), tileinfo=None, constval=None,
-            operation='*', category='ilm', shape=None):
+            operation='*', category='ilm', shape=None,
+            float_precision=np.float64):
         """
         A polynomial 2+1D class for updating large fields of polys.  The form
         of these polynomials if P(x,y) () Q(z), separated in the z-direction.
@@ -197,6 +210,11 @@ class Polynomial2P1D(Polynomial3D):
         operation : string
             Type of joining operation between the (x,y) and (z) poly. Can be
             either '*' or '+'
+
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
         """
 
         self.shape = shape
@@ -205,6 +223,10 @@ class Polynomial2P1D(Polynomial3D):
         self.tileinfo = tileinfo
         self.category = category
         c = self.category
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
 
         # set up the parameter mappings and values
         params, values = [], []
@@ -257,7 +279,7 @@ class Polynomial2P1D(Polynomial3D):
             term += v * self.term(order)
 
         op = {'*': mul, '+': add}[self.operation]
-        self.field = op(self.field_xy, 1.0 + self.field_z)
+        self.field[:] = op(self.field_xy, 1.0 + self.field_z)
         return self.field
 
     def term_ijk(self, index):
@@ -288,29 +310,16 @@ class Polynomial2P1D(Polynomial3D):
                 term += v1 * self.term(order)
 
             op = {'*': mul, '+': add}[self.operation]
-            self.field = op(self.field_xy, 1.0 + self.field_z)
+            self.field[:] = op(self.field_xy, 1.0 + self.field_z)
         else:
             self.set_values(params, values)
-            self.field = self.calc_field()
-
-    def get(self):
-        return self.field[self.tile.slicer]
+            self.field[:] = self.calc_field()
 
     def nopickle(self):
         return super(Polynomial2P1D, self).nopickle() + [
             'r', 'field', 'field_xy', 'field_z',
             '_last_term', '_last_index'
         ]
-
-    def __getstate__(self):
-        odict = self.__dict__.copy()
-        util.cdd(odict, self.nopickle())
-        return odict
-
-    def __setstate__(self, idict):
-        self.__dict__.update(idict)
-        if self.shape:
-            self.initialize()
 
 class LegendrePoly2P1D(Polynomial2P1D):
     def __init__(self, order=(1,1,1), **kwargs):
@@ -357,7 +366,8 @@ class BarnesStreakLegPoly2P1D(Component):
     category = 'ilm'
 
     def __init__(self, npts=(40,20), zorder=7, op='*', barnes_dist=1.75,
-            barnes_clip_size=3, local_updates=True, category='ilm', shape=None):
+            barnes_clip_size=3, local_updates=True, category='ilm', shape=None,
+            float_precision=np.float64):
         """
         A Barnes interpolant. This one is of the form
 
@@ -387,6 +397,11 @@ class BarnesStreakLegPoly2P1D(Component):
 
         local_updates : boolean
             Whether to perform local updates on the ILM
+
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
         """
         self.shape = shape
         self.local_updates = local_updates
@@ -396,6 +411,10 @@ class BarnesStreakLegPoly2P1D(Component):
         self.zorder = zorder
         self.npts = npts
         self.op = op
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
 
         c = self.category
         # set up the various parameter mappings and out local cache of how to
@@ -490,7 +509,8 @@ class BarnesStreakLegPoly2P1D(Component):
 
     def calc_field(self):
         op = {'*': mul, '+': add}[self.op]
-        return self.scale * op(1.0 + self._barnes_full(), 1.0 + self.poly) + self.off
+        return self.scale * op(1.0 + self._barnes_full(), 1.0 + self.poly).astype(
+                self.float_precision) + self.off
 
     def calc_poly(self):
         return np.sum([
@@ -653,6 +673,9 @@ class BarnesStreakLegPoly2P1D(Component):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
+        ##Compatibility patches...
+        self.float_precision = self.__dict__.get('float_precision', np.float64)
+        ##end compatibility patch
         if self.shape:
             self.initialize()
 

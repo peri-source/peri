@@ -37,7 +37,7 @@ def sorted_files(globber, num_sort=True, num_indices=None, return_num=False):
         return allfiles
     return [f[-1] for f in allfiles]
 
-def good_particles(state, inbox=True, inboxrad=False):
+def good_particles(state, inbox=True, inboxrad=False, fullinbox=False):
     """
     Returns a mask of `good' particles as defined by
         * radius > 0
@@ -47,14 +47,17 @@ def good_particles(state, inbox=True, inboxrad=False):
     Parameters:
         inbox : whether to only count particle centers within the image
         inboxrad : whether to only count particles that overlap the image at all
+        fullinbox : Only include particles which are entirely in the image.
     """
     pos = state.obj_get_positions()
     rad = state.obj_get_radii()
 
     mask = rad > 0
 
-    if inbox:
-        if inboxrad:
+    if (inbox | inboxrad | fullinbox):
+        if fullinbox:
+            mask &= trim_box(state, pos, rad=-rad)
+        elif inboxrad:
             mask &= trim_box(state, pos, rad=rad)
         else:
             mask &= trim_box(state, pos, rad=None)
