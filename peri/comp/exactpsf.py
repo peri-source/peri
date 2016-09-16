@@ -99,13 +99,13 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         k_dist : str
             Eithe ['gaussian', 'gamma'] which control the wavevector
             distribution for the polychromatic detection psf. Default
-            is Gaussian. 
-            
+            is Gaussian.
+
         use_J1 : boolean
-            Which hdet confocal model to use. Set to True to include the 
+            Which hdet confocal model to use. Set to True to include the
             J1 term corresponding to a large-NA focusing lens, False to
             exclude it. Default is True
-            
+
         cutbyval : boolean
             If True, cuts the PSF based on the actual value instead of the
             position associated with the nearest value.
@@ -117,13 +117,13 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         cutedgeval : float
             The value with which to determine the edge of the psf, typically
             taken around floating point, 1e-12
-            
+
         pinhole_width : Float
             The width of the line illumination, in 1/k units. Default is 1.0.
 
         do_pinhole : Bool
-            Whether or not to include pinhole line width in the sampling. 
-            Default is False. 
+            Whether or not to include pinhole line width in the sampling.
+            Default is False.
 
         Notes:
             a = ExactLineScanConfocalPSF((64,)*3)
@@ -143,7 +143,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.cutbyval = cutbyval
         self.cutfallrate = cutfallrate
         self.cutedgeval = cutedgeval
-        
+
         self.k_dist = k_dist
         self.use_J1 = use_J1
 
@@ -158,12 +158,12 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         else:
             self.sigkf = sigkf = 0.0
             self.polychromatic = False
-            
+
         if (sph6_ab is not None) and (not np.isnan(sph6_ab)):
             self.use_sph6_ab = True #necessary? FIXME
         else:
             self.use_sph6_ab = False
-            
+
         if (pinhole_width is not None) or do_pinhole:
             self.num_line_pts = 3
         else:
@@ -195,7 +195,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             ind = params.index('sph6-ab')
             params.pop(ind)
             values = np.delete(values, ind)
-            
+
         if not self.do_pinhole:
             ind = params.index('pinhole-width')
             params.pop(ind)
@@ -243,7 +243,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         offset = np.array([zoffset*(zint>0), 0, 0])
         scale = [self.param_dict['psf-zscale'], 1.0, 1.0]
 
-        # create the coordinate vectors for where to actually calculate the 
+        # create the coordinate vectors for where to actually calculate the
         tile = util.Tile(left=0, size=size, centered=True)
         vecs = tile.coords(form='flat')
         vecs = [self._p2k(s*i+o) for i,s,o in zip(vecs, scale, offset)]
@@ -330,7 +330,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             'polar_angle': self.polar_angle,
             'normalize': self.normalize,
             'include_K3_det':self.use_J1
-        }) 
+        })
 
         if self.polychromatic:
             d.update({'nkpts': self.nkpts})
@@ -367,6 +367,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
     def characterize_psf(self):
         """ Get support size and drift polynomial for current set of params """
+        #FIXME there may be an issue with the support and characterization--
+        #   it might be best to do the characterization with the same support
+        #   as the calculated psf.
         l,u = max(self.zrange[0], self.param_dict['psf-zslab']), self.zrange[1]
 
         size_l, drift_l = self.measure_size_drift(l)
@@ -561,13 +564,13 @@ class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
         self.cutoffval = None
         self.support = np.array(support_size)
         super(FixedSSChebLinePSF, self).__init__(*args, **kwargs)
-        
+
     def characterize_psf(self):
         """ Get support size and drift polynomial for current set of params """
         l,u = max(self.zrange[0], self.param_dict['psf-zslab']), self.zrange[1]
 
-        size_l, drift_l = self.measure_size_drift(l)
-        size_u, drift_u = self.measure_size_drift(u)
+        size_l, drift_l = self.measure_size_drift(l, size=self.support)
+        size_u, drift_u = self.measure_size_drift(u, size=self.support)
 
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
 
