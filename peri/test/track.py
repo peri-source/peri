@@ -42,7 +42,7 @@ def get_xyzr_t(df, particle_ind):
     return x,y,z,rads
 
 def msd(df, maxlag, pxsize=0.126, scantime=0.1):
-    drift = tp.compute_drift(df)
+    drift = tp.compute_drift(df, pos_columns=['x','y','z'])
     tm = tp.subtract_drift(df, drift)
     em = tp.emsd(tm, pxsize, scantime, max_lagtime=maxlag, pos_columns=['x','y','z'])
     return em
