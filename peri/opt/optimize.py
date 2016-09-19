@@ -1519,7 +1519,7 @@ def do_levmarq_one_direction(s, direction, max_iter=2, run_length=2,
 
 def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         fractol=1e-7, errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True,
-        do_line_min=True):
+        do_line_min=False):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
