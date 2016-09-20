@@ -616,9 +616,10 @@ class ImageState(State, comp.ComponentCollection):
         def _pad(s):
             return re.subn('(\n)', '\n    ', s)[0]
 
-        return "{} [\n    {}\n]".format(self.__class__.__name__,
-            _pad('\n'.join([c.category+': '+str(c) for c in self.comps]))
-        )
+        image = _pad('\nimage: {}\n'.format(str(self.image)))
+        comps = _pad('\n'.join([c.category+': '+str(c) for c in self.comps]))
+
+        return "{} [{}{}\n]".format(self.__class__.__name__, image, comps)
 
     def __getstate__(self):
         return {'image': self.image, 'comps': self.comps, 'mdl': self.mdl,
