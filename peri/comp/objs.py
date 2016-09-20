@@ -597,7 +597,8 @@ class PlatonicSpheresCollection(Component):
         return Tile(pos - zsc*rad, pos + zsc*rad).pad(self.support_pad)
 
     def __str__(self):
-        return "{} N={}".format(self.__class__.__name__, self.N)
+        return "{} N={}, zscale={}".format(self.__class__.__name__, self.N,
+                self.zscale)
 
     def __repr__(self):
         return self.__str__()
