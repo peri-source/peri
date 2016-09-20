@@ -88,16 +88,15 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
     return J, return_inds
 
-def name_globals(s, include_psf=True):
+def name_globals(s, remove_params=None):
     all_params = s.params
     for p in s.param_positions():
         all_params.remove(p)
     for p in s.param_radii():
         all_params.remove(p)
-    if include_psf == False:
-        for p in all_params[::-1]:
-            if p[:3] == 'psf':
-                all_params.remove(p)
+    if remove_params is not None::
+        for p in remove_params:
+            all_params.remove(p)
     return all_params
 
 def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20, **kwargs):
@@ -1591,7 +1590,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     if mode == 'do-particles':
         glbl_nms = ['ilm-scale', 'offset']  #bkg?
     else:
-        glbl_nms = name_globals(s, include_psf=(mode != 'burn'))
+        remove_params = None if mode == 'burn' else s.get('psf').params
+        glbl_nms = name_globals(s, remove_params=remove_params)
 
     all_lp_stats = []
     all_lm_stats = []
