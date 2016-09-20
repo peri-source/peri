@@ -742,7 +742,8 @@ class LMEngine(object):
         delta_err = self._last_error - self.error
         frac_err = delta_err / self.error
         to_return = {'delta_vals':delta_vals, 'delta_err':delta_err,
-                'num_iter':1*self._num_iter, 'frac_err':frac_err}
+                'num_iter':1*self._num_iter, 'frac_err':frac_err,
+                'error':self.error}
         if get_cos:
             model_cosine = self.calc_model_cosine()
             to_return.update({'model_cosine':model_cosine})
