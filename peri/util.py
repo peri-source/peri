@@ -402,6 +402,13 @@ class Image(object):
         """
         self.filters = [[sl,values[sl]] for sl in slices]
 
+    def __repr__(self):
+        return "{} : {}".format(
+            self.__class__.__name__, str(self.tile)
+        )
+
+    def __str__(self):
+        return self.__repr__()
 
 class NullImage(Image):
     def __init__(self, image=None, shape=None):
@@ -431,6 +438,12 @@ class NullImage(Image):
     def __setstate__(self, idct):
         self.__dict__.update(idct)
         super(NullImage, self).__init__(np.zeros(self.shape))
+
+    def __repr__(self):
+        return "{} : {}".format(self.__class__.__name__, self.shape)
+
+    def __str__(self):
+        return self.__repr__()
 
 class RawImage(Image):
     def __init__(self, filename, tile=None, invert=False, exposure=None,
@@ -510,6 +523,14 @@ class RawImage(Image):
         self.float_precision = self.__dict__.get('float_precision', np.float64)
         ##end compatibility patch
         self.image = self.load_image()
+
+    def __repr__(self):
+        return "{} <{}: {}>".format(
+            self.__class__.__name__, self.filename, str(self.tile)
+        )
+
+    def __str__(self):
+        return self.__repr__()
 
 def cdd(d, k):
     """ Conditionally delete key (or list of keys) 'k' from dict 'd' """
