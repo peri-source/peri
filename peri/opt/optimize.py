@@ -288,7 +288,7 @@ class LMEngine(object):
             Does not work if J has not been evaluated yet.
     Whether to update the full J is controlled by update_J_frequency only,
     which only counts iterations of do_run_1() and do_run_2().
-    Both partial updates are controlled by partial_update_frequency, which
+    Partial updates are controlled by *_update_frequency, which
     counts internal runs in do_internal_run and full runs in do_run_1.
 
     So, if you want a partial update every other run, full J the remaining,
@@ -305,7 +305,8 @@ class LMEngine(object):
                 use_accel=False, max_accel_correction=1., paramtol=1e-6,
                 errtol=1e-5, fractol=1e-6, costol=None, max_iter=5, run_length=5,
                 update_J_frequency=1, broyden_update=False, eig_update=False,
-                partial_update_frequency=3, num_eig_dirs=8, eig_dl=1e-5):
+                eig_update_frequency=3, num_eig_dirs=8, eig_dl=1e-5,
+                broyden_update_frequency=1):
         """
         Levenberg-Marquardt engine with all the options from the
         M. Transtrum J. Sethna 2012 ArXiV paper.
@@ -379,9 +380,12 @@ class LMEngine(object):
             num_eig_dirs: Int
                 If eig_update == True, the number of eigendirections to
                 update when doing the eigen update. Default is 4.
-            partial_update_frequency: Int
-                If broyden_update or eig_update, the frequency to do
-                either/both of those partial updates. Default is 3.
+            eig_update_frequency: Int
+                If eig_update, the frequency to do this partial update.
+                Default is 3.
+            broyden_update_frequency: Int
+                If broyden_update, the frequency to do this partial update.
+                Default is 1.
 
         Relevant attributes
         -------------------
@@ -417,7 +421,8 @@ class LMEngine(object):
         self.num_eig_dirs = num_eig_dirs
         self.run_length = run_length
         self._inner_run_counter = 0
-        self.partial_update_frequency = partial_update_frequency
+        self.eig_update_frequency = eig_update_frequency
+        self.broyden_update_frequency = broyden_update_frequency
 
         self._num_iter = 0
 
@@ -810,7 +815,7 @@ class LMEngine(object):
 
     def check_Broyden_J(self):
         do_update = (self.broyden_update & (not self._fresh_JTJ) &
-                ((self._inner_run_counter % self.partial_update_frequency) == 0))
+                ((self._inner_run_counter % self.broyden_update_frequency) == 0))
         return do_update
 
     def update_Broyden_J(self):
@@ -828,7 +833,7 @@ class LMEngine(object):
 
     def check_update_eig_J(self):
         do_update = (self.eig_update & (not self._fresh_JTJ) &
-                ((self._inner_run_counter % self.partial_update_frequency) == 0))
+                ((self._inner_run_counter % self.eig_update_frequency) == 0))
         return do_update
 
     def update_eig_J(self):
@@ -1564,7 +1569,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
         max_mem : Numeric
             The maximum amount of memory allowed for the optimizers' J's,
-            for both particles & globals. Default is 3e9, i.e. 3GB per
+            for both particles & globals. Default is 1e9, i.e. 1GB per
             optimizer.
 
     Comments
@@ -1608,7 +1613,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         if a != 0 or mode != 'do-particles':
             gstats = do_levmarq(s, glbl_nms, max_iter=glbl_mx_itr, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
-                    partial_update_frequency=3, use_aug=use_aug, damping=
+                    eig_update_frequency=3, use_aug=use_aug, damping=
                     glbl_dmp, decrease_damp_factor=10., use_accel=use_accel,
                     collect_stats=collect_stats, fractol=0.1*fractol,
                     max_mem=max_mem)
