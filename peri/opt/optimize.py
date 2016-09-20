@@ -94,7 +94,7 @@ def name_globals(s, remove_params=None):
         all_params.remove(p)
     for p in s.param_radii():
         all_params.remove(p)
-    if remove_params is not None::
+    if remove_params is not None:
         for p in remove_params:
             all_params.remove(p)
     return all_params
