@@ -1635,7 +1635,15 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         start_err = s.error
         start_params = np.copy(s.state[s.params])
         #2a. Globals
-        glbl_dmp = 0.3 if a == 0 else 3e-2
+        # glbl_dmp = 0.3 if a == 0 else 3e-2
+        ####FIXME we damp degenerate but convenient spaces in the ilm, bkg
+        ####manually, but we should do it more betterer.
+        BAD_DAMP = 1e7
+        BAD_LIST = [['ilm-scale', BAD_DAMP], ['ilm-off', BAD_DAMP], ['ilm-z-0',
+                BAD_DAMP], ['bkg-z-0', BAD_DAMP]]
+        ####
+        glbl_dmp = vectorize_damping(glbl_nms, damping=1.0, increase_list=
+                [['psf-', 1e3]] + BAD_LIST)
         if a != 0 or mode != 'do-particles':
             gstats = do_levmarq(s, glbl_nms, max_iter=glbl_mx_itr, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
