@@ -330,7 +330,7 @@ class LMEngine(object):
                 min_eigval=1e-13, marquardt_damping=False, transtrum_damping=None,
                 use_accel=False, max_accel_correction=1., paramtol=1e-6,
                 errtol=1e-5, fractol=1e-6, costol=None, max_iter=5, run_length=5,
-                update_J_frequency=1, broyden_update=False, eig_update=False,
+                update_J_frequency=1, broyden_update=True, eig_update=False,
                 eig_update_frequency=3, num_eig_dirs=8, eig_dl=1e-5,
                 broyden_update_frequency=1):
         """
