@@ -1621,7 +1621,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     if mode == 'do-particles':
         glbl_nms = ['ilm-scale', 'offset']  #bkg?
     else:
-        remove_params = None if mode == 'burn' else s.get('psf').params
+        remove_params = None if mode == 'burn' else s.get('psf').params + ['zscale']
         glbl_nms = name_globals(s, remove_params=remove_params)
 
     all_lp_stats = []
