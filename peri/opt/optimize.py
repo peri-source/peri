@@ -647,6 +647,7 @@ class LMEngine(object):
         Called internally by do_run_2() but might also be useful on its own.
         """
         self._inner_run_counter = initial_count; good_step = True
+        n_good_steps = 0
         CLOG.debug('Running...')
 
         _last_residuals = self.calc_residuals().copy()
@@ -666,6 +667,7 @@ class LMEngine(object):
             good_step = er1 < er0
 
             if good_step:
+                n_good_steps += 1
                 CLOG.debug('%f\t%f' % (er0, er1))
                 #Updating:
                 self.update_param_vals(delta_vals, incremental=True)
@@ -681,6 +683,7 @@ class LMEngine(object):
                     raise RuntimeError('Function updates are not exact.')
 
             self._inner_run_counter += 1
+        return n_good_steps
 
     def _calc_damped_jtj(self):
         if self.marquardt_damping:
