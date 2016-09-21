@@ -19,7 +19,7 @@ def clip(field):
 
 def extract_field(state, field='exp-particles'):
     if field == 'exp-particles':
-        out = ((1-state.data)*(state.get('obj').get_field() > 1e-5))[state.inner]
+        out = ((1-state.data)*(state.get('obj').get() > 1e-5))[state.inner]
     elif field == 'exp-platonic':
         out = ((1-state.data)*(state._platonic_image() > 1e-5))[state.inner]
     elif field == 'sim-particles':
@@ -92,11 +92,15 @@ def volume_render(field, outfile, maxopacity=1.0, cmap='bone', vmin=None, vmax=N
     renderer = vtk.vtkRenderer()
     renderWin = vtk.vtkRenderWindow()
     renderWin.AddRenderer(renderer)
+    renderWin.SetOffScreenRendering(1);
+
+    if not hasattr(size, '__iter__'):
+        size = (size, size)
 
     renderer.AddVolume(volume)
     renderer.AddLight(light)
     renderer.SetBackground(*bkg)
-    renderWin.SetSize(size, size)
+    renderWin.SetSize(*size)
 
     if offscreen:
         renderWin.SetOffScreenRendering(1)
