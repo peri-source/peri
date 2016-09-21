@@ -636,17 +636,17 @@ class LMEngine(object):
                 self._last_error = _last_error
                 self._last_vals = _last_vals
                 self.error
-                self.do_internal_run()
+                self.do_internal_run(initial_count=1)
             #1 loop
             self._num_iter += 1
 
-    def do_internal_run(self):
+    def do_internal_run(self, initial_count=0):
         """
         Given a fixed damping, J, JTJ, iterates calculating steps, with
         optional Broyden or eigendirection updates.
         Called internally by do_run_2() but might also be useful on its own.
         """
-        self._inner_run_counter = 0; good_step = True
+        self._inner_run_counter = initial_count; good_step = True
         CLOG.debug('Running...')
 
         _last_residuals = self.calc_residuals().copy()
