@@ -825,7 +825,7 @@ class LMEngine(object):
         CLOG.debug('Broyden update.')
         delta_vals = self.param_vals - self._last_vals
         delta_residuals = self._last_residuals - self.calc_residuals()
-        nrm = np.sqrt(delta_vals*delta_vals)
+        nrm = np.sqrt(np.dot(delta_vals, delta_vals))
         direction = delta_vals / nrm
         vals = delta_residuals / nrm
         self._rank_1_J_update(direction, vals)
