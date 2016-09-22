@@ -375,7 +375,7 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
             CLOG.info('Start add_subtract optimization.')
             opt.do_levmarq(st, opt.name_globals(st, remove_params=st.get(
                     'psf').params), max_iter=1, run_length=4, num_eig_dirs=3,
-                    max_mem=max_mem, partial_update_frequency=2, use_aug=False,
+                    max_mem=max_mem, eig_update_frequency=2, use_aug=False,
                     use_accel=True)
             CLOG.info('Add_subtract optimization:\t%f' % st.error)
 
