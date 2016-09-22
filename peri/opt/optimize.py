@@ -424,8 +424,6 @@ class LMEngine(object):
             do_run_2: Function
 
         """
-        # self.damping = float(damping)
-        self.damping = np.array(damping).astype('float')
         self.increase_damp_factor = float(increase_damp_factor)
         self.decrease_damp_factor = float(decrease_damp_factor)
         self.min_eigval = min_eigval
@@ -462,8 +460,9 @@ class LMEngine(object):
 
         #Finally we set the error and parameter values:
         self._set_err_paramvals()
+        self.damping = np.ones(self.param_vals.size, dtype='float')
+        self.damping[:] = np.array(damping)  #keeping the damping always a vector
         self._has_run = False
-
         self.eig_dl = eig_dl
 
     def reset(self, new_damping=None):
@@ -640,11 +639,15 @@ class LMEngine(object):
             #1 loop
             self._num_iter += 1
 
-    def do_internal_run(self, initial_count=0):
+    def do_internal_run(self, initial_count=0, subblock=None):
         """
         Given a fixed damping, J, JTJ, iterates calculating steps, with
         optional Broyden or eigendirection updates.
         Called internally by do_run_2() but might also be useful on its own.
+        Parameters
+        ----------
+            initial_count
+            subblock
         """
         self._inner_run_counter = initial_count; good_step = True
         n_good_steps = 0
@@ -662,7 +665,7 @@ class LMEngine(object):
             #2. Getting parameters, error
             er0 = 1*self.error
             delta_vals = self.find_LM_updates(self.calc_grad(),
-                    do_correct_damping=False)
+                    do_correct_damping=False, subblock=subblock)
             er1 = self.update_function(self.param_vals + delta_vals)
             good_step = er1 < er0
 
@@ -697,10 +700,12 @@ class LMEngine(object):
         damped_JTJ = self.JTJ + self.damping*diag
         return damped_JTJ
 
-    def find_LM_updates(self, grad, do_correct_damping=True):
+    def find_LM_updates(self, grad, do_correct_damping=True, subblock=None):
         """
         Calculates LM updates, with or without the acceleration correction.
         """
+        if subblock is not None:
+            raise NotImplementedError
         damped_JTJ = self._calc_damped_jtj()
         delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, grad, rcond=self.min_eigval)
         if self._fresh_JTJ:
