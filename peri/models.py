@@ -157,6 +157,12 @@ class Model(object):
             compname = diffmap.keys()[0]
             return eval(self.get_difference_model(compname), evar)
 
+    def __str__(self):
+        return "{} : {}".format(self.__class__.__name__, self.get_base_model())
+
+    def __repr__(self):
+        return self.__str__()
+
 class ConfocalImageModel(Model):
     def __init__(self):
         varmap = {
