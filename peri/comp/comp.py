@@ -88,7 +88,7 @@ class ParameterGroup(object):
 #=============================================================================
 # Component class == model components for an image
 #=============================================================================
-class Component(ParameterGroup):
+class Component(ParameterGroup, util.CompatibilityPatch):
     def __init__(self, params, values, ordered=True, category='comp'):
         for attr in ['shape', 'inner', '_parent']:
             if not hasattr(self, attr):
@@ -399,7 +399,17 @@ class ComponentCollection(Component):
 
     def sync_params(self):
         """ Ensure that shared parameters are the same value everywhere """
-        pass # FIXME
+        def _normalize(comps, param):
+            vals = [c.get_values(param) for c in comps]
+            diff = any([vals[i] != vals[i+1] for i in xrange(len(vals)-1)])
+
+            if diff:
+                for c in comps:
+                    c.update(param, vals[0])
+
+        for param, comps in self.lmap.iteritems():
+            if isinstance(comps, list) and len(comps) > 1:
+                _normalize(comps, param)
 
     def trigger_parameter_change(self):
         self.setup_params()

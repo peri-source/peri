@@ -54,6 +54,14 @@ def a3(a):
         return np.array([a]*3, dtype='int')
     return np.array(a).astype('int')
 
+class CompatibilityPatch(object):
+    def patch(self, names, default_values):
+        names = listify(names)
+        default_values = listify(default_values)
+
+        for n, v in zip(names, default_values):
+            self.__dict__.update({n: self.__dict__.get(n, v)})
+
 class Tile(object):
     def __init__(self, left, right=None, mins=None, maxs=None,
             size=None, centered=False):
@@ -445,7 +453,7 @@ class NullImage(Image):
     def __str__(self):
         return self.__repr__()
 
-class RawImage(Image):
+class RawImage(Image, CompatibilityPatch):
     def __init__(self, filename, tile=None, invert=False, exposure=None,
             float_precision=np.float64):
         """
@@ -519,9 +527,7 @@ class RawImage(Image):
 
     def __setstate__(self, idct):
         self.__dict__.update(idct)
-        ##Compatibility patches...
-        self.float_precision = self.__dict__.get('float_precision', np.float64)
-        ##end compatibility patch
+        self.patch('float_precision', np.float64)
         self.image = self.load_image()
 
     def __repr__(self):
