@@ -688,6 +688,61 @@ class LMEngine(object):
             self._inner_run_counter += 1
         return n_good_steps
 
+    def do_stuckJ_run(self):
+        """
+        Optimization when a J is calculated, but trying to step with a full
+        J results in a bad step.
+        """
+        #0. Initialize an active list of sub-blocks of J
+        full_blk = np.ones(self.J.shape[0], dtype='bool')
+        active_list = halve_randomly(full_blk)
+        good_params = np.zeros_like(full_blk, dtype='bool')
+        bad_params = np.zeros_like(full_blk, dtype='bool')
+
+        while len(active_list) > 0:
+            #1. Pop one active sub-block
+            #   You might want to always pop the largest block.
+            cur_block = active_list.pop(np.random.choice(len(active_list)))
+
+            #2. Take a step with the sub-block
+            CLOG.debug('Run with {}-element subblock:'.format(cur_block.sum()))
+            n_steps = self.do_internal_run(subblock=cur_block)
+
+            #3. IF subblock is good or bad, flow:
+            if n_steps > 0:  #at least 1 good step == good block
+                good_params |= cur_block
+            elif cur_block.sum() > 1:  #bad block, can be halved
+                active_list.extend(halve_randomly(cur_block))
+            else:
+                bad_params |= cur_block
+            #4. run while len(active_list) > 0
+
+        #5. Try a step with the good parameters
+        CLOG.debug('Run with all {} good parameters.'.format(good_params.sum()))
+        _ = self.do_internal_run(subblock=good_params)
+
+        #6. Update the bad parameters
+        if bad_params.sum() > 0:
+            self.update_select_J(bad_params)
+
+        #7. Run with full J
+        CLOG.debug('Try run with all parameters.')
+        n_full_steps = self.do_internal_run()  #??
+        if (n_full_steps == 0) & (bad_params.sum() > 0):  #bad step:
+            CLOG.debug('Run with freshly-updated {} bad parameters.'.format(bad_params.sum()))
+            n_bad_steps = self.do_internal_run(subblock=bad_params)
+            while n_bad_steps == 0:
+                #bad step but we know J is correct b/c we just updated it:
+                self.increase_damping()
+                n_bad_steps = self.do_internal_run(subblock=bad_params)
+            #loop is broken == we've run with updated params.
+            #now run with full J
+            _ = self.do_internal_run()
+        #8. Because we might want to keep running this until it stops working,
+        #   we return the number of bad parameters to decide whether to
+        #   keep going.
+        return bad_params.sum()
+
     def _calc_damped_jtj(self, JTJ, subblock=None):
         if self.marquardt_damping:
             diag_vals = np.diag(JTJ)
