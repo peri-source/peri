@@ -1,4 +1,17 @@
 """
+Basically I'm trying to cover 4 options, one of each:
+    (Previously featured state,     No previously featured state)
+    (using previous positions,      no previous positions)
+    -----------------------------------------------------
+    (no, no)    = get_initial_featuring
+    (yes, no)   = get_particle_featuring
+    (yes, yes)  = translate_featuring
+    (no, yes)   = stupid, not doing. Or should I???
+
+These do:
+    (use globals to start,          start from nothing)
+    (use positions to start,        start from trackpy)
+
 Comments:
 If you start from featured globals it seems that slab etc is off enough where
 particles get added in regions they shouldn't be (e.g. below the slab).
@@ -252,9 +265,8 @@ def _calc_ilm_order(imshape):
             npts += ( int(imshape[2] * 11/512.) + 1,)
     return npts, zorder
 
-def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
-        min_rad='calc', max_rad='calc', max_mem=1e9, do_polish=True,
-        use_full_path=False):
+def translate_featuring(state_name=None, im_name=None, use_full_path=False,
+        **kwargs):
     """
     Translates one optimized state into another image where the particles
     have moved by a small amount (~1 particle radius).
@@ -263,6 +275,19 @@ def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
 
     Parameters
     ----------
+        state_name : String or None
+            The name of the initially-optimized state. If None, then it
+            is interactively selected by the user through a Tk window.
+
+        im_name : String or None
+            The name of the new image to optimize. If None, then it is
+            interactively selected by the user through a Tk window.
+
+        use_full_path : Bool
+            Set to True to use the full path of the state instead of
+            partial path names (e.g. C:\Users\Me\Desktop\state.pkl vs
+            state.pkl).
+
         desc : String
             A description to be inserted in saved state. The save name will
             be, e.g., '0.tif-peri-' + desc + 'initial-burn.pkl'. Default is ''
@@ -282,6 +307,10 @@ def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
         max_mem : Numeric
             The maximum additional memory to use for the optimizers, as
             passed to optimize.burn. Default is 1e9.
+
+        do_polish : Bool
+            Set to False to only optimize the particles and add-subtract.
+            Default is True, which then runs a polish afterwards.
     """
     state_name, im_name = _pick_state_im_name(state_name, im_name,
                 use_full_path=use_full_path)
@@ -290,28 +319,67 @@ def translate_featuring(state_name=None, im_name=None, desc='', invert=True,
     im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
 
     s.set_image(im)
-    _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
-            do_polish=do_polish)
+    _translate_particles(s, **kwargs)
     return s
 
 def get_particles_featuring(feature_diam, state_name=None, im_name=None,
-        actual_rad=None, desc='', invert=True, min_rad='calc', max_rad='calc',
-         max_mem=1e9, zscale=0.9, minmass=100, use_full_path=False):
+        use_full_path=False, actual_rad=None, zscale=0.9, minmass=100,
+        **kwargs):
     """
     Runs trackpy.locate on an image, sets the globals from a previous state,
     calls _translate_particles
+    Parameters
+    ----------
+        feature_diam : Int
+            The diameters of the features in the new image, sent to
+            trackpy.locate.
 
-    Basically I'm trying to cover 4 options, one of each:
-        (Previously featured state,     No previously featured state)
-        (using previous positions,      no previous positions)
-    (no, no)    = get_initial_featuring
-    (yes, no)   = get_particle_featuring
-    (yes, yes)  = translate_featuring
-    (no, yes)   = stupid, not doing. Or should I???
+        state_name : String or None
+            The name of the initially-optimized state. If None, then it
+            is interactively selected by the user through a Tk window.
 
-    These do:
-        (use globals to start,          start from nothing)
-        (use positions to start,        start from trackpy)
+        im_name : String or None
+            The name of the new image to optimize. If None, then it is
+            interactively selected by the user through a Tk window.
+
+        use_full_path : Bool
+            Set to True to use the full path of the state instead of
+            partial path names (e.g. C:\Users\Me\Desktop\state.pkl vs
+            state.pkl).
+
+        actual_rad : Float or None
+            The initial guess for the particle radii, which can be distinct
+            from feature_diam/2. If None, then defaults to feature_diam/2.
+
+        zscale : Float
+            The zscale of the PlatonicSpheresCollection. Default is 0.9.
+
+        minmass : Float
+            The minimum mass, as pased to trackpy.locate. Default is 100.
+
+        desc : String
+            A description to be inserted in saved state. The save name will
+            be, e.g., '0.tif-peri-' + desc + 'initial-burn.pkl'. Default is ''
+
+        invert : Bool
+            Whether to invert the image for featuring, as passed to
+            addsubtract.add_subtract. Default is True.
+        min_rad : Float
+            The minimum particle radius, as passed to addsubtract.add_subtract.
+            Default is 'calc', but a known physical value will give better
+            answers.
+        max_rad : Float
+            The maximum particle radius, as passed to addsubtract.add_subtract.
+            Default is 'calc', but a known physical value will give better
+            answers.
+
+        max_mem : Numeric
+            The maximum additional memory to use for the optimizers, as
+            passed to optimize.burn. Default is 1e9.
+
+        do_polish : Bool
+            Set to False to only optimize the particles and add-subtract.
+            Default is True, which then runs a polish afterwards.
     """
     state_name, im_name = _pick_state_im_name(state_name, im_name,
             use_full_path=use_full_path)
@@ -336,8 +404,7 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
     s.set('obj', o)
 
     s.set_image(im)
-    _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
-        do_polish=True)
+    _translate_particles(s, **kwargs)
     return s
 
 def _pick_state_im_name(state_name, im_name, use_full_path=False):
@@ -362,8 +429,8 @@ def _pick_state_im_name(state_name, im_name, use_full_path=False):
         os.chdir(initial_dir)
     return state_name, im_name
 
-def _translate_particles(s, desc, max_mem, min_rad, max_rad, invert,
-        do_polish=True):
+def _translate_particles(s, desc='', max_mem=1e9, min_rad='calc',
+        max_rad='calc', invert=True, do_polish=True):
     RLOG.info('Translate Particles:')
     opt.burn(s, mode='do-particles', n_loop=4, fractol=0.1, desc=desc+
             'translate-particles', max_mem=max_mem, include_rad=False)
