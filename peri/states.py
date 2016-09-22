@@ -630,7 +630,7 @@ class ImageState(State, comp.ComponentCollection):
     def __setstate__(self, idct):
         self.__init__(**idct)
 
-    def set_mem_level(self, mem_level='high'):
+    def set_mem_level(self, mem_level='hi'):
         """
         Sets the memory usage level of the state.
             hi      : all mem's are np.float64
