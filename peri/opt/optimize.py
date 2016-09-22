@@ -688,47 +688,66 @@ class LMEngine(object):
             self._inner_run_counter += 1
         return n_good_steps
 
-    def _calc_damped_jtj(self):
+    def _calc_damped_jtj(self, JTJ, subblock=None):
         if self.marquardt_damping:
-            diag_vals = np.diag(self.JTJ)
+            diag_vals = np.diag(JTJ)
         elif self.transtrum_damping is not None:
-            diag_vals = np.clip(np.diag(self.JTJ), self.transtrum_damping, np.inf)
+            diag_vals = np.clip(np.diag(JTJ), self.transtrum_damping, np.inf)
         else:
-            diag_vals = np.ones(self.JTJ.shape[0])
+            diag_vals = np.ones(JTJ.shape[0])
 
         diag = np.diagflat(diag_vals)
-        damped_JTJ = self.JTJ + self.damping*diag
+        if subblock is None:
+            damped_JTJ = JTJ + self.damping*diag
+        else:
+            damped_JTJ = JTJ + self.damping[subblock]*diag
         return damped_JTJ
+
 
     def find_LM_updates(self, grad, do_correct_damping=True, subblock=None):
         """
         Calculates LM updates, with or without the acceleration correction.
         """
         if subblock is not None:
-            raise NotImplementedError
-        damped_JTJ = self._calc_damped_jtj()
-        delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, grad, rcond=self.min_eigval)
-        if self._fresh_JTJ:
-            CLOG.debug('%d degenerate of %d total directions' % (delta0.size-rank, delta0.size))
+            j = self.J[subblock]
+            JTJ = np.dot(j, j.T)
+            damped_JTJ = self._calc_damped_jtj(JTJ, subblock=subblock)
+            #and I never call it with anything other than calc_grad, so:
+            grad = self.calc_grad()[subblock]
+        else:
+            grad = self.calc_grad()
+            damped_JTJ = self._calc_damped_jtj(self.JTJ, subblock=subblock)
+
+        delta = self._calc_lm_step(damped_JTJ, grad, subblock=subblock)
 
         if self.use_accel:
-            accel_correction = self.calc_accel_correction(damped_JTJ, delta0)
-            nrm_d0 = np.sqrt(np.sum(delta0**2))
+            accel_correction = self.calc_accel_correction(damped_JTJ, delta)
+            nrm_d0 = np.sqrt(np.sum(delta**2))
             nrm_corr = np.sqrt(np.sum(accel_correction**2))
             CLOG.debug('|correction| / |LM step|\t%e' % (nrm_corr/nrm_d0))
             if nrm_corr/nrm_d0 < self.max_accel_correction:
-                delta0 += accel_correction
+                delta += accel_correction
             elif do_correct_damping:
                 CLOG.debug('Untrustworthy step! Increasing damping...')
                 self.increase_damping()
-                damped_JTJ = self._calc_damped_jtj()
-                delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, -grad, \
-                        rcond=self.min_eigval)
+                damped_JTJ = self._calc_damped_jtj(JTJ, subblock=subblock)
+                delta = self._calc_lm_step(damped_JTJ, grad, subblock=subblock)
 
-        if np.any(np.isnan(delta0)):
+        if np.any(np.isnan(delta)):
             CLOG.fatal('Calculated steps have nans!?')
             raise FloatingPointError('Calculated steps have nans!?')
-        return delta0
+        return delta
+
+    def _calc_lm_step(self, damped_JTJ, grad, subblock=None):
+        delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, grad, rcond=self.min_eigval)
+        if self._fresh_JTJ:
+            CLOG.debug('%d degenerate of %d total directions' % (delta0.size-rank, delta0.size))
+        if subblock is not None:
+            delta = np.zeros(self.J.shape[0])
+            delta[subblock] = delta0
+        else:
+            delta = delta0.copy()
+        return delta
 
     def increase_damping(self):
         self.damping *= self.increase_damp_factor
