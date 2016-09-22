@@ -703,7 +703,6 @@ class LMEngine(object):
             damped_JTJ = JTJ + self.damping[subblock]*diag
         return damped_JTJ
 
-
     def find_LM_updates(self, grad, do_correct_damping=True, subblock=None):
         """
         Calculates LM updates, with or without the acceleration correction.
@@ -931,6 +930,24 @@ class LMEngine(object):
         corr *= 0.5
         return corr
 
+    def update_select_J(self, blk):
+        """
+        Updates J only for certain parameters, described by the boolean
+        mask blk.
+        """
+        p0 = self.param_vals.copy()
+        self.update_function(p0)  #in case things are not put back...
+        r0 = self.calc_residuals().copy()
+        dl = np.zeros(p0.size, dtype='float')
+        blk_J = []
+        for i in np.nonzero(blk)[0]:
+            dl *= 0; dl[i] = self.eig_dl
+            self.update_function(p0 + dl)
+            r1 = self.calc_residuals().copy()
+            blk_J.append((r1-r0)/self.eig_dl)
+        self.J[blk] = np.array(blk_J)
+        self.update_function(p0)
+
 class LMFunction(LMEngine):
     def __init__(self, data, func, p0, func_args=(), func_kwargs={}, dl=1e-8,
             **kwargs):
@@ -1136,6 +1153,16 @@ class LMGlobals(LMEngine):
         self.param_names = new_param_names
         self._set_err_paramvals()
         self.reset(new_damping=new_damping)
+
+    def update_select_J(self, blk):
+        """
+        Updates J only for certain parameters, described by the boolean
+        mask blk.
+        """
+        self.update_function(self.param_vals)
+        params = np.array(self.param_names)[blk].tolist()
+        blk_J = -self.state.gradmodel(params=params, inds=self._inds, flat=False)
+        self.J[blk] = blk_J
 
 class LMParticles(LMEngine):
     def __init__(self, state, particles, include_rad=True, **kwargs):
