@@ -308,6 +308,11 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
             The maximum additional memory to use for the optimizers, as
             passed to optimize.burn. Default is 1e9.
 
+        mem_level : String
+            Set to one of 'hi', 'med-hi', 'med', 'med-lo', 'lo' to control
+            the memory overhead of the state at the expense of accuracy.
+            Default is 'hi'.
+
         do_polish : Bool
             Set to False to only optimize the particles and add-subtract.
             Default is True, which then runs a polish afterwards.
@@ -377,6 +382,11 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
             The maximum additional memory to use for the optimizers, as
             passed to optimize.burn. Default is 1e9.
 
+        mem_level : String or None
+            Set to one of 'hi', 'med-hi', 'med', 'med-lo', 'lo' to control
+            the memory overhead of the state at the expense of accuracy.
+            Default is 'hi'.
+
         do_polish : Bool
             Set to False to only optimize the particles and add-subtract.
             Default is True, which then runs a polish afterwards.
@@ -430,7 +440,9 @@ def _pick_state_im_name(state_name, im_name, use_full_path=False):
     return state_name, im_name
 
 def _translate_particles(s, desc='', max_mem=1e9, min_rad='calc',
-        max_rad='calc', invert=True, do_polish=True):
+        max_rad='calc', invert=True, do_polish=True, mem_level='hi'):
+    """Workhorse for translating particles."""
+    s.set_mem_level(mem_level)  #overkill because always sets mem, but w/e
     RLOG.info('Translate Particles:')
     opt.burn(s, mode='do-particles', n_loop=4, fractol=0.1, desc=desc+
             'translate-particles', max_mem=max_mem, include_rad=False)
