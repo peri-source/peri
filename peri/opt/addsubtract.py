@@ -373,9 +373,10 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
         elif _change_since_opt > max_npart:
             _change_since_opt *= 0
             CLOG.info('Start add_subtract optimization.')
-            opt.do_levmarq(st, opt.name_globals(st, include_psf=False),
-                    max_iter=1, run_length=4, num_eig_dirs=3, max_mem=max_mem,
-                    partial_update_frequency=2, use_aug=False, use_accel=True)
+            opt.do_levmarq(st, opt.name_globals(st, max_iter=1, run_length=4,
+                    remove_params=st.get('psf').params, num_eig_dirs=3,
+                    max_mem=max_mem, partial_update_frequency=2, use_aug=False,
+                    use_accel=True)
             CLOG.info('Add_subtract optimization:\t%f' % st.error)
 
     #Optimize the added particles' radii:
