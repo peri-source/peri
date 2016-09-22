@@ -146,6 +146,11 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
             A tile of the sub-region of the image to feature. Default is
             None, i.e. entire image.
 
+        mem_level : String
+            Set to one of 'hi', 'med-hi', 'med', 'med-lo', 'lo' to control
+            the memory overhead of the state at the expense of accuracy.
+            Default is 'hi'.
+
         desc : String
             A description to be inserted in saved state. The save name will
             be, e.g., '0.tif-peri-' + desc + 'initial-burn.pkl', with
