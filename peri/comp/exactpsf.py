@@ -23,7 +23,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
             pxsize=0.125, support_factor=2, normalize=False, sigkf=0.0,
             nkpts=None, cutoffval=None, measurement_iterations=None,
-            k_dist='gaussian', use_J1=True, sph6_ab=None,
+            k_dist='gaussian', use_J1=True, sph6_ab=None, global_zscale=False,
             cutbyval=False, cutfallrate=0.25, cutedgeval=1e-12,
             pinhole_width=None, do_pinhole=False, *args, **kwargs):
         """
@@ -202,11 +202,16 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             values = np.delete(values, ind)
 
         for i in xrange(len(params)):
-            params[i] = 'psf-' + params[i]
+            if params[i] is not 'zscale' and not self.global_zscale:
+                params[i] = 'psf-' + params[i]
 
         super(ExactLineScanConfocalPSF, self).__init__(
             *args, params=params, values=values, shape=shape, **kwargs
         )
+
+    @property
+    def zscale(self):
+        return 'zscale' if self.global_zscale else 'psf-zscale'
 
     def set_shape(self, shape, inner):
         if self.zrange is None:
@@ -241,7 +246,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         # calculate the current pixel value in 1/k, making sure we are above the slab
         zint = max(self._p2k(self._tz(zint)), 0)
         offset = np.array([zoffset*(zint>0), 0, 0])
-        scale = [self.param_dict['psf-zscale'], 1.0, 1.0]
+        scale = [self.param_dict[self.zscale], 1.0, 1.0]
 
         # create the coordinate vectors for where to actually calculate the
         tile = util.Tile(left=0, size=size, centered=True)
@@ -319,7 +324,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             'psf-laser-wavelength': 'laser_wavelength',
             'psf-pinhole-width': 'pinhole_width'
         }
-        bads = ['psf-zscale', 'psf-zslab']
+        bads = [self.zscale, 'psf-zslab']
 
         d = {}
         for k,v in mapper.iteritems():
@@ -348,7 +353,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
     def _tz(self, z):
         """ Transform z to real-space coordinates from tile coordinates """
-        return (z-self.param_dict['psf-zslab'])*self.param_dict['psf-zscale']
+        return (z-self.param_dict['psf-zslab'])*self.param_dict[self.zscale]
 
     def drift(self, z):
         """ Give the pixel offset at a given z value for the current parameters """
@@ -407,7 +412,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
         #Clipping params to computable values:
         alpha = self.param_dict['psf-alpha']
-        zscale = self.param_dict['psf-zscale']
+        zscale = self.param_dict[self.zscale]
         wavelength = self.param_dict['psf-laser-wavelength']
         max_alpha, max_zscale = np.pi/2, 100.
 
@@ -416,7 +421,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             self.param_dict['psf-alpha'] = np.clip(alpha, 1e-3, max_alpha-1e-3)
         if zscale < 1e-3 or zscale > max_zscale:
             warnings.warn('Invalid zscale, clipping', RuntimeWarning)
-            self.param_dict['psf-zscale'] = np.clip(zscale, 1e-3, max_zscale-1e-3)
+            self.param_dict[self.zscale] = np.clip(zscale, 1e-3, max_zscale-1e-3)
         if wavelength < 1e-3:
             warnings.warn('Invalid laser wavelength, clipping', RuntimeWarning)
             self.param_dict['psf-laser-wavelength'] = np.clip(wavelength, 1e-3, np.inf)
@@ -503,6 +508,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
+        self.patch('global_zscale', False)
         if self.shape:
             self.initialize()
 
