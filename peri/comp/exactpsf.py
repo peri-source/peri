@@ -135,6 +135,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.support_factor = support_factor
         self.normalize = normalize
         self.measurement_iterations = measurement_iterations or 11
+        self.global_zscale = global_zscale
 
         self.polychromatic = False
         self.sigkf = sigkf
@@ -579,4 +580,8 @@ class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
         size_u, drift_u = self.measure_size_drift(u, size=self.support)
 
         self.drift_poly = np.polyfit([l, u], [drift_l, drift_u], 1)
+
+    def __str__(self):
+        return "{} {}".format(self.__class__.__name__, self.support)
+
 
