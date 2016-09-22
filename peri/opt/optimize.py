@@ -138,6 +138,20 @@ def vectorize_damping(params, damping=1.0, increase_list=[['psf-', 1e4]]):
                 damp_vec[a] *= fctr
     return damp_vec
 
+def halve_randomly(blk):
+    """
+    Given an array blk of bools, returns two arrays blk1, blk2 such that
+    blk1 | blk2 = blk, blk1 & blk2 = 0, and blk1 and blk2 have an equal
+    amount of True's.
+    """
+    inds = np.nonzero(blk)[0]
+    np.random.shuffle(inds)  #in-place shuffling
+    blk1 = np.zeros_like(blk, dtype='bool')
+    blk2 = np.zeros_like(blk, dtype='bool')
+    blk1[inds[:inds.size/2]] = True
+    blk2[inds[inds.size/2:]] = True
+    return [blk1,blk2]
+
 #=============================================================================#
 #               ~~~~~  Particle Optimization stuff  ~~~~~
 #=============================================================================#
