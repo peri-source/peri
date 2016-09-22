@@ -84,6 +84,11 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
         minmass : Float
             minmass for featuring, as passed to trackpy. Default is 100.
 
+        mem_level : String
+            Set to one of 'hi', 'med-hi', 'med', 'med-lo', 'lo' to control
+            the memory overhead of the state at the expense of accuracy.
+            Default is 'hi'.
+
         slab : peri.comp.objs.Slab instance or None
             If not None, a slab corresponding to that in the image. Default
             is None.
@@ -181,7 +186,9 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
     return s
 
 def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
-        min_rad=None, max_rad=None, invert=True, use_aug=False, zscale=1.0):
+        min_rad=None, max_rad=None, invert=True, use_aug=False, zscale=1.0,
+        mem_level='hi'):
+    """See get_initial_featuring's __doc__"""
     if min_rad is None:
         min_rad = 0.5 * rad.mean()
     if max_rad is None:
@@ -203,6 +210,8 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     b = ilms.LegendrePoly2P1D(order=(9,3,5), category='bkg') #FIXME order needs to be based on image size, slab
     c = comp.GlobalScalar('offset', 0.0)
     s = states.ImageState(im, [o, i, b, c, p])
+    if mem_level != 'hi':
+        s.set_mem_level(mem_level)
     RLOG.info('State Created.')
 
     opt.do_levmarq(s, ['ilm-scale'], max_iter=1, run_length=6, max_mem=max_mem)
