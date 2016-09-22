@@ -283,12 +283,12 @@ class State(comp.ParameterGroup):
 
         self.state = _Statewrap(self)
 
-    def crb(self, params=None):
+    def crb(self, params=None, *args, **kwargs):
         """
         Calculate the diagonal elements of the minimum covariance of the model
-        with respect to parameters params.
+        with respect to parameters params. *args and **kwargs go to fisherinformation.
         """
-        fish = self.fisherinformation(params=params)
+        fish = self.fisherinformation(params=params, *args, **kwargs)
         return np.sqrt(np.diag(np.linalg.inv(fish))) * self.sigma
 
     def __str__(self):
@@ -616,10 +616,11 @@ class ImageState(State, comp.ComponentCollection):
         def _pad(s):
             return re.subn('(\n)', '\n    ', s)[0]
 
-        image = _pad('\nimage: {}\n'.format(str(self.image)))
+        model = _pad('\nmodel: {}\n'.format(str(self.mdl)))
+        image = _pad('image: {}\n'.format(str(self.image)))
         comps = _pad('\n'.join([c.category+': '+str(c) for c in self.comps]))
 
-        return "{} [{}{}\n]".format(self.__class__.__name__, image, comps)
+        return "{} [{}{}{}\n]".format(self.__class__.__name__, model, image, comps)
 
     def __getstate__(self):
         return {'image': self.image, 'comps': self.comps, 'mdl': self.mdl,
