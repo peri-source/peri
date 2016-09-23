@@ -1126,10 +1126,10 @@ class OptObj(object):
         return None
 
 class OptState(OptObj):
-    def __init__(self, state, direction, p0=None, dl=1e-7, be_nice=False):
+    def __init__(self, state, directions, p0=None, dl=1e-7, be_nice=False):
         """
         A wrapper for a peri.states instance which allows for optimization
-        along any one direction. (Make it > 1?)
+        along any set of directions.
         """
         self.state = state
         self.dl = dl
@@ -1140,12 +1140,15 @@ class OptState(OptObj):
             self.p0 = p0.copy()
             if p0.size != np.size(state.state[state.params]):
                 raise ValueError('direction must have same # of elements as state.size')
-        self.param_vals = np.zeros(1)
-        self.direction = np.array(direction)
+        self.directions = np.array(directions)
+        self.param_vals = np.zeros(self.directions.shape[0])
 
     def update_function(self, param_vals):
-        """Updates the state, with param_vals = distance from self.p0 along self.direction."""
-        self.state.update(self.state.params, self.p0 + self.direction * param_vals)
+        """Updates with param_vals[i] = distance from self.p0 along self.direction[i]."""
+        dp = np.zeros(self.p0.size)
+        for a in xrange(param_vals.size):
+            dp += param_vals[a] * self.directions[a]
+        self.state.update(self.state.params, self.p0 + dp)
         self.param_vals[:] = param_vals
         return None
 
@@ -1158,11 +1161,17 @@ class OptState(OptObj):
     def calc_J(self):
         """Calculates J along the direction."""
         r0 = self.state.residuals.copy().ravel()
-        self.update_function(self.param_vals + self.dl)
-        r1 = self.state.residuals.copy().ravel()
-        if self.be_nice:
-            self.update-function(self.param_vals)
-        return np.array([(r1-r0)/self.dl])
+        dl = np.zeros(self.param_vals.size)
+        p0 = self.param_vals.copy()
+        J = []
+        for a in xrange(self.param_vals.size):
+            dl *= 0
+            dl[a] += self.dl
+            self.update_function(p0 + dl)
+            r1 = self.state.residuals.copy().ravel()
+            J.append( (r1-r0)/self.dl)
+        self.update_function(p0)
+        return np.array(J)
 
 class LMGlobals(LMEngine):
     def __init__(self, state, param_names, max_mem=1e9, opt_kwargs={}, **kwargs):
@@ -1657,7 +1666,7 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
     if collect_stats:
         return lp.stats
 
-def do_levmarq_one_direction(s, direction, max_iter=2, run_length=2,
+def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
         damping=1e-3, collect_stats=False, marquardt_damping=True, **kwargs):
     """
         Optimization of a state along one direction.
@@ -1665,10 +1674,11 @@ def do_levmarq_one_direction(s, direction, max_iter=2, run_length=2,
         direction : np.ndarray; transformed to a unit vector internally
         The rest are the same **kwargs in LMEngine.
     """
-    normal = direction / np.sqrt(np.dot(direction, direction))
-    obj = OptState(s, direction)
-    lo = LMOptObj(obj, max_iter=max_iter, run_length=run_length, damping=damping,
-            **kwargs)
+    # normal = direction / np.sqrt(np.dot(direction, direction))
+    normals = np.array([d/np.sqrt(np.dot(d,d)) for d in directions])
+    obj = OptState(s, normals)
+    lo = LMOptObj(obj, max_iter=max_iter, run_length=run_length, damping=
+            damping, marquardt_damping=marquardt_damping, **kwargs)
     lo.do_run_1()
     if collect_stats:
         return lo.get_termination_stats()
@@ -1723,6 +1733,13 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
             for both particles & globals. Default is 1e9, i.e. 1GB per
             optimizer.
 
+        do_line_min : Bool
+            Set to True to do an additional, third optimization per loop
+            which optimizes along the subspace spanned by the last 3 steps
+            of the burn()'s trajectory. In principle this should signifi-
+            cantly speed up the convergence; in practice it sometimes does,
+            sometimes doesn't. Default is False (no subspace minimization).
+
     Comments
     --------
         - It would be nice if some of these magic #'s (region size, num_eig_dirs,
@@ -1754,6 +1771,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     all_line_stats = []
     all_loop_values = []
 
+    _delta_vals = []  #storing the directions we've moved along for line min
     #2. Optimize
     CLOG.info('Start of loop %d:\t%f' % (0, s.error))
     for a in xrange(n_loop):
@@ -1799,9 +1817,10 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
         #2c. Line min?
         end_params = np.copy(s.state[s.params])
+        _delta_vals.append(start_params - end_params)
         if do_line_min:
-            all_line_stats.append(do_levmarq_one_direction(s, start_params -
-                     end_params, collect_stats=collect_stats))
+            all_line_stats.append(do_levmarq_n_directions(s, _delta_vals[-3:],
+                    collect_stats=collect_stats))
             if desc is not None:
                 states.save(s, desc=desc)
             CLOG.info('Line min, loop %d:\t%f' % (a, s.error))
