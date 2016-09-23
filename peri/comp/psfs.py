@@ -123,7 +123,7 @@ class PSF(Component):
         return self.__repr__()
 
     def __repr__(self):
-        return str(self.__class__.__name__)+" {} ".format(self.values)
+        return "{} {}".format(self.__class__.__name__, self.values)
 
 class IdentityPSF(PSF):
     def __init__(self):
