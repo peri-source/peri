@@ -203,8 +203,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             values = np.delete(values, ind)
 
         for i in xrange(len(params)):
-            if params[i] is not 'zscale' and not self.global_zscale:
-                params[i] = 'psf-' + params[i]
+            if params[i] is 'zscale' and self.global_zscale:
+                continue
+            params[i] = 'psf-' + params[i]
 
         super(ExactLineScanConfocalPSF, self).__init__(
             *args, params=params, values=values, shape=shape, **kwargs
