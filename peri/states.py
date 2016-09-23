@@ -616,11 +616,14 @@ class ImageState(State, comp.ComponentCollection):
         def _pad(s):
             return re.subn('(\n)', '\n    ', s)[0]
 
-        model = _pad('\nmodel: {}\n'.format(str(self.mdl)))
+        stats = _pad('\nstats: E={} LL={}\n'.format(self.error, self.loglikelihood))
+        model = _pad('model: {}\n'.format(str(self.mdl)))
         image = _pad('image: {}\n'.format(str(self.image)))
         comps = _pad('\n'.join([c.category+': '+str(c) for c in self.comps]))
 
-        return "{} [{}{}{}\n]".format(self.__class__.__name__, model, image, comps)
+        return "{} [{}{}{}{}{}\n]".format(
+            self.__class__.__name__, stats, model, image, _pad('-'*70+'\n'), comps
+        )
 
     def __getstate__(self):
         return {'image': self.image, 'comps': self.comps, 'mdl': self.mdl,
