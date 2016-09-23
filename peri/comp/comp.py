@@ -405,7 +405,7 @@ class ComponentCollection(Component):
 
             if diff:
                 for c in comps:
-                    c.update(param, vals[0])
+                    c.set_values(param, vals[0])
 
         for param, comps in self.lmap.iteritems():
             if isinstance(comps, list) and len(comps) > 1:
