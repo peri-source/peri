@@ -7,9 +7,7 @@ from peri import runner
 from peri.test import init
 from peri.viz import plots
 
-s = init.create_single_particle_state(imsize=64, radius=5.0, sigma=0.05,
-        psftype='gauss2d', seed=10)#, ilmtype='polynomial', ilmorder=(3,3,2))
-
+s = init.create_single_particle_state(imsize=64, radius=5.0, sigma=0.05, seed=10)
 hess = s.hessloglikelihood()
 
 pl.figure()

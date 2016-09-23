@@ -7,7 +7,7 @@ from peri.viz import interaction
 from peri.test import nbody
 
 im = util.NullImage(np.zeros((32,)*3))
-pos, rad = nbody.create_configuration(30, im.tile)
+pos, rad, tile = nbody.create_configuration(30, im.tile)
 
 def make_image_0():
     P = objs.PlatonicSpheresCollection(pos, rad)
