@@ -23,11 +23,6 @@ If the LMEngine gets 'stuck' on the first loop attempt, since _last_vals ==
 param_vals the LM will check completion and terminate. Leaving as is since I've
 only got this to happen when it's at the minimum...
 
-To fix:
-1. opt.burn() -- right now it seems that the globals aren't fully optimized
-    but the particles are after a few loops. So you might want to spend 1 more
-    iteration updating the globals. Another eig update? More run length?
-
 To add:
 1. AugmentedState: ILM scale options? You'd need a way to get an overall scale
     block, which would probably need to come from the ILM itself.
@@ -35,17 +30,16 @@ To add:
     put stuff back on the card again....
 
 To fix:
-1. In the engine, make do_run_1() and do_run_2() play nicer with each other.
-2. opt.burn() hacks:
-    a.  Once the state is mostly optimized, LMGlobals.J doesn't change much
-        so you could lmglobals.do_internal_run(); lmparticles.do_internal_run()
-        in a loop without recalculating J's (or maybe an eigen update).
-        It would be way faster if you could store all the J's for the
-        particle group collections. Save LMPartilceGroupCollection's lp's J's
-        with numpy.save and a tmp file (standard library).
-        -- this is implemented, but it doesn't work too well.
+1.  In the engine, make do_run_1() and do_run_2() play nicer with each other.
+2.  Right now, when marquardt_damping=False (the default, which works nicely),
+    the correct damping parameter scales with the image size. For each element
+    of J is O(1), so JTJ[i,j]~1^2 * N ~ N where N is the number of residuals
+    pixels. But the damping matrix only matters in its overall ratio to J.
+    So, changing max_mem or changing the image size will affect what a
+    reasonable damping is. One way to do this is to scale the damping by
+    the size of the residuals..........................................
 
-Algorithm is:
+LM Algorithm is:
 1. Evaluate J_ia = df(xi,mu)/dmu_a
 2. Solve the for delta:
     (J^T*J + l*Diag(J^T*J))*delta = J^T(y-f(xi,mu))     (1)
@@ -1664,7 +1658,7 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
         return lp.stats
 
 def do_levmarq_one_direction(s, direction, max_iter=2, run_length=2,
-        damping=1e-3, collect_stats=False, **kwargs):
+        damping=1e-3, collect_stats=False, marquardt_damping=True, **kwargs):
     """
         Optimization of a state along one direction.
         s : state
