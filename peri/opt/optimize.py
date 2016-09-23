@@ -1665,6 +1665,13 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
 
 def do_levmarq_one_direction(s, direction, max_iter=2, run_length=2,
         damping=1e-3, collect_stats=False, **kwargs):
+    """
+        Optimization of a state along one direction.
+        s : state
+        direction : np.ndarray; transformed to a unit vector internally
+        The rest are the same **kwargs in LMEngine.
+    """
+    normal = direction / np.sqrt(np.dot(direction, direction))
     obj = OptState(s, direction)
     lo = LMOptObj(obj, max_iter=max_iter, run_length=run_length, damping=damping,
             **kwargs)
