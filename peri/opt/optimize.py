@@ -1664,9 +1664,10 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
         return lp.stats
 
 def do_levmarq_one_direction(s, direction, max_iter=2, run_length=2,
-        damping=0.03, collect_stats=False, **kwargs):
+        damping=1e-3, collect_stats=False, **kwargs):
     obj = OptState(s, direction)
-    lo = LMOptObj(obj, max_iter=max_iter, run_length=run_length, **kwargs)
+    lo = LMOptObj(obj, max_iter=max_iter, run_length=run_length, damping=damping,
+            **kwargs)
     lo.do_run_1()
     if collect_stats:
         return lo.get_termination_stats()
