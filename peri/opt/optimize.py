@@ -726,8 +726,10 @@ class LMEngine(object):
             #4. run while len(active_list) > 0
 
         #5. Try a step with the good parameters
-        CLOG.debug('Run with all {} good parameters.'.format(good_params.sum()))
-        _ = self.do_internal_run(subblock=good_params)
+        ngood = good_params.sum()
+        if ngood > 0:
+            CLOG.debug('Run with all {} good parameters.'.format(ngood))
+            _ = self.do_internal_run(subblock=good_params)
 
         #6. Update the bad parameters
         if bad_params.sum() > 0:
@@ -739,10 +741,15 @@ class LMEngine(object):
         if (n_full_steps == 0) & (bad_params.sum() > 0):  #bad step:
             CLOG.debug('Run with freshly-updated {} bad parameters.'.format(bad_params.sum()))
             n_bad_steps = self.do_internal_run(subblock=bad_params)
-            while n_bad_steps == 0:
-                #bad step but we know J is correct b/c we just updated it:
+
+            #If we took a bad step, we know the newly-updated J is correct:
+            _try = 0
+            while ((n_bad_steps == 0) & (not self.check_terminate()) &
+                    (_try <self._max_inner_loop)):
                 self.increase_damping()
                 n_bad_steps = self.do_internal_run(subblock=bad_params)
+            if _try >= self._max_inner_loop:
+                CLOG.warn('Stuck!')
             #loop is broken == we've run with updated params.
             #now run with full J
             _ = self.do_internal_run()
@@ -771,13 +778,14 @@ class LMEngine(object):
         Calculates LM updates, with or without the acceleration correction.
         """
         if subblock is not None:
+            if (subblock.sum() == 0) or (subblock.size == 0):
+                CLOG.fatal('Empty subblock in find_LM_updates')
+                raise ValueError('Empty sub-block')
             j = self.J[subblock]
             JTJ = np.dot(j, j.T)
             damped_JTJ = self._calc_damped_jtj(JTJ, subblock=subblock)
-            #and I never call it with anything other than calc_grad, so:
-            grad = self.calc_grad()[subblock]
+            grad = grad[subblock]  #select the subblock of the grad
         else:
-            grad = self.calc_grad()
             damped_JTJ = self._calc_damped_jtj(self.JTJ, subblock=subblock)
 
         delta = self._calc_lm_step(damped_JTJ, grad, subblock=subblock)
@@ -1010,6 +1018,10 @@ class LMEngine(object):
             blk_J.append((r1-r0)/self.eig_dl)
         self.J[blk] = np.array(blk_J)
         self.update_function(p0)
+        #Then we also need to update JTJ:
+        self.JTJ = np.dot(self.J, self.J.T)
+        if np.any(np.isnan(self.J)) or np.any(np.isnan(self.JTJ)):
+            raise FloatingPointError('J, JTJ have nans.')
 
 class LMFunction(LMEngine):
     def __init__(self, data, func, p0, func_args=(), func_kwargs={}, dl=1e-8,
@@ -1235,6 +1247,10 @@ class LMGlobals(LMEngine):
         params = np.array(self.param_names)[blk].tolist()
         blk_J = -self.state.gradmodel(params=params, inds=self._inds, flat=False)
         self.J[blk] = blk_J
+        #Then we also need to update JTJ:
+        self.JTJ = np.dot(self.J, self.J.T)
+        if np.any(np.isnan(self.J)) or np.any(np.isnan(self.JTJ)):
+            raise FloatingPointError('J, JTJ have nans.')
 
 class LMParticles(LMEngine):
     def __init__(self, state, particles, include_rad=True, **kwargs):
@@ -1834,3 +1850,4 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
 
     if collect_stats:
         return all_lp_stats, all_lm_stats, all_line_stats, all_loop_values
+
