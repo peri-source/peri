@@ -55,10 +55,8 @@ def a3(a):
     return np.array(a).astype('int')
 
 class CompatibilityPatch(object):
-    def patch(self, names, default_values):
-        names = listify(names)
-        default_values = listify(default_values)
-
+    def patch(self, var):
+        names, default_values = var.keys(), var.values()
         for n, v in zip(names, default_values):
             self.__dict__.update({n: self.__dict__.get(n, v)})
 
@@ -527,7 +525,7 @@ class RawImage(Image, CompatibilityPatch):
 
     def __setstate__(self, idct):
         self.__dict__.update(idct)
-        self.patch('float_precision', np.float64)
+        self.patch({'float_precision': np.float64})
         self.image = self.load_image()
 
     def __repr__(self):

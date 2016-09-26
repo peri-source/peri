@@ -673,9 +673,7 @@ class BarnesStreakLegPoly2P1D(Component):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        ##Compatibility patches...
-        self.float_precision = self.__dict__.get('float_precision', np.float64)
-        ##end compatibility patch
+        self.patch({'float_precision': np.float64})
         if self.shape:
             self.initialize()
 

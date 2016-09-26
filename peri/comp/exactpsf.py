@@ -510,7 +510,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self.patch('global_zscale', False)
+        self.patch({'global_zscale': False})
         if self.shape:
             self.initialize()
 
