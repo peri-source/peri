@@ -1685,7 +1685,7 @@ def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
 
 def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         fractol=1e-7, errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True,
-        do_line_min=False):
+        do_line_min=True):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
@@ -1738,7 +1738,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
             which optimizes along the subspace spanned by the last 3 steps
             of the burn()'s trajectory. In principle this should signifi-
             cantly speed up the convergence; in practice it sometimes does,
-            sometimes doesn't. Default is False (no subspace minimization).
+            sometimes doesn't. Default is True (subspace minimization).
 
     Comments
     --------
