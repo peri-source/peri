@@ -1255,6 +1255,8 @@ class LMGlobals(LMEngine):
 class LMParticles(LMEngine):
     def __init__(self, state, particles, include_rad=True, **kwargs):
         self.state = state
+        if len(particles) == 0:
+            raise ValueError('Empty list of particle indices')
         self.particles = particles
         self.param_names = (state.param_particle(particles) if include_rad
                 else state.param_particle_pos(particles))
