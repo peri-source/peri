@@ -453,3 +453,21 @@ def identify_misfeatured_regions(st, filter_size=9, sigma_cutoff=8.):
     #5. Sort and return
     volumes = [t.shape.prod() for t in tiles]
     return [tiles[i] for i in np.argsort(volumes)[::-1]]
+
+def add_subtract_misfeatured_tile(st, tile, max_iter=3, **kwargs):
+    """
+    Runs an add-subtract on misfeatured regions in the image.
+    Algorithm: (for me now):
+        1.  Remove all particles within the tile.
+        2.  Feature and add particles to the tile.
+        3.  Optimize the added particles positions only.
+        4.  Run 2-3 until no particles have been added.
+        5.  Optimize added particle radii
+    """
+    raise NotImplementedError
+    #1. Remove all possibly bad particles within the tile.
+    inds = np.nonzero(tile.contains(st.obj_get_positions()))
+    st.obj_remove_particle(inds)
+
+    #2. Feature and add particles to the tile
+    pass
