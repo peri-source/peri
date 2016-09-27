@@ -20,9 +20,11 @@ So you really need a wrapper that calls protocols in order.
 2. WHY THE FUCK IS THIS ADDING PARTICLES AT Z=-8!!!! AND DECREASING THE ERROR!
 """
 import numpy as np
+import scipy.ndimage as nd
 
 import peri
 from peri import initializers
+from peri.util import Tile
 import peri.opt.optimize as opt
 
 from peri.logger import log
@@ -385,3 +387,69 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
         opt.do_levmarq_particles(st, np.array([i]), max_iter=2, damping=0.3)
         added_poses.append(st.obj_get_positions()[i])
     return total_changed, np.array(removed_poses), np.array(added_poses)
+
+def identify_misfeatured_regions(st, filter_size=9, sigma_cutoff=8.):
+    """
+    Identifies regions of missing/misfeatured particles based on the
+    residuals' local deviation from uniform Gaussian noise.
+
+    Input Parameters
+    ----------------
+        st : peri.states instance
+            The state in which to identify mis-featured regions.
+
+        filter_size : Int, best if odd.
+            The size of the filter for calculating the local standard
+            deviation; should approximately be the size of a poorly featured
+            region in each direction. Default is 9.
+
+        sigma_cutoff : Float
+            The max allowed deviation of the residuals from what is expected,
+            in units of the residuals' standard deviation. Lower means more
+            sensitive, higher = less sensitive. Default is 7.0, i.e. one
+            pixel out of every 7*10^11 is mis-identified randomly. In
+            practice the noise is not Gaussian so there are still some
+            regions mis-identified as improperly featured.
+
+    Outputs
+    --------
+        tiles : List of peri.util.Tile instances.
+            Each tile is the smallest bounding tile that contains an
+            improperly featured region. The list is sorted by the tile's
+            volume.
+
+    Algorithm
+    ---------
+        1.  Create a field of the local standard deviation, as measured over
+            a hypercube of size filter_size.
+        2.  Find the maximum reasonable value of the field. The field should
+            be a random variable with mean of r.std() and standard deviation
+            of ~r.std() / sqrt(N), where r is the residuals and N is the
+            number of pixels in the hypercube.
+        3.  Label & Identify the misfeatured regions as portions where
+            the local error is too large.
+        4.  Parse the misfeatured regions into tiles.
+        5.  Return the sorted tiles.
+    """
+    #1. Field of local std
+    r = st.residuals
+    weights = np.ones([filter_size]*len(r.shape), dtype='float')
+    weights /= weights.sum()
+    f = np.sqrt(nd.filters.convolve(r*r, weights, mode='reflect'))
+
+    #2. Maximal reasonable value of the field.
+    max_ok = f.mean() * (1 + sigma_cutoff / np.sqrt(weights.size))
+
+    #3. Label & Identify
+    bad = f > max_ok
+    labels, n = nd.measurements.label(bad)
+    inds = []
+    for i in xrange(1,n+1):
+        inds.append( np.nonzero(labels == i))
+
+    #4. Parse into tiles
+    tiles = [Tile(np.min(ind, axis=1), np.max(ind, axis=1)+1) for ind in inds]
+
+    #5. Sort and return
+    volumes = [t.shape.prod() for t in tiles]
+    return [tiles[i] for i in np.argsort(volumes)[::-1]]
