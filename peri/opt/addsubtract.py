@@ -31,6 +31,14 @@ from peri.logger import log
 CLOG = log.getChild('addsub')
 
 def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
+    if invert:
+        im = 1 - st.residuals
+    else:
+        im = st.residuals
+    return _feature_guess(im, rad, invert=invert, minmass=minmass,
+            use_tp=use_tp, **kwargs)
+
+def _feature_guess(im, rad, invert=True, minmass=None, use_tp=False, **kwargs):
     if minmass == None:
         #30% of the feature size mass is a good cutoff empirically for
         #initializers.local_max_featuring, less for trackpy;
@@ -38,10 +46,6 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
         minmass = rad**3 * 4/3.*np.pi * 0.3
         if use_tp:
             minmass *= 0.1 #magic #; works well
-    if invert:
-        im = 1 - st.residuals
-    else:
-        im = st.residuals
     if use_tp:
         diameter = np.ceil(2*rad)
         diameter += 1-(diameter % 2)
