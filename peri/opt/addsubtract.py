@@ -38,7 +38,7 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
     return _feature_guess(im, rad, invert=invert, minmass=minmass,
             use_tp=use_tp, **kwargs)
 
-def _feature_guess(im, rad, invert=True, minmass=None, use_tp=False, **kwargs):
+def _feature_guess(im, rad, minmass=None, use_tp=False, **kwargs):
     if minmass == None:
         #30% of the feature size mass is a good cutoff empirically for
         #initializers.local_max_featuring, less for trackpy;
@@ -458,7 +458,8 @@ def identify_misfeatured_regions(st, filter_size=9, sigma_cutoff=8.):
     volumes = [t.shape.prod() for t in tiles]
     return [tiles[i] for i in np.argsort(volumes)[::-1]]
 
-def add_subtract_misfeatured_tile(st, tile, max_iter=3, **kwargs):
+def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
+        invert=True, **kwargs):
     """
     Runs an add-subtract on misfeatured regions in the image.
     Algorithm: (for me now):
@@ -468,10 +469,35 @@ def add_subtract_misfeatured_tile(st, tile, max_iter=3, **kwargs):
         4.  Run 2-3 until no particles have been added.
         5.  Optimize added particle radii
     """
-    raise NotImplementedError
+    if rad == 'calc':
+        rad = np.median(st.obj_get_radii())
     #1. Remove all possibly bad particles within the tile.
-    inds = np.nonzero(tile.contains(st.obj_get_positions()))
-    st.obj_remove_particle(inds)
+    rinds = np.nonzero(tile.contains(st.obj_get_positions()))[0]
+    if rinds.size > 0:
+        st.obj_remove_particle(rinds)
 
-    #2. Feature and add particles to the tile
-    pass
+    #2-4. Feature and add particles to the tile, optimize, run until none added
+    n_added = -rinds.size
+    added_poses = []
+    for _ in xrange(max_iter):
+        # guess, _ = _feature_guess(im, rad, **kwargs)
+        if invert:
+            im = 1 - st.residuals[tile.slicer]
+        else:
+            im = st.residuals[tile.slicer]
+        guess, _ = _feature_guess(im, rad, use_tp=False, minmass=0, **kwargs)
+        accepts, poses = check_add_particles(st, guess+tile.l, rad=rad, do_opt=True)
+        added_poses.extend(poses)
+        n_added += accepts
+        if accepts == 0:
+            break
+    else:  #for-break-else
+        raise RuntimeError('runaway adds')  #FIXME? change to a warn
+
+    #5. Optimize added pos + rad:
+    ainds = []
+    for p in added_poses:
+        ainds.append(st.obj_closest_particle(p))
+    if len(ainds) > 0:
+        opt.do_levmarq_particles(st, np.array(ainds), include_rad=True, max_iter=3)
+    return n_added, ainds
