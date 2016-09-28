@@ -1,24 +1,3 @@
-"""
-To do:
-Looking at Neil's data, subtracting isn't as important as adding, because it's
-easier to miss particles than to overfeature.
-
-Also, for add-subtract, it might be better to do 1 loop of subtraction, or
-every other loop of subtraction, rather than spend time every loop subtracting.
-
-Adding / subtracting : rather than doing a fixed number of tries, you might
-want to run until (either a fixed # of tries or you reject N in a row)
-
-For a large # of adds, the ilm scale and offset are off. Optimize?
-
-There is a secondary problem which is that it's possible to fit the bkg in
-regions of the image such that adding a particle there is unfavorable.
-
-So you really need a wrapper that calls protocols in order.
-
-1. Problem with updates not being exact for adding/removing
-2. WHY THE FUCK IS THIS ADDING PARTICLES AT Z=-8!!!! AND DECREASING THE ERROR!
-"""
 import numpy as np
 import scipy.ndimage as nd
 
