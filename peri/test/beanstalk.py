@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 import time
@@ -40,7 +41,7 @@ def listen(func):
     for i in xrange(proc):
         Process(target=_listen, args=(func,)).start()
 
-def launch_all(script, hosts, jobs, nprocs=1, bean_port=DEFAULT_BEANSTALKD,
+def launch_all(script, hosts, jobs, bean_port=DEFAULT_BEANSTALKD,
         docopy=True, env=None):
     """
     Launch a group of workers spread across a group of machines which listen on
@@ -55,21 +56,19 @@ def launch_all(script, hosts, jobs, nprocs=1, bean_port=DEFAULT_BEANSTALKD,
     script : string
         The filename of the script to run
 
-    hosts : list of strings
-        The hosts on which to launch the workers
-
-    nprocs : int or list of ints
-        Number of worker processes to spawn on each worker, the number of
-        concurrent jobs it can run
+    hosts : list of dictionaries or list of strings
+        Each entry in the list should describe a host, containing the keys:
+            "host" : either user@host or host (no default)
+            "proc" : number of processes to launch (default 1)
+            "fldr" : working directory (default /tmp)
+            "env" : extra environment variables which need to be set
+        If list of strings, is simply hostnames
 
     bean_port : int
         beanstalk port which to open
 
     docopy : boolean
         whether to remotely copy the script to the new machine
-
-    env : dictionary
-        extra environment variables which need to be set to run
     """
 
     def beanstalk(bean_port=DEFAULT_BEANSTALKD):
@@ -77,22 +76,38 @@ def launch_all(script, hosts, jobs, nprocs=1, bean_port=DEFAULT_BEANSTALKD,
         check_output(bean, shell=True)
 
     def copy_script(script, host):
-        tmpfile = '/tmp/{}.py'.format(uuid.uuid4().hex)
-        ssh = 'scp {script} {host}:{tmpfile}'.format(
-            script=script, host=host, tmpfile=tmpfile
+        name = host.get('host')
+        fldr = host.get('fldr', '/tmp')
+        proc = host.get('proc', 1)
+        env = host.get('env', {})
+
+        tmpfile = '{}.py'.format(os.path.join(fldr, uuid.uuid4().hex))
+        ssh = 'scp {script} {name}:{tmpfile}'.format(
+            script=script, name=name, tmpfile=tmpfile
         )
         check_output(ssh, shell=True)
         return tmpfile
 
-    def launch(script, host, nprocs=1, bean_port=DEFAULT_BEANSTALKD, env=None, index=0):
+    def launch(script, host, bean_port=DEFAULT_BEANSTALKD, index=0):
+        name = host.get('host')
+        fldr = host.get('fldr', '/tmp')
+        proc = host.get('proc', 1)
+        env = host.get('env', {})
+
         env = env or {}
-        env = 'export PYTHONPATH=$PYTHONPATH;'
+        var = ' '.join(['{}={}:${}'.format(k, v, k) for k,v in env.iteritems()])
+        env = 'export {}; cd {};'.format(var, fldr)
 
         log = '> /tmp/launcher-{}.log 2>&1'.format(index)
         fwd = '-L{}:localhost:{}'.format(bean_port, bean_port)
-        cmd = "{} python {} --port={} --processes={}".format(env, script, bean_port, nprocs)
-        ssh = 'ssh {forward} {host} "{cmd} {log}"'.format(forward=fwd, host=host, cmd=cmd, log=log)
+        cmd = '{} python {} --port={} --processes={}'.format(env, script, bean_port, proc)
+        ssh = 'ssh {forward} {name} -t "{cmd} {log}"'.format(forward=fwd, name=name, cmd=cmd, log=log)
         check_output(ssh, shell=True)
+
+    clean_hosts = []
+    for h in hosts:
+        clean_hosts.append({'host': h} if isinstance(h, str) else h)
+    hosts = clean_hosts
 
     env = env or {}
     procs = {}
@@ -102,12 +117,11 @@ def launch_all(script, hosts, jobs, nprocs=1, bean_port=DEFAULT_BEANSTALKD,
     procs[-1].start()
     time.sleep(1)
 
-    nprocs = [nprocs]*len(hosts) if not hasattr(nprocs, '__iter__') else nprocs
-
-    for i, (host, nproc) in enumerate(zip(hosts, nprocs)):
+    for i, host in enumerate(hosts):
         tmpscript = script if not docopy else copy_script(script, host)
-        procs[i] = Process(target=launch, args=(tmpscript, host, nproc, bean_port, env, i))
+        procs[i] = Process(target=launch, args=(tmpscript, host, bean_port, i))
         procs[i].start()
+        time.sleep(10) 
 
     def signal_handler():
         print "Sending signal to flush, waiting 60 sec until forced shutdown..."
