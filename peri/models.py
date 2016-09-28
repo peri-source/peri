@@ -59,6 +59,15 @@ class Model(object):
             equations to actual component types. For example:
 
                 {'P': 'obj', 'H': 'psf'}
+
+        registry : dict
+            A mapping of categories to components which this model will
+            accept. For example:
+
+                {
+                    'obj': [objs.PlatonicSpheresCollection],
+                    'psf': [psfs.Gaussian4DPoly, psfs.GaussianMomentExpansion]
+                }
         """
         self.modelstr = modelstr
         self.varmap = varmap
@@ -96,9 +105,13 @@ class Model(object):
                     error = True
 
         if error:
-            raise ModelError('Inconsistent catmap and model descriptions')
+            raise ModelError('Inconsistent varmap and modelstr descriptions')
 
     def check_inputs(self, comps):
+        """
+        Check that the list of components `comp` is compatible with both the
+        varmap and modelstr for this Model
+        """
         error = False
         compcats = [c.category for c in comps]
 
@@ -115,10 +128,11 @@ class Model(object):
             raise ModelError('Component list incomplete or incorrect')
 
     def diffname(self, name):
+        """ Transform a variable name into a derivative """
         return 'd'+name
 
     def get_base_model(self):
-        """ The complete model, no variation """
+        """ The complete model, no derivatives """
         return self.modelstr['full']
 
     def get_difference_model(self, category):
@@ -149,6 +163,26 @@ class Model(object):
         return out
 
     def evaluate(self, comps, funcname, diffmap=None, **kwargs):
+        """
+        Calculate the output of a model.
+
+        Parameters:
+        -----------
+        comps : list of `Component`s
+            Components which will be used to evaluate the model
+
+        funcname : string
+            Name of the function which to evaluate for the components
+            which represent their output
+
+        diffmap : dictionary
+            Extra mapping of derivatives or other symbols to extra variables.
+            For example, the difference in a component has been evaluated as
+            diff_obj so we set {'I': diff_obj}
+
+        **kwargs:
+            Arguments passed to "funcname" of component objects
+        """
         evar = self.map_vars(comps, funcname, diffmap=diffmap)
 
         if diffmap is None:
