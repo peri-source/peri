@@ -472,11 +472,6 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
         The added/removed positions returned are whether or not the position
         has been added or removed ever. It's possible that a position is
         added, then removed during a later iteration.
-
-    To implement
-    ------------
-        A way to check regions that are poorly fit (e.g. skew- or kurtosis-
-        hunt).
     """
     if max_npart == 'calc':
         max_npart = 0.05 * st.obj_get_positions().shape[0]
@@ -584,8 +579,64 @@ def identify_misfeatured_regions(st, filter_size=9, sigma_cutoff=8.):
 def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
         invert=True, **kwargs):
     """
-    Runs an add-subtract on misfeatured regions in the image.
-    Algorithm: (for me now):
+    Automatically adds and subtracts missing & extra particles in a region
+    of poor fit.
+
+    Parameters
+    ----------
+        st: ConfocalImagePython
+            The state to add and subtract particles to.
+        tile : peri.util.Tile instance
+            The poorly-fit region to examine.
+        rad : Float or 'calc'
+            The initial radius for added particles; added particles radii
+            are not fit until the end of add_subtract. Default is 'calc',
+            which uses the median radii of active particles.
+            the previous attempt. Default is False.
+        max_iter : Int
+            The maximum number of loops for attempted adds at one tile
+            location. Default is 3.
+        invert : Bool
+            Whether to invert the image for feature_guess. Default is True,
+            i.e. dark particles on bright background.
+
+    **kwargs Parameters
+    -------------------
+        im_change_frac : Float, between 0 and 1.
+            If adding or removing a particle decreases the error less than
+            im_change_frac*the change in the image, the particle is deleted.
+            Default is 0.2.
+
+        min_derr : Float
+            The minimum change in the state's error to keep a particle in the
+            image. Default is '3sig' which uses 3*st.sigma.
+
+        do_opt : Bool
+            Set to False to avoid optimizing particle positions after
+            adding them.
+        minmass : Float
+            The minimum mass for a particle to be identified as a feature,
+            as used by trackpy. Defaults to a decent guess.
+
+        use_tp : Bool
+            Set to True to use trackpy to find missing particles inside
+            the image. Not recommended since it trackpy deliberately
+            cuts out particles at the edge of the image. Default is False.
+
+    Outputs
+    -------
+        n_added : Int.
+            The change in the number of particles, i.e. n_added-n_subtracted.
+        ainds: List of ints
+            The indices of the added particles.
+
+    Comments
+    --------
+        The added/removed positions returned are whether or not the position
+        has been added or removed ever. It's possible/probably that a
+        position is added, then removed during a later iteration.
+
+    Algorithm is:
         1.  Remove all particles within the tile.
         2.  Feature and add particles to the tile.
         3.  Optimize the added particles positions only.
@@ -597,19 +648,19 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     #1. Remove all possibly bad particles within the tile.
     rinds = np.nonzero(tile.contains(st.obj_get_positions()))[0]
     if rinds.size > 0:
-        st.obj_remove_particle(rinds)
+        rpos, rrad = st.obj_remove_particle(rinds)
 
     #2-4. Feature and add particles to the tile, optimize, run until none added
     n_added = -rinds.size
     added_poses = []
     for _ in xrange(max_iter):
-        # guess, _ = _feature_guess(im, rad, **kwargs)
         if invert:
             im = 1 - st.residuals[tile.slicer]
         else:
             im = st.residuals[tile.slicer]
-        guess, _ = _feature_guess(im, rad, use_tp=False, minmass=0, **kwargs)
-        accepts, poses = check_add_particles(st, guess+tile.l, rad=rad, do_opt=True)
+        guess, _ = _feature_guess(im, rad, **kwargs)
+        accepts, poses = check_add_particles(st, guess+tile.l, rad=rad,
+                do_opt=True, **kwargs)
         added_poses.extend(poses)
         n_added += accepts
         if accepts == 0:
@@ -622,5 +673,6 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     for p in added_poses:
         ainds.append(st.obj_closest_particle(p))
     if len(ainds) > 0:
-        opt.do_levmarq_particles(st, np.array(ainds), include_rad=True, max_iter=3)
+        opt.do_levmarq_particles(st, np.array(ainds), include_rad=True,
+                max_iter=3)
     return n_added, ainds
