@@ -1,3 +1,16 @@
+"""
+The FFT module is an abstraction that switches between numpy.fft and pyfftw.
+If pyfftw is present than it uses the pyfftw.interfaces to build a fast
+interface for fftw with wisdom storage. Since the interfaces are the same for
+numpy and pyfftw, that identical interface is passed on through the
+peri.fft.fft object.
+
+*IMPORTANT* The one caveat is that every function call to peri.fft.fft.* must
+unpack extra arguments:
+
+    peri.fft.fft.ifftn(..., **peri.fft.fftkwargs)
+
+"""
 import atexit
 import pickle
 import numpy as np
@@ -49,6 +62,7 @@ if hasfftw:
     threads = _var['fftw-threads']
     threads = threads if threads > 0 else cpu_count()
 
+    # these variables must be passed to every fft.* function
     fftkwargs = {
         'planner_effort': effort,
         'threads': threads,
@@ -57,9 +71,12 @@ if hasfftw:
         'auto_contiguous': True
     }
 
+    # allow the interface to store memory aligned arrays temporarily for
+    # speed of allocation, default now is 30 seconds.
     pyfftw.interfaces.cache.enable()
     pyfftw.interfaces.cache.set_keepalive_time(30)
 
+    # setup the exposed interface and load the wisdom
     fft = pyfftw.interfaces.numpy_fft
     load_wisdom(conf.get_wisdom())
 
