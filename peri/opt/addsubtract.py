@@ -31,6 +31,32 @@ from peri.logger import log
 CLOG = log.getChild('addsub')
 
 def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
+    """
+    Makes a guess at particle positions using heuristic centroid methods.
+    Input Parameters
+    ----------------
+        st : peri.states.State instance
+            The state to check adding particles to.
+        rad : Float
+            The feature size for featuring.
+        invert : Bool
+            Whether to invert the image. Default is True, i.e. particles
+            are dark.
+        minmass : Float or None
+            The minimum mass/masscut of a particle. Default is None=calcualted
+            by feature_guess.
+        use_tp : Bool
+            Whether to use trackpy in feature_guess. Default is False, since
+            trackpy cuts out particles at the edge.
+
+    Output Parameters
+    -----------------
+        guess : [N,3] numpy.ndarray
+            The featured positions of the particles, sorted in order of
+            decreasing feature mass.
+        npart : Int
+            The number of added particles.
+    """
     if invert:
         im = 1 - st.residuals
     else:
@@ -65,13 +91,39 @@ def _feature_guess(im, rad, minmass=None, use_tp=False, **kwargs):
 
 def check_add_particles(st, guess, rad='calc', do_opt=True, **kwargs):
     """
-    comments
-    st = state
-    guess = list-like of poses to check to add,
-    rad = radius to add at. Default is 'calc' = np.median(st.obj.rad)
-    im_change_frac : 0.2, how good the change in error needs to be relative
-        to the change in the difference image.
+    Checks whether to add particles at a given position by seeing if adding
+    the particle improves the fit of the state.
 
+    Input Parameters
+    ----------------
+        st : peri.states.State instance
+            The state to check adding particles to.
+        guess : [N,3] list-like
+            The positions of particles to check to add.
+        rad : Float or 'calc'
+            The radius of the newly-added particles. Default is 'calc',
+            which uses the states current radii's median.
+        do_opt : Bool
+            Whether to optimize the particle position before checking if it
+            should be kept. Default is True (optimizes position).
+
+        im_change_frac : Float
+            How good the change in error needs to be relative to the change
+            in the difference image. Default is 0.2; i.e. if the error does
+            not decrease by 20% of the change in the difference image, do
+            not add the particle.
+
+        min_derr : Float or '3sig'
+            The minimal improvement in error to add a particle. Default
+            is '3sig' = 3*st.sigma.
+
+    Outputs
+    -------
+        accepts : Int
+            The number of added particles
+        new_poses : [N,3] list
+            List of the positions of the added particles. If do_opt==True,
+            then these positions will differ from the input 'guess'.
     """
     accepts = 0
     new_poses = []
@@ -105,7 +157,31 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
     """
     Checks whether to remove particle 'ind' from state 'st'. If removing the
     particle increases the error by less than max( min_derr, change in image *
-            im_change_frac), then the particle is removed.
+    im_change_frac), then the particle is removed.
+
+    Input Parameters
+    ----------------
+        st : peri.states.State instance
+            The state to check adding particles to.
+        ind : Int
+            The index of the particle to check to remove.
+        im_change_frac : Float
+            How good the change in error needs to be relative to the change
+            in the difference image. Default is 0.2; i.e. if the error does
+            not decrease by 20% of the change in the difference image, do
+            not add the particle.
+        min_derr : Float or '3sig'
+            The minimal improvement in error to add a particle. Default
+            is '3sig' = 3*st.sigma.
+
+    Outputs
+    -------
+        killed : Bool
+            Whether the particle was removed.
+        p : Tuple
+            The position of the removed particle.
+        r : Tuple
+            The radius of the removed particle.
     """
     if min_derr == '3sig':
         min_derr = 3 * st.sigma
@@ -123,7 +199,54 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
 
 def add_missing_particles(st, rad='calc', tries=50, **kwargs):
     """
-    do_opt=True, im_change_frac=0.2, opt_box_scale=3,
+    Attempts to add missing particles to the state. Operates by:
+    (1) featuring the difference image using feature_guess,
+    (2) attempting to add the featured positions using check_add_particles.
+
+    Input Parameters
+    ----------------
+        st : peri.states.State instance
+            The state to check adding particles to.
+        rad : Float or 'calc'
+            The radius of the newly-added particles and of the feature
+            size for featuring. Default is 'calc', which uses the state's
+            current radii's median.
+        tries : Int
+            How many particles to attempt to add. Only tries to add the first
+            tries particles, in order of mass.
+
+        invert : Bool
+            Whether to invert the image. Default is True, i.e. particles
+            are dark.
+        minmass : Float or None
+            The minimum mass/masscut of a particle. Default is None=calcualted
+            by feature_guess.
+        use_tp : Bool
+            Whether to use trackpy in feature_guess. Default is False, since
+            trackpy cuts out particles at the edge.
+
+        do_opt : Bool
+            Whether to optimize the particle position before checking if it
+            should be kept. Default is True (optimizes position).
+        im_change_frac : Float
+            How good the change in error needs to be relative to the change
+            in the difference image. Default is 0.2; i.e. if the error does
+            not decrease by 20% of the change in the difference image, do
+            not add the particle.
+
+        min_derr : Float or '3sig'
+            The minimal improvement in error to add a particle. Default
+            is '3sig' = 3*st.sigma.
+
+    Outputs
+    -------
+        accepts : Int
+            The number of added particles
+        new_poses : [N,3] list
+            List of the positions of the added particles. If do_opt==True,
+            then these positions will differ from the input 'guess'.
+
+    do_opt=True, im_change_frac=0.2
     """
     if rad == 'calc':
         rad = np.median(st.obj_get_radii())
