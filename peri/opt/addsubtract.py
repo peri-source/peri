@@ -510,7 +510,7 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
         added_poses.append(st.obj_get_positions()[i])
     return total_changed, np.array(removed_poses), np.array(added_poses)
 
-def identify_misfeatured_regions(st, filter_size=9, sigma_cutoff=8.):
+def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
     """
     Identifies regions of missing/misfeatured particles based on the
     residuals' local deviation from uniform Gaussian noise.
@@ -523,7 +523,7 @@ def identify_misfeatured_regions(st, filter_size=9, sigma_cutoff=8.):
         filter_size : Int, best if odd.
             The size of the filter for calculating the local standard
             deviation; should approximately be the size of a poorly featured
-            region in each direction. Default is 9.
+            region in each dimension. Default is 5.
 
         sigma_cutoff : Float
             The max allowed deviation of the residuals from what is expected,
