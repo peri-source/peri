@@ -388,9 +388,11 @@ class ImageState(State, comp.ComponentCollection):
         model_as_data : boolean
             Whether to use the model image as the true image after initializing
         """
+        self.dim = len(image.get_image().shape)
+
         self.sigma = sigma
         self.priors = priors
-        self.pad = util.a3(pad)
+        self.pad = util.aN(pad, dim=self.dim)
         self.model_as_data = model_as_data
 
         comp.ComponentCollection.__init__(self, comps=comps)

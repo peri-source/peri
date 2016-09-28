@@ -30,29 +30,34 @@ def delistify(a):
         return a[0]
     return a
 
-def imin(a, b):
-    return np.vstack([i3(a), i3(b)]).min(axis=0)
+def imin(a, b, dim=3):
+    return np.vstack([iN(a, dim), iN(b, dim)]).min(axis=0)
 
-def imax(a, b):
-    return np.vstack([i3(a), i3(b)]).max(axis=0)
+def imax(a, b, dim=3):
+    return np.vstack([iN(a, dim), iN(b, dim)]).max(axis=0)
 
-def i3(a):
+def iN(a, dim=3):
     """ Convert an integer or iterable list to numpy 3 array """
     if not hasattr(a, '__iter__'):
-        return np.array([a]*3, dtype='float')
+        return np.array([a]*dim, dtype='float')
     return np.array(a).astype('float')
 
-def amin(a, b):
-    return np.vstack([a3(a), a3(b)]).min(axis=0)
+def amin(a, b, dim=3):
+    return np.vstack([aN(a, dim), aN(b, dim)]).min(axis=0)
 
-def amax(a, b):
-    return np.vstack([a3(a), a3(b)]).max(axis=0)
+def amax(a, b, dim=3):
+    return np.vstack([aN(a, dim), aN(b, dim)]).max(axis=0)
 
-def a3(a):
+def aN(a, dim=3):
     """ Convert an integer or iterable list to numpy 3 array """
     if not hasattr(a, '__iter__'):
-        return np.array([a]*3, dtype='int')
+        return np.array([a]*dim, dtype='int')
     return np.array(a).astype('int')
+
+def getdim(a):
+    if not hasattr(a, '__iter__'):
+        return None
+    return len(a)
 
 class CompatibilityPatch(object):
     def patch(self, var):
@@ -60,9 +65,9 @@ class CompatibilityPatch(object):
         for n, v in zip(names, default_values):
             self.__dict__.update({n: self.__dict__.get(n, v)})
 
-class Tile(object):
+class Tile(CompatibilityPatch):
     def __init__(self, left, right=None, mins=None, maxs=None,
-            size=None, centered=False):
+            size=None, centered=False, dim=None):
         """
         Creates a tile element using many different combinations (where []
         indicates an array created from either a single number or any
@@ -83,43 +88,76 @@ class Tile(object):
 
         Since tiles are used for array slicing, they only allow integer values,
         which can truncated without warning from float.
+
+        Notes on dimension. The dimensionality is determined first by the shape
+        of left, right, size if provided not as an integer. If it not provided there
+        then it is assumed to be 3D. This can be overridden by setting dim in the
+        arguments. For example:
+            Tile(3)         : [0,0,0] -> [3,3,3]
+            Tile(3, dim=2)  : [0,0] -> [3,3]
+            Tile([3])       : [0] -> [3]
         """
+        # first determine the dimensionality of the tile
+        dims = set([getdim(i) for i in [left, right, size]] + [dim])
+        dims = dims.difference(set([None]))
+
+        if len(dims) == 0:
+            dim = 3
+        elif len(dims) == 1:
+            dim = dims.pop()
+        elif len(dims) > 1:
+            raise AttributeError("Dimension mismatch between left, right, size, dim")
+
         if right is None:
             if size is None:
                 right = left
                 left = 0
             else:
                 if not centered:
-                    right = a3(left) + a3(size)
+                    right = aN(left, dim) + aN(size, dim)
                 else:
-                    l, s = a3(left), a3(size)
+                    l, s = aN(left, dim), aN(size, dim)
                     left, right = l - s/2, l + (s+1)/2
 
-        left = a3(left)
-        right = a3(right)
+        left = aN(left, dim)
+        right = aN(right, dim)
+
+        if dim is not None:
+            self.dim = dim
+            assert(left.shape[0] == dim)
+            assert(right.shape[0] == dim)
+        else:
+            self.dim = left.shape[0]
 
         if mins is not None:
-            left = amax(left, a3(mins))
+            left = amax(left, aN(mins, dim), dim=dim)
 
         if maxs is not None:
-            right = amin(right, a3(maxs))
+            right = amin(right, aN(maxs, dim), dim=dim)
 
         self.l = np.array(left)
         self.r = np.array(right)
+        self._build_caches()
+
+    def _build_caches(self):
+        self._coord_slicers = []
+        for i in xrange(self.dim):
+            self._coord_slicers.append(
+                tuple(None if j != i else np.s_[:] for j in xrange(self.dim))
+            )
 
     @property
     def slicer(self):
-        l, r = self.bounds
-        return np.s_[l[0]:r[0], l[1]:r[1], l[2]:r[2]]
+        return tuple(np.s_[l:r] for l,r in zip(*self.bounds))
 
     def oslicer(self, tile):
         """ Opposite slicer, the outer part wrt to a field """
-        z,y,x = tile.coords(form='meshed')
-        z[self.slicer] = -1
-        y[self.slicer] = -1
-        x[self.slicer] = -1
-        mask = (z>0)&(y>0)&(x>0)
-        return tuple(np.array(i).astype('int') for i in zip(z[mask], y[mask], x[mask]))
+        mask = None
+        vecs = tile.coords(form='meshed')
+        for v in vecs:
+            v[self.slicer] = -1
+            mask = mask & (v > 0) if mask is not None else (v>0)
+        return tuple(np.array(i).astype('int') for i in zip(*[v[mask] for v in vecs]))
 
     @property
     def shape(self):
@@ -145,25 +183,25 @@ class Tile(object):
     @property
     def corners(self):
         corners = []
-        for ind in itertools.product(*((0,1),)*3):
+        for ind in itertools.product(*((0,1),)*self.dim):
             ind = np.array(ind)
             corners.append(self.l + ind*self.r)
         return np.array(corners)
 
-    def _format_vector(self, z, y, x, form='broadcast'):
+    def _format_vector(self, vecs, form='broadcast'):
         """
         Format a 3d vector field in certain ways, see `coords` for a description
         of each formatting method.
         """
         if form == 'meshed':
-            return np.meshgrid(z, y, x, indexing='ij')
+            return np.meshgrid(*vecs, indexing='ij')
         elif form == 'vector':
-            z,y,x = np.meshgrid(z, y, x, indexing='ij')
-            return np.rollaxis(np.array(np.broadcast_arrays(z,y,x)),0,4)
+            vecs = np.meshgrid(*vecs, indexing='ij')
+            return np.rollaxis(np.array(np.broadcast_arrays(*vecs)),0,self.dim+1)
         elif form == 'flat':
-            return z,y,x
+            return vecs
         else:
-            return z[:,None,None], y[None,:,None], x[None,None,:]
+            return [v[self._coord_slicers[i]] for i,v in enumerate(vecs)]
 
     def coords(self, norm=False, form='broadcast'):
         """
@@ -194,10 +232,10 @@ class Tile(object):
             norm = 1
         if norm is True:
             norm = np.array(self.shape)
-        norm = i3(norm)
+        norm = iN(norm, self.dim)
 
-        v = list(np.arange(self.l[i], self.r[i]) / norm[i] for i in [0,1,2])
-        return self._format_vector(*v, form=form)
+        v = list(np.arange(self.l[i], self.r[i]) / norm[i] for i in xrange(self.dim))
+        return self._format_vector(v, form=form)
 
     def kvectors(self, norm=False, form='broadcast', real=False, shift=False):
         """
@@ -214,9 +252,9 @@ class Tile(object):
             norm = 1
         if norm is True:
             norm = np.array(self.shape)
-        norm = i3(norm)
+        norm = iN(norm, self.dim)
 
-        v = list(np.fft.fftfreq(self.shape[i])/norm[i] for i in [0,1,2])
+        v = list(np.fft.fftfreq(self.shape[i])/norm[i] for i in xrange(self.dim))
 
         if shift:
             v = list(np.fft.fftshift(t) for t in v)
@@ -224,7 +262,7 @@ class Tile(object):
         if real:
             v[-1] = v[-1][:(self.shape[-1]+1)/2]
 
-        return self._format_vector(*v, form=form)
+        return self._format_vector(v, form=form)
 
     def __str__(self):
         return self.__repr__()
@@ -342,6 +380,14 @@ class Tile(object):
         inner = Tile.intersection([clip, orig])
         outer = Tile.intersection([clip, tile])
         return inner, outer
+
+    def __getstate__(self):
+        return self.__dict__.copy()
+
+    def __setstate__(self, idct):
+        self.__dict__.update(idct)
+        self.patch({'dim': 3})
+        self._build_caches()
 
 
 #=============================================================================
