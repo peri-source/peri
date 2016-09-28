@@ -528,7 +528,7 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
         sigma_cutoff : Float
             The max allowed deviation of the residuals from what is expected,
             in units of the residuals' standard deviation. Lower means more
-            sensitive, higher = less sensitive. Default is 7.0, i.e. one
+            sensitive, higher = less sensitive. Default is 8.0, i.e. one
             pixel out of every 7*10^11 is mis-identified randomly. In
             practice the noise is not Gaussian so there are still some
             regions mis-identified as improperly featured.
@@ -666,7 +666,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
         if accepts == 0:
             break
     else:  #for-break-else
-        raise RuntimeError('runaway adds')  #FIXME? change to a warn
+        CLOG.warn('Runaway adds or insufficient max_iter')
 
     #5. Optimize added pos + rad:
     ainds = []
@@ -676,3 +676,111 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
         opt.do_levmarq_particles(st, np.array(ainds), include_rad=True,
                 max_iter=3)
     return n_added, ainds
+
+def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
+        **kwargs):
+    """
+    Automatically adds and subtracts missing particles based on local
+    regions of poor fit.
+    Calls identify_misfeatured_regions to identify regions, then
+    add_subtract_misfeatured_tile on the tiles in order of size until
+    region_depth tiles have been checked without adding any particles.
+
+    Input Parameters
+    ----------
+        st: ConfocalImagePython
+            The state to add and subtract particles to.
+        region_depth : Int
+            The minimum amount of regions to try; the algorithm terminates
+            if region_depth regions have been tried without adding particles.
+
+    Parameters to identify_misfeatured_regions
+    ------------------------------------------
+        filter_size : Int, best if odd.
+            The size of the filter for calculating the local standard
+            deviation; should approximately be the size of a poorly featured
+            region in each dimension. Default is 5.
+
+        sigma_cutoff : Float
+            The max allowed deviation of the residuals from what is expected,
+            in units of the residuals' standard deviation. Lower means more
+            sensitive, higher = less sensitive. Default is 8.0, i.e. one
+            pixel out of every 7*10^11 is mis-identified randomly. In
+            practice the noise is not Gaussian so there are still some
+            regions mis-identified as improperly featured.
+
+    **kwargs Parameters, to add_subtract_misfeatured_tile
+    ------------------------------------------------------
+        im_change_frac : Float, between 0 and 1.
+            If adding or removing a particle decreases the error less than
+            im_change_frac*the change in the image, the particle is deleted.
+            Default is 0.2.
+
+        min_derr : Float
+            The minimum change in the state's error to keep a particle in the
+            image. Default is '3sig' which uses 3*st.sigma.
+
+        do_opt : Bool
+            Set to False to avoid optimizing particle positions after
+            adding them.
+        minmass : Float
+            The minimum mass for a particle to be identified as a feature,
+            as used by trackpy. Defaults to a decent guess.
+
+        use_tp : Bool
+            Set to True to use trackpy to find missing particles inside
+            the image. Not recommended since it trackpy deliberately
+            cuts out particles at the edge of the image. Default is False.
+
+    Outputs
+    -------
+        n_added : Int
+            The change in the number of particles; i.e the number added -
+            number removed.
+        new_poses : List
+            [N,3] element list of the added particle positions.
+
+    Algorith Description
+    --------------------
+        1.  Identify mis-featured regions by how much the local residuals
+            deviate from the global residuals, as measured by the standard
+            deviation of both.
+        2.  Loop over each of those regions, and:
+            2a. Remove every particle in the current region.
+            2b. Try to add particles in the current region until no more
+                 can be added while adequately decreasing the error.
+            2c. Terminate if at least region_depth regions have been
+                checked without successfully adding a particle.
+
+    Comments
+    --------
+        Because this algorithm is more judicious about chooosing regions to
+        check, and more aggressive about removing particles in those regions,
+        it runs faster and does a better job than the (global) add_subtract.
+        However I'm not sure if this function will work better as an initial
+        add-subtract on an image, since (1) it doesn't check for removing
+        small/big particles per se, and (2) it might be slower when there
+        are many missing particles in many regions of the image, or when
+        the poorly-featured regions are very large or when the fit is bad.
+        As a result, I'd recommend doing a normal add_subtract first and
+        using this function for tough missing or double-featured particles.
+    """
+    #1. Find regions of poor tiles:
+    tiles = identify_misfeatured_regions(st, filter_size=filter_size,
+            sigma_cutoff=sigma_cutoff)
+    #2. Add and subtract in the regions:
+    n_empty = 0
+    n_added = 0
+    new_poses = []
+    for t in tiles:
+        curn, curinds = add_subtract_misfeatured_tile(st, t, **kwargs)
+        if curn == 0:
+            n_empty += 1
+        else:
+            n_added += curn
+            new_poses.extend(st.obj_get_positions()[curinds])
+        if n_empty > region_depth:
+            break  #some message or something?
+    else:  #for-break-else
+        CLOG.info('All regions contained particles.')  #something else??
+    return n_added, new_poses
