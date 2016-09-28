@@ -13,22 +13,33 @@ default_conf = {
 }
 
 def get_conf_filename():
+    """
+    The configuration file either lives in ~/.peri.json or is specified on the
+    command line via the environment variables PERI_CONF_FILE
+    """
     default = os.path.join(os.path.expanduser("~"), ".peri.json")
     return os.environ.get('PERI_CONF_FILE', default)
 
-# Each of the variables above can be defined on the command line
 def transform(v):
+    """
+    Translate environment variables to ones corresponding to keys in the
+    configuration.  In particular, env variables may be made with
+    "PERI_"+key_name: fftw-threads = PERI_FFTW_THREADS. Each env var
+    is later checked to see if it has to do with PERI
+    """
+
     return v.lower().replace('_', '-').replace('peri-', '')
 
 def read_environment():
+    """ Read all environment variables to see if they contain PERI """
     out = {}
     for k,v in os.environ.iteritems():
         if transform(k) in default_conf:
             out[transform(k)] = v
     return out
 
-# variables also defined in the conf file
 def create_default_conf():
+    """ Dump the default_conf to the configuration file """
     with open(get_conf_filename(), 'w') as f:
         json.dump(default_conf, f)
 
@@ -37,7 +48,7 @@ def load_conf():
     Load the configuration with the priority:
         1. environment variables
         2. configuration file
-        3. defaults here
+        3. defaults here (default_conf)
     """
     try:
         conf = copy.copy(default_conf)
