@@ -1003,7 +1003,6 @@ class LMEngine(object):
         rm2 = self.calc_residuals()
         der2 = (rm2 + rm1 - 2*rm0) / (dh*dh)
 
-        damped_JTJ = self._calc_damped_jtj()
         corr, res, rank, s = np.linalg.lstsq(damped_JTJ, np.dot(self.J, der2),
                 rcond=self.min_eigval)
         # corr *= -0.5 -- for some reason + works, minus doesn't... figure it out?
