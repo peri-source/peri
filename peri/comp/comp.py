@@ -162,19 +162,24 @@ class Component(ParameterGroup, util.CompatibilityPatch):
 
     # functions that allow better handling of component collections
     def exports(self):
+        """ Which methods a class wants to expose to parent classes """
         return []
 
     def nopickle(self):
+        """ Class attributes which should not be included in a pickle object """
         return ['_parent']
 
     def register(self, obj):
+        """ Registery a parent object so that communication maybe happen upwards """
         self._parent = obj
 
     def trigger_parameter_change(self):
+        """ Notify parents of a parameter change """
         if self._parent:
             self._parent.trigger_parameter_change()
 
     def trigger_update(self, params, values):
+        """ Notify parent of a parameter change """
         if self._parent:
             self._parent.trigger_update(params, values)
         else:
@@ -302,10 +307,6 @@ class ComponentCollection(Component):
             return pc, vc
         return pc
 
-    def setup_passthroughs(self):
-        self._nopickle = []
-        self._passthrough_func()
-
     def affected_components(self, params):
         comps = []
         plist = self.split_params(params)
@@ -418,7 +419,7 @@ class ComponentCollection(Component):
         if self._parent:
             self._parent.trigger_parameter_change()
 
-    def _passthrough_func(self):
+    def setup_passthroughs(self):
         """
         Inherit some functions from the components that we own. In particular,
         let's grab all functions that begin with `param_` so the super class
@@ -426,6 +427,8 @@ class ComponentCollection(Component):
         under Component.exports and rename with the category type, i.e.,
         SphereCollection.add_particle -> Component.obj_add_particle
         """
+        self._nopickle = []
+
         for c in self.comps:
             # take all member functions that start with 'param_'
             funcs = inspect.getmembers(c, predicate=inspect.ismethod)
