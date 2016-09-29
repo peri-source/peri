@@ -83,13 +83,22 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     return J, return_inds
 
 def name_globals(s, remove_params=None):
+    """
+    Input Parameters
+    ----------------
+        s : peri.states instance
+            The state to name the globals of.
+        remove_params : Set or None
+            A set of unique additional parameters to remove from the globals
+            list.
+    """
     all_params = s.params
     for p in s.param_positions():
         all_params.remove(p)
     for p in s.param_radii():
         all_params.remove(p)
     if remove_params is not None:
-        for p in remove_params:
+        for p in set(remove_params):
             all_params.remove(p)
     return all_params
 
@@ -1781,7 +1790,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     if mode == 'do-particles':
         glbl_nms = ['ilm-scale', 'offset']  #bkg?
     else:
-        remove_params = None if mode == 'polish' else s.get('psf').params + ['zscale']
+        remove_params = None if mode == 'polish' else set(
+                s.get('psf').params + ['zscale'])
         glbl_nms = name_globals(s, remove_params=remove_params)
 
     all_lp_stats = []
@@ -1804,7 +1814,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
                 BAD_DAMP], ['bkg-z-0', BAD_DAMP]]
         ####
         glbl_dmp = vectorize_damping(glbl_nms, damping=1.0, increase_list=
-                [['psf-', 1e3]] + BAD_LIST)
+                [['psf-', 1e3]] + BAD_LIST)  #doesn't work with use_aug...
         if a != 0 or mode != 'do-particles':
             gstats = do_levmarq(s, glbl_nms, max_iter=glbl_mx_itr, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
