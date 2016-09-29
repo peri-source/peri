@@ -709,10 +709,45 @@ class LMEngine(object):
             self._inner_run_counter += 1
         return n_good_steps
 
-    def do_stuckJ_run(self):
+    def do_run_3(self, max_bad=None, stop_halving=1):
+        """
+        I need better names for these functions
+        Runs 1 step of run2, then runs with stuckJ until the # of bad
+        parameter blocks is at least max_bad. Counts both run2 and stuckJ
+        runs towards max_iter counter.
+        Parameters
+        ----------
+            max_bad : Int or None
+                The maximum number of bad sub-blocks of J before giving
+                up and re-calculating an entire J. Default is None, which
+                uses self.param_vals.size / 4
+
+            stop_halving : Int
+                When the size of a bad block is < stop_halving, the entire
+                block is counted as bad and updated, rather than chasing
+                down to the very last bad block. Default is 1.
+
+        Maybe you should ensure that the run2() gave a bad J first? But I
+        also don't want to end up in a situation where the optimizer moves
+        by 1e-10 for 100 steps...
+        """
+        n_bad = 0
+        max_bad = self.param_vals.size / 4 if max_bad is None else max_bad
+        while not self.check_terminate():
+            self._has_run = True()
+            self._run2()
+            self._num_iter += 1
+            while n_bad < max_bad:
+                n_bad = self.do_stuckJ_run(stop_halving=stop_halving)
+                self._num_iter += 1  #Maybe we should could full J updates, maybe not
+
+    def do_stuckJ_run(self, stop_halving=1):
         """
         Optimization when a J is calculated, but trying to step with a full
         J results in a bad step.
+            stop_halving : Int
+                When the # of elements in a bad block is < stop_halving,
+                just call the whole sub-block bad. Default is 1.
         """
         #0. Initialize an active list of sub-blocks of J
         full_blk = np.ones(self.J.shape[0], dtype='bool')
@@ -732,7 +767,7 @@ class LMEngine(object):
             #3. IF subblock is good or bad, flow:
             if n_steps > 0:  #at least 1 good step == good block
                 good_params |= cur_block
-            elif cur_block.sum() > 1:  #bad block, can be halved
+            elif cur_block.sum() > stop_halving:  #bad block, can be halved
                 active_list.extend(halve_randomly(cur_block))
             else:
                 bad_params |= cur_block
