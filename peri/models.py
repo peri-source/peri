@@ -251,7 +251,7 @@ class BlurredParticlesModel(Model):
         }
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
-class BrightfieldImageModel(models.Model):
+class BrightfieldImageModel(Model):
     def __init__(self):
         varmap = {
             'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'obj'
