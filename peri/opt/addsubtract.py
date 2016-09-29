@@ -625,6 +625,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     if rad == 'calc':
         rad = np.median(st.obj_get_radii())
     #1. Remove all possibly bad particles within the tile.
+    initial_error = np.copy(st.error)
     rinds = np.nonzero(tile.contains(st.obj_get_positions()))[0]
     if rinds.size > 0:
         rpos, rrad = st.obj_remove_particle(rinds)
@@ -654,6 +655,17 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     if len(ainds) > 0:
         opt.do_levmarq_particles(st, np.array(ainds), include_rad=True,
                 max_iter=3)
+
+    #6. Ensure that current error after add-subtracting is lower than initial
+    did_something = (rinds.size > 0) and (len(ainds)>0)
+    if did_something & (st.error > initial_error):
+        CLOG.info('Failed addsub, Tile {} -> {}'.format(tile.l.tolist(), tile.r.tolist()))
+        if len(ainds) > 0:
+            _ = st.obj_remove_particle(ainds)
+        if rinds.size > 0:
+            for p, r in zip(rpos, rrad):
+                _ = st.obj_add_particle(p, r)
+        n_added = 0; ainds = []
     return n_added, ainds
 
 def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
@@ -761,5 +773,7 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
         if n_empty > region_depth:
             break  #some message or something?
     else:  #for-break-else
-        CLOG.info('All regions contained particles.')  #something else??
+        pass
+        # CLOG.info('All regions contained particles.')
+        #something else?? this is not quite true
     return n_added, new_poses
