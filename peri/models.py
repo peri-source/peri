@@ -251,6 +251,25 @@ class BlurredParticlesModel(Model):
         }
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
+class BrightfieldImageModel(models.Model):
+    def __init__(self):
+        varmap = {
+            'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'obj'
+        }
+        modelstr = {
+            'full' :'I*H(P) + B',
+            'dI' : 'dI*H(P) + B',
+            'dP' : 'I*H(dP) + B',
+            'dB' : 'dB',
+        }
+        registry = {
+            'bkg': allfields,
+            'ilm': allfields,
+            'psf': allpsfs,  #FIXME should be 2d psfs
+            'obj': allobjs
+        }
+        super(BrightfieldImageModel, self).__init__(modelstr=modelstr, varmap=varmap)#registry=registry)
+
 models = {
     'confocal-dyedfluid': ConfocalImageModel,
     'confocal-dyedobjects': BlurredParticlesModel,
