@@ -190,9 +190,11 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
         slab : peri.comp instance.
             A slab or other component collection in addition to the particles.
             Default is None.
-        use_aug : Bool
-            Set to True to use a peri.opt.AugmentedState for optimization,
-            which may or may not have faster convergence.
+        rz_order: Int
+            Set to an int > 0 to include a rescaling R(z) as a global
+            parameter, which may or may not have faster convergence.
+            rz_order is the order of the polynomial rescaling R(z). Default
+            is 0; i.e. no global radii rescaling.
     Outputs
     -------
         Returns the peri.states instance of the image, after optimization.
@@ -204,7 +206,7 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
     return s
 
 def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
-        min_rad=None, max_rad=None, invert=True, use_aug=False, zscale=1.0,
+        min_rad=None, max_rad=None, invert=True, rz_order=0, zscale=1.0,
         mem_level='hi'):
     """See get_initial_featuring's __doc__"""
     if min_rad is None:
@@ -246,8 +248,7 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
 
     RLOG.info('Final polish:')
     opt.burn(s, mode='polish', n_loop=8, fractol=3e-4, desc=desc+'addsub-polish',
-            max_mem=max_mem, use_aug=use_aug)
-
+            max_mem=max_mem, rz_order=rz_order)
     return s
 
 def _calc_ilm_order(imshape):

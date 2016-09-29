@@ -1639,15 +1639,15 @@ class LMAugmentedState(LMEngine):
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
 def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10.,
-        run_length=6, eig_update=True, collect_stats=False, use_aug=False,
+        run_length=6, eig_update=True, collect_stats=False, rz_order=3,
         run_type=2, **kwargs):
     """
     Convenience wrapper for LMGlobals. Same keyword args, but I've set
     the defaults to what I've found to be useful values for optimizing globals.
     See LMGlobals and LMEngine for documentation.
     """
-    if use_aug:
-        aug = AugmentedState(s, param_names, rz_order=3)
+    if rz_order > 0:
+        aug = AugmentedState(s, param_names, rz_order=rz_order)
         lm = LMAugmentedState(aug, damping=damping, run_length=run_length,
                 decrease_damp_factor=decrease_damp_factor, eig_update=
                 eig_update, **kwargs)
@@ -1709,8 +1709,8 @@ def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
     if collect_stats:
         return lo.get_termination_stats()
 
-def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
-        fractol=1e-7, errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True,
+def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
+        errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True,
         do_line_min=True):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
@@ -1734,10 +1734,11 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
             Set to None to avoid saving. Default is '', which selects
             one of 'burning', 'polishing', 'doing_positions'
 
-        use_aug: Bool
-            Set to True to optimize with an augmented state (R(z) as a
-            global parameter) vs. with the normal global parameters.
-            Default is False (no augmented).
+        rz_order: Int
+            Set to an int > 0 to optimize with an augmented state (R(z) as
+            a global parameter) vs. with the normal global parameters;
+            rz_order is the order of the polynomial approximate for R(z).
+            Default is 0 (no augmented state).
 
         fractol : Float
             Fractional change in error at which to terminate. Default 1e-7
@@ -1785,6 +1786,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
     glbl_run_length = 3 if mode == 'do-particles' else 6
     glbl_mx_itr = 2 if mode == 'burn' else 1
     use_accel = (mode == 'burn')
+    rz_order = int(rz_order)
 
     if mode == 'do-particles':
         glbl_nms = ['ilm-scale', 'offset']  #bkg?
@@ -1812,12 +1814,12 @@ def burn(s, n_loop=6, collect_stats=False, desc='', use_aug=False,
         BAD_LIST = [['ilm-scale', BAD_DAMP], ['ilm-off', BAD_DAMP], ['ilm-z-0',
                 BAD_DAMP], ['bkg-z-0', BAD_DAMP]]
         ####
-        glbl_dmp = vectorize_damping(glbl_nms, damping=1.0, increase_list=
-                [['psf-', 1e3]] + BAD_LIST)  #doesn't work with use_aug...
+        glbl_dmp = vectorize_damping(glbl_nms + ['rz']*rz_order, damping=1.0,
+                increase_list=[['psf-', 1e3]] + BAD_LIST)
         if a != 0 or mode != 'do-particles':
             gstats = do_levmarq(s, glbl_nms, max_iter=glbl_mx_itr, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
-                    eig_update_frequency=3, use_aug=use_aug, damping=
+                    eig_update_frequency=3, rz_order=rz_order, damping=
                     glbl_dmp, decrease_damp_factor=10., use_accel=use_accel,
                     collect_stats=collect_stats, fractol=0.1*fractol,
                     max_mem=max_mem)
