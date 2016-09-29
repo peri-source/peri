@@ -660,15 +660,31 @@ class LMEngine(object):
             self.error
             self.do_internal_run(initial_count=1)
 
-    def do_internal_run(self, initial_count=0, subblock=None):
+    def do_internal_run(self, initial_count=0, subblock=None, update_derr=True):
         """
         Given a fixed damping, J, JTJ, iterates calculating steps, with
-        optional Broyden or eigendirection updates.
-        Called internally by do_run_2() but might also be useful on its own.
+        optional Broyden or eigendirection updates. Iterates either until
+        a bad step is taken or for self.run_length times.
+        Called internally by do_run_2() but is also useful on its own.
         Parameters
         ----------
-            initial_count
-            subblock
+            initial_count : Int
+                The initial count of the run. Default is 0. Increasing from
+                0 effectively temporarily decreases run_length.
+
+            subblock : None or np.ndarray of bools
+                If not None, a boolean mask which determines which sub-
+                block of parameters to run over. Default is None, i.e.
+                all the parameters.
+
+            update_derr : Bool
+                Set to False to not update the variable that determines
+                delta_err, preventing premature termination through errtol.
+        Comments:
+        --------
+        It might be good to do something similar to update_derr with the
+        parameter values, but this is trickier because of Broyden updates
+        and _fresh_J.
         """
         self._inner_run_counter = initial_count; good_step = True
         n_good_steps = 0
@@ -696,7 +712,8 @@ class LMEngine(object):
                 #Updating:
                 self.update_param_vals(delta_vals, incremental=True)
                 self._last_residuals = _last_residuals.copy()
-                self._last_error = er0
+                if update_derr:
+                    self._last_error = er0
                 self.error = er1
 
                 _last_residuals = self.calc_residuals().copy()
@@ -729,12 +746,15 @@ class LMEngine(object):
 
         Maybe you should ensure that the run2() gave a bad J first? But I
         also don't want to end up in a situation where the optimizer moves
-        by 1e-10 for 100 steps...
+        by 1e-10 for 100 steps... -- should be OK because of errtol.
+        One other issue with this is that if you move around in 1 parameter
+        you can get a small but positive change in the error, which can
+        create a premature stoppage through self.check_terminate()
         """
         n_bad = 0
         max_bad = self.param_vals.size / 4 if max_bad is None else max_bad
         while not self.check_terminate():
-            self._has_run = True()
+            self._has_run = True
             self._run2()
             self._num_iter += 1
             while n_bad < max_bad:
@@ -757,12 +777,12 @@ class LMEngine(object):
 
         while len(active_list) > 0:
             #1. Pop one active sub-block
-            #   You might want to always pop the largest block.
-            cur_block = active_list.pop(np.random.choice(len(active_list)))
+            # cur_block = active_list.pop(np.random.choice(len(active_list)))
+            cur_block = active_list.pop(0)  #largest rather than random block.
 
             #2. Take a step with the sub-block
             CLOG.debug('Run with {}-element subblock:'.format(cur_block.sum()))
-            n_steps = self.do_internal_run(subblock=cur_block)
+            n_steps = self.do_internal_run(subblock=cur_block, update_derr=False)
 
             #3. IF subblock is good or bad, flow:
             if n_steps > 0:  #at least 1 good step == good block
@@ -779,28 +799,29 @@ class LMEngine(object):
             CLOG.debug('Run with all {} good parameters.'.format(ngood))
             _ = self.do_internal_run(subblock=good_params)
 
-        #6. Update the bad parameters
         if bad_params.sum() > 0:
+            #6. Update the bad parameters
             self.update_select_J(bad_params)
-
-        #7. Run with full J
-        CLOG.debug('Try run with all parameters.')
-        n_full_steps = self.do_internal_run()  #??
-        if (n_full_steps == 0) & (bad_params.sum() > 0):  #bad step:
-            CLOG.debug('Run with freshly-updated {} bad parameters.'.format(bad_params.sum()))
-            n_bad_steps = self.do_internal_run(subblock=bad_params)
-
-            #If we took a bad step, we know the newly-updated J is correct:
-            _try = 0
-            while ((n_bad_steps == 0) & (not self.check_terminate()) &
-                    (_try <self._max_inner_loop)):
-                self.increase_damping()
+            #7. Run with full J
+            CLOG.debug('Try run with all parameters.')
+            n_full_steps = self.do_internal_run()  #??
+            if (n_full_steps == 0):  #bad step:
+                CLOG.debug('Run with freshly-updated {} bad parameters.'.format(bad_params.sum()))
                 n_bad_steps = self.do_internal_run(subblock=bad_params)
-            if _try >= self._max_inner_loop:
-                CLOG.warn('Stuck!')
-            #loop is broken == we've run with updated params.
-            #now run with full J
-            _ = self.do_internal_run()
+
+                #If we took a bad step, we know the newly-updated J is correct:
+                _try = 0
+                while ((n_bad_steps == 0) & (not self.check_terminate()) &
+                        (_try < self._max_inner_loop)):
+                    _try += 1
+                    self.increase_damping()
+                    n_bad_steps = self.do_internal_run(subblock=bad_params)
+                if _try >= self._max_inner_loop:
+                    CLOG.warn('Stuck!')
+                else:
+                    #successfully ran with updated bad params, now with full J
+                    CLOG.debug('Try again with all parameters.')
+                    _ = self.do_internal_run()
         #8. Because we might want to keep running this until it stops working,
         #   we return the number of bad parameters to decide whether to
         #   keep going.
