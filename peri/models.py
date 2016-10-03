@@ -253,20 +253,23 @@ class BlurredParticlesModel(Model):
 
 class BrightfieldImageModel(Model):
     def __init__(self):
+        """Model 3 or 4 or 6b (all equivalent) in Brian's writeup."""
         varmap = {
-            'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'obj'
+            'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'obj', 'c':'contrast'
         }
         modelstr = {
-            'full' :'I*H(P) + B',
-            'dI' : 'dI*H(P)',
-            'dP' : 'I*H(dP)',
+            'full' :'I*(1+c*H(P)) + B',
+            'dI' : 'dI*(1+c*H(P))',
+            'dP' : 'I*c*H(dP)',
+            'dc' : 'I*dc*H(P)',
             'dB' : 'dB',
         }
         registry = {
             'bkg': allfields,
             'ilm': allfields,
             'psf': allpsfs,  #FIXME should be 2d psfs
-            'obj': allobjs
+            'obj': allobjs,
+            'contrast': {'const': GlobalScalar}
         }
         super(BrightfieldImageModel, self).__init__(modelstr=modelstr, varmap=varmap)#registry=registry)
 
