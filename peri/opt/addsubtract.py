@@ -663,7 +663,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
         if len(ainds) > 0:
             _ = st.obj_remove_particle(ainds)
         if rinds.size > 0:
-            for p, r in zip(rpos, rrad):
+            for p, r in zip(rpos.reshape(-1,3), rrad.reshape(-1)):
                 _ = st.obj_add_particle(p, r)
         n_added = 0; ainds = []
     return n_added, ainds
