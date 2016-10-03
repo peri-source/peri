@@ -258,8 +258,8 @@ class BrightfieldImageModel(Model):
         }
         modelstr = {
             'full' :'I*H(P) + B',
-            'dI' : 'dI*H(P) + B',
-            'dP' : 'I*H(dP) + B',
+            'dI' : 'dI*H(P)',
+            'dP' : 'I*H(dP)',
             'dB' : 'dB',
         }
         registry = {
