@@ -1699,7 +1699,7 @@ class LMAugmentedState(LMEngine):
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
 def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10.,
-        run_length=6, eig_update=True, collect_stats=False, rz_order=3,
+        run_length=6, eig_update=True, collect_stats=False, rz_order=0,
         run_type=2, **kwargs):
     """
     Convenience wrapper for LMGlobals. Same keyword args, but I've set
