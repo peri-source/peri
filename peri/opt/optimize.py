@@ -726,7 +726,7 @@ class LMEngine(object):
             self._inner_run_counter += 1
         return n_good_steps
 
-    def do_run_3(self, max_bad=None, stop_halving=1):
+    def do_run_3(self, max_bad=None, max_updates=3, stop_halving=1):
         """
         I need better names for these functions
         Runs 1 step of run2, then runs with stuckJ until the # of bad
@@ -738,6 +738,10 @@ class LMEngine(object):
                 The maximum number of bad sub-blocks of J before giving
                 up and re-calculating an entire J. Default is None, which
                 uses self.param_vals.size / 4
+
+            max_updates : Int
+                The maximum number of times to attempt the local ln(N) updates
+                of J. Default is 3.
 
             stop_halving : Int
                 When the size of a bad block is < stop_halving, the entire
@@ -757,9 +761,11 @@ class LMEngine(object):
             self._has_run = True
             self._run2()
             self._num_iter += 1
-            while n_bad < max_bad:
+            for _ in xrange(max_updates):
                 n_bad = self.do_stuckJ_run(stop_halving=stop_halving)
                 self._num_iter += 1  #Maybe we should could full J updates, maybe not
+                if (self.check_terminate()) or (n_bad >= max_bad):
+                    break
 
     def do_stuckJ_run(self, stop_halving=1):
         """
