@@ -37,41 +37,66 @@ def sorted_files(globber, num_sort=True, num_indices=None, return_num=False):
         return allfiles
     return [f[-1] for f in allfiles]
 
-def good_particles(state, inbox=True, inboxrad=False, fullinbox=False):
+def good_particles(state, inbox=True, inboxrad=False, fullinbox=False,
+        pos=None, rad=None, ishape=None):
     """
     Returns a mask of `good' particles as defined by
         * radius > 0
         * position inside box
-        * active
 
-    Parameters:
-        inbox : whether to only count particle centers within the image
-        inboxrad : whether to only count particles that overlap the image at all
-        fullinbox : Only include particles which are entirely in the image.
+    Input Parameters
+    ---------------
+        state : peri.States instance
+            The state to identify the good particles. If pos, rad, and ishape
+            are provided, then this does not need to be passed.
+        inbox : Bool
+            Whether to only count particle centers within the image. Default
+            is True.
+        inboxrad : Bool
+            Whether to only count particles that overlap the image at all.
+            Default is False.
+        fullinbox : Bool
+            Whether to only include particles which are entirely in the
+            image. Default is False
+        pos : [3,N] np.ndarray or None
+            If not None, the particles' positions.
+        rad : [N] element numpy.ndarray or None
+            If not None, the particles' radii.
+        ishape : 3-element list-like or None
+            If not None, the inner region of the state.
+
+    Outputs
+    -------
+        mask : np.ndarray of bools
+            A boolean mask of which particles are good (True) or bad.
     """
-    pos = state.obj_get_positions()
-    rad = state.obj_get_radii()
+    if pos is None:
+        pos = state.obj_get_positions()
+    if rad is None:
+        rad = state.obj_get_radii()
 
     mask = rad > 0
 
     if (inbox | inboxrad | fullinbox):
         if fullinbox:
-            mask &= trim_box(state, pos, rad=-rad)
+            mask &= trim_box(state, pos, rad=-rad, ishape=ishape)
         elif inboxrad:
-            mask &= trim_box(state, pos, rad=rad)
+            mask &= trim_box(state, pos, rad=rad, ishape=ishape)
         else:
-            mask &= trim_box(state, pos, rad=None)
+            mask &= trim_box(state, pos, rad=None, ishape=ishape)
 
     return mask
-    
-def trim_box(state, p, rad=None):
+
+def trim_box(state, p, rad=None, ishape=None):
     """
     Returns particles within the image.  If rad is provided, then
     particles that intersect the image at all (p-r) > edge
     """
+    if ishape is None:
+        ishape = state.ishape.shape
     if rad is None:
-        return ((p > 0) & (p < np.array(state.data.shape))).all(axis=-1)
-    return ((p+rad[:,None] > 0) & (p-rad[:,None] < np.array(state.data.shape))).all(axis=-1)
+        return ((p > 0) & (p < np.array(ishape))).all(axis=-1)
+    return ((p+rad[:,None] > 0) & (p-rad[:,None] < np.array(ishape))).all(axis=-1)
 
 def nearest(p0, p1, cutoff=None):
     """
@@ -130,11 +155,11 @@ def gofr(pos, rad, zscale, diameter=None, resolution=3e-2, rmax=10, method='norm
         if None, determined by method, otherwise 1/r^2 norm
 
     phi_method : str ['obj', 'state']
-        which data to use to calculate the packing_fraction. 
+        which data to use to calculate the packing_fraction.
             -- 'pos' : (not stable) calculate based on fractional spheres in
                 a cube, do not use
 
-            -- 'const' : the volume fraction is provided by the user via 
+            -- 'const' : the volume fraction is provided by the user via
                 the variable phi
 
             -- 'state' : the volume is calculated by using the platonic sphere
