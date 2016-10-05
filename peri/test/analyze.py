@@ -37,6 +37,17 @@ def sorted_files(globber, num_sort=True, num_indices=None, return_num=False):
         return allfiles
     return [f[-1] for f in allfiles]
 
+def dict_to_pos_rad(d):
+    """Given a dictionary of a states params:values, returns the pos & rad."""
+    p, r = [], []
+    for i in itertools.count():
+        try:
+            p.append([d['sph-{}-{}'.format(i, c)] for c in 'zyx'])
+            r.append(d['sph-{}-a'.format(i)])
+        except KeyError:
+            break
+    return np.array(p), np.array(r)
+
 def good_particles(state, inbox=True, inboxrad=False, fullinbox=False,
         pos=None, rad=None, ishape=None):
     """
