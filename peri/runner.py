@@ -330,7 +330,7 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
 
 def get_particles_featuring(feature_diam, state_name=None, im_name=None,
         use_full_path=False, actual_rad=None, zscale=0.9, minmass=100,
-        **kwargs):
+        invert=True, **kwargs):
     """
     Runs trackpy.locate on an image, sets the globals from a previous state,
     calls _translate_particles
@@ -363,13 +363,14 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
         minmass : Float
             The minimum mass, as pased to trackpy.locate. Default is 100.
 
+        invert : Bool
+            Whether to invert the image for featuring, as passed to
+            addsubtract.add_subtract. Default is True.
+
         desc : String
             A description to be inserted in saved state. The save name will
             be, e.g., '0.tif-peri-' + desc + 'initial-burn.pkl'. Default is ''
 
-        invert : Bool
-            Whether to invert the image for featuring, as passed to
-            addsubtract.add_subtract. Default is True.
         min_rad : Float
             The minimum particle radius, as passed to addsubtract.add_subtract.
             Default is 'calc', but a known physical value will give better
