@@ -541,7 +541,7 @@ class LMEngine(object):
             good_step = (find_best_step([self.error, er1]) == 1)
             if not good_step:
                 er0 = self.update_function(self.param_vals)
-                if np.abs(er0 -self.error) > 1e-7:
+                if np.abs(er0 -self.error)/er0 > 1e-7:
                     raise RuntimeError('Function updates are not exact.')
                 CLOG.debug('Bad step, increasing damping')
                 CLOG.debug('\t\t%f\t%f' % (self.error, er1))
@@ -556,7 +556,7 @@ class LMEngine(object):
                 else:
                     er0 = self.update_function(self.param_vals)
                     CLOG.warn('Stuck!')
-                    if np.abs(er0 -self.error) > 1e-7:
+                    if np.abs(er0 -self.error)/er0 > 1e-7:
                         raise RuntimeError('Function updates are not exact.')
 
             #state is updated, now params:
