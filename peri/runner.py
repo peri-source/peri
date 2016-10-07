@@ -329,8 +329,8 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
     return s
 
 def get_particles_featuring(feature_diam, state_name=None, im_name=None,
-        use_full_path=False, actual_rad=None, zscale=0.9, minmass=100,
-        invert=True, **kwargs):
+        use_full_path=False, actual_rad=None, minmass=100, invert=True,
+        **kwargs):
     """
     Runs trackpy.locate on an image, sets the globals from a previous state,
     calls _translate_particles
@@ -356,9 +356,6 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
         actual_rad : Float or None
             The initial guess for the particle radii, which can be distinct
             from feature_diam/2. If None, then defaults to feature_diam/2.
-
-        zscale : Float
-            The zscale of the PlatonicSpheresCollection. Default is 0.9.
 
         minmass : Float
             The minimum mass, as pased to trackpy.locate. Default is 100.
@@ -407,8 +404,8 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
     pos[:,0] = f['z']
     pos[:,1] = f['y']
     pos[:,2] = f['x']
-    #Right now there is not a good way to translate, so:
 
+    #Right now there is not a good way to translate, so:
     slab = s.get('obj').comps[1] #FIXME I don't think this will always be correct
     sph = objs.PlatonicSpheresCollection(pos=pos, rad=actual_rad, zscale=
             s.state['zscale'])
@@ -416,7 +413,7 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
     s.set('obj', o)
 
     s.set_image(im)
-    _translate_particles(s, **kwargs)
+    _translate_particles(s, invert=invert, **kwargs)
     return s
 
 def _pick_state_im_name(state_name, im_name, use_full_path=False):
