@@ -25,11 +25,13 @@ def listify(a):
         return [a]
     return list(a)
 
-def delistify(a, like=None):
+def delistify(a, b=None):
     out = a
     if isinstance(a, (tuple, list, np.ndarray)) and len(a) == 1:
         out = a[0]
-    return out if like is None else type(like)(out)
+    if isinstance(b, (tuple, list, np.ndarray)):
+        return type(b)(out)
+    return out
 
 def amin(a, b):
     return np.vstack([a, b]).min(axis=0)
