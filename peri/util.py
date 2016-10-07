@@ -26,12 +26,15 @@ def listify(a):
     return list(a)
 
 def delistify(a, b=None):
-    out = a
-    if isinstance(a, (tuple, list, np.ndarray)) and len(a) == 1:
-        out = a[0]
     if isinstance(b, (tuple, list, np.ndarray)):
-        return type(b)(out)
-    return out
+        if isinstance(a, (tuple, list, np.ndarray)):
+            return type(b)(a)
+        return type(b)([a])
+    else:
+        if isinstance(a, (tuple, list, np.ndarray)) and len(a) == 1:
+            return a[0]
+        return a
+    return a
 
 def amin(a, b):
     return np.vstack([a, b]).min(axis=0)
