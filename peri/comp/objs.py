@@ -510,45 +510,30 @@ class PlatonicSpheresCollection(Component):
 
     def remove_particle(self, inds):
         """ Remove the particle at index `inds`, may be a list """
-        fulldraw = (len(listify(inds)) > self.N / 2)
-
         if self.rad.shape[0] == 0:
             return
 
-        # make sure we remove them in reverse order
-        if hasattr(inds, '__iter__'):
-            inds = np.sort(inds)[::-1]
+        inds = listify(inds)
 
-        allpos, allrad = [], []
+        # Here's the game plan:
+        #   1. get all positions and sizes of particles that we will be
+        #      removing (to return to user)
+        #   2. redraw those particles to 0.0 radius 
+        #   3. remove the particles and trigger changes
+        # However, there is an issue -- if there are two particles at opposite
+        # ends of the image, it will be significantly slower than usual
+        pos = self.pos[inds].copy()
+        rad = self.rad[inds].copy()
 
-        for ind in listify(inds):
-            pos = self.pos[ind].copy()
-            rad = self.rad[ind].copy()
+        self.trigger_update(self.param_particle_rad(inds), np.zeros(len(inds)))
 
-            # draw it as zero size particle before changing parameters
-            params = self.param_particle(ind)
-            values = self.get_values(params)
-            values[-1] = 0.0
-            self.trigger_update(params, values)
-
-            self.pos = np.delete(self.pos, ind, axis=0)
-            self.rad = np.delete(self.rad, ind, axis=0)
-
-            # if we are not part of the system, go ahead and draw
-            if not self._parent and self.shape and not fulldraw:
-                self._draw_particle(pos, rad, -1)
-
-            allpos.append(pos)
-            allrad.append(rad)
+        np.delete(self.pos, inds, axis=0)
+        np.delete(self.rad, inds, axis=0)
 
         # update the parameters globally
         self.setup_variables()
-
-        if fulldraw:
-            self.initialize()
-
         self.trigger_parameter_change()
-        return np.squeeze(np.array(allpos)), np.squeeze(np.array(allrad))
+        return np.squeeze(np.array(pos)), np.squeeze(np.array(rad))
 
     def get_positions(self):
         return self.pos.copy()
