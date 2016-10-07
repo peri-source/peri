@@ -5,7 +5,7 @@ from scipy.linalg import expm3
 
 from peri.special import functions
 from peri.comp import Component
-from peri.util import Tile, cdd, amin, amax, listify, delistify
+from peri.util import Tile, cdd, listify, delistify
 
 # maximum number of iterations to get an exact volume
 MAX_VOLUME_ITERATIONS = 10
@@ -322,7 +322,7 @@ class PlatonicSpheresCollection(Component):
                 values.append(self.pos[ind][0])
             elif typ == 'a':
                 values.append(self.rad[ind])
-        return delistify(values)
+        return delistify(values, params)
 
     def set_values(self, params, values):
         for p,v in zip(listify(params), listify(values)):

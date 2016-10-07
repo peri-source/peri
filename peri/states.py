@@ -279,7 +279,7 @@ class State(comp.ParameterGroup):
             def __getitem__(self, d=None):
                 if d is None:
                     d = self.obj.params
-                return util.delistify(self.obj.get_values(d))
+                return util.delistify(self.obj.get_values(d), d)
 
         self.state = _Statewrap(self)
 

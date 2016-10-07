@@ -45,8 +45,9 @@ class ParameterGroup(object):
 
     def get_values(self, params):
         """ Get the value of a list or single parameter """
-        values = util.delistify([self.param_dict[p] for p in util.listify(params)])
-        return values
+        return util.delistify(
+            [self.param_dict[p] for p in util.listify(params)], params
+        )
 
     def set_values(self, params, values):
         """
@@ -328,7 +329,7 @@ class ComponentCollection(Component):
             if not p in self.lmap:
                 raise NotAParameterError("%r does not belong to %r" % (p, self))
             vals.append(self.lmap[p][0].get_values(p))
-        return util.delistify(vals)
+        return util.delistify(vals, params)
 
     def set_values(self, params, values):
         plist, vlist = self.split_params(params, values)
