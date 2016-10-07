@@ -510,6 +510,8 @@ class PlatonicSpheresCollection(Component):
 
     def remove_particle(self, inds):
         """ Remove the particle at index `inds`, may be a list """
+        fulldraw = (len(listify(inds)) > self.N / 2)
+
         if self.rad.shape[0] == 0:
             return
 
@@ -533,7 +535,7 @@ class PlatonicSpheresCollection(Component):
             self.rad = np.delete(self.rad, ind, axis=0)
 
             # if we are not part of the system, go ahead and draw
-            if not self._parent and self.shape:
+            if not self._parent and self.shape and not fulldraw:
                 self._draw_particle(pos, rad, -1)
 
             allpos.append(pos)
@@ -541,6 +543,10 @@ class PlatonicSpheresCollection(Component):
 
         # update the parameters globally
         self.setup_variables()
+
+        if fulldraw:
+            self.initialize()
+
         self.trigger_parameter_change()
         return np.squeeze(np.array(allpos)), np.squeeze(np.array(allrad))
 
