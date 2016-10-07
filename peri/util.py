@@ -25,34 +25,26 @@ def listify(a):
         return [a]
     return list(a)
 
-def delistify(a):
+def delistify(a, like=None):
+    out = a
     if isinstance(a, (tuple, list, np.ndarray)) and len(a) == 1:
-        return a[0]
-    return a
+        out = a[0]
+    return out if like is None else type(like)(out)
 
-def imin(a, b, dim=3):
-    return np.vstack([iN(a, dim), iN(b, dim)]).min(axis=0)
+def amin(a, b):
+    return np.vstack([a, b]).min(axis=0)
 
-def imax(a, b, dim=3):
-    return np.vstack([iN(a, dim), iN(b, dim)]).max(axis=0)
+def amax(a, b):
+    return np.vstack([a, b]).max(axis=0)
 
-def iN(a, dim=3):
+def aN(a, dim=3, dtype='int'):
     """ Convert an integer or iterable list to numpy 3 array """
     if not hasattr(a, '__iter__'):
-        return np.array([a]*dim, dtype='float')
-    return np.array(a).astype('float')
+        return np.array([a]*dim, dtype=dtype)
+    return np.array(a).astype(dtype)
 
-def amin(a, b, dim=3):
-    return np.vstack([aN(a, dim), aN(b, dim)]).min(axis=0)
-
-def amax(a, b, dim=3):
-    return np.vstack([aN(a, dim), aN(b, dim)]).max(axis=0)
-
-def aN(a, dim=3):
-    """ Convert an integer or iterable list to numpy 3 array """
-    if not hasattr(a, '__iter__'):
-        return np.array([a]*dim, dtype='int')
-    return np.array(a).astype('int')
+def getdtype(types):
+    return np.sum([np.array([1], dtype=t) for t in types]).dtype
 
 def getdim(a):
     if not hasattr(a, '__iter__'):
@@ -67,7 +59,7 @@ class CompatibilityPatch(object):
 
 class Tile(CompatibilityPatch):
     def __init__(self, left, right=None, mins=None, maxs=None,
-            size=None, centered=False, dim=None):
+            size=None, centered=False, dim=None, dtype='int'):
         """
         Creates a tile element using many different combinations (where []
         indicates an array created from either a single number or any
@@ -97,6 +89,8 @@ class Tile(CompatibilityPatch):
             Tile(3, dim=2)  : [0,0] -> [3,3]
             Tile([3])       : [0] -> [3]
         """
+        self.dtype = dtype
+
         # first determine the dimensionality of the tile
         dims = set([getdim(i) for i in [left, right, size]] + [dim])
         dims = dims.difference(set([None]))
@@ -114,13 +108,13 @@ class Tile(CompatibilityPatch):
                 left = 0
             else:
                 if not centered:
-                    right = aN(left, dim) + aN(size, dim)
+                    right = aN(left, dim, dtype=self.dtype) + aN(size, dim, dtype=self.dtype)
                 else:
-                    l, s = aN(left, dim), aN(size, dim)
+                    l, s = aN(left, dim, dtype=self.dtype), aN(size, dim, dtype=self.dtype)
                     left, right = l - s/2, l + (s+1)/2
 
-        left = aN(left, dim)
-        right = aN(right, dim)
+        left = aN(left, dim, dtype=self.dtype)
+        right = aN(right, dim, dtype=self.dtype)
 
         if dim is not None:
             self.dim = dim
@@ -130,10 +124,10 @@ class Tile(CompatibilityPatch):
             self.dim = left.shape[0]
 
         if mins is not None:
-            left = amax(left, aN(mins, dim), dim=dim)
+            left = amax(left, aN(mins, dim))
 
         if maxs is not None:
-            right = amin(right, aN(maxs, dim), dim=dim)
+            right = amin(right, aN(maxs, dim))
 
         self.l = np.array(left)
         self.r = np.array(right)
@@ -171,6 +165,10 @@ class Tile(CompatibilityPatch):
     def center(self):
         """ Return the center of the tile """
         return (self.r + self.l)/2.0
+
+    @property
+    def volume(self):
+        return np.prod(self.shape)
 
     @property
     def kcenter(self):
@@ -232,7 +230,7 @@ class Tile(CompatibilityPatch):
             norm = 1
         if norm is True:
             norm = np.array(self.shape)
-        norm = iN(norm, self.dim)
+        norm = aN(norm, self.dim, dtype='float')
 
         v = list(np.arange(self.l[i], self.r[i]) / norm[i] for i in xrange(self.dim))
         return self._format_vector(v, form=form)
@@ -252,7 +250,7 @@ class Tile(CompatibilityPatch):
             norm = 1
         if norm is True:
             norm = np.array(self.shape)
-        norm = iN(norm, self.dim)
+        norm = aN(norm, self.dim, dtype='float')
 
         v = list(np.fft.fftfreq(self.shape[i])/norm[i] for i in xrange(self.dim))
 
@@ -304,7 +302,7 @@ class Tile(CompatibilityPatch):
         for tile in tiles[1:]:
             l = amax(l, tile.l)
             r = amin(r, tile.r)
-        return Tile(l, r)
+        return Tile(l, r, dtype=l.dtype)
 
     @staticmethod
     def boundingtile(tiles, *args):
@@ -319,7 +317,7 @@ class Tile(CompatibilityPatch):
         for tile in tiles[1:]:
             l = amin(l, tile.l)
             r = amax(r, tile.r)
-        return Tile(l, r)
+        return Tile(l, r, dtype=l.dtype)
 
     def __eq__(self, other):
         if other is None:
@@ -338,7 +336,7 @@ class Tile(CompatibilityPatch):
         return Tile.boundingtile(self, other)
 
     def copy(self):
-        return Tile(self.l.copy(), self.r.copy())
+        return Tile(self.l.copy(), self.r.copy(), dtype=self.dtype)
 
     def translate(self, dr):
         """ Translate a tile by an amount dr """
@@ -360,8 +358,8 @@ class Tile(CompatibilityPatch):
         overhanging `tile`, can be viewed as self \\ tile (set theory relative
         complement, but in a bounding sense)
         """
-        ll = np.abs(amin(self.l - tile.l, 0))
-        rr = np.abs(amax(self.r - tile.r, 0))
+        ll = np.abs(amin(self.l - tile.l, aN(0, dim=self.dim)))
+        rr = np.abs(amax(self.r - tile.r, aN(0, dim=self.dim)))
         return ll, rr
 
     def reflect_overhang(self, clip):
@@ -380,6 +378,9 @@ class Tile(CompatibilityPatch):
         inner = Tile.intersection([clip, orig])
         outer = Tile.intersection([clip, tile])
         return inner, outer
+
+    def astype(self, dtype):
+        return Tile(self.l.astype(dtype), self.r.astype(dtype))
 
     def __getstate__(self):
         return self.__dict__.copy()
