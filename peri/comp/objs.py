@@ -482,31 +482,31 @@ class PlatonicSpheresCollection(Component):
 
     def add_particle(self, pos, rad):
         """
-        Add a particle at position pos (3 element list or numpy array) and
-        radius rad (scalar float). Returns index of new particle.
-        """
-        if self.N == 0:
-            self.pos = np.array(pos).reshape(-1, 3)
-            self.rad = np.array([rad])
-        else:
-            self.pos = np.vstack([self.pos, pos])
-            self.rad = np.hstack([self.rad, 0.0])
+        Add a particle or list of particles given by a list of positions and
+        radii, both need to be array-like.
 
-        # if we are not part of the system, go ahead and draw
-        if not self._parent and self.shape:
-            self._draw_particle(pos, rad, +1)
+        Parameters:
+        -----------
+        pos : array-like [N, 3]
+            Positions of all new particles
+
+        rad : array-like [N]
+            Corresponding radii of new particles
+        """
+        # add some zero mass particles to the list (same as not having these
+        # particles in the image, which is true at this moment)
+        inds = np.arange(self.N, self.N+len(rad))
+        self.pos = np.vstack([self.pos, pos])
+        self.rad = np.hstack([self.rad, np.zeros(len(rad))])
 
         # update the parameters globally
         self.setup_variables()
         self.trigger_parameter_change()
-        ind = self.closest_particle(pos)
 
         # now request a drawing of the particle plz
-        params = self.param_particle(ind)
-        values = self.get_values(params)
-        values[-1] = rad
-        self.trigger_update(params, values)
-        return ind
+        params = self.param_particle_rad(inds)
+        self.trigger_update(params, rad)
+        return inds
 
     def remove_particle(self, inds):
         """ Remove the particle at index `inds`, may be a list """
