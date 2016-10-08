@@ -107,19 +107,22 @@ class Tile(CompatibilityPatch):
         elif len(dims) > 1:
             raise AttributeError("Dimension mismatch between left, right, size, dim")
 
+        nkw = {'dim': dim, 'dtype': self.dtype}
+
         if right is None:
             if size is None:
                 right = left
                 left = 0
             else:
                 if not centered:
-                    right = aN(left, dim, dtype=self.dtype) + aN(size, dim, dtype=self.dtype)
+                    right = aN(left, **nkw) + aN(size, **nkw)
                 else:
-                    l, s = aN(left, dim, dtype=self.dtype), aN(size, dim, dtype=self.dtype)
+                    l = aN(left, **nkw)
+                    s = aN(size, **nkw)
                     left, right = l - s/2, l + (s+1)/2
 
-        left = aN(left, dim, dtype=self.dtype)
-        right = aN(right, dim, dtype=self.dtype)
+        left = aN(left, **nkw)
+        right = aN(right, **nkw)
 
         if dim is not None:
             self.dim = dim
@@ -129,10 +132,10 @@ class Tile(CompatibilityPatch):
             self.dim = left.shape[0]
 
         if mins is not None:
-            left = amax(left, aN(mins, dim))
+            left = amax(left, aN(mins, **nkw))
 
         if maxs is not None:
-            right = amin(right, aN(maxs, dim))
+            right = amin(right, aN(maxs, **nkw))
 
         self.l = np.array(left)
         self.r = np.array(right)
