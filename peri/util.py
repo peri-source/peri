@@ -395,7 +395,7 @@ class Tile(CompatibilityPatch):
 
     def __setstate__(self, idct):
         self.__dict__.update(idct)
-        self.patch({'dim': 3})
+        self.patch({'dim': 3, 'dtype': 'int'})
         self._build_caches()
 
 
