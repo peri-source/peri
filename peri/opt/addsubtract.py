@@ -116,9 +116,8 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, **kwargs):
         old_err = st.error
         ind = st.obj_add_particle(p0, rad)
         if do_opt:
-            opt.do_levmarq_particles(st, np.array([ind],dtype='int'),
-                    damping=1.0, max_iter=2, run_length=3, eig_update=False,
-                    include_rad=False)
+            opt.do_levmarq_particles(st, ind, damping=1.0, max_iter=2,
+                    run_length=3, eig_update=False, include_rad=False)
         did_kill, p, r = check_remove_particle(st, ind, **kwargs)
         if not did_kill:
             accepts += 1

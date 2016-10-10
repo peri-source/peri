@@ -492,6 +492,11 @@ class PlatonicSpheresCollection(Component):
 
         rad : array-like [N]
             Corresponding radii of new particles
+
+        Returns:
+        --------
+        inds : N-element numpy.ndarray.
+            Indices of the added particles.
         """
         rad = listify(rad)
         # add some zero mass particles to the list (same as not having these
