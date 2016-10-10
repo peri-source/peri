@@ -405,12 +405,8 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
     pos[:,1] = f['y']
     pos[:,2] = f['x']
 
-    #Right now there is not a good way to translate, so:
-    slab = s.get('obj').comps[1] #FIXME I don't think this will always be correct
-    sph = objs.PlatonicSpheresCollection(pos=pos, rad=actual_rad, zscale=
-            s.state['zscale'])
-    o = comp.ComponentCollection([sph, slab], category='obj')
-    s.set('obj', o)
+    _ = s.obj_remove_particle(np.arange(s.obj_get_radii().size))
+    s.obj_add_particle(pos, np.ones(pos.shape[0])*actual_rad)
 
     s.set_image(im)
     _translate_particles(s, invert=invert, **kwargs)
