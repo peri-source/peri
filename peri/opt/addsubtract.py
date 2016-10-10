@@ -173,7 +173,7 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
         killed = False
     else:
         killed = True
-    return killed, tuple(p), (r,)
+    return killed, tuple(p[0]), (r[0],)
 
 def add_missing_particles(st, rad='calc', tries=50, **kwargs):
     """
