@@ -493,6 +493,7 @@ class PlatonicSpheresCollection(Component):
         rad : array-like [N]
             Corresponding radii of new particles
         """
+        rad = listify(rad)
         # add some zero mass particles to the list (same as not having these
         # particles in the image, which is true at this moment)
         inds = np.arange(self.N, self.N+len(rad))
