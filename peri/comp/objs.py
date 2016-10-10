@@ -527,8 +527,8 @@ class PlatonicSpheresCollection(Component):
 
         self.trigger_update(self.param_particle_rad(inds), np.zeros(len(inds)))
 
-        np.delete(self.pos, inds, axis=0)
-        np.delete(self.rad, inds, axis=0)
+        self.pos = np.delete(self.pos, inds, axis=0)
+        self.rad = np.delete(self.rad, inds, axis=0)
 
         # update the parameters globally
         self.setup_variables()
