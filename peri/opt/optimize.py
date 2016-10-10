@@ -1777,7 +1777,7 @@ def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
 
 def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
         errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True,
-        do_line_min=True):
+        do_line_min='default'):
     """
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
@@ -1826,12 +1826,15 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
             for both particles & globals. Default is 1e9, i.e. 1GB per
             optimizer.
 
-        do_line_min : Bool
+        do_line_min : Bool or 'default'.
             Set to True to do an additional, third optimization per loop
             which optimizes along the subspace spanned by the last 3 steps
             of the burn()'s trajectory. In principle this should signifi-
             cantly speed up the convergence; in practice it sometimes does,
-            sometimes doesn't. Default is True (subspace minimization).
+            sometimes doesn't. Default is 'default', which picks by mode:
+                'burn'          : False
+                'do-particles'  : False
+                'polish'        : True
 
     Comments
     --------
@@ -1845,6 +1848,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
     mode = mode.lower()
     if mode not in {'burn', 'do-particles', 'polish'}:
         raise ValueError('mode must be one of burn, do-particles, polish')
+
+    #1. Setting Defaults
     if desc is '':
         desc = mode + 'ing' if mode != 'do-particles' else 'doing-particles'
 
@@ -1853,6 +1858,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
     glbl_mx_itr = 2 if mode == 'burn' else 1
     use_accel = (mode == 'burn')
     rz_order = int(rz_order)
+    if do_line_min == 'default':
+        do_line_min = (mode == 'polish')
 
     if mode == 'do-particles':
         glbl_nms = ['ilm-scale', 'offset']  #bkg?
@@ -1929,4 +1936,3 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
 
     if collect_stats:
         return all_lp_stats, all_lm_stats, all_line_stats, all_loop_values
-
