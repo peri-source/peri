@@ -165,6 +165,7 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
         min_derr = 3 * st.sigma
     present_err = st.error; present_d = st.residuals.copy()
     p, r = st.obj_remove_particle(ind)
+    p = p[0]; r = r[0]
     absent_err = st.error; absent_d = st.residuals.copy()
 
     im_change = np.sum((present_d - absent_d)**2)
@@ -173,7 +174,7 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
         killed = False
     else:
         killed = True
-    return killed, tuple(p[0]), (r[0],)
+    return killed, tuple(p), (r,)
 
 def add_missing_particles(st, rad='calc', tries=50, **kwargs):
     """
@@ -316,6 +317,7 @@ def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
         ind = st.obj_closest_particle(pos)
         old_err = st.error
         p, r = st.obj_remove_particle(ind)
+        p = p[0]; r = r[0]
         part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
                 tuple(p) + (r,) + (old_err, st.error))
         with log.noformat():
