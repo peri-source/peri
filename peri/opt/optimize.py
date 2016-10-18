@@ -1022,7 +1022,7 @@ class LMEngine(object):
         """
         CLOG.debug('Broyden update.')
         delta_vals = self.param_vals - self._last_vals
-        delta_residuals = self._last_residuals - self.calc_residuals()
+        delta_residuals = self.calc_residuals() - self._last_residuals
         nrm = np.sqrt(np.dot(delta_vals, delta_vals))
         direction = delta_vals / nrm
         vals = delta_residuals / nrm
@@ -1366,7 +1366,7 @@ class LMParticles(LMEngine):
         self._dif_tile = self._get_diftile()
         del self.J
         #J = grad(residuals) = -grad(model)
-        self.J = -self.state.gradmodel(params=self.param_names, rts=False,
+        self.J = -self.state.gradmodel(params=self.param_names, rts=True,  #False,
             slicer=self._dif_tile.slicer)
 
     def calc_residuals(self):
