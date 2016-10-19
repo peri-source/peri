@@ -337,7 +337,8 @@ class LMEngine(object):
     So, if you want a partial update every other run, full J the remaining,
     this would be:
         do_run_1(): update_J_frequency=2, partial_update_frequency=1
-        do_run_2(): update_J_frequency=1, partial_update_frequency=1, run_length=2
+        do_run_2(): update_J_frequency=1, partial_update_frequency=1,
+                    run_length=2
     I would like to make this either a little more consistent or totally
     incompatible to be less confusing, especially since do_run_2() with
     update_J_frequency=2 just checks to decrease the damping without either
@@ -884,9 +885,11 @@ class LMEngine(object):
         return delta
 
     def _calc_lm_step(self, damped_JTJ, grad, subblock=None):
-        delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, grad, rcond=self.min_eigval)
+        delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, grad,
+                rcond=self.min_eigval)
         if self._fresh_JTJ:
-            CLOG.debug('%d degenerate of %d total directions' % (delta0.size-rank, delta0.size))
+            CLOG.debug('%d degenerate of %d total directions' % (
+                    delta0.size-rank, delta0.size))
         if subblock is not None:
             delta = np.zeros(self.J.shape[0])
             delta[subblock] = delta0
@@ -1057,22 +1060,20 @@ class LMEngine(object):
 
     def calc_accel_correction(self, damped_JTJ, delta0):
         """
-        I'm not sure if this is correct... FIXME
+        Geodesic acceleration correction to the LM step.
         """
-        dh = 0.1
         #Get the derivative:
         _ = self.update_function(self.param_vals)
-        rm0 = self.calc_residuals()
-        _ = self.update_function(self.param_vals + dh * delta0)
-        rm1 = self.calc_residuals()
-        _ = self.update_function(self.param_vals - dh * delta0)
-        rm2 = self.calc_residuals()
-        der2 = (rm2 + rm1 - 2*rm0) / (dh*dh)
+        rm0 = self.calc_residuals().copy()
+        _ = self.update_function(self.param_vals + delta0)
+        rm1 = self.calc_residuals().copy()
+        _ = self.update_function(self.param_vals - delta0)
+        rm2 = self.calc_residuals().copy()
+        der2 = (rm2 + rm1 - 2*rm0)
 
         corr, res, rank, s = np.linalg.lstsq(damped_JTJ, np.dot(self.J, der2),
                 rcond=self.min_eigval)
-        # corr *= -0.5 -- for some reason + works, minus doesn't... figure it out?
-        corr *= 0.5
+        corr *= -0.5
         return corr
 
     def update_select_J(self, blk):
