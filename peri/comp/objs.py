@@ -1,7 +1,11 @@
 import numpy as np
 from scipy.special import erf
-from scipy.weave import inline
 from scipy.linalg import expm3
+
+try:
+    from scipy.weave import inline
+except ImportError as e:
+    from weave import inline
 
 from peri.special import functions
 from peri.comp import Component

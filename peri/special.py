@@ -1,5 +1,9 @@
 import numpy as np
-from scipy.weave import inline
+
+try:
+    from scipy.weave import inline
+except ImportError as e:
+    from weave import inline
 
 functions = r"""
 double PI = 3.1415926535;
