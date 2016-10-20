@@ -1,7 +1,6 @@
 import itertools
 import numpy as np
 import scipy as sp
-from peri.const import ZEROLOGPRIOR
 
 class HardSphereOverlapNaive(object):
     def __init__(self, pos, rad, zscale=1, prior_type='absolute'):
