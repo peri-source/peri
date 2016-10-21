@@ -60,12 +60,30 @@ linalg.solve
 
 def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     """
-    Generates
-    Would be nice if the following arguments were accepted by state.gradmodel:
-        dl
-        be_nice (put back updates or not)
-        threept (three-point vs two-point stencil, i.e. 2+1 vs 1+1 updates)
+    Calculates a random approximation to J by returning J only at a
+    set of random pixel/voxel locations.
 
+    Inputs Parameters
+    -----------------
+        s : peri.states instance
+            The state to calculate J for.
+        params : List
+            The list of parameter names to calculate the gradient of.
+        num_inds : Int
+            The number of pix/voxels at which to calculate the random
+            approximation to J.
+    **kwargs Parameters
+    -------------------
+        All kwargs parameters get passed to s.gradmodel only.
+
+    Returns
+    -------
+        J : numpy.ndarray
+            [d, num_inds] array of J, at the given indices.
+
+        return_inds : numpy.ndarray or slice
+            [num_inds] element array or slice(0, None) of the model
+            indices at which J was evaluated.
     """
     start_time = time.time()
     tot_pix = s.residuals.size
@@ -102,7 +120,7 @@ def name_globals(s, remove_params=None):
             all_params.remove(p)
     return all_params
 
-def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20, **kwargs):
+def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20):
     #1. Max for a given max_mem:
     px_mem = int(max_mem / 8 / nparams) #1 float = 8 bytes
     #2. num_pix for a given redundancy
@@ -163,7 +181,7 @@ def find_particles_in_tile(state, tile):
     bools = tile.contains(state.obj_get_positions())
     return np.arange(bools.size)[bools]
 
-def separate_particles_into_groups(s, region_size=40, bounds=None, **kwargs):
+def separate_particles_into_groups(s, region_size=40, bounds=None):
     """
     Given a state, returns a list of groups of particles. Each group of
     particles are located near each other in the image. Every particle
@@ -1303,7 +1321,7 @@ class LMGlobals(LMEngine):
             *.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
         """
         self.state = state
-        self.kwargs = opt_kwargs
+        self.kwargs = opt_kwargs  #change to self.opt_kwargs if it's OK FIXME
         self.max_mem = max_mem
         self.num_pix = get_num_px_jtj(state, len(param_names), max_mem=max_mem,
                 **self.kwargs)
@@ -1674,7 +1692,7 @@ class LMAugmentedState(LMEngine):
             opt.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
         """
         self.aug_state = aug_state
-        self.kwargs = opt_kwargs
+        self.kwargs = opt_kwargs  #change to self.opt_kwargs if it's OK FIXME
         self.max_mem = max_mem
         self.num_pix = get_num_px_jtj(aug_state.state, aug_state.param_vals.size,
                 max_mem=max_mem, **self.kwargs)
