@@ -44,6 +44,7 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
             use_tp=use_tp, **kwargs)
 
 def _feature_guess(im, rad, minmass=None, use_tp=False, **kwargs):
+    """Workhorse of feature_guess"""
     if minmass == None:
         #30% of the feature size mass is a good cutoff empirically for
         #initializers.local_max_featuring, less for trackpy;
@@ -237,25 +238,24 @@ def add_missing_particles(st, rad='calc', tries=50, **kwargs):
             **kwargs)
     return accepts, new_poses
 
-def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
+def remove_bad_particles(st, min_rad='calc', max_rad='calc', min_edge_dist=2.0,
         check_rad_cutoff=[3.5,15], check_outside_im=True, tries=50,
         im_change_frac=0.2, **kwargs):
     """
-    Same syntax as before, but here I'm just trying to kill the smallest particles...
-    I don't think this is good because you only check the same particles each time
-    Updates a single particle (labeled ind) in the state st.
+    Removes improperly-featured particles from the state, based on a
+    combination of particle size and the change in error on removal.
 
     Parameters
     -----------
     min_rad : Float
         All particles with radius below min_rad are automatically deleted.
-        Set to 'calc' to make it the median rad - 15* radius std.
-        Default is 2.0
+        Set to 'calc' to make it the median rad - 25* radius std.
+        Default is 'calc'.
 
     max_rad : Float
         All particles with radius above max_rad are automatically deleted.
         Set to 'calc' to make it the median rad + 15* radius std.
-        Default is 12.0
+        Default is 'calc'.
 
     min_edge_dist : Float
         All particles within min_edge_dist of the (padded) image
@@ -283,7 +283,6 @@ def remove_bad_particles(st, min_rad=2.0, max_rad=12.0, min_edge_dist=2.0,
     -----------
     removed: Int
         The cumulative number of particles removed.
-
     """
     is_near_im_edge = lambda pos, pad: (((pos + st.pad) < pad) | (pos >
             np.array(st.ishape.shape) + st.pad - pad)).any(axis=1)
@@ -361,7 +360,7 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
         st: ConfocalImagePython
             The state to add and subtract particles to.
         max_iter : Int
-            The maximum number of add-subtract loops to use. Default is 5.
+            The maximum number of add-subtract loops to use. Default is 7.
             Terminates after either max_iter loops or when nothing has
             changed.
         max_npart : Int or 'calc'
@@ -383,11 +382,12 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
             if they are bright on a dark background. Default is True.
         min_rad : Float
             Particles with radius below min_rad are automatically deleted.
-            Default is 2.0.
+            Default is 'calc' = median rad - 25* radius std.
         max_rad : Float
             Particles with radius below min_rad are automatically deleted.
-            Default is 12.0, but you should change this for your partilce
-            sizes.
+            Default is 'calc' = median rad + 15* radius std, but you should
+            change this for your particle sizes.
+
         min_edge_dist : Float
             Particles closer to the edge of the padded image than this
             are automatically deleted. Default is 2.0.
@@ -553,7 +553,7 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
     tiles = [Tile(np.min(ind, axis=1), np.max(ind, axis=1)+1) for ind in inds]
 
     #5. Sort and return
-    volumes = [t.shape.prod() for t in tiles]
+    volumes = [t.volume for t in tiles]
     return [tiles[i] for i in np.argsort(volumes)[::-1]]
 
 def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
