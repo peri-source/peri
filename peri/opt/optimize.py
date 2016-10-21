@@ -216,6 +216,28 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
     """
     Finds the biggest region size for LM particle optimization with a
     given memory constraint.
+
+    Input Parameters
+    ----------------
+        s : peri.states instance
+            The state with the particles
+        region_size : Int or 3-element list-like of ints.
+            The initial guess for the region size.
+        max_mem : Numeric
+            The maximum memory for the optimizer to take.
+
+    **kwargs
+    --------
+        bounds: 2-element list-like of 3-element lists.
+            The sub-region of the image over which to look for particles.
+                bounds[0]: The lower-left  corner of the image region.
+                bounds[1]: The upper-right corner of the image region.
+            Default (None -> ([0,0,0], s.oshape.shape)) is a box of the entire
+            image size, i.e. the default places every particle in the image
+            somewhere in the groups.
+    Returns
+    -------
+        region_size : numpy.ndarray of ints of the region size.
     """
     region_size = np.array(region_size).astype('int')
 
@@ -1467,7 +1489,7 @@ class LMParticleGroupCollection(object):
             self.max_mem = new_max_mem
         if do_calc_size:
             self.region_size = calc_particle_group_region_size(self.state,
-                    self.region_size, max_mem=self.max_mem, **self._kwargs)
+                    region_size=self.region_size, max_mem=self.max_mem)
         self.stats = []
         self.particle_groups = separate_particles_into_groups(self.state,
                 self.region_size)
