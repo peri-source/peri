@@ -51,20 +51,22 @@ def watch(func, file_pattern, postfix='run'):
 
     def _watch(func, file_pattern, postfix, index):
         # redirect the logs to separate files in /tmp
-        sys.stdout = open('/tmp/peri-watch-{}.stdout'.format(index), "a", buffering=0)
-        sys.stderr = open('/tmp/peri-watch-{}.stderr'.format(index), "a", buffering=0)
+        sys.stdout = open('/tmp/peri-watch-{}.stdout'.format(index), "w", buffering=0)
+        sys.stderr = open('/tmp/peri-watch-{}.stderr'.format(index), "w", buffering=0)
 
         def mark_done(f, postfix):
             return '{}-{}'.format(f, postfix)
 
         def next_file():
-            yield get_next_job(
+            return get_next_job(
                 file_pattern,  mark_done(file_pattern, postfix)
             )
 
-        for f in next_file():
-            open(mark_done(f, postfix), 'w').close()
-            func(f)
+        filename = next_file()
+        while filename:
+            open(mark_done(filename, postfix), 'w').close()
+            func(filename)
+            filename = next_file()
 
     print 'Launching listener processes',
     for i in xrange(proc):
@@ -92,13 +94,14 @@ def launch_watchers(script, hosts, nprocs=1):
     def launch(script, host):
         cmd = 'python {} --processes={}'.format(script, nprocs)
         log = '> /tmp/peri-launcher.log 2>&1'
-        ssh = 'ssh {name} "bash -c \'{cmd} {log}\'"'.format(name=host, cmd=cmd, log=log)
+        sub = 'bash -c \'{cmd} {log}\''.format(cmd=cmd, log=log)
+        ssh = sub if host == LOCALHOST else 'ssh {name} "{sub}"'.format(name=host, sub=sub)
         check_output(ssh, shell=True)
 
     procs = {}
 
     print 'Starting job process for'
-    for host in hosts:
+    for i, host in enumerate(hosts):
         print '...', host
         procs[i] = Process(target=launch, args=(script, host))
         procs[i].start()
@@ -143,8 +146,8 @@ def listen(func):
 
     def _listen(func, index):
         # redirect the logs to separate files in /tmp
-        sys.stdout = open('/tmp/peri-listen-{}.stdout'.format(index), "a", buffering=0)
-        sys.stderr = open('/tmp/peri-listen-{}.stderr'.format(index), "a", buffering=0)
+        sys.stdout = open('/tmp/peri-listen-{}.stdout'.format(index), "w", buffering=0)
+        sys.stderr = open('/tmp/peri-listen-{}.stderr'.format(index), "w", buffering=0)
 
         bsd = bean.Connection(host=LOCALHOST, port=port)
         while True:
