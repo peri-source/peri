@@ -1367,11 +1367,17 @@ class LMParticles(LMEngine):
         self._dif_tile = self._get_diftile()
         del self.J
         #J = grad(residuals) = -grad(model)
-        self.J = -self.state.gradmodel(params=self.param_names, rts=True,  #False,
-            slicer=self._dif_tile.slicer)
+        if self._dif_tile.volume > 0:
+            self.J = -self.state.gradmodel(params=self.param_names, rts=True,
+                slicer=self._dif_tile.slicer)
+        else:
+            self.J = np.zeros([len(self.param_names), 1])
 
     def calc_residuals(self):
-        return self.state.residuals[self._dif_tile.slicer].ravel().copy()
+        if self._dif_tile.volume > 0:
+            return self.state.residuals[self._dif_tile.slicer].ravel().copy()
+        else:
+            return np.zeros(1)
 
     def update_function(self, values):
         #1. Clipping values:
