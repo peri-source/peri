@@ -13,33 +13,6 @@ DEFAULT_BEANSTALKD = 14444
 #=============================================================================
 # Shared filesystem (NFS etc) parallel job runner
 #=============================================================================
-def watch(func, file_pattern, postfix='run'):
-    import argparse
-    parser = argparse.ArgumentParser(description="PERI remote listener")
-    parser.add_argument('--processes', '-n', type=int, help="number of processes to launch")
-
-    args = vars(parser.parse_args())
-    proc = int(args.get('processes') or 1)
-
-    def _watch(func, file_pattern, postfix):
-        def mark_done(f, postfix):
-            return '{}-{}'.format(f, postfix)
-
-        def next_file():
-            yield get_next_job(
-                file_pattern,  mark_done(file_pattern, postfix)
-            )
-
-        for f in next_file():
-            open(mark_done(f, postfix), 'w').close()
-            func(f)
-
-    print 'Launching listener processes',
-    for i in xrange(proc):
-        print i,
-        Process(target=_watch, args=(func, file_pattern, postfix)).start()
-    print '.'
-
 def get_next_job(start_prefix, end_prefix):
     """
     Given two globs, figure out the the difference in the file lists to
@@ -63,6 +36,41 @@ def get_next_job(start_prefix, end_prefix):
         next_file = [t[-1] for t in f0 if t[-2] == next_num][0]
         return next_file
     return None
+
+def watch(func, file_pattern, postfix='run'):
+    """
+    Watch the filesystem for files that match `file_pattern` and run the ones
+    that haven't been completed yet with function `func`
+    """
+    import argparse
+    parser = argparse.ArgumentParser(description="PERI remote listener")
+    parser.add_argument('--processes', '-n', type=int, help="number of processes to launch")
+
+    args = vars(parser.parse_args())
+    proc = int(args.get('processes') or 1)
+
+    def _watch(func, file_pattern, postfix, index):
+        # redirect the logs to separate files in /tmp
+        sys.stdout = open('/tmp/peri-watch-{}.stdout'.format(index), "a", buffering=0)
+        sys.stderr = open('/tmp/peri-watch-{}.stderr'.format(index), "a", buffering=0)
+
+        def mark_done(f, postfix):
+            return '{}-{}'.format(f, postfix)
+
+        def next_file():
+            yield get_next_job(
+                file_pattern,  mark_done(file_pattern, postfix)
+            )
+
+        for f in next_file():
+            open(mark_done(f, postfix), 'w').close()
+            func(f)
+
+    print 'Launching listener processes',
+    for i in xrange(proc):
+        print i,
+        Process(target=_watch, args=(func, file_pattern, postfix, i)).start()
+    print '.'
 
 def launch_watchers(script, hosts, nprocs=1):
     """
@@ -133,7 +141,11 @@ def listen(func):
     port = int(args.get('port') or DEFAULT_BEANSTALKD)
     proc = int(args.get('processes') or 1)
 
-    def _listen(func):
+    def _listen(func, index):
+        # redirect the logs to separate files in /tmp
+        sys.stdout = open('/tmp/peri-listen-{}.stdout'.format(index), "a", buffering=0)
+        sys.stderr = open('/tmp/peri-listen-{}.stderr'.format(index), "a", buffering=0)
+
         bsd = bean.Connection(host=LOCALHOST, port=port)
         while True:
             job = bsd.reserve()
@@ -142,7 +154,7 @@ def listen(func):
     print 'Launching listener processes',
     for i in xrange(proc):
         print i,
-        Process(target=_listen, args=(func,)).start()
+        Process(target=_listen, args=(func,i)).start()
 
 def launch_all(script, hosts, jobs, bean_port=DEFAULT_BEANSTALKD, docopy=True):
     """
