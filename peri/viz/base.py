@@ -101,7 +101,7 @@ rcparams = {
     'axes.unicode_minus':False,
     'axes.formatter.limits':[-3,3],
     'axes.unicode_minus':False,
-    'axes.color_cycle': COLORS + ['#FF7F00', '#FFFF33','#A65628','#F781BF','#999999'],
+    'axes.color_cycle': COLORS + ['#FF7F00', '#D0D033','#A65628','#F781BF','#999999'],
     'xtick.major.size':10,
     'xtick.minor.size':5,
     'xtick.labelsize':'large',
