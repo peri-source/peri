@@ -44,6 +44,10 @@ def calc_pts_lag(npts=20, scl=0.051532):
     wts = scl*wts0*np.cosh(pts0*scl)*np.exp(pts0)
     return pts, wts
 
+#######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
+#                        Electric Field Focus Integrals
+#######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
+
 def f_theta(cos_theta, zint, z, n2n1=0.95, sph6_ab=None, **kwargs):
     """
     Calculates the portions of the wavefront "aberration" due to z, theta
@@ -196,6 +200,10 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
         return kint.reshape(rho.shape), Kprefactor
     else:
         return kint.reshape(rho.shape)
+
+#######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
+#                          Confocal PSF Calculations
+#######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
 
 def get_hsym_asym(rho, z, get_hdet=False, include_K3_det=True, **kwargs):
     """
@@ -580,9 +588,13 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
 
     return hdet if normalize else hdet / hdet.sum()
 
-def calculate_monochrome_brightfield_psf(x, y, z, normalize=False, **kwargs):
+#######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
+#                             Epifluorescence PSFs
+#######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
+
+def calculate_monochrome_fluorescence_psf(x, y, z, normalize=False, **kwargs):
     """
-    Calculate the PSF for brightfield, assuming illumination with unpolarized
+    Calculate the PSF for fluorescence, assuming illumination with unpolarized
     but vectorial light.
     Inputs:
         - x, y, z: numpy.arrays of the same shape at which to evaluate the psf
@@ -594,30 +606,130 @@ def calculate_monochrome_brightfield_psf(x, y, z, normalize=False, **kwargs):
     Outputs:
         - psf: numpy.array of the psf, shape x.shape == y.shape == z.shape
     """
-
     rho = np.sqrt(x**2 + y**2)
     psf, toss = get_hsym_asym(rho, z, get_hdet=True, **kwargs)
 
     if normalize:
         norm = psf.sum(axis=(0,1)) #should be independent of z
         psf /= norm.max()
-
     return psf
 
-def calculate_polychrome_brightfield_psf(x, y, z, k0=1., sigk=0.1, npts=3, **kwargs):
+def calculate_polychrome_fluorescence_psf(x, y, z, k0=1., sigk=0.1, npts=3,
+        **kwargs):
+    """
+    Polychromatic version of calculate_monochrome_fluorescence_psf, with
+    a gaussian distribution of wavevectors, mean k0 and std sigkf.
+    Should probably be incorporated into make_polydisperse_psf FIXME
+    """
     pts,wts = np.polynomial.hermite.hermgauss(npts)
-
     kpts = k0 + sigk*np.sqrt(2)*pts
     wts /= np.sqrt(np.pi) #normalizing the integral
 
     inner = [
-        wts[a] * calculate_monochrome_brightfield_psf(
+        wts[a] * calculate_monochrome_fluorescence_psf(
             x*kpts[a], y*kpts[a],z*kpts[a], **kwargs
         ) for a in xrange(npts)
     ]
     psf = np.sum(inner, axis=0)
-
     return psf
+
+#######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
+#                               Brightfield PSFs
+#######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
+
+def calc_monochrome_brightfield_pointdipole(rho, z, normalize=False, **kwargs):
+    """
+    Given rho, z, returns the image of a dipole scatterer as imaged
+    through a finite-aperture lens with spherical aberrations due to an
+    index mismatch between the lens and fluid, using monochromatic light.
+    Includes both the heterodyne and homodyne contributions.
+    Input Parameters
+    ----------------
+        rho : numpy.ndarray
+            N-element numpy.array of the rho values at which to
+            evaluate the psf. Arbitrary shape. Units of 1/k.
+        z : numpy.ndarray
+            numpy.array of the same shape as rho; the z values at
+            which to evaluate the psf. Units of 1/k.
+        normalize : Bool
+            Set to True to normalize the psf internally. Default is False
+
+    **kwargs (to get_K)
+    -------------------
+        alpha : Float
+            Float scalar; The opening angle of the lens aperture.
+        n2n1 : Float
+            Float scalar, the ratio of the index of the suspending fluid
+            to the optics index.
+        zint : Float
+            Float scalar. The distance between the optical interface and
+            the lens's nominal focal point.
+    Outputs:
+        psf: numpy.array of the same shape as rho, of the image of a
+            dipole scatterer at varying z's in the image space. Same
+            shape as rho,z.
+    """
+    if rho.shape != z.shape:
+        raise ValueError('rho.shape != z.shape')
+
+    I1a = get_K(rho, z, K=1, get_hdet=True, **kwargs)
+    I2a = get_K(rho, z, K=2, get_hdet=True, **kwargs)
+    #The new version, assuming that the wavefront is coherent on the
+    #scale of the PSF, but not the lens. Note psf-working-distance is not used.
+    #Also note that in get_K there is an i->-i transformation as compared to
+    #the brightfield writeup, hence the conj in hetero.
+    hetero = 2*np.real(1j*np.exp(1j*z) * I1a.conj())
+    homo = np.real(I1a*I1a.conj() + I2a*I2a.conj())
+
+    if normalize:
+        #Normalize by the total scattered intensity only:
+        for a in xrange(homo.shape[2]):  #xyz here
+            scale = homo[:,:,a].sum()
+            homo[:,:,a] /= scale
+            hetero[:,:,a] /= scale
+    return hetero, homo
+
+def make_polydisperse_psf(rho, z, func, k0=1.0, sigk=0.3, num_hg=10, **kwargs):
+    """
+    Given a monodisperse PSF function, calculates a polydisperse PSF.
+    Input Parameters
+    ----------------
+        rho : np.ndarray
+            The rho (= distance from optical axis) values at which to
+            calculate the psf
+        z : np.ndarray
+            The z (= distance along optical axis) values at which to
+            calculate the psf
+        func : Function
+            The function that calculates the monochromatic psf. Syntax is
+            psf = func(rho, z, **kwargs)
+        k0 : Float
+            The mean of the wavevectors' Gaussian distribution. Default is 1.
+        sigk : Float
+            The standard deviation of the wavevectors' Gaussian distribution.
+            Default is 0.3.
+        **kwargs : **kwargs
+            Any parameters passed to func.
+
+    TODO:
+    Give this a way to do non-gaussian distributions of k
+    """
+    if rho.shape != z.shape:
+        raise ValueError('rho.shape != z.shape')
+
+    pts, wts = np.polynomial.hermite.hermgauss(num_hg)
+    wts /= np.sqrt(np.pi)
+    kpts = np.abs(pts*np.sqrt(2)*sigk + k0)
+
+    ans = wts[0]*func(rho*kpts[0], z*kpts[0], **kwargs)
+    for k,w in zip(kpts[1:], wts[1:]):
+        ans += w*func(rho*k, z*k, **kwargs)
+
+    return ans
+
+#######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
+#                              Utility Functions
+#######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
 
 def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
     """
@@ -676,5 +788,3 @@ def vec_to_halfvec(vec):
     lowest = np.abs(vec).min()
     highest = np.abs(vec).max()
     return np.arange(lowest, highest + 0.1*dx, dx).astype(vec.dtype)
-
-
