@@ -81,9 +81,6 @@ class Logger(object):
         Add another handler to the logging system if not present already.
         Available handlers are currently: ['console-bw', 'console-color', 'rotating-log']
         """
-        if name in self.handlers:
-            return
-
         # make sure the the log file has a name
         if name == 'rotating-log' and 'filename' not in kwargs:
             kwargs.update({'filename': self.logfilename})
@@ -93,6 +90,12 @@ class Logger(object):
             kwargs.update({'stringio': StringIO.StringIO()})
 
         handler = types[name](**kwargs)
+        self.add_handler_raw(handler, name, level=level, formatter=formatter)
+
+    def add_handler_raw(self, handler, name, level='info', formatter='standard'):
+        if name in self.handlers:
+            return
+
         handler.setLevel(levels[level])
         handler.setFormatter(logging.Formatter(formatters[formatter]))
         self.log.addHandler(handler)
@@ -171,11 +174,17 @@ try:
 except ImportError as e:
     PygmentHandler = BWHandler
 
+try:
+    from loggr import LoggrHandler
+except ImportError as e:
+    LoggrHandler = BWHandler
+
 types = {
     'stringio': BWHandler,
     'console-bw': BWHandler,
     'console-color': PygmentHandler,
     'rotating-log': LogHandler,
+    'loggr': LoggrHandler,
 }
 
 levels = {
