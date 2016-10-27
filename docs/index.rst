@@ -1,13 +1,28 @@
 Welcome to PERI's documentation!
 ================================
 
+.. topic:: Quick start
+
+    To start featuring immediately, see the :doc:`quick start guide. </quickstart>`
+
 Parameter Extraction from Reconstruction of Images (PERI) is a package that
 extracts features from microscope images by fitting a physics-based model to
 data. It is a set of models and components that are used to recreate the
 physics of image formation in order to extract desired quantities such as
-particle sizes and positions at the information theoretic limit.
+particle sizes and positions at the information theoretic limit.  While a very
+general software package, the primary model currently implemented is that of 3D
+confocal microscopes, particularly of the line and point scan varities.
+
+In these documents you will find information about:
+
+* :doc:`Installation </installation>`
+* :doc:`Package overview </overview>`
+* :doc:`Configuration options </configuration>`
+* :doc:`Developing models </models>`
+* :doc:`Implementing components </components>`
 
 Contents:
+=========
 
 .. toctree::
    :maxdepth: 3
