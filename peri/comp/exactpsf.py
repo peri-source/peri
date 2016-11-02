@@ -199,6 +199,7 @@ class ExactPSF(psfs.PSF):
         super(ExactPSF, self).__init__(
             *args, params=params, values=values, shape=shape, **kwargs
         )
+
     def psffunc(self, *args, **kwargs):
         raise NotImplementedError('Supply psffunc in subclass')
 
@@ -766,11 +767,6 @@ class ExactPinholeConfocalPSF(ExactPSF):
                 k_dist=k_dist, use_J1=use_J1, sph6_ab=sph6_ab, global_zscale=
                 global_zscale, cutbyval=cutbyval, cutfallrate=cutfallrate,
                 cutedgeval=cutedgeval, *args, **kwargs)
-        #do_pinhole??'
-        if self.polychromatic:
-            self.psffunc = psfcalc.calculate_polychrome_pinhole_psf
-        else:
-            self.psffunc = psfcalc.calculate_pinhole_psf
 
     def pack_args(self):
         """
@@ -806,12 +802,14 @@ class ExactPinholeConfocalPSF(ExactPSF):
             d.update({'nlpts': self.num_line_pts})
         return d
 
-    def psffunc(self, *args, **kwargs):
+    def psffunc(self, x, y, z, **kwargs):
+        #do_pinhole??'
         if self.polychromatic:
             func = psfcalc.calculate_polychrome_pinhole_psf
         else:
             func = psfcalc.calculate_pinhole_psf
-        return func(*args, **kwargs)
+        x3, y3, z3 = np.meshgrid(x, y, z, indexing='ij')
+        return func(x3, y3, z3, **kwargs)
 
 class ChebyshevPSF(ExactPSF):
     def __init__(self, cheb_degree=6, cheb_evals=8, *args, **kwargs):
