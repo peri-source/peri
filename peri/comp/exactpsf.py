@@ -813,14 +813,13 @@ class ExactPinholeConfocalPSF(ExactPSF):
             func = psfcalc.calculate_pinhole_psf
         return func(*args, **kwargs)
 
-
-class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
+class ChebyshevPSF(ExactPSF):
     def __init__(self, cheb_degree=6, cheb_evals=8, *args, **kwargs):
         """
-        Same as ExactLineScanConfocalPSF except that integration is performed
-        in the 4th dimension by employing fast Chebyshev approximates to how
-        the PSF varies with depth into the sample. For help, see
-        ExactLineScanConfocalPSF.
+        Same as ExactPSF, except that the convolution is performed in
+        the 4th dimension by employing fast Chebyshev approximates to
+        how the PSF varies with depth into the sample. For help, see
+        ExactPSF.
 
         Additional parameters:
         ----------------------
@@ -833,7 +832,7 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
         self.cheb_degree = cheb_degree
         self.cheb_evals = cheb_evals
 
-        super(ChebyshevLineScanConfocalPSF, self).__init__(*args, **kwargs)
+        super(ChebyshevPSF, self).__init__(*args, **kwargs)
 
     def update(self, params, values):
         self.update_values(params, values)
@@ -867,11 +866,12 @@ class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
 
         return outfield
 
-class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
+class FixedSSChebPSF(ChebyshevPSF):
     def __init__(self, support_size=[35,17,25], *args, **kwargs):
+        """ChebyshevPSF with a fixed support size"""
         self.cutoffval = None
         self.support = np.array(support_size)
-        super(FixedSSChebLinePSF, self).__init__(*args, **kwargs)
+        super(FixedSSChebPSF, self).__init__(*args, **kwargs)
 
     def characterize_psf(self):
         """ Get support size and drift polynomial for current set of params """
@@ -885,4 +885,22 @@ class FixedSSChebLinePSF(ChebyshevLineScanConfocalPSF):
     def __str__(self):
         return "{} {}".format(self.__class__.__name__, self.support)
 
+
+##Multiple-inheritance-defined classes, see individual docs for details
+class ChebyshevLineScanConfocalPSF(ChebyshevPSF, ExactLineScanConfocalPSF):
+    """See ChebyshevPSF, ExactLineScanConfocalPSF for docs."""
+    pass
+
+class FixedSSChebLinePSF(FixedSSChebPSF, ExactLineScanConfocalPSF):
+    """See FixedSSChebPSF, ExactLineScanConfocalPSF for docs."""
+    pass
+
+class ChebyshevPinholeConfocalPSF(ChebyshevPSF, ExactPinholeConfocalPSF):
+    """See ChebyshevPSF, ExactPinholeConfocalPSF for docs."""
+    pass
+
+class FixedSSPinholePSF(FixedSSChebPSF, ExactPinholeConfocalPSF):
+    """See FixedSSChebPSF, ExactPinholeConfocalPSF for docs."""
+    pass
+##Multiple-inheritance-defined classes, see individual docs for details
 
