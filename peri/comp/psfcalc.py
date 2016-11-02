@@ -830,15 +830,40 @@ def make_polydisperse_psf(rho, z, func, k0=1.0, sigk=0.3, num_hg=10, **kwargs):
 
 def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
     """
-    Since all the PSFs have a cos2phi symmetry, which is also (loosely)
-    the symmetry of a pixelated grid, ....
-    Speeds up psf calculations by a factor of 4 for free / some broadcasting.
-    Doesn't work for linescan psf because of the hdet bit...
-    Inputs:
-        - xpts: 1D N-element numpy.array of the x-points to evaluate func at.
-        - ypts: "   "           "   "     "  "  y-points  "     "      "   "
-        - zpts: "   "           "   "     "  "  y-points  "     "      "   "
-        - func: function to evaluate.
+    Speeds up psf calculations by a factor of 4 for free / some broadcasting
+    by exploiting the x->-x, y->-y symmetry of a psf function. Pass x and y
+    as the positive (say) values of the coordinates at which to evaluate func,
+    and it will return the function sampled at [x[::-1]] + x. Note it is not
+    wrapped in z.
+
+    Parameters
+    ----------
+        xpts : numpy.ndarray
+            1D N-element numpy.array of the x-points to evaluate func at.
+        ypts : numpy.ndarray
+            y-points to evaluate func at.
+        zpts : numpy.ndarray
+            z-points to evaluate func at.
+        func : function
+            The function to evaluate and wrap around. Syntax must be
+            func(x,y,z, **kwargs)
+        **kwargs : Any parameters passed to the function.
+
+    Outputs
+    -------
+        to_return : numpy.ndarray
+            The wrapped and calculated psf, of shape
+            [2*x.size - x0, 2*y.size - y0, z.size], where x0=1 if x[0]=0, etc.
+
+    Comments
+    --------
+    The coordinates should be something like numpy.arange(start, stop, diff),
+    with start near 0. If x[0]==0, all of x is calcualted but only x[1:]
+    is wrapped (i.e. it works whether or not x[0]=0).
+
+    This doesn't work directly for a linescan psf because the illumination
+    portion is not like a grid. However, the illumination and detection
+    are already combined with wrap_and_calc in calculate_linescan_psf etc.
     """
 
     #1. Checking that everything is hunky-dory:
