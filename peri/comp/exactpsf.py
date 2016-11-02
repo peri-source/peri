@@ -803,13 +803,14 @@ class ExactPinholeConfocalPSF(ExactPSF):
         return d
 
     def psffunc(self, x, y, z, **kwargs):
-        #do_pinhole??'
+        #do_pinhole?? FIXME
         if self.polychromatic:
             func = psfcalc.calculate_polychrome_pinhole_psf
         else:
             func = psfcalc.calculate_pinhole_psf
-        x3, y3, z3 = np.meshgrid(x, y, z, indexing='ij')
-        return func(x3, y3, z3, **kwargs)
+        x0, y0 = [psfcalc.vec_to_halfvec(v) for v in [x,y]]
+        vls = psfcalc.wrap_and_calc_psf(x0, y0, z, func, **kwargs)
+        return vls / vls.sum()
 
 class ChebyshevPSF(ExactPSF):
     def __init__(self, cheb_degree=6, cheb_evals=8, *args, **kwargs):
@@ -897,7 +898,7 @@ class ChebyshevPinholeConfocalPSF(ChebyshevPSF, ExactPinholeConfocalPSF):
     """See ChebyshevPSF, ExactPinholeConfocalPSF for docs."""
     pass
 
-class FixedSSPinholePSF(FixedSSChebPSF, ExactPinholeConfocalPSF):
+class FixedSSChebPinholePSF(FixedSSChebPSF, ExactPinholeConfocalPSF):
     """See FixedSSChebPSF, ExactPinholeConfocalPSF for docs."""
     pass
 ##Multiple-inheritance-defined classes, see individual docs for details
