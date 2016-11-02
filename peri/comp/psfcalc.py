@@ -247,29 +247,44 @@ def get_hsym_asym(rho, z, get_hdet=False, include_K3_det=True, **kwargs):
 
     return hsym.real, hasym.real #imaginary part should be 0
 
-def get_psf(x, y, z, kfki=0.89, zint=100.0, normalize=False, **kwargs):
+def calculate_pinhole_psf(x, y, z, kfki=0.89, zint=100.0, normalize=False,
+        **kwargs):
     """
-    Gets the PSF as calculated, for one set of points (x,y,z).
-    Inputs:
-        - x: Numpy array, the x-coordinate of the PSF in units of 1/ the
-            wavevector of the incoming light.
-        - y: Numpy array, the y-coordinate.
-        - z: Numpy array, the z-coordinate.
-        - kfki: Float scalar, the ratio of wavevectors of the outgoing light
-            to the incoming light. Default is 0.89.
-        - zint: Float scalar, the distance from the interface, in units of
+    Calculates the perfect-pinhole PSF, for a set of points (x,y,z).
+    Parameters
+    -----------
+        x : numpy.ndarray
+            The x-coordinate of the PSF in units of 1/ the wavevector of
+            the incoming light.
+        y : numpy.ndarray
+            The y-coordinate.
+        z : numpy.ndarray
+            The z-coordinate.
+        kfki : Float
+            The (scalar) ratio of wavevectors of the outgoing light to the
+            incoming light. Default is 0.89.
+        zint : Float
+            The (scalar) distance from the interface, in units of
             1/k_incoming. Default is 100.0
-        - alpha: The opening angle of the lens.
-        - n2n1: The ratio of the index in the 2nd medium to that in the first.
-        - normalize: Boolean. Set to True to normalize the psf correctly,
-            accounting for intensity variations with depth. This will give a
-            psf that does not sum to 1.
-    Outputs:
-        - psf: x.shape numpy.array.
+        normalize : Bool
+            Set to True to normalize the psf correctly, accounting for
+            intensity variations with depth. This will give a psf that does
+            not sum to 1.
+    **kwargs Parameters
+    -------------------
+        alpha : Float
+            The opening angle of the lens.
+        n2n1 : Float
+            The ratio of the index in the 2nd medium to that in the first.
 
-    Comments:
-        (1) Note that the PSF is not necessarily centered on the z=0 pixel,
-            since the calculation includes the shift.
+    Returns
+    -------
+        psf : numpy.ndarray, of shape x.shape
+
+    Comments
+    --------
+        (1) The PSF is not necessarily centered on the z=0 pixel, since the
+            calculation includes the shift.
 
         (2) If you want z-varying illumination of the psf then set
             normalize=True. This does the normalization by doing:
@@ -280,7 +295,6 @@ def get_psf(x, y, z, kfki=0.89, zint=100.0, normalize=False, **kwargs):
             roughly equally spaced points. Or do it manually by calling
             get_hsym_asym()
     """
-
     rho = np.sqrt(x**2 + y**2)
     phi = np.arctan2(y, x)
 
@@ -293,6 +307,103 @@ def get_psf(x, y, z, kfki=0.89, zint=100.0, normalize=False, **kwargs):
         hdet /= hdet.sum()
 
     return (hsym + np.cos(2*phi)*hasym)*hdet
+
+def get_polydisp_pts_wts(kfki, sigkf, dist_type='gaussian', nkpts=3):
+    if dist_type.lower() == 'gaussian':
+        pts, wts = np.polynomial.hermite.hermgauss(nkpts)
+        kfkipts = np.abs(kfki + sigkf*np.sqrt(2)*pts)
+    elif dist_type.lower() == 'laguerre' or dist_type.lower() == 'gamma':
+        k_scale = sigkf**2/kfki
+        associated_order = kfki**2/sigkf**2 - 1
+        #Associated Laguerre with alpha >~170 becomes numerically unstable, so:
+        max_order=150
+        if associated_order > max_order or associated_order < (-1+1e-3):
+            warnings.warn('Numerically unstable sigk, clipping', RuntimeWarning)
+            associated_order = np.clip(associated_order, -1+1e-3, max_order)
+        kfkipts, wts = la_roots(nkpts, associated_order)
+        kfkipts *= k_scale
+    else:
+        raise ValueError('dist_type must be either gaussian or laguerre')
+    return kfkipts, wts/wts.sum()
+
+def calculate_polychrome_pinhole_psf(x, y, z, normalize=False, kfki=0.889,
+        sigkf=0.1, zint=100., nkpts=3, dist_type='gaussian', **kwargs)
+    """
+    Calculates the perfect-pinhole PSF, for a set of points (x,y,z).
+    Parameters
+    -----------
+        x : numpy.ndarray
+            The x-coordinate of the PSF in units of 1/ the wavevector of
+            the incoming light.
+        y : numpy.ndarray
+            The y-coordinate.
+        z : numpy.ndarray
+            The z-coordinate.
+        kfki : Float
+            The mean ratio of the outgoing light's wavevector to the incoming
+            light's. Default is 0.89.
+        sigkf : Float
+            Standard deviation of kfki; the distribution of the light values
+            will be approximately kfki +- sigkf.
+        zint : Float
+            The (scalar) distance from the interface, in units of
+            1/k_incoming. Default is 100.0
+        dist_type: The distribution type of the polychromatic light.
+            Can be one of 'laguerre'/'gamma' or 'gaussian.' If 'gaussian'
+            the resulting k-values are taken in absolute value. Default
+            is 'gaussian.'
+        normalize : Bool
+            Set to True to normalize the psf correctly, accounting for
+            intensity variations with depth. This will give a psf that does
+            not sum to 1. Default is False.
+
+    **kwargs Parameters
+    -------------------
+        alpha : Float
+            The opening angle of the lens.
+        n2n1 : Float
+            The ratio of the index in the 2nd medium to that in the first.
+
+    Returns
+    -------
+        psf : numpy.ndarray, of shape x.shape
+
+    Comments
+    --------
+        (1) The PSF is not necessarily centered on the z=0 pixel, since the
+            calculation includes the shift.
+
+        (2) If you want z-varying illumination of the psf then set
+            normalize=True. This does the normalization by doing:
+                hsym, hasym /= hsym.sum()
+                hdet /= hdet.sum()
+            and then calculating the psf that way. So if you want the
+            intensity to be correct you need to use a large-ish array of
+            roughly equally spaced points. Or do it manually by calling
+            get_hsym_asym()
+    """
+    #0. Setup
+    kfkipts, wts = get_polydisp_pts_wts(kfki, sigkf, dist_type=dist_type,
+            nkpts=nkpts)
+    rho = np.sqrt(x**2 + y**2)
+    phi = np.arctan2(y, x)
+
+    #1. Hilm
+    hsym, hasym = get_hsym_asym(rho, z, zint=zint, get_hdet=False, **kwargs)
+    hilm = (hsym + np.cos(2*phi)*hasym)  #FIXME in a separate function?
+
+    #2. Hdet
+    hdet_func = lambda kfki: get_hsym_asym(rho*kfki, z*kfki,
+                zint=kfki*zint, get_hdet=True, **kwargs)[0]
+    inner = [wts[a] * hdet_func(kfkipts[a]) for a in xrange(nkpts)]
+    hdet = np.sum(inner, axis=0)
+
+    #3. Normalize and return
+    if normalize:
+        hilm /= hilm.sum()
+        hdet /= hdet.sum()
+    psf = hdet * hilm
+    return psf if normalize else psf / psf.sum()
 
 def get_psf_scalar(x, y, z, kfki=1., zint=100.0, normalize=False, **kwargs):
     """
