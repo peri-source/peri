@@ -18,22 +18,22 @@ def moment(p, v, order=1):
 #=============================================================================
 # The actual interfaces that can be used in the peri system
 #=============================================================================
-class ExactLineScanConfocalPSF(psfs.PSF):
-    def __init__(self, shape=None, zrange=None, laser_wavelength=0.488, zslab=0.,
-            zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
-            pxsize=0.125, support_factor=2, normalize=False, sigkf=0.0,
-            nkpts=None, cutoffval=None, measurement_iterations=None,
+class ExactPSF(psfs.PSF):
+    def __init__(self, shape=None, zrange=None, laser_wavelength=0.488,
+            zslab=0., zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173,
+            polar_angle=0., pxsize=0.125, support_factor=2, normalize=False,
+            sigkf=0.0, nkpts=None, cutoffval=None, measurement_iterations=None,
             k_dist='gaussian', use_J1=True, sph6_ab=None, global_zscale=False,
             cutbyval=False, cutfallrate=0.25, cutedgeval=1e-12,
             pinhole_width=None, do_pinhole=False, *args, **kwargs):
         """
-        PSF for line-scanning confocal microscopes that can be used with the
-        peri framework.  Calculates the spatially varying point spread
-        function for confocal microscopes and allows them to be applied to
-        images as a convolution.
+        Superclass for all the exact PSFs, i.e. any PSF that is based on
+        physical properties of the imaging system such as the laser
+        wavelength.
 
-        This PSF assumes that the z extent is large compared to the image size
-        and so calculates the local PSF for every z layer in the image.
+        This PSF functions by calculating the local PSF for every z layer
+        in the image, and convolving each layer independently (numerically
+        the exact model of image formation).
 
         Parameters:
         -----------
@@ -124,11 +124,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         do_pinhole : Bool
             Whether or not to include pinhole line width in the sampling.
             Default is False.
-
-        Notes:
-            a = ExactLineScanConfocalPSF((64,)*3)
-            psf, (z,y,x) = a.psf_slice(1., size=51)
-            imshow((psf*r**4)[:,:,25], cmap='bone')
         """
         self.pxsize = pxsize
         self.polar_angle = polar_angle
@@ -165,12 +160,6 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         else:
             self.use_sph6_ab = False
 
-        if (pinhole_width is not None) or do_pinhole:
-            self.num_line_pts = 3
-        else:
-            self.num_line_pts = 1
-        pinhole_width = pinhole_width if (pinhole_width is not None) else 1.0
-
         if shape and zrange is None:
             zrange = (0, shape.shape[0])
         self.zrange = zrange
@@ -178,11 +167,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         # text location of parameters for ease of extraction
         params = [
             'kfki', 'zslab', 'zscale', 'alpha', 'n2n1', 'laser-wavelength',
-            'sigkf', 'sph6-ab', 'pinhole-width'
+            'sigkf', 'sph6-ab'
         ]
         values = np.array([
             kfki,   zslab,   zscale,   alpha,   n2n1,   laser_wavelength,
-            sigkf,    sph6_ab,   pinhole_width
+            sigkf,    sph6_ab
         ])
 
         # the next statements must occur in the correct order so that
@@ -197,19 +186,21 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             params.pop(ind)
             values = np.delete(values, ind)
 
-        if not self.do_pinhole:
-            ind = params.index('pinhole-width')
-            params.pop(ind)
-            values = np.delete(values, ind)
+        # if not self.do_pinhole:  #this canbe appended if self.do_pinhole
+            # ind = params.index('pinhole-width')
+            # params.pop(ind)
+            # values = np.delete(values, ind)
 
         for i in xrange(len(params)):
             if params[i] is 'zscale' and self.global_zscale:
                 continue
             params[i] = 'psf-' + params[i]
 
-        super(ExactLineScanConfocalPSF, self).__init__(
+        super(ExactPSF, self).__init__(
             *args, params=params, values=values, shape=shape, **kwargs
         )
+    def psffunc(self, *args, **kwargs):
+        raise NotImplementedError('Supply psffunc in subclass')
 
     @property
     def zscale(self):
@@ -218,7 +209,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
     def set_shape(self, shape, inner):
         if self.zrange is None:
             self.zrange = (0, shape.shape[0])
-        super(ExactLineScanConfocalPSF, self).set_shape(shape, inner)
+        super(ExactPSF, self).set_shape(shape, inner)
 
     def psf_slice(self, zint, size=11, zoffset=0., getextent=False):
         """
@@ -255,12 +246,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         vecs = tile.coords(form='flat')
         vecs = [self._p2k(s*i+o) for i,s,o in zip(vecs, scale, offset)]
 
-        if self.polychromatic:
-            psffunc = psfcalc.calculate_polychrome_linescan_psf
-        else:
-            psffunc = psfcalc.calculate_linescan_psf
-
-        psf = psffunc(*vecs[::-1], zint=zint, **self.args()).T
+        psf = self.psffunc(*vecs[::-1], zint=zint, **self.args()).T
         vec = tile.coords(form='meshed')
 
         # create a smoothly varying point spread function by cutting off the psf
@@ -315,39 +301,9 @@ class ExactLineScanConfocalPSF(psfs.PSF):
     def args(self):
         """
         Pack the parameters into the form necessary for the integration
-        routines above.  For example, packs for calculate_linescan_psf
+        routines above in psfcalc.
         """
-        mapper = {
-            'psf-kfki': 'kfki',
-            'psf-alpha': 'alpha',
-            'psf-n2n1': 'n2n1',
-            'psf-sigkf': 'sigkf',
-            'psf-sph6-ab': 'sph6_ab',
-            'psf-laser-wavelength': 'laser_wavelength',
-            'psf-pinhole-width': 'pinhole_width'
-        }
-        bads = [self.zscale, 'psf-zslab']
-
-        d = {}
-        for k,v in mapper.iteritems():
-            if self.param_dict.has_key(k):
-                d[v] = self.param_dict[k]
-
-        d.update({
-            'polar_angle': self.polar_angle,
-            'normalize': self.normalize,
-            'include_K3_det':self.use_J1
-        })
-
-        if self.polychromatic:
-            d.update({'nkpts': self.nkpts})
-            d.update({'k_dist': self.k_dist})
-
-        if self.do_pinhole:
-            d.update({'nlpts': self.num_line_pts})
-
-        d.update({'use_laggauss': True})
-        return d
+        raise NotImplementedError('Implement in Subclass')
 
     def _p2k(self, v):
         """ Convert from pixel to 1/k_incoming (laser_wavelength/(2\pi)) units """
@@ -496,7 +452,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         return outfield
 
     def nopickle(self):
-        return super(ExactLineScanConfocalPSF, self).nopickle() + [
+        return super(ExactPSF, self).nopickle() + [
             '_rx', '_ry', '_rz', '_rlen',
             '_memoize_clear', '_memoize_caches',
             'rpsf', 'kpsf',
@@ -513,6 +469,343 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         self.patch({'global_zscale': False})
         if self.shape:
             self.initialize()
+
+class ExactLineScanConfocalPSF(psfs.PSF):
+    def __init__(self, shape=None, zrange=None, laser_wavelength=0.488, zslab=0.,
+            zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
+            pxsize=0.125, support_factor=2, normalize=False, sigkf=0.0,
+            nkpts=None, cutoffval=None, measurement_iterations=None,
+            k_dist='gaussian', use_J1=True, sph6_ab=None, global_zscale=False,
+            cutbyval=False, cutfallrate=0.25, cutedgeval=1e-12,
+            pinhole_width=None, do_pinhole=False, *args, **kwargs):
+        """
+        PSF for line-scanning confocal microscopes that can be used with the
+        peri framework.  Calculates the spatially varying point spread
+        function for confocal microscopes and allows them to be applied to
+        images as a convolution.
+
+        This PSF assumes that the z extent is large compared to the image size
+        and so calculates the local PSF for every z layer in the image.
+
+        Parameters:
+        -----------
+        shape : tuple
+            Shape of the image in (z,y,x) pixel numbers (to be deprecated)
+
+        zrange : tuple
+            range of z pixels over which we should calculate the psf, good pixels
+            being zrange[0] <= z <= zrange[1]. currently must be set to the interior
+            of the image, so [state.pad, state.image.shape[0] - state.pad]
+
+        laser_wavelength : float
+            wavelength of light in um of the incoming laser light
+
+        zslab : float
+            Pixel position of the optical interface where 0 is the edge of the
+            image in the z direction
+
+        zscale : float
+            Scaling of the z pixel size, so that each pixel is located at
+            zscale*(z - zint), such that the interface does not move with zscale
+
+        kfki : float
+            Ratio of outgoing to incoming light wavevectors, 2\pi/\lambda
+
+        n2n1 : float
+            Ratio of the index mismatch across the optical interface. For typical
+            glass with glycerol/water 80/20 mixture this is 1.4/1.518
+
+        alpha : float
+            Aperture of the lens in radians, set by arcsin(n2n1)?
+
+        polar_angle : float
+            the angle of the light polarization with respect to the scanning axis
+
+        pxsize : float
+            the size of a xy pixel in um, defaults to cohen group size 0.125 um
+
+        support_factor : integer
+            size of the support
+
+        normalize : boolean
+            if True, use the normalization as calculated by the PSF instead of
+            unit normalization
+
+        sigkf : float
+            Width of wavelengths to use in the polychromatic psf, None is
+            monochromatic. Values for kfki = kfki +- sigkf, unitless
+
+        nkpts : integer
+            number of integration points to use for the polychromatic psf
+
+        cutoffval : float
+            Percentage of peak psf value to cutoff using a 3-axis
+            exp(-(r-r0)**4) function where r0 is determined by cutoffval. A
+            good value for this is the bit depth of the camera, or possibly the
+            SNR, so 1/2**8 or 1/50.
+
+        measurement_iterations : int
+            number of interations used when trying to find the center of mass
+            of the psf in a certain slice
+
+        k_dist : str
+            Eithe ['gaussian', 'gamma'] which control the wavevector
+            distribution for the polychromatic detection psf. Default
+            is Gaussian.
+
+        use_J1 : boolean
+            Which hdet confocal model to use. Set to True to include the
+            J1 term corresponding to a large-NA focusing lens, False to
+            exclude it. Default is True
+
+        cutbyval : boolean
+            If True, cuts the PSF based on the actual value instead of the
+            position associated with the nearest value.
+
+        cutfallrate : float
+            The relative value of the cutoffval over which to damp the
+            remaining values of the psf. 0.3 seems a good fit now.
+
+        cutedgeval : float
+            The value with which to determine the edge of the psf, typically
+            taken around floating point, 1e-12
+
+        pinhole_width : Float
+            The width of the line illumination, in 1/k units. Default is 1.0.
+
+        do_pinhole : Bool
+            Whether or not to include pinhole line width in the sampling.
+            Default is False.
+
+        Notes:
+            a = ExactLineScanConfocalPSF((64,)*3)
+            psf, (z,y,x) = a.psf_slice(1., size=51)
+            imshow((psf*r**4)[:,:,25], cmap='bone')
+        """
+        super(ExactLineScanConfocalPSF, self).__init__(shape=shape,
+                zrange=zrange, laser_wavelength=laser_wavelength, zslab=zslab,
+                zscale=zscale, kfki=kfki, n2n1=n2n1, alpha=alpha, pxsize=
+                pxsize, polar_angle=polar_angle, support_factor=support_factor,
+                normalize=normalize, sigkf=sigkf, nkpts=nkpts, cutoffval=
+                cutoffval, measurement_iterations= measurement_iterations,
+                k_dist=k_dist, use_J1=use_J1, sph6_ab=sph6_ab, global_zscale=
+                global_zscale, cutbyval=cutbyval, cutfallrate=cutfallrate,
+                cutedgeval=cutedgeval, *args, **kwargs)
+
+        self.do_pinhole = do_pinhole
+        if (pinhole_width is not None) or do_pinhole:
+            self.num_line_pts = 3
+        else:
+            self.num_line_pts = 1
+        pinhole_width = pinhole_width if (pinhole_width is not None) else 1.0
+
+        # the next statements must occur in the correct order so that
+        # other parameters are not deleted by mistake
+        if self.do_pinhole:
+            k = 'psf-pinhole-width'
+            params.append(k)
+            self.param_dict.update({k:pinhole_width})
+            #FIXME this is not correct!!!! should be done intelligently thru
+            #the superclass's init, but..
+
+        super(ExactLineScanConfocalPSF, self).__init__(
+            *args, params=params, values=values, shape=shape, **kwargs
+        )
+        if self.polychromatic:
+            self.psffunc = psfcalc.calculate_polychrome_linescan_psf
+        else:
+            self.psffunc = psfcalc.calculate_linescan_psf
+
+    def args(self):
+        """
+        Pack the parameters into the form necessary for the integration
+        routines above.  For example, packs for calculate_linescan_psf
+        """
+        mapper = {
+            'psf-kfki': 'kfki',
+            'psf-alpha': 'alpha',
+            'psf-n2n1': 'n2n1',
+            'psf-sigkf': 'sigkf',
+            'psf-sph6-ab': 'sph6_ab',
+            'psf-laser-wavelength': 'laser_wavelength',
+            'psf-pinhole-width': 'pinhole_width'
+        }
+        bads = [self.zscale, 'psf-zslab']
+
+        d = {}
+        for k,v in mapper.iteritems():
+            if self.param_dict.has_key(k):
+                d[v] = self.param_dict[k]
+
+        d.update({
+            'polar_angle': self.polar_angle,
+            'normalize': self.normalize,
+            'include_K3_det':self.use_J1
+        })
+
+        if self.polychromatic:
+            d.update({'nkpts': self.nkpts})
+            d.update({'k_dist': self.k_dist})
+
+        if self.do_pinhole:
+            d.update({'nlpts': self.num_line_pts})
+
+        d.update({'use_laggauss': True})
+        return d
+
+class ExactPinholeConfocalPSF(ExactLineScanConfocalPSF):
+    def __init__(self, shape=None, zrange=None, laser_wavelength=0.488, zslab=0.,
+            zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
+            pxsize=0.125, support_factor=2, normalize=False, sigkf=0.0,
+            nkpts=None, cutoffval=None, measurement_iterations=None,
+            k_dist='gaussian', use_J1=True, sph6_ab=None, global_zscale=False,
+            cutbyval=False, cutfallrate=0.25, cutedgeval=1e-12,
+            *args, **kwargs):
+        """
+        PSF for a pinhole confocal microscopes that can be used with the
+        peri framework.  Calculates the spatially varying point spread
+        function for confocal microscopes and allows them to be applied to
+        images as a convolution.
+
+        This PSF assumes that the z extent is large compared to the image size
+        and so calculates the local PSF for every z layer in the image.
+
+        Parameters:
+        -----------
+        shape : tuple
+            Shape of the image in (z,y,x) pixel numbers (to be deprecated)
+
+        zrange : tuple
+            range of z pixels over which we should calculate the psf, good pixels
+            being zrange[0] <= z <= zrange[1]. currently must be set to the interior
+            of the image, so [state.pad, state.image.shape[0] - state.pad]
+
+        laser_wavelength : float
+            wavelength of light in um of the incoming laser light
+
+        zslab : float
+            Pixel position of the optical interface where 0 is the edge of the
+            image in the z direction
+
+        zscale : float
+            Scaling of the z pixel size, so that each pixel is located at
+            zscale*(z - zint), such that the interface does not move with zscale
+
+        kfki : float
+            Ratio of outgoing to incoming light wavevectors, 2\pi/\lambda
+
+        n2n1 : float
+            Ratio of the index mismatch across the optical interface. For typical
+            glass with glycerol/water 80/20 mixture this is 1.4/1.518
+
+        alpha : float
+            Aperture of the lens in radians, set by arcsin(n2n1)?
+
+        polar_angle : float
+            the angle of the light polarization with respect to the scanning axis
+
+        pxsize : float
+            the size of a xy pixel in um, defaults to cohen group size 0.125 um
+
+        support_factor : integer
+            size of the support
+
+        normalize : boolean
+            if True, use the normalization as calculated by the PSF instead of
+            unit normalization
+
+        sigkf : float
+            Width of wavelengths to use in the polychromatic psf, None is
+            monochromatic. Values for kfki = kfki +- sigkf, unitless
+
+        nkpts : integer
+            number of integration points to use for the polychromatic psf
+
+        cutoffval : float
+            Percentage of peak psf value to cutoff using a 3-axis
+            exp(-(r-r0)**4) function where r0 is determined by cutoffval. A
+            good value for this is the bit depth of the camera, or possibly the
+            SNR, so 1/2**8 or 1/50.
+
+        measurement_iterations : int
+            number of interations used when trying to find the center of mass
+            of the psf in a certain slice
+
+        k_dist : str
+            Eithe ['gaussian', 'gamma'] which control the wavevector
+            distribution for the polychromatic detection psf. Default
+            is Gaussian.
+
+        use_J1 : boolean
+            Which hdet confocal model to use. Set to True to include the
+            J1 term corresponding to a large-NA focusing lens, False to
+            exclude it. Default is True
+
+        cutbyval : boolean
+            If True, cuts the PSF based on the actual value instead of the
+            position associated with the nearest value.
+
+        cutfallrate : float
+            The relative value of the cutoffval over which to damp the
+            remaining values of the psf. 0.3 seems a good fit now.
+
+        cutedgeval : float
+            The value with which to determine the edge of the psf, typically
+            taken around floating point, 1e-12
+
+        Notes:
+            a = ExactLineScanConfocalPSF((64,)*3)
+            psf, (z,y,x) = a.psf_slice(1., size=51)
+            imshow((psf*r**4)[:,:,25], cmap='bone')
+        """
+        super(ExactLineScanConfocalPSF, self).__init__(shape=shape,
+                zrange=zrange, laser_wavelength=laser_wavelength, zslab=zslab,
+                zscale=zscale, kfki=kfki, n2n1=n2n1, alpha=alpha, pxsize=
+                pxsize, polar_angle=polar_angle, support_factor=support_factor,
+                normalize=normalize, sigkf=sigkf, nkpts=nkpts, cutoffval=
+                cutoffval, measurement_iterations= measurement_iterations,
+                k_dist=k_dist, use_J1=use_J1, sph6_ab=sph6_ab, global_zscale=
+                global_zscale, cutbyval=cutbyval, cutfallrate=cutfallrate,
+                cutedgeval=cutedgeval, *args, **kwargs)
+        #do_pinhole??
+        if self.polychromatic:
+            self.psffunc = psfcalc.calculate_polychrome_pinhole_psf
+        else:
+            self.psffunc = psfcalc.calculate_pinhole_psf
+
+    def args(self):
+        """
+        Pack the parameters into the form necessary for the integration
+        routines above.  For example, packs for calculate_linescan_psf
+        """
+        mapper = {
+            'psf-kfki': 'kfki',
+            'psf-alpha': 'alpha',
+            'psf-n2n1': 'n2n1',
+            'psf-sigkf': 'sigkf',
+            'psf-sph6-ab': 'sph6_ab',
+            'psf-laser-wavelength': 'laser_wavelength'
+        }
+        bads = [self.zscale, 'psf-zslab']
+
+        d = {}
+        for k,v in mapper.iteritems():
+            if self.param_dict.has_key(k):
+                d[v] = self.param_dict[k]
+
+        d.update({
+            'polar_angle': self.polar_angle,
+            'normalize': self.normalize,
+            'include_K3_det':self.use_J1
+        })
+
+        if self.polychromatic:
+            d.update({'nkpts': self.nkpts})
+            d.update({'k_dist': self.k_dist})
+
+        if self.do_pinhole:
+            d.update({'nlpts': self.num_line_pts})
+        return d
 
 class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
     def __init__(self, cheb_degree=6, cheb_evals=8, *args, **kwargs):
