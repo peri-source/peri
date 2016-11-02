@@ -1,3 +1,24 @@
+"""
+
+The default values for the global package configuration are provided in ``peri.conf.default_conf``.
+The configuration variables are described here:
+
+========================= ====================== =============================================================
+Variable name             Default value          Description
+========================= ====================== =============================================================
+``fftw-threads``          -1                     Number of threads for fftw to use, -1 indicates all available
+``fftw-planning-effort``  ``FFTW_MEASURE``       One of (``FFTW_ESTIMATE``, ``FFTW_MEASURE``, ``FFTW_PATIENT``)
+                                                 where options to the right take longer the first time but
+                                                 are faster in subsequent evaluations.
+``fftw-wisdom``           ``~/.peri-wisdom.pkl`` Location of file in which to store wisdom. Wisdom is the results
+                                                 of fftw benchmarking itself, allowing it to run as fast as possible.
+``log-filename``          ``~/.peri.log``        Name of file for logging.
+``log-to-file``           False                  Whether or not to actually save logs to a file as well
+``log-colors``            False                  Display logs in color (supported by xterm256)
+``verbosity``             vvv                    Level of verbosity for logs, the more v's the more verbose
+========================= ====================== =============================================================
+"""
+
 import os
 import json
 import copy

@@ -16,10 +16,10 @@ confocal microscopes, particularly of the line and point scan varities.
 In these documents you will find information about:
 
 * :doc:`Installation </installation>`
-* :doc:`Package overview </overview>`
+* :doc:`Package overview </architecture>`
 * :doc:`Configuration options </configuration>`
-* :doc:`Developing models </models>`
-* :doc:`Implementing components </components>`
+* :ref:`ref-developing-models`
+* :ref:`ref-implementing-components`
 
 Contents:
 =========
@@ -27,8 +27,10 @@ Contents:
 .. toctree::
    :maxdepth: 3
 
-   overview
-   crb
+   quickstart
+   installation
+   architecture
+   configuration
    confocal
    brightfield
 
