@@ -246,7 +246,7 @@ class ExactPSF(psfs.PSF):
         vecs = tile.coords(form='flat')
         vecs = [self._p2k(s*i+o) for i,s,o in zip(vecs, scale, offset)]
 
-        psf = self.psffunc(*vecs[::-1], zint=zint, **self.args()).T
+        psf = self.psffunc(*vecs[::-1], zint=zint, **self.pack_args()).T
         vec = tile.coords(form='meshed')
 
         # create a smoothly varying point spread function by cutting off the psf
@@ -298,7 +298,7 @@ class ExactPSF(psfs.PSF):
     def todict(self):
         return {k:self.params[i] for i,k in enumerate(self.params)}
 
-    def args(self):
+    def pack_args(self):
         """
         Pack the parameters into the form necessary for the integration
         routines above in psfcalc.
@@ -470,7 +470,7 @@ class ExactPSF(psfs.PSF):
         if self.shape:
             self.initialize()
 
-class ExactLineScanConfocalPSF(psfs.PSF):
+class ExactLineScanConfocalPSF(ExactPSF):
     def __init__(self, shape=None, zrange=None, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
             pxsize=0.125, support_factor=2, normalize=False, sigkf=0.0,
@@ -582,7 +582,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
             psf, (z,y,x) = a.psf_slice(1., size=51)
             imshow((psf*r**4)[:,:,25], cmap='bone')
         """
-        super(ExactLineScanConfocalPSF, self).__init__(shape=shape,
+        super(ExactLineScanConfocalPSF, self).__init__(*args, shape=shape,
                 zrange=zrange, laser_wavelength=laser_wavelength, zslab=zslab,
                 zscale=zscale, kfki=kfki, n2n1=n2n1, alpha=alpha, pxsize=
                 pxsize, polar_angle=polar_angle, support_factor=support_factor,
@@ -590,7 +590,7 @@ class ExactLineScanConfocalPSF(psfs.PSF):
                 cutoffval, measurement_iterations= measurement_iterations,
                 k_dist=k_dist, use_J1=use_J1, sph6_ab=sph6_ab, global_zscale=
                 global_zscale, cutbyval=cutbyval, cutfallrate=cutfallrate,
-                cutedgeval=cutedgeval, *args, **kwargs)
+                cutedgeval=cutedgeval, **kwargs)
 
         self.do_pinhole = do_pinhole
         if (pinhole_width is not None) or do_pinhole:
@@ -604,19 +604,11 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         if self.do_pinhole:
             k = 'psf-pinhole-width'
             params.append(k)
-            self.param_dict.update({k:pinhole_width})
             #FIXME this is not correct!!!! should be done intelligently thru
             #the superclass's init, but..
+            self.param_dict.update({k:pinhole_width})
 
-        super(ExactLineScanConfocalPSF, self).__init__(
-            *args, params=params, values=values, shape=shape, **kwargs
-        )
-        if self.polychromatic:
-            self.psffunc = psfcalc.calculate_polychrome_linescan_psf
-        else:
-            self.psffunc = psfcalc.calculate_linescan_psf
-
-    def args(self):
+    def pack_args(self):
         """
         Pack the parameters into the form necessary for the integration
         routines above.  For example, packs for calculate_linescan_psf
@@ -653,7 +645,14 @@ class ExactLineScanConfocalPSF(psfs.PSF):
         d.update({'use_laggauss': True})
         return d
 
-class ExactPinholeConfocalPSF(ExactLineScanConfocalPSF):
+    def psffunc(self, *args, **kwargs):
+        if self.polychromatic:
+            func = psfcalc.calculate_polychrome_linescan_psf
+        else:
+            func = psfcalc.calculate_linescan_psf
+        return func(*args, **kwargs)
+
+class ExactPinholeConfocalPSF(ExactPSF):
     def __init__(self, shape=None, zrange=None, laser_wavelength=0.488, zslab=0.,
             zscale=1.0, kfki=0.889, n2n1=1.44/1.518, alpha=1.173, polar_angle=0.,
             pxsize=0.125, support_factor=2, normalize=False, sigkf=0.0,
@@ -758,7 +757,7 @@ class ExactPinholeConfocalPSF(ExactLineScanConfocalPSF):
             psf, (z,y,x) = a.psf_slice(1., size=51)
             imshow((psf*r**4)[:,:,25], cmap='bone')
         """
-        super(ExactLineScanConfocalPSF, self).__init__(shape=shape,
+        super(ExactPinholeConfocalPSF, self).__init__(shape=shape,
                 zrange=zrange, laser_wavelength=laser_wavelength, zslab=zslab,
                 zscale=zscale, kfki=kfki, n2n1=n2n1, alpha=alpha, pxsize=
                 pxsize, polar_angle=polar_angle, support_factor=support_factor,
@@ -767,13 +766,13 @@ class ExactPinholeConfocalPSF(ExactLineScanConfocalPSF):
                 k_dist=k_dist, use_J1=use_J1, sph6_ab=sph6_ab, global_zscale=
                 global_zscale, cutbyval=cutbyval, cutfallrate=cutfallrate,
                 cutedgeval=cutedgeval, *args, **kwargs)
-        #do_pinhole??
+        #do_pinhole??'
         if self.polychromatic:
             self.psffunc = psfcalc.calculate_polychrome_pinhole_psf
         else:
             self.psffunc = psfcalc.calculate_pinhole_psf
 
-    def args(self):
+    def pack_args(self):
         """
         Pack the parameters into the form necessary for the integration
         routines above.  For example, packs for calculate_linescan_psf
@@ -806,6 +805,14 @@ class ExactPinholeConfocalPSF(ExactLineScanConfocalPSF):
         if self.do_pinhole:
             d.update({'nlpts': self.num_line_pts})
         return d
+
+    def psffunc(self, *args, **kwargs):
+        if self.polychromatic:
+            func = psfcalc.calculate_polychrome_pinhole_psf
+        else:
+            func = psfcalc.calculate_pinhole_psf
+        return func(*args, **kwargs)
+
 
 class ChebyshevLineScanConfocalPSF(ExactLineScanConfocalPSF):
     def __init__(self, cheb_degree=6, cheb_evals=8, *args, **kwargs):
