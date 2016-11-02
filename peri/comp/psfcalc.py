@@ -640,22 +640,8 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
         requisite associated Laguerre quadrature becomes unstable. To
         prevent this sigkf/k0 is effectively clipped to be > 0.0815.
     """
-    if dist_type.lower() == 'gaussian':
-        pts, wts = np.polynomial.hermite.hermgauss(nkpts)
-        kfkipts = np.abs(kfki + sigkf*np.sqrt(2)*pts)
-    elif dist_type.lower() == 'laguerre' or dist_type.lower() == 'gamma':
-        k_scale = sigkf**2/kfki
-        associated_order = kfki**2/sigkf**2 - 1
-        #Associated Laguerre with alpha >~170 becomes numerically unstable, so:
-        max_order=150
-        if associated_order > max_order or associated_order < (-1+1e-3):
-            warnings.warn('Numerically unstable sigk, clipping', RuntimeWarning)
-            associated_order = np.clip(associated_order, -1+1e-3, max_order)
-        kfkipts, wts = la_roots(nkpts, associated_order)
-        kfkipts *= k_scale
-    else:
-        raise ValueError('dist_type must be either gaussian or laguerre')
-    wts /= wts.sum() #normalizing integral
+    kfkipts, wts = get_polydisp_pts_wts(kfki, sigkf, dist_type=dist_type,
+            nkpts=nkpts)
 
     #0. Set up vecs
     if wrap:
