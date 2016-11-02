@@ -327,7 +327,7 @@ def get_polydisp_pts_wts(kfki, sigkf, dist_type='gaussian', nkpts=3):
     return kfkipts, wts/wts.sum()
 
 def calculate_polychrome_pinhole_psf(x, y, z, normalize=False, kfki=0.889,
-        sigkf=0.1, zint=100., nkpts=3, dist_type='gaussian', **kwargs)
+        sigkf=0.1, zint=100., nkpts=3, dist_type='gaussian', **kwargs):
     """
     Calculates the perfect-pinhole PSF, for a set of points (x,y,z).
     Parameters
