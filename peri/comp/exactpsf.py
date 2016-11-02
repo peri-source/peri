@@ -201,6 +201,13 @@ class ExactPSF(psfs.PSF):
         )
 
     def psffunc(self, *args, **kwargs):
+        """
+        The function to evaluate the exact psf. Syntax must be
+            psf = psffunc(x, y, z, **kwargs)
+        and return a [x.size, y.size, z.size] numpy.ndarray, where x,y,z
+        are 1D arrays.
+        Implement in subclass.
+        """
         raise NotImplementedError('Supply psffunc in subclass')
 
     @property
@@ -647,6 +654,7 @@ class ExactLineScanConfocalPSF(ExactPSF):
         return d
 
     def psffunc(self, *args, **kwargs):
+        """Calculates a linescan psf"""
         if self.polychromatic:
             func = psfcalc.calculate_polychrome_linescan_psf
         else:
@@ -803,6 +811,7 @@ class ExactPinholeConfocalPSF(ExactPSF):
         return d
 
     def psffunc(self, x, y, z, **kwargs):
+        """Calculates a pinhole psf"""
         #do_pinhole?? FIXME
         if self.polychromatic:
             func = psfcalc.calculate_polychrome_pinhole_psf
@@ -865,6 +874,10 @@ class ChebyshevPSF(ExactPSF):
 
         return outfield
 
+    def __str__(self):
+        return "{} {}".format(self.__class__.__name__, [self.cheb_degree,
+                self.cheb_evals])
+
 class FixedSSChebPSF(ChebyshevPSF):
     def __init__(self, support_size=[35,17,25], *args, **kwargs):
         """ChebyshevPSF with a fixed support size"""
@@ -884,7 +897,6 @@ class FixedSSChebPSF(ChebyshevPSF):
     def __str__(self):
         return "{} {}".format(self.__class__.__name__, self.support)
 
-
 ##Multiple-inheritance-defined classes, see individual docs for details
 class ChebyshevLineScanConfocalPSF(ChebyshevPSF, ExactLineScanConfocalPSF):
     """See ChebyshevPSF, ExactLineScanConfocalPSF for docs."""
@@ -901,5 +913,3 @@ class ChebyshevPinholeConfocalPSF(ChebyshevPSF, ExactPinholeConfocalPSF):
 class FixedSSChebPinholePSF(FixedSSChebPSF, ExactPinholeConfocalPSF):
     """See FixedSSChebPSF, ExactPinholeConfocalPSF for docs."""
     pass
-##Multiple-inheritance-defined classes, see individual docs for details
-
