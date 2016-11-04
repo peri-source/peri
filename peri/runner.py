@@ -450,6 +450,9 @@ def _translate_particles(s, desc='', max_mem=1e9, min_rad='calc',
     states.save(s, desc=desc+'translate-addsub')
 
     if do_polish:
-        RLOG.info('Final polish:')
-        opt.burn(s, mode='polish', n_loop=7, fractol=3e-4, desc=desc+
+        RLOG.info('Final Burn:')
+        opt.burn(s, mode='burn', n_loop=3, fractol=3e-4, desc=desc+
+            'addsub-burn', max_mem=max_mem)
+        RLOG.info('Final Polish:')
+        opt.burn(s, mode='polish', n_loop=4, fractol=3e-4, desc=desc+
             'addsub-polish', max_mem=max_mem)
