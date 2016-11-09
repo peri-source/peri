@@ -8,11 +8,11 @@ data which we wish to fit with a polynomial. While a relatively simple problem,
 we will implement it in the PERI framework including how to get the best
 performance using various aspects of the package.
 
-Overview
-========
+States
+=======
 
-State class
-------------
+Overview
+--------
 
 The basic structure needed to fit a model to data is the ``State`` object. This
 structure holds the data and model and provides a common interface that allows
@@ -25,7 +25,7 @@ methods in order to have a functioning ``State``. In order to implement a
     :members: __init__, data, model, update
     :undoc-members:
 
-Example class: PolyFitState
+Example: PolyFitState
 ---------------------------
 
 To demonstrate this ``State`` class, let's implement a polynomial fit class
@@ -90,6 +90,9 @@ We can then make an instance of this ``PolyFitState`` and begin to fit fake
     # create a state
     s = PolyFitState(x, y, order=C)
 
+Properties
+^^^^^^^^^^
+
 We can check out some of the common functions provided to ``State`` objects
 before we begin to optimize. For example, we can look at an approximation to
 the sensitivity matrix :math:`J^T J`:
@@ -107,4 +110,57 @@ parameters:
 
     s.crb()
 
+From here, we can optimize the parameters of the state along with the estimated
+noise level. First, we will do so using Monte Carlo sampling, particularly with
+a multidimensional slice sampler.
 
+Optimization
+^^^^^^^^^^^^
+
+.. code-block:: python
+
+    import matplotlib.pyplot as pl
+    from peri.mc import sample
+
+    # burn a number of samples, then collect the samples around the true value
+    h = sample.sample_state(s, s.params, N=1000, doprint=True, procedure='uniform')
+    h = sample.sample_state(s, s.params, N=30, doprint=True, procedure='uniform')
+
+    pl.plot(s.data, 'o')
+    pl.plot(s.model, '-')
+
+    # distribution of fit parameter values
+    h.get_histogram()
+
+We can also optimize the ``PolyFitState`` using variations on nonlinear least
+squares optimization with `Levenberg-Marquardt
+<https://en.wikipedia.org/wiki/Levenberg%E2%80%93Marquardt_algorithm>`_.
+
+.. code-block:: python
+
+    import peri.opt.optimize as opt
+    opt.do_levmarq(s, s.params[1:])
+
+    pl.plot(s.data, 'o')
+    pl.plot(s.model, '-')
+
+Image states
+=============
+
+Since a common usage pattern of PERI is to optimize models of experimental
+microscope images, we implemented a very flexible ``ImageState`` which
+provides:
+
+* Easy implementation of new model equations
+* Compartmentalization of parts of an image
+* Many optimizations including local image updates and better FFTs
+
+On top of the :class:`peri.states.State` class, we add several layers of
+complexity.  We feel these levels of complexity help, rather than harm, the
+development of new image models and allows the flexibility to adapt to new
+brands and types of microscopes and experimental systems. Here we will describe
+these structures and along the way develop a very simple image model. 
+
+* **Model** -- 
+* **Component** --
+* **Tile** --
