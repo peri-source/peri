@@ -94,7 +94,7 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     else:
         inds = None
         return_inds = slice(0, None)
-        slicer = [slice(0, None), slice(0, None), slice(0, None)]
+        slicer = [slice(0, None)]*len(s.residuals.shape)
     #J = d/dx( residuals ) = d/dx( data - model) = -d/dx( model)
     J = -s.gradmodel(params=params, inds=inds, slicer=slicer, flat=False, **kwargs)
     CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
