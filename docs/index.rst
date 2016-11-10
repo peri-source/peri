@@ -33,6 +33,7 @@ Contents:
    configuration
    confocal
    brightfield
+   reference
 
 
 Indices and tables

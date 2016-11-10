@@ -24,6 +24,7 @@ methods in order to have a functioning ``State``. In order to implement a
 .. autoclass:: peri.states.State
     :members: __init__, data, model, update
     :undoc-members:
+    :noindex:
 
 Example: PolyFitState
 ---------------------------
@@ -159,8 +160,19 @@ On top of the :class:`peri.states.State` class, we add several layers of
 complexity.  We feel these levels of complexity help, rather than harm, the
 development of new image models and allows the flexibility to adapt to new
 brands and types of microscopes and experimental systems. Here we will describe
-these structures and along the way develop a very simple image model. 
+these structures and along the way develop a very simple image model of
+polydisperse discs in a plane imaged with microscope described by a Gaussian
+point-spread-function (PSF).
+
+First, we must introduce some terminology to 
 
 * **Model** -- 
 * **Component** --
 * **Tile** --
+  
+Components
+----------
+
+First, we split this 
+
+
