@@ -19,7 +19,7 @@ def sample(field, inds=None, slicer=None, flat=True):
     """
     Take a sample from a field given flat indices or a shaped slice
 
-    Parameters:
+    Parameters
     -----------
     inds : list of indices
         One dimensional (raveled) indices to return from the field
@@ -41,11 +41,71 @@ def sample(field, inds=None, slicer=None, flat=True):
         return out.ravel()
     return out
 
+_graddoc = \
+"""
+Parameters
+-----------
+func : callable
+    Function wrt to take a derivative, should return a nparray that is
+    the same shape for all params and values
+
+params : string or list of strings
+    Paramter(s) to take the derivative wrt
+
+dl : float
+    Derivative step size for numerical deriv
+
+rts : boolean
+    Return To Start. Return the state to how you found it when done,
+    needs another update call, so can be ommitted sometimes (small dl).
+    If True, functions return the final answer along with the final func
+    evaluation so that it may be passed onto other calls.
+
+**kwargs :
+    Arguments to `func`
+"""
+
+_sampledoc = \
+"""
+kwargs (supply only one):
+-----------------------------
+inds : list of indices
+    One dimensional (raveled) indices to return from the field
+
+slicer : slice object
+    A shaped (3D) slicer that returns a section of image
+
+flat : boolean
+    Whether to flatten the sampled item before returning
+"""
+
+
 #=============================================================================
 # Super class of State, has all basic components and structure
 #=============================================================================
 class State(comp.ParameterGroup):
     def __init__(self, params, values, logpriors=None, **kwargs):
+        """
+        A model and corresponding functions to perform a fit to data using a
+        variety of optimization routines. A model takes parameters and values
+        (names and values) which determine the output of a model, which is then
+        compared with data.
+
+        Parameters
+        -----------
+        params : list of strings
+            The names of the parameters (should be a unique set)
+
+        values : list of numbers
+            The corresponding values of the parameters
+
+        logpriors : list of `peri.prior.Prior`
+            Priors (constraints) to apply to parameters
+
+        kwargs :
+            Arguments to pass to super class :class:`peri.comp.ParameterGroup`
+            including `ordered` and `category`.
+        """
         self.stack = []
         self.logpriors = logpriors
 
@@ -54,89 +114,108 @@ class State(comp.ParameterGroup):
 
     @property
     def data(self):
-        """ Get the raw data of the model fit """
+        """
+        Class property: the raw data of the model fit. Should return a number
+        (preferrably float) or an ndarray (essentially any object which as
+        operands +-/...). This object is constant since it is data.
+        """
         pass
 
     @property
     def model(self):
-        """ Get the current model fit to the data """
+        """
+        Class property: the current model fit to the data. Should return a
+        number or ndarray. Ideally this object should be an object updated by
+        the :func:`peri.states.State.update` function and simply returned in
+        this property
+        """
         pass
 
     @property
     def residuals(self):
-        """ Get the model residuals wrt data """
+        """
+        Class property: the model residuals wrt data, residuals = data - model,
+        :math:`R_i = D_i - M_i(\\theta)`
+        """
         return self.data - self.model
 
     @property
     def error(self):
+        """
+        Class property: Sum of the squared errors,
+        :math:`E = \sum_i (D_i - M_i(\\theta))^2`
+        """
         return np.dot(self.residuals.flat, self.residuals.flat)
 
     @property
     def loglikelihood(self):
-        pass
+        """
+        Class property: loglikelihood calculated by the model error,
+        :math:`\\mathcal{L} = - \\frac{1}{2} \\sum\\left[
+        \\left(\\frac{D_i - M_i(\\theta)}{\sigma}\\right)^2
+        + \\log{(2\pi \sigma^2)} \\right]`
+        """
+        sig = self.hyper_parameters.get_values('sigma')
+        err = self.error
+        N = np.size(self.residuals)
+        return -0.5*err/sig**2 - np.log(np.sqrt(2*np.pi)*sig)*N
 
     @property
     def logprior(self):
+        """
+        Class property: logprior calculated from the sum of all prior objects
+        """
         pass
 
     def update(self, params, values):
+        """
+        Update a single parameter or group of parameters ``params``
+        with ``values``.
+
+        Parameters
+        ----------
+        params : string or list of strings
+            Parameter names which to update
+
+        value : number or list of numbers
+            Values of those parameters which to update
+        """
         return super(State, self).update(params, values)
 
     def push_update(self, params, values):
+        """
+        Perform a parameter update and keep track of the change on the state.
+        Same call structure as :func:`peri.states.States.update`
+        """
         curr = self.get_values(params)
         self.stack.append((params, curr))
         self.update(params, values)
 
     def pop_update(self):
+        """
+        Pop the last update from the stack push by
+        :func:`peri.states.States.push_update` by undoing the chnage last
+        performed.
+        """
         params, values = self.stack.pop()
         self.update(params, values)
 
     @contextmanager
     def temp_update(self, params, values):
+        """
+        Context manager to temporarily perform a parameter update (by using the
+        stack structure). To use:
+        
+            with state.temp_update(params, values):
+                # measure the cost or something
+                state.error
+        """
         self.push_update(params, values)
         yield
         self.pop_update()
 
     def param_all(self):
         return self.params
-
-    _graddoc = \
-    """
-    Parameters:
-    -----------
-    func : callable
-        Function wrt to take a derivative, should return a nparray that is
-        the same shape for all params and values
-
-    params : string or list of strings
-        Paramter(s) to take the derivative wrt
-
-    dl : float
-        Derivative step size for numerical deriv
-
-    rts : boolean
-        Return To Start. Return the state to how you found it when done,
-        needs another update call, so can be ommitted sometimes (small dl).
-        If True, functions return the final answer along with the final func
-        evaluation so that it may be passed onto other calls.
-
-    **kwargs :
-        Arguments to `func`
-    """
-
-    _sampledoc = \
-    """
-    kwargs (supply only one):
-    -----------------------------
-    inds : list of indices
-        One dimensional (raveled) indices to return from the field
-
-    slicer : slice object
-        A shaped (3D) slicer that returns a section of image
-
-    flat : boolean
-        Whether to flatten the sampled item before returning
-    """
 
     def _grad_one_param(self, funct, p, dl=2e-5, rts=False, **kwargs):
         """
@@ -225,7 +304,7 @@ class State(comp.ParameterGroup):
         return np.squeeze(hess)
 
     def _dograddoc(self, f):
-        f.im_func.func_doc += self._graddoc
+        f.im_func.func_doc += _graddoc
 
     def build_funcs(self):
         """
@@ -256,13 +335,13 @@ class State(comp.ParameterGroup):
         self.J = partial(self._grad, funct=r)
 
         # add the appropriate documentation to the following functions
-        self.fisherinformation.__doc__ = self._graddoc + self._sampledoc
-        self.gradloglikelihood.__doc__ = self._graddoc
-        self.hessloglikelihood.__doc__ = self._graddoc
-        self.gradmodel.__doc__ = self._graddoc + self._sampledoc
-        self.hessmodel.__doc__ = self._graddoc + self._sampledoc
-        self.JTJ.__doc__ = self._graddoc + self._sampledoc
-        self.J.__doc__ = self._graddoc + self._sampledoc
+        self.fisherinformation.__doc__ = _graddoc + _sampledoc
+        self.gradloglikelihood.__doc__ = _graddoc
+        self.hessloglikelihood.__doc__ = _graddoc
+        self.gradmodel.__doc__ = _graddoc + _sampledoc
+        self.hessmodel.__doc__ = _graddoc + _sampledoc
+        self.JTJ.__doc__ = _graddoc + _sampledoc
+        self.J.__doc__ = _graddoc + _sampledoc
 
         # add documentation to the private functions as well. this is done
         # slightly differently, hence the function call
@@ -335,7 +414,7 @@ class PolyFitState(State):
         sig = self.param_dict['sigma']
         return (
             -(0.5 * (self.residuals/sig)**2).sum()
-            -np.log(np.sqrt(2*np.pi)*sig)*self._data.oshape[0]
+            -np.log(np.sqrt(2*np.pi)*sig)*self._data.shape[0]
         )
 
     @property
@@ -354,16 +433,16 @@ class ImageState(State, comp.ComponentCollection):
         shapes are subtracted.  This is then spread with a point spread function
         (PSF).
 
-        Parameters:
+        Parameters
         -----------
-        image : `peri.util.Image` object
+        image : ``peri.util.Image`` object
             The raw image with which to compare the model image from this
             class.  This image should have been prepared through
             prepare_for_state, which does things such as padding necessary for
             this class. In the case of the RawImage, paths are used to keep
             track of the image object to save on pickle size.
 
-        comp : list of `peri.comp.Component`s or `peri.comp.ComponentCollection`s
+        comp : list of ``peri.comp.Component``s or ``peri.comp.ComponentCollection``s
             Components used to make up the model image. Each separate component
             must be of a different category, otherwise combining them would be
             ambiguous. If you desire multiple Components of one category,
@@ -371,14 +450,14 @@ class ImageState(State, comp.ComponentCollection):
             combining) and supply that to the comps list.
 
             The component types must match the list of categories in the
-            ImageState.catmap which tells how components are matched to
+            ``ImageState.catmap`` which tells how components are matched to
             parts of the model equation.
 
-        mdl : `peri.models.Model` object
+        mdl : ``peri.models.Model`` object
             Model defining how to combine different Components into a single
             model.
 
-        priors: list of `peri.priors` [default: ()]
+        priors: list of ``peri.priors`` [default: ()]
             Whether or not to turn on overlap priors using neighborlists
 
         pad : integer or tuple of integers (optional)

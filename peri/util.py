@@ -15,10 +15,41 @@ log = log.getChild('util')
 #=============================================================================
 # Tiling utilities
 #=============================================================================
-def oddify(a):
-    return a + (a % 2 == 0)
+def oddify(num):
+    """
+    Return the next odd number if ``num`` is even.
+
+    Examples
+    --------
+    >>> oddify(1)
+    1
+
+    >>> oddify(4)
+    5
+    """
+    return num + (num % 2 == 0)
 
 def listify(a):
+    """
+    Convert a scalar ``a`` to a list and all iterables to list as well.
+
+    Examples
+    --------
+    >>> listify(0)
+    [0]
+
+    >>> listify([1,2,3])
+    [1, 2, 3]
+
+    >>> listify('a')
+    ['a']
+
+    >>> listify(np.array([1,2,3]))
+    [1, 2, 3]
+
+    >>> listify('string')
+    ['string']
+    """
     if a is None:
         return []
     elif not isinstance(a, (tuple, list, np.ndarray)):
@@ -26,6 +57,27 @@ def listify(a):
     return list(a)
 
 def delistify(a, b=None):
+    """
+    If a single element list, extract the element as an object, otherwise
+    leave as it is.
+
+    Examples
+    --------
+    >>> delistify('string')
+    'string'
+
+    >>> delistify(['string'])
+    'string'
+
+    >>> delistify(['string', 'other'])
+    ['string', 'other']
+
+    >>> delistify(np.array([1.0]))
+    1.0
+
+    >>> delistify([1, 2, 3])
+    [1, 2, 3]
+    """
     if isinstance(b, (tuple, list, np.ndarray)):
         if isinstance(a, (tuple, list, np.ndarray)):
             return type(b)(a)
@@ -43,7 +95,38 @@ def amax(a, b):
     return np.vstack([a, b]).max(axis=0)
 
 def aN(a, dim=3, dtype='int'):
-    """ Convert an integer or iterable list to numpy 3 array """
+    """
+    Convert an integer or iterable list to numpy array of length dim. This func
+    is used to allow other methods to take both scalars non-numpy arrays with
+    flexibility.
+
+    Parameters
+    ----------
+    a : number, iterable, array-like
+        The object to convert to numpy array
+
+    dim : integer
+        The length of the resulting array
+
+    dtype : string or np.dtype
+        Type which the resulting array should be, e.g. 'float', np.int8
+
+    Returns
+    -------
+    arr : numpy array
+        Resulting numpy array of length ``dim`` and type ``dtype``
+
+    Examples
+    --------
+    >>> aN(1, dim=2, dtype='float')
+    array([ 1.,  1.])
+
+    >>> aN(1, dtype='int')
+    array([1, 1, 1])
+
+    >>> aN(np.array([1,2,3]), dtype='float')
+    array([ 1.,  2.,  3.])
+    """
     if not hasattr(a, '__iter__'):
         return np.array([a]*dim, dtype=dtype)
     return np.array(a).astype(dtype)
@@ -66,22 +149,56 @@ class Tile(CompatibilityPatch):
     def __init__(self, left, right=None, mins=None, maxs=None,
             size=None, centered=False, dim=None, dtype='int'):
         """
-        Creates a tile element using many different combinations (where []
-        indicates an array created from either a single number or any
+        Creates a tile element which represents a hyperrectangle in D
+        dimensions. These hyperrectangles may be operated upon to find
+        intersections, bounding tiles, calculate interior coordinates
+        and other common operations.
+
+
+        Parameters
+        ----------
+        left : number or array-like
+            Left side of the tile
+            
+        right : (optional) number or array-like
+            If provided along with left, gives the right side of the tile
+
+        mins : (optional) number or array-like
+            Can be provided to clip the sides of the Tile to certain minimum
+
+        maxs : (optional) number or array-like
+            Can be provided to clip the sides of the Tile to certain maximum
+
+        size : (optional) number or array-like
+            If provided along with left gives the size of the tile
+            
+        centered : boolean
+            * If true:   ``[left] - [size]/2 -> [left] + [size]/2``
+            * If false:  ``[left] -> [left] + [size]``
+
+        dim : integer
+            Number of dimensions for the Tile
+
+        dtype : string, np.dtype
+            Resulting type of number for the Tile coordinates
+
+        Notes
+        -----
+
+        These parameters can be combined into many different combinations
+        (where [] indicates an array created from either a single number or any
         iterable):
 
-            left : [0,0,0] -> [left]
-            left, right : [left] -> [right]
-            left, size : [left] -> [left] + [size]              (if not centered)
-            left, size : [left] - [size]/2 -> [left] + ([size]+1)/2 (if centered)
+            * left : ``[0,0,0] -> [left]``
+            * left, right : ``[left] -> [right]``
+            * left, size (not centered) : ``[left] -> [left] + [size]``
+            * left, size (yes centered) : ``[left] - [size]/2 -> [left] + [size]/2``
 
-        The addition +1 on the last variety is to ensure that odd sized arrays
-        are treated correctly i.e. left=0, size=3 -> [-1,0,1]. Each of these
-        can be limited by using (mins, maxs) which are applied after
-        calculating left, right for each element:
+        Each of these can be limited by using (mins, maxs) which are applied
+        after calculating left, right for each element:
 
-            left = max(left, [mins])
-            right = min(right, [maxs])
+            * ``left = max(left, [mins])``
+            * ``right = min(right, [maxs])``
 
         Since tiles are used for array slicing, they only allow integer values,
         which can truncated without warning from float.
@@ -90,9 +207,26 @@ class Tile(CompatibilityPatch):
         of left, right, size if provided not as an integer. If it not provided there
         then it is assumed to be 3D. This can be overridden by setting dim in the
         arguments. For example:
-            Tile(3)         : [0,0,0] -> [3,3,3]
-            Tile(3, dim=2)  : [0,0] -> [3,3]
-            Tile([3])       : [0] -> [3]
+            * Tile(3)         : ``[0,0,0] -> [3,3,3]``
+            * Tile(3, dim=2)  : ``[0,0] -> [3,3]``
+            * Tile([3])       : ``[0] -> [3]``
+
+        Examples
+        --------
+        >>> Tile(10)
+        Tile [0, 0, 0] -> [10, 10, 10] ([10, 10, 10])
+
+        >>> Tile([1,2])
+        Tile [0, 0] -> [1, 2] ([1, 2])
+
+        >>> Tile(0, size=4, centered=True)
+        Tile [-2, -2, -2] -> [2, 2, 2] ([4, 4, 4])
+
+        >>> Tile([-1, 0, 1], right=10, mins=0)
+        Tile [0, 0, 1] -> [10, 10, 10] ([10, 10, 9])
+
+        >>> Tile(10, dtype='float')
+        Tile [0.0, 0.0, 0.0] -> [10.0, 10.0, 10.0] ([10.0, 10.0, 10.0])
         """
         self.dtype = dtype
 
@@ -150,6 +284,7 @@ class Tile(CompatibilityPatch):
 
     @property
     def slicer(self):
+        """ numpy array slicer object for this tile """
         return tuple(np.s_[l:r] for l,r in zip(*self.bounds))
 
     def oslicer(self, tile):
@@ -176,6 +311,15 @@ class Tile(CompatibilityPatch):
 
     @property
     def volume(self):
+        """
+        Volume of the tile
+
+        >>> Tile(10).volume
+        1000
+
+        >>> Tile(np.sqrt(2), dim=2, dtype='float').volume #doctest: +ELLIPSIS
+        2.0000000000...
+        """
         return np.prod(self.shape)
 
     @property
@@ -188,6 +332,15 @@ class Tile(CompatibilityPatch):
 
     @property
     def corners(self):
+        """
+        Iterate the vector of all corners of the hyperrectangles
+
+        >>> Tile(3, dim=2).corners
+        array([[0, 0],
+               [0, 3],
+               [3, 0],
+               [3, 3]])
+        """
         corners = []
         for ind in itertools.product(*((0,1),)*self.dim):
             ind = np.array(ind)
@@ -213,7 +366,7 @@ class Tile(CompatibilityPatch):
         """
         Returns the coordinate vectors associated with the tile.
 
-        Parameters:
+        Parameters
         -----------
         norm : boolean
             can rescale the coordinates for you. False is no rescaling, True is
@@ -249,7 +402,7 @@ class Tile(CompatibilityPatch):
         of -0.5 to 0.5. `norm` and `form` arguments arethe same as that passed to
         `Tile.coords`.
 
-        Parameters:
+        Parameters
         -----------
         real : boolean
             whether to return kvectors associated with the real fft instead
@@ -282,13 +435,18 @@ class Tile(CompatibilityPatch):
         """
         Test whether coordinates are contained within this tile.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         items : ndarray [3] or [N, 3]
             N coordinates to check are within the bounds of the tile
 
         pad : integer or ndarray [3]
             anisotropic padding to apply in the contain test
+
+        Examples
+        --------
+        >>> Tile(5, dim=2).contains([[-1, 0], [2, 3], [2, 6]])
+        array([False,  True, False], dtype=bool)
         """
         o = ((items >= self.l-pad) & (items < self.r+pad))
         if len(o.shape) == 2:
@@ -299,7 +457,12 @@ class Tile(CompatibilityPatch):
 
     @staticmethod
     def intersection(tiles, *args):
-        """ Intersection of tiles, returned as a tile """
+        """
+        Intersection of tiles, returned as a tile
+        
+        >>> Tile.intersection(Tile([0, 1], [5, 4]), Tile([1, 0], [4, 5]))
+        Tile [1, 1] -> [4, 4] ([3, 3])
+        """
         tiles = listify(tiles) + listify(args)
 
         if len(tiles) < 2:
@@ -314,7 +477,12 @@ class Tile(CompatibilityPatch):
 
     @staticmethod
     def boundingtile(tiles, *args):
-        """ Convex bounding box of a group of tiles """
+        """
+        Convex bounding box of a group of tiles
+
+        >>> Tile.boundingtile(Tile([0, 1], [5, 4]), Tile([1, 0], [4, 5]))
+        Tile [0, 0] -> [5, 5] ([5, 5])
+        """
         tiles = listify(tiles) + listify(args)
 
         if len(tiles) < 2:
@@ -347,14 +515,27 @@ class Tile(CompatibilityPatch):
         return Tile(self.l.copy(), self.r.copy(), dtype=self.dtype)
 
     def translate(self, dr):
-        """ Translate a tile by an amount dr """
+        """
+        Translate a tile by an amount dr
+
+        >>> Tile(5).translate(1)
+        Tile [1, 1, 1] -> [6, 6, 6] ([5, 5, 5])
+        """
         tile = self.copy()
         tile.l += dr
         tile.r += dr
         return tile
 
     def pad(self, pad):
-        """ Pad this tile by an equal amount on each side as specified by pad """
+        """
+        Pad this tile by an equal amount on each side as specified by pad
+
+        >>> Tile(10).pad(2)
+        Tile [-2, -2, -2] -> [12, 12, 12] ([14, 14, 14])
+
+        >>> Tile(10).pad([1,2,3])
+        Tile [-1, -2, -3] -> [11, 12, 13] ([12, 14, 16])
+        """
         tile = self.copy()
         tile.l -= pad
         tile.r += pad
@@ -407,7 +588,7 @@ class Image(object):
         """
         Create an image object from a raw np.ndarray.
 
-        Parameters:
+        Parameters
         -----------
         image : ndarray
             The image in float format with dimensions arranged as [z,y,x]
@@ -444,8 +625,8 @@ class Image(object):
         Sets Fourier-space filters for the image. The image is filtered by
         subtracting values from the image at slices.
 
-        Inputs
-        ------
+        Parameters
+        ----------
             slices : List of indices or slice objects.
                 The q-values in Fourier space to filter.
             values : np.ndarray
@@ -453,8 +634,8 @@ class Image(object):
                 values should be the same size as the FFT of the image;
                 only the portions of values at slices will be removed.
 
-        Example:
-        -------
+        Examples
+        --------
         To remove a two Fourier peaks in the data at q=(10, 10, 10) &
         (245, 245, 245), where im is an Image object:
             slices = [(10,10,10), (245, 245, 245)]
@@ -477,7 +658,7 @@ class NullImage(Image):
         An image object that doesn't actual store any information so that small
         save states can be created for pure model states
 
-        Parameters:
+        Parameters
         -----------
         shape : tuple
             Size of the image which will be mocked
@@ -615,7 +796,7 @@ class ProgressBar(object):
             2) A simple number completed look:
                 Progress :   17 / 289
 
-        Parameters:
+        Parameters
         -----------
         num : integer
             The number of tasks that need to be completed
@@ -724,7 +905,7 @@ class ProgressBar(object):
         """
         Update the value of the progress and update progress bar.
 
-        Parameters:
+        Parameters
         -----------
         value : integer
             The current iteration of the progress

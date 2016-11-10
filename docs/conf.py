@@ -20,6 +20,7 @@ except ImportError as e:
     warnings.warn("Theme alabaster not found, style will be altered")
     alabaster = None
 
+alabaster = None
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -33,7 +34,11 @@ except ImportError as e:
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.pngmath', 'sphinx.ext.mathjax', 'sphinx.ext.viewcode']
+extensions = [
+    'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.pngmath',
+    'sphinx.ext.mathjax', 'sphinx.ext.viewcode', 'sphinxcontrib.napoleon'
+]
+autodoc_member_order = 'bysource'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -258,7 +263,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
   ('index', 'PERI', u'PERI Documentation',
-   u'Matt Bierbaum, Brian Leahy', 'PERI', 'One line description of project.',
+   u'Matt Bierbaum, Brian Leahy', 'PERI', 'Parameter Extraction from Reconstruction of Images',
    'Miscellaneous'),
 ]
 
@@ -270,3 +275,17 @@ texinfo_documents = [
 
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 #texinfo_show_urls = 'footnote'
+
+# document __init__ too
+autoclass_content = 'both'
+autodoc_member_order = 'bysource'
+
+"""
+def skip(app, what, name, obj, skip, options):
+    if name == "__init__":
+        return False
+    return skip
+
+def setup(app):
+    app.connect("autodoc-skip-member", skip)
+"""
