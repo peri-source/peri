@@ -19,7 +19,7 @@ def sample(field, inds=None, slicer=None, flat=True):
     """
     Take a sample from a field given flat indices or a shaped slice
 
-    Parameters:
+    Parameters
     -----------
     inds : list of indices
         One dimensional (raveled) indices to return from the field
@@ -43,7 +43,7 @@ def sample(field, inds=None, slicer=None, flat=True):
 
 _graddoc = \
 """
-Parameters:
+Parameters
 -----------
 func : callable
     Function wrt to take a derivative, should return a nparray that is
@@ -91,7 +91,7 @@ class State(comp.ParameterGroup):
         (names and values) which determine the output of a model, which is then
         compared with data.
 
-        Parameters:
+        Parameters
         -----------
         params : list of strings
             The names of the parameters (should be a unique set)
@@ -117,7 +117,7 @@ class State(comp.ParameterGroup):
         """
         Class property: the raw data of the model fit. Should return a number
         (preferrably float) or an ndarray (essentially any object which as
-        operands *-+/). This object is constant since it is data.
+        operands +-/...). This object is constant since it is data.
         """
         pass
 
@@ -172,8 +172,8 @@ class State(comp.ParameterGroup):
         Update a single parameter or group of parameters ``params``
         with ``values``.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         params : string or list of strings
             Parameter names which to update
 
@@ -433,16 +433,16 @@ class ImageState(State, comp.ComponentCollection):
         shapes are subtracted.  This is then spread with a point spread function
         (PSF).
 
-        Parameters:
+        Parameters
         -----------
-        image : `peri.util.Image` object
+        image : ``peri.util.Image`` object
             The raw image with which to compare the model image from this
             class.  This image should have been prepared through
             prepare_for_state, which does things such as padding necessary for
             this class. In the case of the RawImage, paths are used to keep
             track of the image object to save on pickle size.
 
-        comp : list of `peri.comp.Component`s or `peri.comp.ComponentCollection`s
+        comp : list of ``peri.comp.Component``s or ``peri.comp.ComponentCollection``s
             Components used to make up the model image. Each separate component
             must be of a different category, otherwise combining them would be
             ambiguous. If you desire multiple Components of one category,
@@ -450,14 +450,14 @@ class ImageState(State, comp.ComponentCollection):
             combining) and supply that to the comps list.
 
             The component types must match the list of categories in the
-            ImageState.catmap which tells how components are matched to
+            ``ImageState.catmap`` which tells how components are matched to
             parts of the model equation.
 
-        mdl : `peri.models.Model` object
+        mdl : ``peri.models.Model`` object
             Model defining how to combine different Components into a single
             model.
 
-        priors: list of `peri.priors` [default: ()]
+        priors: list of ``peri.priors`` [default: ()]
             Whether or not to turn on overlap priors using neighborlists
 
         pad : integer or tuple of integers (optional)
