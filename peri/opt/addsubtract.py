@@ -12,30 +12,32 @@ CLOG = log.getChild('addsub')
 def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
     """
     Makes a guess at particle positions using heuristic centroid methods.
-    Input Parameters
-    ----------------
+
+    Parameters
+    ----------
         st : peri.states.State instance
             The state to check adding particles to.
         rad : Float
             The feature size for featuring.
-        invert : Bool
+        invert : Bool, optional
             Whether to invert the image. Default is True, i.e. particles
             are dark.
-        minmass : Float or None
-            The minimum mass/masscut of a particle. Default is None=calcualted
-            by feature_guess.
-        use_tp : Bool
-            Whether to use trackpy in feature_guess. Default is False, since
+        minmass : Float or None, optional
+            The minimum mass/masscut of a particle. Default is
+            None = calculated internally.
+        use_tp : Bool, optional
+            Whether or not to use trackpy. Default is False, since
             trackpy cuts out particles at the edge.
 
-    Output Parameters
-    -----------------
+    Returns
+    -------
         guess : [N,3] numpy.ndarray
             The featured positions of the particles, sorted in order of
             decreasing feature mass.
         npart : Int
             The number of added particles.
     """
+    #FIXME does not use the **kwargs, but needs them b/c called with wrong kwargs
     if invert:
         im = 1 - st.residuals
     else:
@@ -45,6 +47,7 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
 
 def _feature_guess(im, rad, minmass=None, use_tp=False, **kwargs):
     """Workhorse of feature_guess"""
+    #FIXME does not use the **kwargs, but needs them because of add_subtract_locally
     if minmass == None:
         #30% of the feature size mass is a good cutoff empirically for
         #initializers.local_max_featuring, less for trackpy;
@@ -74,19 +77,21 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, **kwargs):
     Checks whether to add particles at a given position by seeing if adding
     the particle improves the fit of the state.
 
-    Input Parameters
-    ----------------
+    Parameters
+    ----------
         st : peri.states.State instance
             The state to check adding particles to.
         guess : [N,3] list-like
             The positions of particles to check to add.
-        rad : Float or 'calc'
+        rad : Float or 'calc', optional.
             The radius of the newly-added particles. Default is 'calc',
             which uses the states current radii's median.
-        do_opt : Bool
+        do_opt : Bool, optional
             Whether to optimize the particle position before checking if it
             should be kept. Default is True (optimizes position).
 
+    **kwargs Parameters
+    -------------------
         im_change_frac : Float
             How good the change in error needs to be relative to the change
             in the difference image. Default is 0.2; i.e. if the error does
@@ -97,7 +102,7 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, **kwargs):
             The minimal improvement in error to add a particle. Default
             is '3sig' = 3*st.sigma.
 
-    Outputs
+    Returns
     -------
         accepts : Int
             The number of added particles
@@ -179,54 +184,56 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
 
 def add_missing_particles(st, rad='calc', tries=50, **kwargs):
     """
-    Attempts to add missing particles to the state. Operates by:
+    Attempts to add missing particles to the state.
+
+    Operates by:
     (1) featuring the difference image using feature_guess,
     (2) attempting to add the featured positions using check_add_particles.
 
-    Input Parameters
-    ----------------
+    Parameters
+    ----------
         st : peri.states.State instance
             The state to check adding particles to.
-        rad : Float or 'calc'
+        rad : Float or 'calc', optional
             The radius of the newly-added particles and of the feature
             size for featuring. Default is 'calc', which uses the state's
             current radii's median.
-        tries : Int
+        tries : Int, optional
             How many particles to attempt to add. Only tries to add the first
-            tries particles, in order of mass.
+            tries particles, in order of mass. Default is 50.
 
-        invert : Bool
+    **kwargs Parameters
+    -------------------
+        invert : Bool, optional
             Whether to invert the image. Default is True, i.e. particles
             are dark.
-        minmass : Float or None
+        minmass : Float or None, optionals
             The minimum mass/masscut of a particle. Default is None=calcualted
             by feature_guess.
-        use_tp : Bool
+        use_tp : Bool, optional
             Whether to use trackpy in feature_guess. Default is False, since
             trackpy cuts out particles at the edge.
 
-        do_opt : Bool
+        do_opt : Bool, optional
             Whether to optimize the particle position before checking if it
             should be kept. Default is True (optimizes position).
-        im_change_frac : Float
+        im_change_frac : Float, optional
             How good the change in error needs to be relative to the change
             in the difference image. Default is 0.2; i.e. if the error does
             not decrease by 20% of the change in the difference image, do
             not add the particle.
 
-        min_derr : Float or '3sig'
+        min_derr : Float or '3sig', optional
             The minimal improvement in error to add a particle. Default
             is '3sig' = 3*st.sigma.
 
-    Outputs
+    Returns
     -------
         accepts : Int
             The number of added particles
         new_poses : [N,3] list
             List of the positions of the added particles. If do_opt==True,
             then these positions will differ from the input 'guess'.
-
-    do_opt=True, im_change_frac=0.2
     """
     if rad == 'calc':
         rad = np.median(st.obj_get_radii())
@@ -247,40 +254,43 @@ def remove_bad_particles(st, min_rad='calc', max_rad='calc', min_edge_dist=2.0,
 
     Parameters
     -----------
-    min_rad : Float
+    st : peri.states.State instance
+        The state to remove bad particles from.
+    min_rad : Float, optional
         All particles with radius below min_rad are automatically deleted.
         Set to 'calc' to make it the median rad - 25* radius std.
         Default is 'calc'.
 
-    max_rad : Float
+    max_rad : Float, optional
         All particles with radius above max_rad are automatically deleted.
         Set to 'calc' to make it the median rad + 15* radius std.
         Default is 'calc'.
 
-    min_edge_dist : Float
+    min_edge_dist : Float, optional
         All particles within min_edge_dist of the (padded) image
         edges are automatically deleted. Default is 2.0
 
-    check_rad_cutoff : 2-element list of floats
+    check_rad_cutoff : 2-element list of floats, optional
         Particles with radii < check_rad_cutoff[0] or > check_rad_cutoff[1]
         are checked if they should be deleted. Set to 'calc' to make it the
         median rad +- 3.5 * radius std. Default is [3.5, 15].
 
-    check_outside_im : Bool
+    check_outside_im : Bool, optional
         If True, checks if particles located outside the unpadded image
         should be deleted. Default is True.
 
-    tries : Int
+    tries : Int, optional
         The maximum number of particles with radii < check_rad_cutoff
         to try to remove. Checks in increasing order of radius size.
         Default is 50.
 
-    im_change_frac : Float, between 0 and 1.
-        If removing a particle decreases the error less than im_change_frac*
-        the change in the image, the particle is deleted. Default is 0.2.
+    im_change_frac : Float, , optional
+        Number between 0 and 1. If removing a particle decreases the
+        error by less than im_change_frac*the change in the image, then
+        the particle is deleted. Default is 0.2
 
     Returns
-    -----------
+    -------
     removed: Int
         The cumulative number of particles removed.
     """
@@ -355,83 +365,88 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
     """
     Automatically adds and subtracts missing & extra particles.
 
+    Operates by removing bad particles then adding missing particles on
+    repeat, until either no particles are added/removed or after `max_iter`
+    attempts.
+
     Parameters
     ----------
-        st: ConfocalImagePython
+        st: peri.states.State instance
             The state to add and subtract particles to.
-        max_iter : Int
+        max_iter : Int, optional
             The maximum number of add-subtract loops to use. Default is 7.
             Terminates after either max_iter loops or when nothing has
             changed.
-        max_npart : Int or 'calc'
+        max_npart : Int or 'calc', optional
             The maximum number of particles to add before optimizing the
             non-psf globals. Default is 'calc', which uses 5% of the initial
             number of particles.
-        max_mem : Int
+        max_mem : Int, optional
             The maximum memory to use for optimization after adding max_npart
             particles. Default is 2e8.
-        always_check_remove : Bool
+        always_check_remove : Bool, optional
             Set to True to always check whether to remove particles. If
             False, only checks for removal while particles were removed on
             the previous attempt. Default is False.
 
     **kwargs Parameters
     -------------------
-        invert : Bool
+        invert : Bool, optional
             True if the particles are dark on a bright background, False
             if they are bright on a dark background. Default is True.
-        min_rad : Float
+        min_rad : Float, optional
             Particles with radius below min_rad are automatically deleted.
             Default is 'calc' = median rad - 25* radius std.
-        max_rad : Float
+        max_rad : Float, optional
             Particles with radius below min_rad are automatically deleted.
             Default is 'calc' = median rad + 15* radius std, but you should
             change this for your particle sizes.
 
-        min_edge_dist : Float
+        min_edge_dist : Float, optional
             Particles closer to the edge of the padded image than this
             are automatically deleted. Default is 2.0.
         check_rad_cutoff : 2-element float list.
             Particles with radii < check_rad_cutoff[0] or > check...[1]
             are checked if they should be deleted (not automatic).
             Default is [3.5, 15].
-        check_outside_im : Bool
+        check_outside_im : Bool, optional
             Set to True to check whether to delete particles whose
             positions are outside the un-padded image.
 
-        rad : Float
+        rad : Float, optional
             The initial radius for added particles; added particles radii
             are not fit until the end of add_subtract. Default is 'calc',
             which uses the median radii of active particles.
 
-        tries : Int
+        tries : Int, optional
             The number of particles to attempt to remove or add, per
             iteration. Default is 50.
 
-        im_change_frac : Float, between 0 and 1.
-            If adding or removing a particle decreases the error less than
-            im_change_frac*the change in the image, the particle is deleted.
-            Default is 0.2.
+        im_change_frac : Float, optional
+            How good the change in error needs to be relative to the change
+            in the difference image. Default is 0.2; i.e. if the error does
+            not decrease by 20% of the change in the difference image, do
+            not add the particle.
 
-        min_derr : Float
+        min_derr : Float, optional
             The minimum change in the state's error to keep a particle in the
             image. Default is '3sig' which uses 3*st.sigma.
 
-        do_opt : Bool
+        do_opt : Bool, optional
             Set to False to avoid optimizing particle positions after
             adding them.
-        minmass : Float
+        minmass : Float, optional
             The minimum mass for a particle to be identified as a feature,
             as used by trackpy. Defaults to a decent guess.
 
-        use_tp : Bool
+        use_tp : Bool, optional
             Set to True to use trackpy to find missing particles inside
             the image. Not recommended since it trackpy deliberately
             cuts out particles at the edge of the image. Default is False.
 
-    Outputs
+    Returns
     -------
-        total_changed : Int.
+        total_changed : Int
             The total number of adds and subtracts done on the data.
             Not the same as changed_inds.size since the same particle
             or particle index can be added/subtracted multiple times.
@@ -442,16 +457,16 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
             The positions of particles that have been removed at any point in
             the add-subtract cycle.
 
-    Comments
-    --------
+    Notes
+    ------
         Occasionally after the intial featuring a cluster of particles
-        is featured as 1 big particle. To fix these mistakes, it helps
-        to set max_rad to a physical value. This removes the big particle
-        and allows it to be re-featured by (several passes of) the adding
-        portion.
-        The added/removed positions returned are whether or not the position
-        has been added or removed ever. It's possible that a position is
-        added, then removed during a later iteration.
+    is featured as 1 big particle. To fix these mistakes, it helps to
+    set max_rad to a physical value. This removes the big particle and
+    allows it to be re-featured by (several passes of) the adds.
+
+        The added/removed positions returned are whether or not the
+    position has been added or removed ever. It's possible that a
+    position is added, then removed during a later iteration.
     """
     if max_npart == 'calc':
         max_npart = 0.05 * st.obj_get_positions().shape[0]
@@ -610,11 +625,11 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
         ainds: List of ints
             The indices of the added particles.
 
-    Comments
+    Notes
     --------
-        The added/removed positions returned are whether or not the position
-        has been added or removed ever. It's possible/probably that a
-        position is added, then removed during a later iteration.
+        The added/removed positions returned are whether or not the
+    position has been added or removed ever. It's possible/probably that
+    a position is added, then removed during a later iteration.
 
     Algorithm is:
         1.  Remove all particles within the tile.
@@ -674,11 +689,12 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
     """
     Automatically adds and subtracts missing particles based on local
     regions of poor fit.
+
     Calls identify_misfeatured_regions to identify regions, then
     add_subtract_misfeatured_tile on the tiles in order of size until
     region_depth tiles have been checked without adding any particles.
 
-    Input Parameters
+    Parameters
     ----------
         st: ConfocalImagePython
             The state to add and subtract particles to.
@@ -721,10 +737,10 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
 
         use_tp : Bool
             Set to True to use trackpy to find missing particles inside
-            the image. Not recommended since it trackpy deliberately
-            cuts out particles at the edge of the image. Default is False.
+            the image. Not recommended since trackpy deliberately cuts
+            out particles at the edge of the image. Default is False.
 
-    Outputs
+    Returns
     -------
         n_added : Int
             The change in the number of particles; i.e the number added -
@@ -732,8 +748,9 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
         new_poses : List
             [N,3] element list of the added particle positions.
 
-    Algorith Description
-    --------------------
+    Notes
+    -----
+    Algorithm Description
         1.  Identify mis-featured regions by how much the local residuals
             deviate from the global residuals, as measured by the standard
             deviation of both.
@@ -744,18 +761,16 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
             2c. Terminate if at least region_depth regions have been
                 checked without successfully adding a particle.
 
-    Comments
-    --------
-        Because this algorithm is more judicious about chooosing regions to
-        check, and more aggressive about removing particles in those regions,
-        it runs faster and does a better job than the (global) add_subtract.
-        However I'm not sure if this function will work better as an initial
-        add-subtract on an image, since (1) it doesn't check for removing
-        small/big particles per se, and (2) it might be slower when there
-        are many missing particles in many regions of the image, or when
-        the poorly-featured regions are very large or when the fit is bad.
-        As a result, I'd recommend doing a normal add_subtract first and
-        using this function for tough missing or double-featured particles.
+        Because this algorithm is more judicious about chooosing regions
+    to check, and more aggressive about removing particles in those
+    regions, it runs faster and does a better job than the (global)
+    add_subtract. However, this function does not necessarily work better
+    as an initial add-subtract on an image, since (1) it doesn't check
+    for removing small/big particles per se, and (2) when the poorly-
+    featured regions of the image are large or when the fit is bad, it
+    will remove essentially all of the particles, taking a long time.
+    As a result, it's usually best to do a normal add_subtract first and
+    using this function for tough missing or double-featured particles.
     """
     #1. Find regions of poor tiles:
     tiles = identify_misfeatured_regions(st, filter_size=filter_size,
