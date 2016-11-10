@@ -144,6 +144,19 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
         s : peri.states.ImageState instance
             The optimized state.
 
+    See Also
+    --------
+        feature_from_pos_rad    : Using a previous state's globals and
+            user-provided positions and radii as an initial guess,
+            completely optimizes a state.
+
+        get_particle_featuring  : Using a previous state's globals and
+            positions as an initial guess, completely optimizes a state.
+
+        translate_featuring     : Use a previous state's globals and
+            centroids methods for an initial particle guess, completely
+            optimizes a state.
+
     Notes
     -----
         The **kwargs parameters are passed to _optimize_from_centroid.
@@ -229,6 +242,18 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
     -------
         s : peri.states.ImageState instance
             The optimized state.
+
+    See Also
+    --------
+        get_initial_featuring   : Features an image from scratch, using
+            centroid methods as initial particle locations.
+
+        get_particle_featuring  : Using a previous state's globals and
+            positions as an initial guess, completely optimizes a state.
+
+        translate_featuring     : Use a previous state's globals and
+            centroids methods for an initial particle guess, completely
+            optimizes a state.
 
     Notes
     -----
@@ -371,6 +396,18 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
         s : peri.states.ImageState instance
             The optimized state.
 
+    See Also
+    --------
+        get_initial_featuring   : Features an image from scratch, using
+            centroid methods as initial particle locations.
+
+        feature_from_pos_rad    : Using a previous state's globals and
+            user-provided positions and radii as an initial guess,
+            completely optimizes a state.
+
+        get_particle_featuring  : Using a previous state's globals and
+            positions as an initial guess, completely optimizes a state.
+
     Notes
     -----
         The **kwargs parameters are passed to _translate_particles.
@@ -459,6 +496,19 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
     -------
         s : peri.states.ImageState instance
             The optimized state.
+
+    See Also
+    --------
+        get_initial_featuring   : Features an image from scratch, using
+            centroid methods as initial particle locations.
+
+        feature_from_pos_rad    : Using a previous state's globals and
+            user-provided positions and radii as an initial guess,
+            completely optimizes a state.
+
+        translate_featuring     : Use a previous state's globals and
+            centroids methods for an initial particle guess, completely
+            optimizes a state.
 
     Notes
     -----
