@@ -68,7 +68,8 @@ class ParameterGroup(object):
     def nopickle(self):
         """
         Elements of the class that should not be included in pickled objects.
-        If inheriting a new class, should be:
+        If inheriting a new class, should be::
+
             super(Class, self).nopickle() + ['other1', 'other2', ...]
         """
         return []
@@ -278,12 +279,12 @@ class ComponentCollection(Component):
     def split_params(self, params, values=None):
         """
         Split params, values into groups that correspond to the ordering in
-        self.comps. For example, given a sphere collection and slab,
+        self.comps. For example, given a sphere collection and slab::
 
-        [
-            (spheres) [pos rad etc] [pos val, rad val, etc]
-            (slab) [slab params] [slab vals]
-        ]
+            [
+                (spheres) [pos rad etc] [pos val, rad val, etc]
+                (slab) [slab params] [slab vals]
+            ]
         """
         pc, vc = [], []
 

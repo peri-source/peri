@@ -365,7 +365,8 @@ class State(comp.ParameterGroup):
     def crb(self, params=None, *args, **kwargs):
         """
         Calculate the diagonal elements of the minimum covariance of the model
-        with respect to parameters params. *args and **kwargs go to fisherinformation.
+        with respect to parameters params. ``*args`` and ``**kwargs`` go to
+        ``fisherinformation``.
         """
         fish = self.fisherinformation(params=params, *args, **kwargs)
         return np.sqrt(np.diag(np.linalg.inv(fish))) * self.sigma
@@ -435,14 +436,14 @@ class ImageState(State, comp.ComponentCollection):
 
         Parameters
         -----------
-        image : ``peri.util.Image`` object
+        image : :class:`peri.util.Image` object
             The raw image with which to compare the model image from this
             class.  This image should have been prepared through
             prepare_for_state, which does things such as padding necessary for
             this class. In the case of the RawImage, paths are used to keep
             track of the image object to save on pickle size.
 
-        comp : list of ``peri.comp.Component``s or ``peri.comp.ComponentCollection``s
+        comp : list of :class:`peri.comp.comp.Component` or :class:`peri.comp.comp.ComponentCollection`
             Components used to make up the model image. Each separate component
             must be of a different category, otherwise combining them would be
             ambiguous. If you desire multiple Components of one category,
@@ -453,7 +454,7 @@ class ImageState(State, comp.ComponentCollection):
             ``ImageState.catmap`` which tells how components are matched to
             parts of the model equation.
 
-        mdl : ``peri.models.Model`` object
+        mdl : :class:`peri.models.Model` object
             Model defining how to combine different Components into a single
             model.
 
@@ -717,11 +718,19 @@ class ImageState(State, comp.ComponentCollection):
     def set_mem_level(self, mem_level='hi'):
         """
         Sets the memory usage level of the state.
-            hi      : all mem's are np.float64
-            med-hi  : image, platonic are float32, rest are float64
-            med     : all mem's are float32
-            med-lo  : image, platonic are float16, rest float32
-            lo      : all are float16, which is bad for accuracy.
+
+        Parameters
+        ----------
+        mem_level : string
+            Can be set to one of:
+                * hi      : all mem's are np.float64
+                * med-hi  : image, platonic are float32, rest are float64
+                * med     : all mem's are float32
+                * med-lo  : image, platonic are float16, rest float32
+                * lo      : all are float16, which is bad for accuracy.
+
+        Notes
+        -----
         Right now the PSF is not affected by the mem-level changes, which is
         OK for mem but it means that self._model, self._residuals are always
         float64, which can be a chunk of mem.

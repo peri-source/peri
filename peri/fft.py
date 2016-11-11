@@ -1,16 +1,23 @@
 """
 The FFT module is an abstraction that switches between ``numpy.fft`` and
-``pyfftw``.  If pyfftw is present than it uses the pyfftw.interfaces to build a
-fast interface for fftw with wisdom storage. Since the interfaces are the same
-for ``numpy`` and ``pyfftw``, that identical interface is passed on through the
-``peri.fft.fft`` object.
+``pyfftw``.  If pyfftw is present than it uses the ``pyfftw.interfaces`` to
+build a fast interface for fftw with wisdom storage. Since the interfaces are
+the same for ``numpy`` and ``pyfftw``, that identical interface is passed on
+through the ``peri.fft.fft`` object.
 
-.. important::
+.. warning::
 
     The one caveat is that every function call to ``peri.fft.fft.*`` must
     unpack extra arguments::
 
         peri.fft.fft.ifftn(..., **peri.fft.fftkwargs)
+
+To use this module, simply import the ``fft`` object from the module and use
+it as your would the standard ``numpy.fft`` module, except for the extra
+arguments::
+
+    from peri.fft import fft, fftkwargs
+    fft.fftn(image_array, **fftkwargs)
 
 """
 import atexit

@@ -142,10 +142,10 @@ class Model(object):
 
     def map_vars(self, comps, funcname, diffmap=None, **kwargs):
         """
-        Map component function `funcname` result into model variables
-        dictionary for use in eval of the model. If `diffmap` is provided then
+        Map component function ``funcname`` result into model variables
+        dictionary for use in eval of the model. If ``diffmap`` is provided then
         that symbol is translated into 'd'+diffmap.key and is replaced by
-        diffmap.value. **kwargs are passed to the comp.funcname(**kwargs).
+        diffmap.value. ``**kwargs` are passed to the ``comp.funcname(**kwargs)``.
         """
         out = {}
         diffmap = diffmap or {}
@@ -168,7 +168,7 @@ class Model(object):
 
         Parameters
         -----------
-        comps : list of `Component`s
+        comps : list of :class:`peri.comp.comp.Component`s
             Components which will be used to evaluate the model
 
         funcname : string
@@ -178,10 +178,10 @@ class Model(object):
         diffmap : dictionary
             Extra mapping of derivatives or other symbols to extra variables.
             For example, the difference in a component has been evaluated as
-            diff_obj so we set {'I': diff_obj}
+            diff_obj so we set ``{'I': diff_obj}``
 
-        **kwargs:
-            Arguments passed to "funcname" of component objects
+        ``**kwargs``:
+            Arguments passed to ``funcname`` of component objects
         """
         evar = self.map_vars(comps, funcname, diffmap=diffmap)
 

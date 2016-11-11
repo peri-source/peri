@@ -175,15 +175,16 @@ class PlatonicSpheresCollection(Component):
         A collection of spheres in real-space with positions and radii, drawn
         not necessarily on a uniform grid (i.e. scale factor associated with
         z-direction).  There are many ways to draw the sphere, currently
-        supported  methods can be one of:
+        supported  methods can be one of::
+
             [
                 'bool', 'lerp', 'logistic', 'triangle', 'constrained-cubic',
                 'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast',
                 'user-method'
             ]
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         pos : ndarray [N,3]
             Initial positions of the spheres
 
@@ -209,8 +210,8 @@ class PlatonicSpheresCollection(Component):
 
         user_method : tuple (function, parameters)
             Provide your own sphere function to the drawing method. First
-            element of tuple is function with call signature func(dr, a, *args)
-            where the second element is the *args that are not the distance
+            element of tuple is function with call signature `func(dr, a, *args)`
+            where the second element is the `*args` that are not the distance
             to edge (dr) or particles radius (a). `method` must be set to
             'user-method'.
 
@@ -489,16 +490,16 @@ class PlatonicSpheresCollection(Component):
         Add a particle or list of particles given by a list of positions and
         radii, both need to be array-like.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         pos : array-like [N, 3]
             Positions of all new particles
 
         rad : array-like [N]
             Corresponding radii of new particles
 
-        Returns:
-        --------
+        Returns
+        -------
         inds : N-element numpy.ndarray.
             Indices of the added particles.
         """
@@ -633,8 +634,8 @@ class Slab(Component):
         """
         A half plane corresponding to a cover-slip.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         shape : tuple
             field shape over which to calculate
 
