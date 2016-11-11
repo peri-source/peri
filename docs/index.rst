@@ -34,7 +34,16 @@ Contents:
    configuration
    confocal
    brightfield
-   reference
+
+
+Reference:
+==========
+
+.. toctree::
+   :glob:
+   :maxdepth: 3
+
+   reference/*
 
 
 Indices and tables

@@ -157,7 +157,7 @@ provides:
 * Many optimizations including local image updates and better FFTs
 
 On top of the :class:`peri.states.State` class, we add several layers of
-complexity.  We feel these levels of complexity help, rather than harm, the
+complexity.  We feel these levels of complexity help, rather than hinder, the
 development of new image models and allows the flexibility to adapt to new
 brands and types of microscopes and experimental systems. Here we will describe
 these structures and along the way develop a very simple image model of
@@ -166,9 +166,9 @@ point-spread-function (PSF).
 
 First, we must introduce some terminology to 
 
-* **Model** -- :class:`peri.models.Model`
-* **Component** -- :class:`peri.comp.comp.Component`
-* **Tile** -- :class:`peri.util.Tile`
+* **Model** (:class:`peri.models.Model`) -- 
+* **Component** (:class:`peri.comp.comp.Component`) -- 
+* **Tile** (:class:`peri.util.Tile`) -- 
   
 Components
 ----------
