@@ -1378,10 +1378,10 @@ class LMGlobals(LMEngine):
             *.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
         """
         self.state = state
-        self.kwargs = opt_kwargs  #change to self.opt_kwargs if it's OK FIXME
+        self.opt_kwargs = opt_kwargs
         self.max_mem = max_mem
         self.num_pix = get_num_px_jtj(state, len(param_names), max_mem=max_mem,
-                **self.kwargs)
+                **self.opt_kwargs)
         self.param_names = param_names
         super(LMGlobals, self).__init__(**kwargs)
 
@@ -1394,7 +1394,7 @@ class LMGlobals(LMEngine):
     def calc_J(self):
         del self.J
         self.J, self._inds = get_rand_Japprox(self.state,
-                self.param_names, num_inds=self.num_pix, **self.kwargs)
+                self.param_names, num_inds=self.num_pix, **self.opt_kwargs)
 
     def calc_residuals(self):
         return self.state.residuals.ravel()[self._inds].copy()
@@ -1749,10 +1749,10 @@ class LMAugmentedState(LMEngine):
             opt.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
         """
         self.aug_state = aug_state
-        self.kwargs = opt_kwargs  #change to self.opt_kwargs if it's OK FIXME
+        self.opt_kwargs = opt_kwargs
         self.max_mem = max_mem
         self.num_pix = get_num_px_jtj(aug_state.state, aug_state.param_vals.size,
-                max_mem=max_mem, **self.kwargs)
+                max_mem=max_mem, **self.opt_kwargs)
         super(LMAugmentedState, self).__init__(**kwargs)
 
     def _set_err_paramvals(self):
@@ -1769,7 +1769,7 @@ class LMAugmentedState(LMEngine):
         s = self.aug_state.state
         sa = self.aug_state
         J_st, inds = get_rand_Japprox(s, self.aug_state.param_names,
-                num_inds=self.num_pix, **self.kwargs)
+                num_inds=self.num_pix, **self.opt_kwargs)
         self._inds = inds
 
         #2. J for the augmented portion:
@@ -1814,9 +1814,21 @@ def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10.,
     """
     Runs Levenberg-Marquardt optimization on a state.
 
-    Convenience wrapper for LMGlobals. Same keyword args, but I've set
-    the defaults to what I've found to be useful values for optimizing globals.
+    Convenience wrapper for LMGlobals. Same keyword args, but the defaults
+    have been set to useful values for optimizing globals.
     See LMGlobals and LMEngine for documentation.
+
+    See Also
+    --------
+        do_levmarq_particles : Levenberg-Marquardt optimization of a
+            specified set of particles.
+
+        do_levmarq_all_particle_groups : Levenberg-Marquardt optimization
+            of all the particles in the state.
+
+        LMGlobals : Optimizer object; the workhorse of do_levmarq.
+
+        LMEngine : Engine superclass for all the optimizers.
     """
     if rz_order > 0:
         aug = AugmentedState(s, param_names, rz_order=rz_order)
@@ -1839,9 +1851,23 @@ def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10.,
 def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
         run_length=4, collect_stats=False, max_iter=2, **kwargs):
     """
-    Convenience wrapper for LMParticles. Same keyword args, but I've set
-    the defaults to what I've found to be useful values for optimizing
-    particles. See LMParticles and LMEngine for documentation.
+    Levenberg-Marquardt optimization on a set of particles.
+
+    Convenience wrapper for LMParticles. Same keyword args, but the
+    defaults have been set to useful values for optimizing particles.
+    See LMParticles and LMEngine for documentation.
+
+    See Also
+    --------
+        do_levmarq_all_particle_groups : Levenberg-Marquardt optimization
+            of all the particles in the state.
+
+        do_levmarq : Levenberg-Marquardt optimization of the entire state;
+            useful for optimizing global parameters.
+
+        LMParticles : Optimizer object; the workhorse of do_levmarq_particles.
+
+        LMEngine : Engine superclass for all the optimizers.
     """
     lp = LMParticles(s, particles, damping=damping, run_length=run_length,
             decrease_damp_factor=decrease_damp_factor, max_iter=max_iter,
@@ -1853,9 +1879,23 @@ def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
 def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
         decrease_damp_factor=10., run_length=4, collect_stats=False, **kwargs):
     """
+    Levenberg-Marquardt optimization for every particle in the state.
+
     Convenience wrapper for LMParticleGroupCollection. Same keyword args,
     but I've set the defaults to what I've found to be useful values for
     optimizing particles. See LMParticleGroupCollection for documentation.
+
+    See Also
+    --------
+        do_levmarq_particles : Levenberg-Marquardt optimization of a
+            specified set of particles.
+
+        do_levmarq : Levenberg-Marquardt optimization of the entire state;
+            useful for optimizing global parameters.
+
+        LMParticleGroupCollection : The workhorse of do_levmarq.
+
+        LMEngine : Engine superclass for all the optimizers.
     """
     lp = LMParticleGroupCollection(s, region_size=region_size, damping=damping,
             run_length=run_length, decrease_damp_factor=decrease_damp_factor,
@@ -1867,9 +1907,17 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
 def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
         damping=1e-3, collect_stats=False, marquardt_damping=True, **kwargs):
     """
-        Optimization of a state along one direction.
-        s : state
-        direction : np.ndarray; transformed to a unit vector internally
+    Optimization of a state along a specific set of directions in parameter
+    space.
+
+    Parameters
+    ----------
+        s : peri.states.ConfocalImagePython instance
+            The state to optimize
+        directions : np.ndarray
+            [n,d] element numpy.ndarray of the n directions in the d-
+            dimensional space to optimize along. `directions` is trans-
+            formed to a unit vector internally
         The rest are the same **kwargs in LMEngine.
     """
     # normal = direction / np.sqrt(np.dot(direction, direction))
