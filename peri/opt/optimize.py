@@ -63,15 +63,16 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     Calculates a random approximation to J by returning J only at a
     set of random pixel/voxel locations.
 
-    Inputs Parameters
-    -----------------
+    Parameters
+    ----------
         s : peri.states instance
             The state to calculate J for.
         params : List
             The list of parameter names to calculate the gradient of.
-        num_inds : Int
+        num_inds : Int, optional.
             The number of pix/voxels at which to calculate the random
-            approximation to J.
+            approximation to J. Default is 1000.
+
     **kwargs Parameters
     -------------------
         All kwargs parameters get passed to s.gradmodel only.
@@ -102,16 +103,24 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
 
 def name_globals(s, remove_params=None):
     """
-    Input Parameters
-    ----------------
+    Returns a list of the global parameter names.
+
+    Parameters
+    ----------
         s : peri.states instance
             The state to name the globals of.
         remove_params : Set or None
             A set of unique additional parameters to remove from the globals
             list.
+
+    Returns
+    -------
+        all_params : list
+            The list of the global parameter names, with each of
+            remove_params removed.
     """
     all_params = s.params
-    for p in s.param_positions():
+    for p in s.param_positions():  #FIXME s.param_particle()??
         all_params.remove(p)
     for p in s.param_radii():
         all_params.remove(p)
@@ -121,6 +130,36 @@ def name_globals(s, remove_params=None):
     return all_params
 
 def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20):
+    """
+    Calculates the number of pixels to use for J at a given memory usage.
+
+    Tries to pick a number of pixels as (size of image / `decimate`).
+    However, clips this to a maximum size and minimum size to ensure that
+    (1) too much memory isn't used and (2) J has enough elements so that
+    the inverse of JTJ will be well-conditioned.
+
+    Parameters
+    ----------
+        s : peri.states instance
+            The state on which to calculate J.
+        nparams : Int
+            The number of parameters that will be included in J.
+        decimate : Int, optional
+            The amount to decimate the number of pixels in the image by,
+            i.e. tries to pick num_px = size of image / decimate.
+            Default is 1
+        max_mem : Numeric, optional
+            The maximum allowed memory, in bytes, for J to occupy at
+            double-precision. Default is 1e9.
+        min_redundant : Int, optional
+            The number of pixels must be at least `min_redundant` *
+            `nparams`. If not, an error is raised. Default is 20
+
+    Returns
+    -------
+        num_px : Int
+            The number of pixels at which to calcualte J.
+    """
     #1. Max for a given max_mem:
     px_mem = int(max_mem / 8 / nparams) #1 float = 8 bytes
     #2. num_pix for a given redundancy
@@ -130,13 +169,14 @@ def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20):
 
     if px_red > px_mem:
         raise RuntimeError('Insufficient max_mem for desired redundancy.')
-    num_px = np.clip(px_dec, px_red, px_mem)
+    num_px = np.clip(px_dec, px_red, px_mem).astype('int')
     return num_px
 
 def vectorize_damping(params, damping=1.0, increase_list=[['psf-', 1e4]]):
     """
     Returns a non-constant damping vector, allowing certain parameters to be
     more strongly damped than others.
+
     Parameters
     ----------
         params : List
@@ -164,6 +204,7 @@ def halve_randomly(blk):
     Given an array blk of bools, returns two arrays blk1, blk2 such that
     blk1 | blk2 = blk, blk1 & blk2 = 0, and blk1 and blk2 have an equal
     amount of True's.
+    Parameters
     """
     inds = np.nonzero(blk)[0]
     np.random.shuffle(inds)  #in-place shuffling
@@ -177,26 +218,42 @@ def halve_randomly(blk):
 #               ~~~~~  Particle Optimization stuff  ~~~~~
 #=============================================================================#
 def find_particles_in_tile(state, tile):
-    """Finds the particles in a tile, as numpy.ndarray of ints."""
+    """
+    Finds the particles in a tile, as numpy.ndarray of ints.
+
+    Parameters
+    ----------
+        state : peri.states instance
+            The state to locate particles in.
+        tile : peri.util.Tile instance
+            Tile of the region inside which to check for particles.
+
+    Returns
+    -------
+        numpy.ndarray, int
+            The indices of the particles in the tile.
+    """
     bools = tile.contains(state.obj_get_positions())
     return np.arange(bools.size)[bools]
 
 def separate_particles_into_groups(s, region_size=40, bounds=None):
     """
+    Separates particles into convenient groups for optimization.
+
     Given a state, returns a list of groups of particles. Each group of
     particles are located near each other in the image. Every particle
     located in the desired region is contained in exactly 1 group.
 
-    Parameters:
-    -----------
-    s : State
+    Parameters
+    ----------
+    s : peri.states instance
         The peri state to find particles in.
-    region_size: Int or 3-element list-like of ints.
+    region_size : Int or 3-element list-like of ints, optional
         The size of the box. Groups particles into boxes of shape
         (region_size[0], region_size[1], region_size[2]). If region_size
         is a scalar, the box is a cube of length region_size.
         Default is 40.
-    bounds: 2-element list-like of 3-element lists.
+    bounds : 2-element list-like of 3-element lists, optional
         The sub-region of the image over which to look for particles.
             bounds[0]: The lower-left  corner of the image region.
             bounds[1]: The upper-right corner of the image region.
@@ -204,9 +261,9 @@ def separate_particles_into_groups(s, region_size=40, bounds=None):
         image size, i.e. the default places every particle in the image
         somewhere in the groups.
 
-    Returns:
-    -----------
-    particle_groups: List
+    Returns
+    -------
+    particle_groups : List
         Each element of particle_groups is an int numpy.ndarray of the
         group of nearby particles. Only contains groups with a nonzero
         number of particles, so the elements don't necessarily correspond
@@ -239,10 +296,10 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
     ----------------
         s : peri.states instance
             The state with the particles
-        region_size : Int or 3-element list-like of ints.
-            The initial guess for the region size.
-        max_mem : Numeric
-            The maximum memory for the optimizer to take.
+        region_size : Int or 3-element list-like of ints, optional.
+            The initial guess for the region size. Default is 40
+        max_mem : Numeric, optional
+            The maximum memory for the optimizer to take. Default is 1e9
 
     **kwargs
     --------
@@ -1755,6 +1812,8 @@ def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10.,
         run_length=6, eig_update=True, collect_stats=False, rz_order=0,
         run_type=2, **kwargs):
     """
+    Runs Levenberg-Marquardt optimization on a state.
+
     Convenience wrapper for LMGlobals. Same keyword args, but I've set
     the defaults to what I've found to be useful values for optimizing globals.
     See LMGlobals and LMEngine for documentation.
@@ -1826,6 +1885,8 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
         errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True,
         do_line_min='default'):
     """
+    Optimizes all the parameters of a state.
+
     Burns a state through calling LMParticleGroupCollection and LMGlobals/
     LMAugmentedState.
 
@@ -1833,46 +1894,37 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
     ----------
         s : peri.states.ConfocalImagePython instance
             The state to optimize
-
-        n_loop : Int
+        n_loop : Int, optional
             The number of times to loop over in the optimizer. Default is 6.
-
-        collect_stats : Bool
+        collect_stats : Bool, optional
             Whether or not to collect information on the optimizer's
             performance. Default is False, because True tends to increase
             the memory usage above max_mem.
-
-        desc : string
+        desc : string, optional
             Description to append to the states.save() call every loop.
             Set to None to avoid saving. Default is '', which selects
             one of 'burning', 'polishing', 'doing_positions'
-
-        rz_order: Int
+        rz_order: Int, optional
             Set to an int > 0 to optimize with an augmented state (R(z) as
             a global parameter) vs. with the normal global parameters;
             rz_order is the order of the polynomial approximate for R(z).
             Default is 0 (no augmented state).
-
-        fractol : Float
+        fractol : Float, optional
             Fractional change in error at which to terminate. Default 1e-7
-
-        errtol : Float
+        errtol : Float, optional
             Absolute change in error at which to terminate. Default 1e-3
-
-        mode : 'burn', 'do-particles', or 'polish'
+        mode : {'burn', 'do-particles', or 'polish'}, optional
             What mode to optimize with.
                 'burn'          : Your state is far from the minimum.
                 'do-particles'  : Positions are far from the minimum,
                                   globals are well-fit.
                 'polish'        : The state is close to the minimum.
-            'burn' is the default and will optimize any scenario, but the
-            others will be faster for their specific scenarios.
-
+            'burn' is the default. Only `polish` will get to the global
+            minimum.
         max_mem : Numeric
             The maximum amount of memory allowed for the optimizers' J's,
             for both particles & globals. Default is 1e9, i.e. 1GB per
             optimizer.
-
         do_line_min : Bool or 'default'.
             Set to True to do an additional, third optimization per loop
             which optimizes along the subspace spanned by the last 3 steps
@@ -1883,14 +1935,23 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
                 'do-particles'  : False
                 'polish'        : True
 
-    Comments
-    --------
-        - It would be nice if some of these magic #'s (region size, num_eig_dirs,
-            etc) were calculated in a good way.
-
+    Notes
+    -----
+        Proceeds by alternating between one Levenberg-Marquardt step
+    optimizing the globals, one optimizing the particles, and repeating
+    until termination.
+        In addition, if `do_line_min` is True, at the end of each loop
+    step an additional optimization is tried along the subspaced spanned
+    by the steps taken during the last 3 loops. Ideally, this changes the
+    convergence from linear to quadratic, but it doesn't always do much.
+        Each of the 3 options proceed by optimizing as follows:
     burn            : lm.do_run_2(), lp.do_run_2(). No psf, 2 loops on lm.
     do-particles    : lp.do_run_2(), scales for ilm, bkg's
     polish          : lm.do_run_2(), lp.do_run_2(). Everything, 1 loop each.
+    where lm is a globals LMGlobals instance, and lp a
+    LMParticleGroupCollection instance.
+        It would be nice if some of these magic #'s (region size,
+    num_eig_dirs, etc) were calculated in a good way. FIXME
     """
     mode = mode.lower()
     if mode not in {'burn', 'do-particles', 'polish'}:
