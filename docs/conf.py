@@ -39,6 +39,7 @@ extensions = [
     'sphinx.ext.mathjax', 'sphinx.ext.viewcode', 'sphinxcontrib.napoleon'
 ]
 autodoc_member_order = 'bysource'
+todo_include_todos = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

@@ -30,6 +30,7 @@ Contents:
    quickstart
    installation
    architecture
+   optimization
    configuration
    confocal
    brightfield

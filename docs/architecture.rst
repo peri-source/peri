@@ -22,7 +22,7 @@ methods in order to have a functioning ``State``. In order to implement a
 ``State``, you must know about the following functions:
 
 .. autoclass:: peri.states.State
-    :members: __init__, data, model, update
+    :members: data, model, update
     :undoc-members:
     :noindex:
 
@@ -166,13 +166,14 @@ point-spread-function (PSF).
 
 First, we must introduce some terminology to 
 
-* **Model** -- 
-* **Component** --
-* **Tile** --
+* **Model** -- :class:`peri.models.Model`
+* **Component** -- :class:`peri.comp.comp.Component`
+* **Tile** -- :class:`peri.util.Tile`
   
 Components
 ----------
 
-First, we split this 
+First, we split the model into small parts which break up the monolithic model
+into managable pieces. We call these 
 
 
