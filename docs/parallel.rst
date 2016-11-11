@@ -1,5 +1,15 @@
-Setting up PERI with AWS (starcluster)
-======================================
+***********************
+Parallel image analysis
+***********************
+
+Computing on AWS
+================
+
+Barebones
+---------
+
+Starcluster
+-----------
 
 Since data analysis takes considerably longer than heuristic methods, we often
 need to employ many computer resources to analyze data in a reasonable amount

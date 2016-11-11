@@ -29,12 +29,12 @@ Contents:
 
    quickstart
    installation
+   configuration
    architecture
    optimization
-   configuration
+   parallel
+   crb
    confocal
-   brightfield
-
 
 Reference:
 ==========
