@@ -44,25 +44,25 @@ class Model(object):
         An abstraction for defining how to combine components into a complete
         model as well as derivatives with respect to different variables.
 
-        Parameters:
+        Parameters
         -----------
         modelstr : dict of strings
             (Using a custom model) The actual equations used to defined the model.
             At least one eq. is required under the key `full`. Other partial
             update equations can be added where the variable name (e.g. 'dI')
-            denotes a partial update of I, for example:
+            denotes a partial update of I, for example::
 
                 {'full': 'H(P)', 'dP': 'H(dP)'}
 
         varmap : dict
             (Using a custom model) The mapping of variables in the modelstr
-            equations to actual component types. For example:
+            equations to actual component types. For example::
 
                 {'P': 'obj', 'H': 'psf'}
 
         registry : dict
             A mapping of categories to components which this model will
-            accept. For example:
+            accept. For example::
 
                 {
                     'obj': [objs.PlatonicSpheresCollection],
@@ -166,7 +166,7 @@ class Model(object):
         """
         Calculate the output of a model.
 
-        Parameters:
+        Parameters
         -----------
         comps : list of `Component`s
             Components which will be used to evaluate the model
@@ -199,6 +199,15 @@ class Model(object):
 
 class ConfocalImageModel(Model):
     def __init__(self):
+        """
+        Confocal microscope image with simplifications made for performance.
+        In particular, the sensing and illumination point spread functions
+        are combined into one:
+
+        .. math::
+            \\mathcal{M} = H(I(1-P) + CP) + B
+
+        """
         varmap = {
             'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'obj', 'C': 'offset'
         }

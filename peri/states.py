@@ -756,6 +756,8 @@ def save(state, filename=None, desc='', extra=None):
     Save the current state with extra information (for example samples and LL
     from the optimization procedure).
 
+    Parameters
+    ----------
     state : peri.states.ImageState
         the state object which to save
 
@@ -794,7 +796,15 @@ def save(state, filename=None, desc='', extra=None):
     pickle.dump(save, open(filename, 'wb'))
 
 def load(filename):
-    """ Load the state from the given file, moving to the file's directory during load """
+    """
+    Load the state from the given file, moving to the file's directory during
+    load (temporarily, moving back after loaded)
+
+    Parameters
+    ----------
+    filename : string
+        name of the file to open, should be a .pkl file
+    """
     path, name = os.path.split(filename)
     path = path or '.'
 

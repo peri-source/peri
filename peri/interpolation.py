@@ -6,10 +6,13 @@ class BarnesInterpolation1D(object):
         """
         A class for 1-d barnes interpolation. Give data points d at locations x.
 
-        Parameters:
-        -----------
-        (x, d) : ndarrays, 1-dimensional
-            input positions and values
+        Parameters
+        ----------
+        x : ndarrays, 1-dimensional
+            input positions, x values for data points
+
+        d : ndarrays, 1-dimensional
+            input values, y values for data points
 
         filter_size : float
             control parameter for weight function (sigma), should be the average
@@ -74,8 +77,8 @@ class ChebyshevInterpolation1D(object):
         A 1D Chebyshev approximation / interpolation for an ND function, approximating
         (N-1)D in in the last dimension. 
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         func : callable
             A function that takes scalar arguments (1D) and returns a N
             dimensional array corresponding to that scalar. Make it such that,
@@ -111,7 +114,7 @@ class ChebyshevInterpolation1D(object):
         Calculate the coefficients based on the func, degree, and interpolating points.
         _coeffs is a [order, N,M,....] array
 
-        Note: 
+        Notes 
         -----
         Moved the -c0 to the coefficients defintion
         app -= 0.5 * self._coeffs[0] -- moving this to the coefficients
@@ -158,7 +161,9 @@ class ChebyshevInterpolation1D(object):
     def __call__(self, x):
         """
         Approximates `func` at the coordinates x, which must be in the window.
-            f(x) = sum_{k=0}^{N-1} c_k T_k(x) - co/2
+
+        .. math::
+            f(x) = \sum_{k=0}^{N-1} c_k T_k(x) - co/2
 
         Output is in the format [A,...,x]
         """

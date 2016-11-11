@@ -107,7 +107,7 @@ class Component(ParameterGroup, util.CompatibilityPatch):
         This method returns a `peri.util.Tile` object defining the region of
         a field that has to be modified by the update of (params, values).
 
-        Parameters:
+        Parameters
         -----------
         params : single param, list of params
             A single parameter or list of parameters to be updated
@@ -128,7 +128,7 @@ class Component(ParameterGroup, util.CompatibilityPatch):
         about a tile `tile`. Padding size is the total size, so half that
         on each side.
 
-        Parameters:
+        Parameters
         -----------
         tile : `peri.util.Tile`
             A tile defining the region of interest
@@ -227,7 +227,7 @@ class ComponentCollection(Component):
         straight-forward is get, but by default it adds all fields. This
         class has the same interface as Component itself.
 
-        Parameters:
+        Parameters
         -----------
         comps : list of `peri.comp.Component`
             The components to group together
