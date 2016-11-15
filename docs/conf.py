@@ -301,3 +301,22 @@ def skip(app, what, name, obj, skip, options):
 def setup(app):
     app.connect("autodoc-skip-member", skip)
 """
+
+#####################################################
+# add LaTeX macros 
+# Additional stuff for the LaTeX preamble.
+latex_elements['preamble'] = '\usepackage{amsmath}\n\usepackage{amssymb}\n'
+f = file('latex_macros.sty')
+
+try:
+    pngmath_latex_preamble  # check whether this is already defined
+except NameError:
+    pngmath_latex_preamble = ""
+
+for macro in f:
+    # used when building latex and pdf versions
+    latex_elements['preamble'] += macro + '\n'
+    # used when building html version
+    pngmath_latex_preamble += macro + '\n'
+
+#####################################################
