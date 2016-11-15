@@ -9,7 +9,8 @@ def himmelblau(xy):
     """
     Himmelblau's function, as a set of residuals (cost = sum(residuals**2))
 
-    The standard Himmelbau's function is with data as [11, 7].
+    The standard Himmelbau's function is with data as [11, 7], and four
+    minimum at (3.0, 2.0), ~(-2.8, 3.1), ~(-3.8, -3.3), ~(3.6, -1.8).
     Himmelblau's function is a quadratic model in both x and y. Its data-
     space dimension (2) is equal to its model-space dimension (2), so
     there is only parameter-effect curvature.
@@ -55,7 +56,8 @@ def rosenbrock(xy, A=10):
     The original rosenbrock banana function, as a set of residuals
     (cost = sum(residuals**2))
 
-    The original function is with data = [1,0]. It is a coupled model,
+    The original function is with data = [1,0] and A=10, with a global
+    minimum at (1,1)=(data[0], data[0]^2). It is a coupled model,
     quadratic in x and linear in y. Its data-space dimension (2) is equal
     to its model-space dimension (2), so there is only parameter-effect
     curvature.
@@ -106,7 +108,7 @@ def rosenbrock_gen(xy, A=10, order=3):
     r2 = A*(y-x**order / order)
     return np.array([r1,r2])
 
-def rosenbrock_dd(xd, A=10, order=3):
+def rosenbrock_gendd(xd, A=10, order=3):
     """
     A higher-dimensional modification of a generalized rosenbrock
     function, as a set of residuals (cost = sum(residuals**2))
@@ -207,8 +209,9 @@ def booth(xy):
     """
     The Booth's function, as a set of residuals (cost = sum(residuals**2))
 
-    The standard Booth function is with data as [7, 5]. It is a coupled
-    linear model, with the parameter and data space both 2-dimensional.
+    The standard Booth function is with data as [7, 5], and has a single
+    global minimum at (1,3). It is a coupled linear model, with the
+    parameter and data space both 2-dimensional.
 
     Parameters
     ----------
@@ -221,8 +224,8 @@ def booth(xy):
             The residuals of the model.
     """
     x,y = xy
-    r1 = 7-2*y
-    r2 = 5-y-2*x
+    r1 = x + 2*y
+    r2 = y + 2*x
     return np.array([r1,r2])
 
 # def increase_model_dimension(func):
