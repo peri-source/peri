@@ -241,6 +241,13 @@ class BlurredFieldModel(Model):
         registry = {'psf': allpsfs, 'ilm': allfields}
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
+class ParticlesOnlyModel(Model):
+    def __init__(self):
+        varmap = {'P': 'obj'}
+        modelstr = {'full': 'P', 'dP': 'dP'}
+        registry = {'obj': allobjs}
+        Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
+
 class BlurredParticlesModel(Model):
     def __init__(self):
         varmap = {

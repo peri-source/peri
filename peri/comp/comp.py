@@ -14,9 +14,42 @@ class NotAParameterError(Exception):
 class ParameterGroup(object):
     def __init__(self, params=None, values=None, ordered=True, category='param'):
         """
-        Set up a parameter group, which is essentially an OrderedDict of param
-        -> values. However, it is generalized so that this structure is not
-        strictly enforced for all ParameterGroup subclasses.
+        Any object which computes something based on parameters and values can
+        be considered a ``ParameterGroup``. This class provides a common
+        interface since ``ParameterGroup`` appears throughout ``PERI``
+        including ``Components``, ``Priors``, ``States``. In the very basic
+        form, a ``ParameterGroup`` is a ``dict`` or ``OrderedDict`` of::
+
+            { parameter_name: parameter_value, ... }
+
+        The use of a dictionary is strictly optional -- as long as the following
+        methods are provided, the parameters and values may be stored in any
+        format that is convenient:
+        
+            * :func:`~peri.comp.comp.ParameterGroup.params`
+            * :func:`~peri.comp.comp.ParameterGroup.values`
+            * :func:`~peri.comp.comp.ParameterGroup.get_values`
+            * :func:`~peri.comp.comp.ParameterGroup.set_values`
+            * :func:`~peri.comp.comp.ParameterGroup.update`
+
+        Parameters
+        ----------
+        params : string, list of strings
+            The names of the parameters, in the proper order
+
+        values : number, list of numbers
+            The values corresponding to the parameter names
+
+        ordered : boolean (default: True)
+            If True, uses an OrderedDict so that parameter order is
+            deterministic independent of number of parameters
+
+        category : string (default: 'param')
+            Name of the category associated with this ParameterGroup.
+            
+            .. warning::
+            
+                FIXME : should only be a property of Component
         """
         gen = OrderedDict if ordered else dict
 
@@ -31,38 +64,55 @@ class ParameterGroup(object):
 
         self.category = category
 
-    def initargs(self):
-        """ Return arguments that are passed to init to setup the class again """
-        return {"params": self.params, "values": self.values, "ordered": self.ordered}
-
     def update(self, params, values):
         """
-        Update the a single (param, value) combination, or a list or tuple of
-        params and corresponding values for the object.
+        Update the calculation of the class based on a pair or pairs
+        of parameters and associated values.
+
+        Parameters
+        ----------
+        params : string, list of strings
+            name of parameters to update
+
+        values : number, list of numbers
+            cooresponding values to update
         """
         self.set_values(params, values)
         return True
 
     def get_values(self, params):
-        """ Get the value of a list or single parameter """
+        """
+        Get the value of a list or single parameter.
+
+        Parameters
+        ----------
+        params : string, list of string
+            name of parameters which to retrieve
+        """
         return util.delistify(
             [self.param_dict[p] for p in util.listify(params)], params
         )
 
     def set_values(self, params, values):
         """
-        Directly set a single (param, value) combination, or a list or tuple of
-        params and corresponding values for the object.
+        Directly set the values corresponding to certain parameters.
+        This does not necessarily trigger and update of the calculation,
+        
+        See also
+        --------
+        :func:`~peri.comp.comp.ParameterGroup.update` : full update func
         """
         for p, v in zip(util.listify(params), util.listify(values)):
             self.param_dict[p] = v
 
     @property
     def params(self):
+        """ The list of parameters """
         return self.param_dict.keys()
 
     @property
     def values(self):
+        """ The list of values """
         return self.param_dict.values()
 
     def nopickle(self):
@@ -71,8 +121,26 @@ class ParameterGroup(object):
         If inheriting a new class, should be::
 
             super(Class, self).nopickle() + ['other1', 'other2', ...]
+
+        Returns
+        -------
+        elements : list of strings
+            The name of class member variables which should not be pickled
         """
         return []
+
+    def initargs(self):
+        """
+        Pickling helper method which returns a dictionary of function
+        parameters which get passed to pickle via `__getinitargs__
+        <https://docs.python.org/2/library/pickle.html#object.__getinitargs__>`_
+        
+        Returns
+        -------
+        arg_dict : dictionary
+            ``**kwargs`` to be passed to the __init__ func after unpickling
+        """
+        return {"params": self.params, "values": self.values, "ordered": self.ordered}
 
     def __str__(self):
         return "{} [{}]".format(self.__class__.__name__, self.param_dict)
@@ -92,6 +160,34 @@ class ParameterGroup(object):
 #=============================================================================
 class Component(ParameterGroup, util.CompatibilityPatch):
     def __init__(self, params, values, ordered=True, category='comp'):
+        """
+        A :class:`~peri.comp.comp.ParameterGroup` which specifically computes
+        over sections of an image for an :class:`~peri.states.ImageState`. To
+        this end, we require the implementation of several new member functions:
+
+            * :func:`~peri.comp.comp.Component.initialize`
+            * :func:`~peri.comp.comp.Component.get_update_tile`
+            * :func:`~peri.comp.comp.Component.get_padding_size`
+            * :func:`~peri.comp.comp.Component.set_shape`
+            * :func:`~peri.comp.comp.Component.set_tile`
+            * :func:`~peri.comp.comp.Component.get`
+
+        Parameters
+        ----------
+        params : string, list of strings
+            The names of the parameters, in the proper order
+
+        values : number, list of numbers
+            The values corresponding to the parameter names
+
+        ordered : boolean (default: True)
+            If True, uses an OrderedDict so that parameter order is
+            deterministic independent of number of parameters
+
+        category : string (default: 'param')
+            Name of the category associated with this ParameterGroup.
+            
+        """
         for attr in ['shape', 'inner', '_parent']:
             if not hasattr(self, attr):
                 setattr(self, attr, None)  #Not sure if this is the best, since inner and shape are related
@@ -105,8 +201,16 @@ class Component(ParameterGroup, util.CompatibilityPatch):
 
     def get_update_tile(self, params, values):
         """
-        This method returns a `peri.util.Tile` object defining the region of
-        a field that has to be modified by the update of (params, values).
+
+        This method returns a :class:`~peri.util.Tile` object defining the
+        region of a field that has to be modified by the update of (params,
+        values). For example, if this Component is the point-spread-function,
+        it might return a tile of entire image since every parameter affects
+        the entire image::
+
+            return self.shape
+
+        
 
         Parameters
         -----------
@@ -116,9 +220,9 @@ class Component(ParameterGroup, util.CompatibilityPatch):
         values : single value, list of values
             The values corresponding to the params
 
-        Returns:
-        --------
-        tile : `peri.util.Tile`
+        Returns
+        -------
+        tile : :class:`~peri.util.Tile`
             A tile corresponding to the image region
         """
         pass
@@ -127,12 +231,20 @@ class Component(ParameterGroup, util.CompatibilityPatch):
         """
         Get the amount of padding required for this object when calculating
         about a tile `tile`. Padding size is the total size, so half that
-        on each side.
+        on each side. For example, if this Component is a Gaussian point spread
+        function, then the padding returned might be::
+
+            peri.util.Tile(np.ceil(2*self.sigma))
 
         Parameters
         -----------
-        tile : `peri.util.Tile`
+        tile : :class:`~peri.util.Tile`
             A tile defining the region of interest
+
+        Returns
+        -------
+        pad : :class:`~peri.util.Tile`
+            A tile corresponding to the required padding size
         """
         pass
 

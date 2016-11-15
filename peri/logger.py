@@ -2,6 +2,8 @@
 A simple but pretty logging interface for configurable logs across all packages.
 To use, simply import the base log and (maybe) tack on a child context:
 
+.. code-block:: python
+
     from peri.logger import log
     clog = log.getChild("<child name>") # optional
 
@@ -10,11 +12,15 @@ To use, simply import the base log and (maybe) tack on a child context:
 
 Call with:
 
+.. code-block:: python
+
     log.info('something %r' % object)
     log.error('bad thing')
 
 You can set the level of information displayed, for example, to only display
 critical errors. The order is debug, info, warn, error, fatal
+
+.. code-block:: python
 
     log.set_level('info')
 """
