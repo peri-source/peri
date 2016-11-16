@@ -86,9 +86,10 @@ def rosenbrock_gen(xy, A=10, order=3):
     higher-order nonlinearity. The residuals are
         r1 = xy[0]
         r2 = xy[1] - xy[0]^n/n
-    The original function is with data = [1,0] and n=2. The model is
-    coupled, polynomial in x and linear in y. Its data-space dimension (2)
-    is equal to its model-space dimension (2), so there is only parameter-
+    The original function is with data = [1,0] and order=2, and has a
+    single minimum at (x,y) = (1, 1/order). The model is coupled,
+    polynomial in x and linear in y. Its data-space dimension (2) is
+    equal to its model-space dimension (2), so there is only parameter-
     effect curvature. (See M Transtrum et al, PRE 2011)
 
     Parameters
@@ -108,15 +109,50 @@ def rosenbrock_gen(xy, A=10, order=3):
     r2 = A*(y-x**order / order)
     return np.array([r1,r2])
 
+def rosenbrock_dd(xd, A=10):
+    """
+    A higher-dimensional modification of the rosenbrock function, as a
+    set of residuals (cost = sum(residuals**2))
+
+    The standard modified function is with data = zeros(N), with a
+    global minimum at xd = ones(d). It is a coupled model, quadratic in
+    the first d-1 parameters. Its data-space dimension (2d-2) is greater
+    than its model-space dimension (d) for d > 2.
+
+    Parameters
+    ----------
+        - xd : d-element list-like
+            The x,y parameters of the model.
+
+    Returns
+    -------
+        (2d-2)-element list-like
+            The residuals of the model.
+
+    Notes
+    -----
+        Based on the multidimensional variation
+            f(x) = \sum_{i=1}^{N-1} 100(x_{i+1} - x_i&2) + (1-x_i)^2
+    This gives a data space of dimension 2*(N-1) =2N-2 and a parameter
+    space of dimension N. According to wikipedia, has 1 minimia for N=3
+    at (1,1,1), 2 minima for 4<=N<=7. See:
+    https://en.wikipedia.org/wiki/Rosenbrock_function#Multidimensional_generalisations
+    """
+    xp = xd[1:]
+    xi = xd[:-1]
+    r1 = A*(xp - xi*xi)
+    r2 = 1 - xi
+    return np.append(r1, r2)
+
 def rosenbrock_gendd(xd, A=10, order=3):
     """
     A higher-dimensional modification of a generalized rosenbrock
     function, as a set of residuals (cost = sum(residuals**2))
 
-    The standard modified function is with data = zeros(N). This function
-    is a coupled model, polynomial in the first d-1 parameters. Its data-
-    space dimension (2d-2) is greater than its model-space dimension (d)
-    for d > 2.
+    The standard modified function is with data = zeros(N), with a
+    global minimum at xd=ones(d). This function is a coupled model,
+    polynomial in the first d-1 parameters. Its data-space dimension
+    (2d-2) is greater than its model-space dimension (d) for d > 2.
 
     Parameters
     ----------
@@ -145,49 +181,14 @@ def rosenbrock_gendd(xd, A=10, order=3):
     r2 = 1 - xi
     return np.append(r1, r2)
 
-def rosenbrock_dd(xd, A=10):
-    """
-    A higher-dimensional modification of the rosenbrock function, as a
-    set of residuals (cost = sum(residuals**2))
-
-    The standard modified function is with data = zeros(N). It is a
-    coupled model, quadratic in the first d-1 parameters. Its data-space
-    dimension (2d-2) is greater than its model-space dimension (d) for
-    d > 2.
-
-    Parameters
-    ----------
-        - xd : d-element list-like
-            The x,y parameters of the model.
-
-    Returns
-    -------
-        (2d-2)-element list-like
-            The residuals of the model.
-
-    Notes
-    -----
-        Based on the multidimensional variation
-            f(x) = \sum_{i=1}^{N-1} 100(x_{i+1} - x_i&2) + (1-x_i)^2
-    This gives a data space of dimension 2*(N-1) =2N-2 and a parameter
-    space of dimension N. According to wikipedia, has 1 minimia for N=3
-    at (1,1,1), 2 minima for 4<=N<=7. See:
-    https://en.wikipedia.org/wiki/Rosenbrock_function#Multidimensional_generalisations
-    """
-    xp = xd[1:]
-    xi = xd[:-1]
-    r1 = A*(xp - xi*xi)
-    r2 = 1 - xi
-    return np.append(r1, r2)
-
 def beale(xy):
     """
     The Beale function, as a set of residuals (cost = sum(residuals**2))
 
-    The standard Beale's function is with data as [1.5, 2.25, 2.625].
-    Beale's function is a coupled model, linear in x and quartic in y.
-    Its data-space dimension (3) is greater than its model-space
-    dimension (2).
+    The standard Beale's function is with data as [1.5, 2.25, 2.625],
+    and has a global minima at (3, 0.5). Beale's function is a coupled
+    model, linear in x and quartic in y. Its data-space dimension (3) is
+    greater than its model-space dimension (2).
 
     Parameters
     ----------
