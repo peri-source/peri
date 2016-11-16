@@ -227,4 +227,9 @@ semi-local updates for best performance.
 ComponentCollections and Models
 -------------------------------
 
+.. autoclass:: peri.comp.comp.ComponentCollection
+    :members: get
+    :noindex:
 
+Example: Gaussian-blurred discs
+-------------------------------

@@ -2,6 +2,13 @@
 peri.states
 ***********
 
+Index of members within ``peri.states``:
+
+* :class:`peri.states.State`
+* :class:`peri.states.ImageState`
+* :func:`peri.states.save`
+* :func:`peri.states.load`
+
 peri.states.State
 =================
 
