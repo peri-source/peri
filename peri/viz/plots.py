@@ -449,10 +449,11 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
             (x,edge), where edge is the appropriate edge of the image.
                 edgepts[0] : (x,y) points for the upper edge
                 edgepts[1] : (x,y) points for the lower edge
-            Default is 'calc' which calculates edge points by splitting the
-            image into 3 regions of equal area. If edgepts is a float
-            scalar, calculates the edge points based on a constant fraction
-            of distance from the edge.
+            where `x` is the coordinate along the image's 0th axis and `y`
+            along the images 1st axis. Default is 'calc,' which calculates
+            edge points by splitting the image into 3 regions of equal
+            area. If edgepts is a float scalar, calculates the edge points
+            based on a constant fraction of distance from the edge.
         do_imshow : Bool
             If True, imshow's and returns the returned handle.
             If False, returns the array as a [M,N,4] array.
@@ -479,7 +480,7 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
 
     im = np.zeros([data.shape[0], data.shape[1], 4])
     im_x, im_y = np.meshgrid(np.arange(im.shape[0]), np.arange(im.shape[1]),
-            indexing='xy')
+            indexing='ij')
     if np.size(edgepts) == 1:
         #Gets equal-area sections, at sqrt(2/3) of the sides
         f = np.sqrt(2./3.) if edgepts == 'calc' else edgepts
@@ -510,9 +511,9 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
     rs = res_cmap(center_data(residuals, res_vmin, res_vmax))
 
     for a in xrange(4):
-        im[:,:,a][upper_mask] = dt[:,:,a][upper_mask]
+        im[:,:,a][upper_mask] = rs[:,:,a][upper_mask]
         im[:,:,a][center_mask] = gm[:,:,a][center_mask]
-        im[:,:,a][lower_mask] = rs[:,:,a][lower_mask]
+        im[:,:,a][lower_mask] = dt[:,:,a][lower_mask]
     if do_imshow:
         return plt.imshow(im)
     else:
