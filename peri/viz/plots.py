@@ -845,31 +845,57 @@ def crb_rad(state0, samples0, state1, samples1, crb0, crb1):
     pp(ax, drad, sim, crb, 'a')
 
 
-def twoslice(field, inner, zlayer=None, xlayer=None, size=6.0,
-        cmap='bone_r', vmin=0, vmax=1):
-    field = field[inner]
+def twoslice(field, center=None, size=6.0, cmap='bone_r', vmin=0, vmax=1,
+        orientation='vertical', figpad=1.09, off=0.01):
+    """
+    Plot two parts of the ortho view, the two sections given by ``orientation``.
+    """
+    center = center or [i/2 for i in field.shape]
+    slices = []
+    for i,c in enumerate(center):
+        blank = [np.s_[:]]*len(center)
+        blank[i] = c
+        slices.append(tuple(blank))
 
-    slicez = zlayer or field.shape[0]/2
-    slicex = xlayer or field.shape[2]/2
-    slicer1 = np.s_[slicez,:,:]
-    slicer2 = np.s_[:,:,slicex]
+    z,y,x = [float(i) for i in field.shape]
+    w = float(x + z)
+    h = float(y + z)
 
-    sh = field.shape
-    q = float(sh[1]) / (sh[0]+sh[1])
-    r = float(sh[1] + sh[0]) / sh[1]
-
-    fig = pl.figure(figsize=(size, size*r*1.05))
-    ax1 = fig.add_axes((0, 1-q, 1, q))
-    ax2 = fig.add_axes((0, 0, 1, 1-q))
-
-    def show(ax, slicer):
-        ax.imshow(field[slicer], cmap=cmap, interpolation='nearest', vmin=vmin, vmax=vmax)
+    def show(field, ax, slicer, transpose=False):
+        tmp = field[slicer] if not transpose else field[slicer].T
+        ax.imshow(
+            tmp, cmap=cmap, interpolation='nearest',
+            vmin=vmin, vmax=vmax
+        )
         ax.set_xticks([])
         ax.set_yticks([])
         ax.grid('off')
 
-    show(ax1, slicer1)
-    show(ax2, slicer2)
+    if orientation.startswith('v'):
+        # rect = l,b,w,h
+        print x, y, z, w, h, x/h
+        r = x/h
+        q = y/h
+        f = 1 / (1 + 3*off)
+        fig = pl.figure(figsize=(size*r, size*f))
+        ax1 = fig.add_axes((off, f*(1-q)+2*off, f, f*q))
+        ax2 = fig.add_axes((off, off,           f, f*(1-q)))
+
+        show(field, ax1, slices[0])
+        show(field, ax2, slices[1])
+    else:
+        # rect = l,b,w,h
+        r = y/w
+        q = x/w
+        f = 1 / (1 + 3*off)
+        fig = pl.figure(figsize=(size*f, size*r))
+        ax1 = fig.add_axes((off,    off,   f*q, f))
+        ax2 = fig.add_axes((2*off+f*q, off, f*(1-q), f))
+
+        show(field, ax1, slices[0])
+        show(field, ax2, slices[2], transpose=True)
+
+    return fig, ax1, ax2
 
 def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
         cmap='bone_r', vmin=0, vmax=1, showimage=False, solid=False, pad=None):
