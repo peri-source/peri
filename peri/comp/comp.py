@@ -172,6 +172,9 @@ class Component(ParameterGroup, util.CompatibilityPatch):
             * :func:`~peri.comp.comp.Component.set_tile`
             * :func:`~peri.comp.comp.Component.get`
 
+        In order to facilitate optimizations such as caching and local updates,
+        we must incorporate tiling in this object. 
+
         Parameters
         ----------
         params : string, list of strings
@@ -342,11 +345,25 @@ class ComponentCollection(Component):
 
         Parameters
         -----------
-        comps : list of `peri.comp.Component`
+        comps : list of :class:`~peri.comp.comp.Component`
             The components to group together
 
-        field_reduce_func : function (list of ndarrays)
-            Reduction function for get object of collection
+        field_reduce_func : function(list of ndarrays)
+            Reduction function for get object of collection, what happens when
+            all comps are reduced to a single field (etc). For example, nested
+            point spread functions may want convolution to be the reduce func::
+
+                def reduce_conv(psfs):
+                    ffts = np.array([fft.fftn(p) for p in psfs])
+                    return fft.ifftn(np.prod(ffts, axis=0))
+
+            Or, if it is just a simple field that needs to be added together::
+
+                def reduce_add(x):
+                    return reduce(add, x)
+
+        category : string
+            Name of the category associated with this ``ComponentCollection``
         """
         self.comps = comps
         self.category = category
