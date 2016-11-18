@@ -668,8 +668,8 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     ainds = []
     for p in added_poses:
         ainds.append(st.obj_closest_particle(p))
-    if len(ainds) > 0:
-        opt.do_levmarq_particles(st, np.array(ainds), include_rad=True,
+    for i in ainds:
+        opt.do_levmarq_particles(st, np.array([i]), include_rad=True,
                 max_iter=3)
 
     #6. Ensure that current error after add-subtracting is lower than initial
