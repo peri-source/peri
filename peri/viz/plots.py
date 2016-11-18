@@ -443,16 +443,16 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
             Default is 'calc' = 0.5(data.min() + model.min())
         res_vmax : Float
             vmax for the imshow for the residuals. Default is +0.1
-        edgepts : Nested list-like or scalar.
+        edgepts : Nested list-like or float.
             The vertices of the triangles which determine the splitting of
             the image. The vertices are at (image corner, (edge, y), and
             (x,edge), where edge is the appropriate edge of the image.
-                edgepts[0] : (x,y) points for the lower/upper edge
-                edgepts[1] : (x,y) points for the upper/lower edge
+                edgepts[0] : (x,y) points for the upper edge
+                edgepts[1] : (x,y) points for the lower edge
             Default is 'calc' which calculates edge points by splitting the
-            image into 3 regions of equal area. If it's a float scalar, it
-            calculates edge_pts based on a constant fraction of distance from
-            the edge.
+            image into 3 regions of equal area. If edgepts is a float
+            scalar, calculates the edge points based on a constant fraction
+            of distance from the edge.
         do_imshow : Bool
             If True, imshow's and returns the returned handle.
             If False, returns the array as a [M,N,4] array.
@@ -474,12 +474,12 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
     residuals = s.residuals[tile.slicer].squeeze()
     data = s.data[tile.slicer].squeeze()
     model = s.model[tile.slicer].squeeze()
-    if len(data.shape) != 2:
+    if data.ndim != 2:
         raise ValueError('tile does not give a 2D slice')
 
     im = np.zeros([data.shape[0], data.shape[1], 4])
     im_x, im_y = np.meshgrid(np.arange(im.shape[0]), np.arange(im.shape[1]),
-            indexing='ij')
+            indexing='xy')
     if np.size(edgepts) == 1:
         #Gets equal-area sections, at sqrt(2/3) of the sides
         f = np.sqrt(2./3.) if edgepts == 'calc' else edgepts
@@ -494,12 +494,13 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
         data_vmax = 0.5*(data.max() + model.max())
 
     #1. Get masks
-    upper_region = im_y - (upper_edge[1] + (data.shape[1] - upper_edge[1]) *
-            im_x / float(upper_edge[0]))
-    upper_mask = np.round(upper_region) > 0
-    lower_region = im_y - lower_edge[1] * ((im_x - lower_edge[0]) /
-            (data.shape[0]-lower_edge[0]))
-    lower_mask = np.round(lower_region) < 0
+    lower_slope = lower_edge[1] / max(float(data.shape[0] - lower_edge[0]), 1e-9)
+    upper_slope = (data.shape[1] - upper_edge[1]) / float(upper_edge[0])
+    #and the edge points are the x or y intercepts
+    lower_intercept = -lower_slope * lower_edge[0]
+    upper_intercept = upper_edge[1]
+    lower_mask = im_y < (im_x * lower_slope + lower_intercept)
+    upper_mask = im_y > (im_x * upper_slope + upper_intercept)
 
     center_mask= -(lower_mask | upper_mask)
 
@@ -509,9 +510,9 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
     rs = res_cmap(center_data(residuals, res_vmin, res_vmax))
 
     for a in xrange(4):
-        im[:,:,a][lower_mask] = dt[:,:,a][lower_mask]
+        im[:,:,a][upper_mask] = dt[:,:,a][upper_mask]
         im[:,:,a][center_mask] = gm[:,:,a][center_mask]
-        im[:,:,a][upper_mask] = rs[:,:,a][upper_mask]
+        im[:,:,a][lower_mask] = rs[:,:,a][lower_mask]
     if do_imshow:
         return plt.imshow(im)
     else:
