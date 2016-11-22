@@ -572,7 +572,7 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
     return [tiles[i] for i in np.argsort(volumes)[::-1]]
 
 def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
-        invert=True, **kwargs):
+        invert=True, max_allowed_remove=20, **kwargs):
     """
     Automatically adds and subtracts missing & extra particles in a region
     of poor fit.
@@ -583,17 +583,23 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
             The state to add and subtract particles to.
         tile : peri.util.Tile instance
             The poorly-fit region to examine.
-        rad : Float or 'calc'
+        rad : Float or 'calc', optional
             The initial radius for added particles; added particles radii
             are not fit until the end of add_subtract. Default is 'calc',
             which uses the median radii of active particles.
             the previous attempt. Default is False.
-        max_iter : Int
+        max_iter : Int, optional
             The maximum number of loops for attempted adds at one tile
             location. Default is 3.
-        invert : Bool
+        invert : Bool, optional
             Whether to invert the image for feature_guess. Default is True,
             i.e. dark particles on bright background.
+        max_allowed_remove : Int, optional
+            The maximum number of particles to remove. If the misfeatured
+            tile contains more than this many particles, raises an error.
+            If it contains more than half as many particles, throws a
+            warning. If more than this many particles are added, they are
+            optimized in blocks of max_allowed_remove. Default is 20.
 
     **kwargs Parameters
     -------------------
@@ -637,13 +643,22 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
         3.  Optimize the added particles positions only.
         4.  Run 2-3 until no particles have been added.
         5.  Optimize added particle radii
+    Because all the particles are removed within a tile, it is important
+    to set max_allowed_remove to a reasonable value. Otherwise, if the
+    tile is the size of the image it can take a long time to remove all
+    the particles and re-add them.
     """
     if rad == 'calc':
         rad = np.median(st.obj_get_radii())
     #1. Remove all possibly bad particles within the tile.
     initial_error = np.copy(st.error)
     rinds = np.nonzero(tile.contains(st.obj_get_positions()))[0]
-    if rinds.size > 0:
+    if rinds.size >= max_allowed_remove:
+        CLOG.fatal('Misfeatured region too large!')
+        raise RuntimeError
+    elif rinds.size >= max_allowed_remove/2:
+        CLOG.warn('Large misfeatured regions.')
+    elif rinds.size > 0:
         rpos, rrad = st.obj_remove_particle(rinds)
 
     #2-4. Feature and add particles to the tile, optimize, run until none added
@@ -668,7 +683,11 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     ainds = []
     for p in added_poses:
         ainds.append(st.obj_closest_particle(p))
-    for i in ainds:
+    if len(ainds) > max_allowed_remove:
+        for i in xrange(0, len(ainds), max_allowed_remove):
+            opt.do_levmarq_particles(st, np.array(ainds[i:i +
+                    max_allowed_remove]), include_rad=True, max_iter=3)
+    elif len(ainds) > 0:
         opt.do_levmarq_particles(st, np.array([i]), include_rad=True,
                 max_iter=3)
 
@@ -719,6 +738,24 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
 
     **kwargs Parameters, to add_subtract_misfeatured_tile
     ------------------------------------------------------
+        rad : Float or 'calc', optional
+            The initial radius for added particles; added particles radii
+            are not fit until the end of add_subtract. Default is 'calc',
+            which uses the median radii of active particles.
+            the previous attempt. Default is False.
+        max_iter : Int, optional
+            The maximum number of loops for attempted adds at one tile
+            location. Default is 3.
+        invert : Bool, optional
+            Whether to invert the image for feature_guess. Default is True,
+            i.e. dark particles on bright background.
+        max_allowed_remove : Int, optional
+            The maximum number of particles to remove. If the misfeatured
+            tile contains more than this many particles, raises an error.
+            If it contains more than half as many particles, throws a
+            warning. If more than this many particles are added, they are
+            optimized in blocks of max_allowed_remove. Default is 20.
+
         im_change_frac : Float, between 0 and 1.
             If adding or removing a particle decreases the error less than
             im_change_frac*the change in the image, the particle is deleted.
@@ -739,6 +776,13 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
             Set to True to use trackpy to find missing particles inside
             the image. Not recommended since trackpy deliberately cuts
             out particles at the edge of the image. Default is False.
+
+        max_allowed_remove : Int, optional
+            The maximum number of particles to remove. If the misfeatured
+            tile contains more than this many particles, raises an error.
+            If it contains more than half as many particles, throws a
+            warning. If more than this many particles are added, they are
+            optimized in blocks of max_allowed_remove. Default is 20.
 
     Returns
     -------
@@ -764,7 +808,7 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
         Because this algorithm is more judicious about chooosing regions
     to check, and more aggressive about removing particles in those
     regions, it runs faster and does a better job than the (global)
-    add_subtract. However, this function does not necessarily work better
+    add_subtract. However, this function usually does not work better
     as an initial add-subtract on an image, since (1) it doesn't check
     for removing small/big particles per se, and (2) when the poorly-
     featured regions of the image are large or when the fit is bad, it
