@@ -110,6 +110,9 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, **kwargs):
             List of the positions of the added particles. If do_opt==True,
             then these positions will differ from the input 'guess'.
     """
+    #FIXME right now this adds, removes, adds again if good. It should be
+    #add, remove if bad (always 1 update faster).
+    #sub-function out the bit from check_remove_particle
     accepts = 0
     new_poses = []
     if rad == 'calc':
@@ -174,13 +177,44 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
     p = p[0]; r = r[0]
     absent_err = st.error; absent_d = st.residuals.copy()
 
-    im_change = np.sum((present_d - absent_d)**2)
-    if (absent_err - present_err) >= max([im_change_frac * im_change, min_derr]):
+    if should_particle_exist(absent_err, present_err, absent_d, present_d,
+            im_change_frac=im_change_frac, min_derr=min_derr):
         st.obj_add_particle(p, r)
         killed = False
     else:
         killed = True
     return killed, tuple(p), (r,)
+
+def should_particle_exist(absent_err, present_err, absent_d, present_d,
+        im_change_frac=0.2, min_derr=0.1):
+    """
+    Checks whether or not adding a particle should be present.
+
+    Parameters
+    ----------
+        absent_err : Float
+            The state error without the particle.
+        present_err : Float
+            The state error with the particle.
+        absent_d : numpy.ndarray
+            The state residuals without the particle.
+        present_d : numpy.ndarray
+            The state residuals with the particle.
+        im_change_frac : Float, optional
+            How good the change in error needs to be relative to the change
+            in the residuals. Default is 0.2; i.e. return False if the
+            error does not decrease by 0.2 x the change in the residuals.
+        min_derr : Float, optional
+            The minimal improvement in error. Default is 0.1
+
+    Returns
+    -------
+        Bool
+            True if the errors is better with the particle present.
+    """
+    delta_im = np.ravel(present_d - absent_d)
+    im_change = np.dot(delta_im, delta_im)
+    return (absent_err - present_err) >= max([im_change_frac * im_change, min_derr])
 
 def add_missing_particles(st, rad='calc', tries=50, **kwargs):
     """
@@ -547,6 +581,9 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
             the local error is too large.
         4.  Parse the misfeatured regions into tiles.
         5.  Return the sorted tiles.
+    FIXME you could do an Otsu threshold to calculate the sigma cutoff;
+    seems to work OK in my one test; although it's a # similar to the
+    sigma cutoff.
     """
     #1. Field of local std
     r = st.residuals
