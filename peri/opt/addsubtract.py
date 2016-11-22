@@ -125,8 +125,9 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
         absent_d = st.residuals.copy()
         ind = st.obj_add_particle(p0, rad)
         if do_opt:
-            opt.do_levmarq_particles(st, ind, damping=1.0, max_iter=2,
-                    run_length=3, eig_update=False, include_rad=False) #the slowest part of this
+            opt.do_levmarq_particles(st, ind, damping=1.0, max_iter=1,
+                    run_length=3, eig_update=False, include_rad=False)
+                    #the slowest part of this
         present_err = st.error
         present_d = st.residuals.copy()
         dont_kill = should_particle_exist(absent_err, present_err, absent_d,
