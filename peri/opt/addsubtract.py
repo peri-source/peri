@@ -72,7 +72,8 @@ def _feature_guess(im, rad, minmass=None, use_tp=False, **kwargs):
     inds = np.argsort(mass)[::-1] #biggest mass first
     return guess[inds].copy(), npart
 
-def check_add_particles(st, guess, rad='calc', do_opt=True, **kwargs):
+def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
+        min_derr='3sig'):
     """
     Checks whether to add particles at a given position by seeing if adding
     the particle improves the fit of the state.
@@ -89,15 +90,11 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, **kwargs):
         do_opt : Bool, optional
             Whether to optimize the particle position before checking if it
             should be kept. Default is True (optimizes position).
-
-    **kwargs Parameters
-    -------------------
         im_change_frac : Float
             How good the change in error needs to be relative to the change
             in the difference image. Default is 0.2; i.e. if the error does
             not decrease by 20% of the change in the difference image, do
             not add the particle.
-
         min_derr : Float or '3sig'
             The minimal improvement in error to add a particle. Default
             is '3sig' = 3*st.sigma.
@@ -113,30 +110,40 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, **kwargs):
     #FIXME right now this adds, removes, adds again if good. It should be
     #add, remove if bad (always 1 update faster).
     #sub-function out the bit from check_remove_particle
+    if min_derr == '3sig':
+        min_derr = 3 * st.sigma
     accepts = 0
     new_poses = []
-    if rad == 'calc':
+    if rad is 'calc':
         rad = np.median(st.obj_get_radii())
     message = '-'*30 + 'ADDING' + '-'*30 + '\n  Z\t  Y\t  X\t  R\t|\t ERR0\t\t ERR1'
     with log.noformat():
         CLOG.info(message)
     for a in xrange(guess.shape[0]):
         p0 = guess[a]
-        old_err = st.error
+        absent_err = st.error
+        absent_d = st.residuals.copy()
         ind = st.obj_add_particle(p0, rad)
         if do_opt:
             opt.do_levmarq_particles(st, ind, damping=1.0, max_iter=2,
-                    run_length=3, eig_update=False, include_rad=False)
-        did_kill, p, r = check_remove_particle(st, ind, **kwargs)
-        if not did_kill:
+                    run_length=3, eig_update=False, include_rad=False) #the slowest part of this
+        present_err = st.error
+        present_d = st.residuals.copy()
+        dont_kill = should_particle_exist(absent_err, present_err, absent_d,
+                present_d, im_change_frac=im_change_frac, min_derr=min_derr)
+        # did_kill, p, r = check_remove_particle(st, ind, **kwargs)
+        if dont_kill:
             accepts += 1
+            p = tuple(st.obj_get_positions()[ind].ravel())
+            r = tuple(st.obj_get_radii()[ind].ravel())
             new_poses.append(p)
             part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
-                    p + r + (old_err, st.error))
+                    p + r + (absent_err, st.error))
             with log.noformat():
                 CLOG.info(part_msg)
         else:
-            if np.abs(old_err - st.error) > 1e-4:
+            st.obj_remove_particle(ind)
+            if np.abs(absent_err - st.error) > 1e-4:
                 raise RuntimeError('updates not exact?')
     return accepts, new_poses
 
