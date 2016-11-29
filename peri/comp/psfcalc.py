@@ -313,17 +313,6 @@ def get_hsym_asym(rho, z, get_hdet=False, include_K3_det=True, **kwargs):
             The ratio n2/n1 of the index mismatch between the sample
             (index n2) and the optical train (index n1). Must be on
             [0,inf) but should be near 1. Default is 0.95
-        K : {1, 2, 3}, optional
-            Which of the 3 integrals to evaluate. Default is 1
-        Kprefactor : numpy.ndarray or None
-            This array is calculated internally and optionally returned;
-            pass it back to avoid recalculation and increase speed. Default
-            is None, i.e. calculate it internally.
-        return_Kprefactor : Bool, optional
-            Set to True to also return the Kprefactor (parameter above)
-            to speed up the calculation for the next values of K. Default
-            is False        alpha : Float, optional
-            scalar on (0,pi/2). The acceptance angle of the lens.
 
     Returns
     -------
@@ -376,9 +365,10 @@ def calculate_pinhole_psf(x, y, z, kfki=0.89, zint=100.0, normalize=False,
     **kwargs Parameters
     -------------------
         alpha : Float
-            The opening angle of the lens.
+            The opening angle of the lens. Default is 1.
         n2n1 : Float
             The ratio of the index in the 2nd medium to that in the first.
+            Default is 0.95
 
     Returns
     -------
@@ -489,9 +479,10 @@ def calculate_polychrome_pinhole_psf(x, y, z, normalize=False, kfki=0.889,
     **kwargs Parameters
     -------------------
         alpha : Float
-            The opening angle of the lens.
+            The opening angle of the lens. Default is 1.
         n2n1 : Float
             The ratio of the index in the 2nd medium to that in the first.
+            Default is 0.95
 
     Returns
     -------
@@ -536,23 +527,39 @@ def calculate_polychrome_pinhole_psf(x, y, z, normalize=False, kfki=0.889,
 
 def get_psf_scalar(x, y, z, kfki=1., zint=100.0, normalize=False, **kwargs):
     """
-    Gets an exact, wide-angle PSF for scalar (non-vectorial) light, i.e.
-    ignoring the effects of polarization, for one set of points (x,y,z).
-    This calculation also ignores the apodization factor for the ilm psf.
-    Inputs:
-        - x: Numpy array, the x-coordinate of the PSF in units of 1/ the
-            wavevector of the incoming light.
-        - y: Numpy array, the y-coordinate.
-        - z: Numpy array, the z-coordinate.
-        - kfki: Float scalar, the ratio of wavevectors of the outgoing light
-            to the incoming light. Default is 1.0, which makes it 2x faster.
-        - zint: Float scalar, the distance from the interface, in units of
-            1/k_incoming. Default is 100.0
-        - alpha: The opening angle of the lens.
-        - n2n1: The ratio of the index in the 2nd medium to that in the first.
-        - normalize: Boolean. Set to True to normalize the psf correctly,
-            accounting for intensity variations with depth. This will give a
-            psf that does not sum to 1.
+    Calculates a scalar (non-vectorial light) approximation to a confocal PSF
+
+    The calculation is approximate, since it ignores the effects of
+    polarization and apodization, but should be ~3x faster.
+
+    Parameters
+    ----------
+        x : numpy.ndarray
+            The x-coordinate of the PSF in units of 1/ the wavevector
+            of the incoming light.
+        y : numpy.ndarray
+            The y-coordinate of the PSF in units of 1/ the wavevector
+            of the incoming light. Must be the same shape as `x`.
+        z : numpy.ndarray
+            The z-coordinate of the PSF in units of 1/ the wavevector
+            of the incoming light. Must be the same shape as `x`.
+        kfki : Float, optional
+            The ratio of wavevectors of the outgoing light to the
+            incoming light. Set to 1.0 to speed up the calculation
+            by another factor of 2. Default is 1.0
+        zint : Float, optional
+            The distance from to the optical interface, in units of
+            1/k_incoming. Default is 100.
+        normalize : Bool
+            Set to True to normalize the psf correctly, accounting for
+            intensity variations with depth. This will give a psf that does
+            not sum to 1. Default is False.
+        alpha : Float
+            The opening angle of the lens. Default is 1.
+        n2n1 : Float
+            The ratio of the index in the 2nd medium to that in the first.
+            Default is 0.95
+
     Outputs:
         - psf: x.shape numpy.array.
 
@@ -598,28 +605,51 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
     """
     Calculates the illumination PSF for a line-scanning confocal with the
     confocal line oriented along the x direction.
-    Inputs:
-        - y, z: Float numpy.arrays of the y- and z- points to evaluate
-            the illumination PSF at, in units of 1/k. Arbitrary shape.
-        - polar_angle: The angle of the illuminating light's polarization with
-            respect to the x-axis (the line's orientation).
-        - pinhole_width: The width of the geometric image of the line projected
-            onto the sample, in units of 1/k. Default is 1. Set to 0 by setting
-            nlpts = 1. The perfect line image is assumed to be a Gaussian.
-        - nlpts: The number of points to use for Hermite-gauss quadrature over
-            the line's width. Default is 1, corresponding to an infinitesmally
-            thin line.
-        - use_laggauss:     Bool
-            Set to True to use a more-accurate sinh'd Laguerre-Gauss quadrature
-            for integration over the line's length (more accurate in the
-            same amount of time). Default is False for backwards compatibility.
-        - **kwargs: Paramters such as alpha, n2n1 that are passed to
-            get_hsym_hasym
-    Outputs:
-        - hilm: Float numpy.array of the line illumination, of the same shape
-            as y and z.
-    """
 
+    Parameters
+    ----------
+        y : numpy.ndarray
+            The y points (in-plane, perpendicular to the line direction)
+            at which to evaluate the illumination PSF, in units of 1/k.
+            Arbitrary shape.
+        z : numpy.ndarray
+            The z points (optical axis) at which to evaluate the illum-
+            ination PSF, in units of 1/k. Must be the same shape as `y`
+        polar_angle : Float, optional
+            The angle of the illuminating light's polarization with
+            respect to the line's orientation along x. Default is 0.
+        pinhole_width : Float, optional
+            The width of the geometric image of the line projected onto
+            the sample, in units of 1/k. Default is 1. The perfect line
+            image is assumed to be a Gaussian. If `nlpts` is set to 1,
+            the line will always be of zero width.
+        nlpts : Int, optional
+            The number of points to use for Hermite-gauss quadrature over
+            the line's width. Default is 1, corresponding to a zero-width
+            line.
+        use_laggauss : Bool, optional
+            Set to True to use a more-accurate sinh'd Laguerre-Gauss
+            quadrature for integration over the line's length (more accurate
+            in the same amount of time). Default is False for backwards
+            compatibility.  FIXME what did we do here?
+
+    **kwargs Parameters
+    -------------------
+        alpha : Float, optional
+            The acceptance angle of the lens, on (0,pi/2). Default is 1.
+        zint : Float, optional
+            The distance of the len's unaberrated focal point from the
+            optical interface, in units of 1/k. Default is 100.
+        n2n1 : Float, optional
+            The ratio n2/n1 of the index mismatch between the sample
+            (index n2) and the optical train (index n1). Must be on
+            [0,inf) but should be near 1. Default is 0.95
+
+    Returns
+    -------
+        hilm : numpy.ndarray
+            The line illumination, of the same shape as y and z.
+    """
     if use_laggauss:
         x_vals, wts = calc_pts_lag()
     else:
@@ -655,34 +685,56 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
 def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
         polar_angle=0., wrap=True, **kwargs):
     """
+    Calculates the point spread function of a line-scanning confocal.
+
     Make x,y,z  __1D__ numpy.arrays, with x the direction along the
     scan line. (to make the calculation faster since I dont' need the line
     ilm for each x).
 
-    Inputs:
-        - x, y, z: 1D numpy.arrays of the grid points to evaluate the PSF at.
-            Floats, in units of 1/k_incoming. = lambda/2pi
-    Optional Inputs:
-        - normalize: Boolean. Set to True to include the effects of PSF
-            normalization on the image intensity.
-        - kfki: The ratio of the final light's wavevector to the incoming.
+    Parameters
+    ----------
+        x : numpy.ndarray
+            _One_dimensional_ array of the x grid points (along the line
+            illumination) at which to evaluate the psf. In units of
+            1/k_incoming.
+        y : numpy.ndarray
+            _One_dimensional_ array of the y grid points (in plane,
+            perpendicular to the line illumination) at which to evaluate
+            the psf. In units of 1/k_incoming.
+        z : numpy.ndarray
+            _One_dimensional_ array of the z grid points (along the
+            optical axis) at which to evaluate the psf. In units of
+            1/k_incoming.
+        normalize : Bool, optional
+            Set to True to include the effects of PSF normalization on
+            the image intensity. Default is False.
+        kfki : Float, optional
+            The ratio of the final light's wavevector to the incoming.
             Default is 0.889
-        - zint: The position of the optical interface, in units of 1/k_incoming
-        - wrap : Bool
-            Wraps the psf calculation for speed, assuming that the input x,y
-            are regularly-spaced points. Default is True. If x,y are not
-            regularly spaced then set wrap=False.
-        Other **kwargs
-        - polar_angle: Float scalar of the polarization angle of the light with
-            respect to the line direction (x). From calculate_linescan_ilm_psf;
-            default is 0.
-        - alpha: The aperture angle of the lens; default 1. From get_K().
-            (in radians, 1.173 for our confocal / arcsin(n2n1))
-        - n2n1: The index mismatch of the sample; default 0.95. From get_K().
-            for our confocal, 1.4/1.518
-    Outputs:
-        - psf: 3D- numpy.array of the point-spread function. Indexing is
-            psf[x,y,z].
+        zint : Float, optional
+            The position of the optical interface, in units of 1/k_incoming
+            Default is 100.
+        wrap : Bool, optional
+            If True, wraps the psf calculation for speed, assuming that
+            the input x, y are regularly-spaced points. If x,y are not
+            regularly spaced then `wrap` must be set to False. Default is True.
+        polar_angle : Float, optional
+            The polarization angle of the light (radians) with respect to
+            the line direction (x). Default is 0.
+
+        **kwargs Parameters
+        --------------------
+        alpha : Float
+            The opening angle of the lens. Default is 1.
+        n2n1 : Float
+            The ratio of the index in the 2nd medium to that in the first.
+            Default is 0.95
+
+    Returns
+    -------
+        numpy.ndarray
+            A 3D- numpy.array of the point-spread function. Indexing is
+            psf[x,y,z]; shape is [x.size, y,size, z.size]
     """
 
     #0. Set up vecs
@@ -731,37 +783,66 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
         sigkf=0.1, zint=100., nkpts=3, dist_type='gaussian', wrap=True,
         **kwargs):
     """
-    Calculates the full PSF for a line-scanning confocal with a polydisperse
-    emission spectrum of the dye. The dye's emission spectrum is assumed to be
-    Gaussian.
-    Inputs:
-        - x, y, z: 1D numpy.arrays of the grid points to evaluate the PSF at.
-            Floats, in units of 1/k_incoming.
-    Optional Inputs:
-        - normalize: Boolean. Set to True to include the effects of PSF
-            normalization on the image intensity.
-        - kfki: The mean ratio of the final light's wavevector to the incoming.
-            Default is 0.889
-        - sigkf: Float scalar; sigma of kfki -- kfki values are kfki +- sigkf.
-        - zint: The position of the optical interface, in units of 1/k_incoming
-        - dist_type: The distribution type of the polychromatic light.
-            Can be one of 'laguerre'/'gamma' or 'gaussian.' If 'gaussian'
-            the resulting k-values are taken in absolute value. Default
-            is 'gaussian.'
-        - wrap : Bool
-            Wraps the psf calculation for speed, assuming that the input x,y
-            are regularly-spaced points. Default is True. If x,y are not
-            regularly spaced then set wrap=False.
-    Other **kwargs
-        - polar_angle: Float scalar of the polarization angle of the light with
-            respect to the line direction (x). From calculate_linescan_ilm_psf;
-            default is 0.
-        - alpha: The aperture angle of the lens; default 1. From get_K().
-        - n2n1: The index mismatch of the sample; default 0.95. From get_K().
-    Outputs:
-        - psf: 3D- numpy.array of the point-spread function. Indexing is
-            psf[x,y,z].
-    Comments:
+    Calculates the point spread function of a line-scanning confocal with
+    polydisperse dye emission.
+
+    Make x,y,z  __1D__ numpy.arrays, with x the direction along the
+    scan line. (to make the calculation faster since I dont' need the line
+    ilm for each x).
+
+    Parameters
+    ----------
+        x : numpy.ndarray
+            _One_dimensional_ array of the x grid points (along the line
+            illumination) at which to evaluate the psf. In units of
+            1/k_incoming.
+        y : numpy.ndarray
+            _One_dimensional_ array of the y grid points (in plane,
+            perpendicular to the line illumination) at which to evaluate
+            the psf. In units of 1/k_incoming.
+        z : numpy.ndarray
+            _One_dimensional_ array of the z grid points (along the
+            optical axis) at which to evaluate the psf. In units of
+            1/k_incoming.
+        normalize : Bool, optional
+            Set to True to include the effects of PSF normalization on
+            the image intensity. Default is False.
+        kfki : Float, optional
+            The mean of the ratio of the final light's wavevector to the
+            incoming. Default is 0.889
+        sigkf : Float, optional
+            The standard deviation of the ratio of the final light's
+            wavevector to the incoming. Default is 0.1
+        zint : Float, optional
+            The position of the optical interface, in units of 1/k_incoming
+            Default is 100.
+        dist_type : {`gaussian`, `gamma`}, optional
+            The distribution of the outgoing light. If 'gaussian' the
+            resulting k-values are taken in absolute value. Default
+            is `gaussian`
+        wrap : Bool, optional
+            If True, wraps the psf calculation for speed, assuming that
+            the input x, y are regularly-spaced points. If x,y are not
+            regularly spaced then `wrap` must be set to False. Default is True.
+
+        **kwargs Parameters
+        --------------------
+        polar_angle : Float, optional
+            The polarization angle of the light (radians) with respect to
+            the line direction (x). Default is 0.
+        alpha : Float
+            The opening angle of the lens. Default is 1.
+        n2n1 : Float
+            The ratio of the index in the 2nd medium to that in the first.
+            Default is 0.95
+
+    Returns
+    -------
+        numpy.ndarray
+            A 3D- numpy.array of the point-spread function. Indexing is
+            psf[x,y,z]; shape is [x.size, y,size, z.size]
+    Notes
+    -----
         Neither distribution type is perfect. If sigkf/k0 is big (>0.5ish)
         then part of the Gaussian is negative. To avoid issues an abs() is
         taken, but then the actual mean and variance are not what is
@@ -820,17 +901,35 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
 
 def calculate_monochrome_fluorescence_psf(x, y, z, normalize=False, **kwargs):
     """
-    Calculate the PSF for fluorescence, assuming illumination with unpolarized
-    but vectorial light.
-    Inputs:
-        - x, y, z: numpy.arrays of the same shape at which to evaluate the psf
-    Optional (**kwargs) arguments:
-        - alpha
-        - n2n1
-        - zint
+    Calculate a PSF for fluorescence microscopy with monochromatic emission.
 
-    Outputs:
-        - psf: numpy.array of the psf, shape x.shape == y.shape == z.shape
+    Parameters
+    -----------
+        x : numpy.ndarray
+            The x-coordinates of the PSF in units of 1/ the wavevector of
+            the incoming light.
+        y : numpy.ndarray
+            The y-coordinate. Must be the same shape as `x`
+        z : numpy.ndarray
+            The z-coordinate. Must be the same shape as `x`
+        normalize : Bool, optional
+            Set to True to normalize the psf correctly such that each
+            z-slice sums to 1. This will change the relative values of
+            psf(z) at fixed rho. Default is False
+    **kwargs Parameters
+    -------------------
+        zint : Float
+            The (scalar) distance from the interface, in units of
+            1/k_incoming. Default is 100.0
+        alpha : Float
+            The opening angle of the lens. Default is 1.
+        n2n1 : Float
+            The ratio of the index in the 2nd medium to that in the first.
+            Default is 0.95
+    Returns
+    -------
+        numpy.ndarray
+            The psf, the same shape as `x`, `y`, and `z`
     """
     rho = np.sqrt(x**2 + y**2)
     psf, toss = get_hsym_asym(rho, z, get_hdet=True, **kwargs)
@@ -843,10 +942,48 @@ def calculate_monochrome_fluorescence_psf(x, y, z, normalize=False, **kwargs):
 def calculate_polychrome_fluorescence_psf(x, y, z, k0=1., sigk=0.1, npts=3,
         **kwargs):
     """
-    Polychromatic version of calculate_monochrome_fluorescence_psf, with
-    a gaussian distribution of wavevectors, mean k0 and std sigkf.
-    Should probably be incorporated into make_polydisperse_psf FIXME
+    Calculate a PSF for fluorescence microscopy with polychromatic emission
+
+    This calls calculate_monochrome_fluorescence_psf internally for each
+    value of k. Assumes that the distribution of light is Gaussian.
+
+    Parameters
+    -----------
+        x : numpy.ndarray
+            The x-coordinates of the PSF in units of 1/ the wavevector of
+            the incoming light.
+        y : numpy.ndarray
+            The y-coordinate. Must be the same shape as `x`
+        z : numpy.ndarray
+            The z-coordinate. Must be the same shape as `x`
+        k0 : Float, optional
+            The mean of the emitted light wavevectors. Default is 1.0
+        sigk : Float, optional
+            The standard deviation of the emitted light wavevectors.
+            Default is 0.1
+        npts : Int, optional
+            The order of the Gauss-Hermite quadrature to use. Default is 3
+
+    **kwargs Parameters
+    -------------------
+        normalize : Bool, optional
+            Set to True to normalize the psf correctly such that each
+            z-slice sums to 1. This will change the relative values of
+            psf(z) at fixed rho. Default is False
+        zint : Float
+            The (scalar) distance from the interface, in units of
+            1/k_incoming. Default is 100.0
+        alpha : Float
+            The opening angle of the lens. Default is 1.
+        n2n1 : Float
+            The ratio of the index in the 2nd medium to that in the first.
+            Default is 0.95
+    Returns
+    -------
+        numpy.ndarray
+            The psf, the same shape as `x`, `y`, and `z`
     """
+    # Should probably be incorporated into make_polydisperse_psf FIXME
     pts,wts = np.polynomial.hermite.hermgauss(npts)
     kpts = k0 + sigk*np.sqrt(2)*pts
     wts /= np.sqrt(np.pi) #normalizing the integral
@@ -865,12 +1002,15 @@ def calculate_polychrome_fluorescence_psf(x, y, z, k0=1., sigk=0.1, npts=3,
 
 def calc_monochrome_brightfield_pointdipole(rho, z, normalize=False, **kwargs):
     """
+    Calculates a brightfield psf, for monochromatic illumination.
+
     Given rho, z, returns the image of a dipole scatterer as imaged
     through a finite-aperture lens with spherical aberrations due to an
     index mismatch between the lens and fluid, using monochromatic light.
     Includes both the heterodyne and homodyne contributions.
-    Input Parameters
-    ----------------
+
+    Parameters
+    ----------
         rho : numpy.ndarray
             N-element numpy.array of the rho values at which to
             evaluate the psf. Arbitrary shape. Units of 1/k.
@@ -890,7 +1030,9 @@ def calc_monochrome_brightfield_pointdipole(rho, z, normalize=False, **kwargs):
         zint : Float
             Float scalar. The distance between the optical interface and
             the lens's nominal focal point.
-    Outputs:
+
+    Returns
+    -------
         psf: numpy.array of the same shape as rho, of the image of a
             dipole scatterer at varying z's in the image space. Same
             shape as rho,z.
@@ -918,6 +1060,7 @@ def calc_monochrome_brightfield_pointdipole(rho, z, normalize=False, **kwargs):
 def make_polydisperse_psf(rho, z, func, k0=1.0, sigk=0.3, num_hg=10, **kwargs):
     """
     Given a monodisperse PSF function, calculates a polydisperse PSF.
+
     Input Parameters
     ----------------
         rho : np.ndarray
@@ -937,6 +1080,10 @@ def make_polydisperse_psf(rho, z, func, k0=1.0, sigk=0.3, num_hg=10, **kwargs):
         **kwargs : **kwargs
             Any parameters passed to func.
 
+    Returns
+    -------
+        numpy.ndarray
+            The polydisperse psf, of whatever shape is returned by `func`
     TODO:
     Give this a way to do non-gaussian distributions of k
     """
@@ -959,6 +1106,8 @@ def make_polydisperse_psf(rho, z, func, k0=1.0, sigk=0.3, num_hg=10, **kwargs):
 
 def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
     """
+    Wraps a point-spread function in x and y.
+
     Speeds up psf calculations by a factor of 4 for free / some broadcasting
     by exploiting the x->-x, y->-y symmetry of a psf function. Pass x and y
     as the positive (say) values of the coordinates at which to evaluate func,
@@ -984,8 +1133,8 @@ def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
             The wrapped and calculated psf, of shape
             [2*x.size - x0, 2*y.size - y0, z.size], where x0=1 if x[0]=0, etc.
 
-    Comments
-    --------
+    Notes
+    -----
     The coordinates should be something like numpy.arange(start, stop, diff),
     with start near 0. If x[0]==0, all of x is calcualted but only x[1:]
     is wrapped (i.e. it works whether or not x[0]=0).
@@ -994,7 +1143,6 @@ def wrap_and_calc_psf(xpts, ypts, zpts, func, **kwargs):
     portion is not like a grid. However, the illumination and detection
     are already combined with wrap_and_calc in calculate_linescan_psf etc.
     """
-
     #1. Checking that everything is hunky-dory:
     for t in [xpts,ypts,zpts]:
         if len(t.shape) != 1:
