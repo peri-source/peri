@@ -21,11 +21,11 @@ the lens, so they shouldn't be too rapidly varying, but you might need more
 points for large z,zint (large compared to 100).
 """
 NPTS = 20
-PTS,WTS = np.polynomial.legendre.leggauss(NPTS)
+PTS,WTS = np.polynomial.legendre.leggauss(NPTS)  #only used in get_K; 1ms overhead for 20
 #This was the old way for the line scans:
 PTS_HG,WTS_HG = np.polynomial.hermite.hermgauss(NPTS*2)
 PTS_HG = PTS_HG[NPTS:]
-WTS_HG = WTS_HG[NPTS:]*np.exp(PTS_HG*PTS_HG)
+WTS_HG = WTS_HG[NPTS:]*np.exp(PTS_HG*PTS_HG)  #only used in calculate_linescan_ilm_psf, along with calc_pts_lag
 
 #This is the new way:
 def calc_pts_lag(npts=20, scl=0.051532):
@@ -50,22 +50,35 @@ def calc_pts_lag(npts=20, scl=0.051532):
 
 def f_theta(cos_theta, zint, z, n2n1=0.95, sph6_ab=None, **kwargs):
     """
+    Returns the wavefront aberration for an aberrated, defocused lens.
+
     Calculates the portions of the wavefront "aberration" due to z, theta
-    only. (the rho portion I've integrated analytically to Bessels.)
-    Inputs
-        cos_theta: N-element numpy.ndarray.
-            The values of cos(theta) at which to compute f_theta.
-        zint: Float
+    only, for a lens with defocus and spherical aberration induced by
+    coverslip mismatch. (The rho portion can be analytically integrated
+    to Bessels.)
+
+    Parameters
+    ----------
+        cos_theta : numpy.ndarray.
+            The N values of cos(theta) at which to compute f_theta.
+        zint : Float
             The position of the lens relative to the interface.
-        z: M-element numpy.ndarray
-            The z-values to compute f_theta at. z.size is unrelated to
-            cos_theta.size.
-        n2n1: Float
+        z : numpy.ndarray
+            The M z-values to compute f_theta at. `z.size` is unrelated
+            to `cos_theta.size`
+        n2n1: Float, optional
             The ratio of the index of the immersed medium to the optics.
-        sph6_ab: Float or None.
+            Default is 0.95
+        sph6_ab : Float or None, optional
             Set sph6_ab to a nonzero value to add residual 6th-order
             spherical aberration that is proportional to sph6_ab. Default
             is None (i.e. doesn't calculate).
+
+    Returns
+    -------
+        wvfront : numpy.ndarray
+            The aberrated wavefront, as a function of theta and z.
+            Shape is [z.size, cos_theta.size]
     """
     wvfront = (np.outer(np.ones_like(z)*zint, cos_theta) -
             np.outer(zint+z, csqrt(n2n1**2-1+cos_theta**2)))
@@ -77,39 +90,83 @@ def f_theta(cos_theta, zint, z, n2n1=0.95, sph6_ab=None, **kwargs):
         wvfront.imag = -np.abs(wvfront.imag)
     return wvfront
 
-def get_taus(cos_theta, n2n1=1./1.05):
+def get_taus(cos_theta, n2n1=0.95):
     """
     Calculates the Fresnel reflectivity for s-polarized light incident on an
     interface with index ration n2n1.
 
-    Inputs:
-        -cos_theta: The _cosine_ of the angle of the incoming light. Float.
-    Optional inputs:
-        -n2n1: The ratio n2/n1 of the 2nd material's index n2 to the first's n1
-    Returns:
-        Float, same type (array or scalar) as cos_theta.
+    Parameters
+    ----------
+        cos_theta : Float or numpy.ndarray
+            The _cosine_ of the angle of the incoming light. Float.
+        n2n1 : Float, optional
+            The ratio n2/n1 of the 2nd material's index n2 to the first's n1
+            Default is 0.95
+
+    Returns
+    -------
+        Float or numpy.ndarray
+            The reflectivity, in the same type (ndarray or Float) and
+            shape as cos_theta
     """
     return 2./(1+csqrt(1+(n2n1**2-1)*cos_theta**-2))
 
-def get_taup(cos_theta, n2n1=1./1.05):
+def get_taup(cos_theta, n2n1=0.95):
     """
     Calculates the Fresnel reflectivity for p-polarized light incident on an
     interface with index ration n2n1.
 
-    Inputs:
-        -cos_theta: The _cosine_ of the angle of the incoming light. Float.
-    Optional inputs:
-        -n2n1: The ratio n2/n1 of the 2nd material's index n2 to the first's n1
-    Returns:
-        Float, same type (array or scalar) as cos_theta.
+    Parameters
+    ----------
+        cos_theta : Float or numpy.ndarray
+            The _cosine_ of the angle of the incoming light. Float.
+        n2n1 : Float, optional
+            The ratio n2/n1 of the 2nd material's index n2 to the first's n1
+            Default is 0.95
+
+    Returns
+    -------
+        Float or numpy.ndarray
+            The reflectivity, in the same type (ndarray or Float) and
+            shape as cos_theta
     """
     return 2*n2n1/(n2n1**2+csqrt(1-(1-n2n1**2)*cos_theta**-2))
 
 def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False,
         **kwargs):
     """
-    Internal function called by get_K; gets the prefactor in the integrand
-    that is independent of which integral is being called.
+    Returns a prefactor in the electric field integral.
+
+    This is an internal function called by get_K. The returned prefactor
+    in the integrand is independent of which integral is being called;
+    it is a combination of the exp(1j*phase) and apodization.
+
+    Parameters
+    ----------
+        z : numpy.ndarray
+            The values of z (distance along optical axis) at which to
+            calculate the prefactor. Size is unrelated to the size of
+            `cos_theta`
+        cos_theta : numpy.ndarray
+            The values of cos(theta) (i.e. position on the incoming
+            focal spherical wavefront) at which to calculate the
+            prefactor. Size is unrelated to the size of `z`
+        zint : Float, optional
+            The position of the optical interface, in units of 1/k.
+            Default is 100.
+        n2n1 : Float, optional
+            The ratio of the index mismatch between the optics (n1) and
+            the sample (n2). Default is 0.95
+        get_hdet : Bool, optional
+            Set to True to calculate the detection prefactor vs the
+            illumination prefactor (i.e. False to include apodization).
+            Default is False
+
+    Returns
+    -------
+        numpy.ndarray
+            The prefactor, of size [`z.size`, `cos_theta.size`], sampled
+            at the values [`z`, `cos_theta`]
     """
 
     phase = f_theta(cos_theta, zint, z, n2n1=n2n1, **kwargs)
@@ -122,37 +179,56 @@ def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False,
 def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
         Kprefactor=None, return_Kprefactor=False, **kwargs):
     """
-    Internal function for calculating psf's. Returns various integrals that
-    appear in Hell's psf calculation.
-    Inputs:
-        -rho: Rho in cylindrical coordinates. Float scalar or numpy.array.
-        -z:   Z in cylindrical coordinates. Float scalar or numpy.array.
+    Calculates one of three electric field integrals.
 
-    Optional Inputs:
-        -alpha: Float scalar on (0,pi/2). The acceptance angle of the lens.
-        -zint: Float scalar on [0, inf). The distance of the len's
-            unaberrated focal point from the interface.
-        -n2n1: Float scalar on [0,inf) but really near 1. The ratio n2/n1
-            of index mismatch between the sample (index n2) and the
-            optical train (index n1).
-        -get_hdet: Boolean. Set to True to get the detection portion of the
-            psf; False to get the illumination portion of the psf.
-        -K: 1, 2, or 3. Which of the 3 integrals to evaluate. Internal.
-        - Kprefactor: numpy.ndarray calculated internally. Pass it to
-            avoid recalculation.
-        - return_Kprefactor: Bool
+    Internal function for calculating point spread functions. Returns
+    one of three electric field integrals that describe the electric
+    field near the focus of a lens; these integrals appear in Hell's psf
+    calculation.
+
+    Parameters
+    ----------
+        rho : numpy.ndarray
+            Rho in cylindrical coordinates, in units of 1/k.
+        z : numpy.ndarray
+            Z in cylindrical coordinates, in units of 1/k. `rho` and
+            `z` must be the same shape
+
+        alpha : Float, optional
+            The acceptance angle of the lens, on (0,pi/2). Default is 1.
+        zint : Float, optional
+            The distance of the len's unaberrated focal point from the
+            optical interface, in units of 1/k. Default is 100.
+        n2n1 : Float, optional
+            The ratio n2/n1 of the index mismatch between the sample
+            (index n2) and the optical train (index n1). Must be on
+            [0,inf) but should be near 1. Default is 0.95
+        get_hdet : Bool, optional
+            Set to True to get the detection portion of the psf; False
+            to get the illumination portion of the psf. Default is True
+        K : {1, 2, 3}, optional
+            Which of the 3 integrals to evaluate. Default is 1
+        Kprefactor : numpy.ndarray or None
+            This array is calculated internally and optionally returned;
+            pass it back to avoid recalculation and increase speed. Default
+            is None, i.e. calculate it internally.
+        return_Kprefactor : Bool, optional
             Set to True to also return the Kprefactor (parameter above)
-            to speed up the calculation for the next values of K.
-    Outputs:
-        -integrand: The integral K_i; rho.shape numpy.array
-    Optional outputs:
-        Kprefactor: The prefactor for the Jn(....)*(taus+-taup) portion.
-            Since it's used repeatedly, can be returned to be re-passed
-            as Kprefactor for speed.
-    Comments:
-        This is the only function that relies on rho,z being numpy.arrays,
-        and it's just in a flag that I've added.... move to psf?
+            to speed up the calculation for the next values of K. Default
+            is False
+
+    Returns
+    -------
+        kint : numpy.ndarray
+            The integral K_i; rho.shape numpy.array
+        [, Kprefactor] : numpy.ndarray
+            The prefactor that is independent of which integral is being
+            calculated but does depend on the parameters; can be passed
+            back to the function for speed.
     """
+    # Comments:
+        # This is the only function that relies on rho,z being numpy.arrays,
+        # and it's just in a flag that I've added.... move to psf?
     if type(rho) != np.ndarray or type(z) != np.ndarray or (rho.shape != z.shape):
         raise ValueError('rho and z must be np.arrays of same shape.')
 
@@ -163,7 +239,7 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
 
     #Getting the array of points to quad at
     cos_theta = 0.5*(1-np.cos(alpha))*PTS+0.5*(1+np.cos(alpha))
-    #[cosTheta,rho,z]
+    #[cos_theta,rho,z]
 
     if Kprefactor is None:
         Kprefactor = get_Kprefactor(z, cos_theta, zint=zint, \
@@ -207,28 +283,54 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
 
 def get_hsym_asym(rho, z, get_hdet=False, include_K3_det=True, **kwargs):
     """
-    Gets the symmetric and asymmetric portions of the PSF. All distances
-    (rho,z,zint) are in units of the 1/light wavevector.
-    Inputs:
-        -rho: Rho in cylindrical coordinates. Numpy.array.
-        -z:   Z in cylindrical coordinates. Numpy.array.
+    Calculates the symmetric and asymmetric portions of a confocal PSF.
 
-    Optional Inputs:
-        -alpha: Float scalar on (0,pi/2). The acceptance angle of the lens.
-        -zint: Float scalar on [0, inf). The distance of the len's
-            unaberrated focal point from the interface.
-        -n2n1: Float scalar on [0,inf) but really near 1. The ratio n2/n1
-            of index mismatch between the sample (index n2) and the
-            optical train (index n1).
-        -get_hdet: Boolean. Set to True to get the detection portion of the
-            psf; False to get the illumination portion of the psf.
-        -include_K3_det: Boolean. Flag to not calculate the `K3' component
-            for the detection PSF, corresponding to (I think) a low-aperature
-            focusing lens and no z-polarization of the focused light.
+    Parameters
+    ----------
+        rho : numpy.ndarray
+            Rho in cylindrical coordinates, in units of 1/k.
+        z : numpy.ndarray
+            Z in cylindrical coordinates, in units of 1/k. Must be the
+            same shape as `rho`
+        get_hdet : Bool, optional
+            Set to True to get the detection portion of the psf; False
+            to get the illumination portion of the psf. Default is True
+        include_K3_det : Bool, optional.
+            Flag to not calculate the `K3' component for the detection
+            PSF, corresponding to (I think) a low-aperature focusing
+            lens and no z-polarization of the focused light. Default
+            is True, i.e. calculates the K3 component as if the focusing
+            lens is high-aperture
 
-    Outputs:
-        -hsym:  rho.shape numpy.array of the symmetric portion of the PSF
-        -hasym: rho.shape numpy.array of the symmetric portion of the PSF
+    **kwargs Parameters
+    -------------------
+        alpha : Float, optional
+            The acceptance angle of the lens, on (0,pi/2). Default is 1.
+        zint : Float, optional
+            The distance of the len's unaberrated focal point from the
+            optical interface, in units of 1/k. Default is 100.
+        n2n1 : Float, optional
+            The ratio n2/n1 of the index mismatch between the sample
+            (index n2) and the optical train (index n1). Must be on
+            [0,inf) but should be near 1. Default is 0.95
+        K : {1, 2, 3}, optional
+            Which of the 3 integrals to evaluate. Default is 1
+        Kprefactor : numpy.ndarray or None
+            This array is calculated internally and optionally returned;
+            pass it back to avoid recalculation and increase speed. Default
+            is None, i.e. calculate it internally.
+        return_Kprefactor : Bool, optional
+            Set to True to also return the Kprefactor (parameter above)
+            to speed up the calculation for the next values of K. Default
+            is False        alpha : Float, optional
+            scalar on (0,pi/2). The acceptance angle of the lens.
+
+    Returns
+    -------
+        hsym : numpy.ndarray
+            `rho`.shape numpy.array of the symmetric portion of the PSF
+        hasym : numpy.ndarray
+            `rho`.shape numpy.array of the asymmetric portion of the PSF
     """
 
     K1, Kprefactor = get_K(rho, z, K=1, get_hdet=get_hdet, Kprefactor=None,
@@ -251,6 +353,7 @@ def calculate_pinhole_psf(x, y, z, kfki=0.89, zint=100.0, normalize=False,
         **kwargs):
     """
     Calculates the perfect-pinhole PSF, for a set of points (x,y,z).
+
     Parameters
     -----------
         x : numpy.ndarray
@@ -309,6 +412,31 @@ def calculate_pinhole_psf(x, y, z, kfki=0.89, zint=100.0, normalize=False,
     return (hsym + np.cos(2*phi)*hasym)*hdet
 
 def get_polydisp_pts_wts(kfki, sigkf, dist_type='gaussian', nkpts=3):
+    """
+    Calculates a set of Gauss quadrature points & weights for polydisperse
+    light.
+
+    Returns a list of points and weights of the final wavevector's distri-
+    bution, in units of the initial wavevector.
+
+    Parameters
+    ----------
+        kfki : Float
+            The mean of the polydisperse outgoing wavevectors.
+        sigkf : Float
+            The standard dev. of the polydisperse outgoing wavevectors.
+        dist_type : {`gaussian`, `gamma`}, optional
+            The distribution, gaussian or gamma, of the wavevectors.
+            Default is `gaussian`
+        nkpts : Int, optional
+            The number of quadrature points to use. Default is 3
+    Returns
+    -------
+        kfkipts : numpy.ndarray
+            The Gauss quadrature points at which to calculate kfki.
+        wts : numpy.ndarray
+            The associated Gauss quadrature weights.
+    """
     if dist_type.lower() == 'gaussian':
         pts, wts = np.polynomial.hermite.hermgauss(nkpts)
         kfkipts = np.abs(kfki + sigkf*np.sqrt(2)*pts)
@@ -330,6 +458,7 @@ def calculate_polychrome_pinhole_psf(x, y, z, normalize=False, kfki=0.889,
         sigkf=0.1, zint=100., nkpts=3, dist_type='gaussian', **kwargs):
     """
     Calculates the perfect-pinhole PSF, for a set of points (x,y,z).
+
     Parameters
     -----------
         x : numpy.ndarray
