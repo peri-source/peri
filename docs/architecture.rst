@@ -231,5 +231,9 @@ ComponentCollections and Models
     :members: get
     :noindex:
 
+.. autoclass:: peri.models.Model
+    :members: evaluate
+    :noindex:
+
 Example: Gaussian-blurred discs
 -------------------------------

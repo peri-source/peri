@@ -136,11 +136,25 @@ class Model(object):
         return self.modelstr['full']
 
     def get_difference_model(self, category):
-        """ Get the equation corresponding to a variation wrt category """
+        """
+        Get the equation corresponding to a variation wrt category. For example
+        if::
+        
+            modelstr = {
+                'full' :'H(I) + B',
+                'dH' : 'dH(I)',
+                'dI' : 'H(dI)',
+                'dB' : 'dB'
+            }
+
+            varmap = {'H': 'psf', 'I': 'obj', 'B': 'bkg'}
+
+        then ``get_difference_model('obj') == modelstr['dI'] == 'H(dI)'``
+        """
         name = self.diffname(self.ivarmap[category])
         return self.modelstr.get(name)
 
-    def map_vars(self, comps, funcname, diffmap=None, **kwargs):
+    def map_vars(self, comps, funcname='get', diffmap=None, **kwargs):
         """
         Map component function ``funcname`` result into model variables
         dictionary for use in eval of the model. If ``diffmap`` is provided then
@@ -162,18 +176,21 @@ class Model(object):
 
         return out
 
-    def evaluate(self, comps, funcname, diffmap=None, **kwargs):
+    def evaluate(self, comps, funcname='get', diffmap=None, **kwargs):
         """
-        Calculate the output of a model.
+        Calculate the output of a model. It is recommended that at some point
+        before using `evaluate`, that you make sure the inputs are valid using
+        :class:`~peri.models.Model.check_inputs`
 
         Parameters
         -----------
-        comps : list of :class:`peri.comp.comp.Component`s
+        comps : list of :class:`~peri.comp.comp.Component`
             Components which will be used to evaluate the model
 
-        funcname : string
-            Name of the function which to evaluate for the components
-            which represent their output
+        funcname : string (default: 'get')
+            Name of the function which to evaluate for the components which
+            represent their output. That is, when each component is used in the
+            evaluation, it is really their ``attr(comp, funcname)`` which is used.
 
         diffmap : dictionary
             Extra mapping of derivatives or other symbols to extra variables.
