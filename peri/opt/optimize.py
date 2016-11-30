@@ -1,3 +1,10 @@
+"""
+TODO:
+    1. burn -- 2 loops of globals is only good for the first few loops; after
+            that it's overkill. Best to make a 3rd mode now, since the
+            psf and zscale move around without a set of burns.
+    2. better optimization? things like run_3 with eigenvalue blocks
+"""
 import os
 import sys
 import time
@@ -201,10 +208,23 @@ def vectorize_damping(params, damping=1.0, increase_list=[['psf-', 1e4]]):
 
 def halve_randomly(blk):
     """
-    Given an array blk of bools, returns two arrays blk1, blk2 such that
-    blk1 | blk2 = blk, blk1 & blk2 = 0, and blk1 and blk2 have an equal
-    amount of True's.
+    Randomly halves a block.
+
+    Given an array blk of bools, returns two arrays `blk1`, `blk2` such
+    that `blk1` | `blk2` = `blk`, `blk1` & `blk2` = 0, and `blk1` and
+    `blk2` have an equal amount of True's.
+
     Parameters
+    ----------
+        blk : numpy.ndarray
+            1D ndarray of booleans
+
+    Returns
+    -------
+        blk1 : numpy.ndarray
+            The first boolean block.
+        blk2 : numpy.ndarray
+            The second boolean block.
     """
     inds = np.nonzero(blk)[0]
     np.random.shuffle(inds)  #in-place shuffling
@@ -350,9 +370,23 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
 
 def get_residuals_update_tile(st, padded_tile):
     """
+    Translates a tile in the padded image to the unpadded image.
+
     Given a state and a tile that corresponds to the padded image, returns
     a tile that corresponds to the the corresponding pixels of the difference
     image
+
+    Parameters
+    ----------
+        st : peri.states.state
+            The state
+        padded_tile : peri.util.Tile
+            The tile in the padded image.
+
+    Returns
+    -------
+        peri.util.Tile
+            The tile corresponding to padded_tile in the unpadded image.
     """
     inner_tile = st.ishape.intersection([st.ishape, padded_tile])
     return inner_tile.translate(-st.pad)
@@ -605,7 +639,7 @@ class LMEngine(object):
         raise NotImplementedError('implement in subclass')
 
     def calc_residuals(self):
-        """Function that, when called, returns data - model."""
+        """returns residuals = data - model."""
         raise NotImplementedError('implement in subclass')
 
     def update_function(self, param_vals):
@@ -623,6 +657,7 @@ class LMEngine(object):
             self._num_iter += 1; self._inner_run_counter += 1
 
     def _run1(self):
+        """workhorse for do_run_1"""
             if self.check_update_J():
                 self.update_J()
             else:
@@ -764,22 +799,22 @@ class LMEngine(object):
         optional Broyden or eigendirection updates. Iterates either until
         a bad step is taken or for self.run_length times.
         Called internally by do_run_2() but is also useful on its own.
+
         Parameters
         ----------
-            initial_count : Int
+            initial_count : Int, optional
                 The initial count of the run. Default is 0. Increasing from
                 0 effectively temporarily decreases run_length.
-
-            subblock : None or np.ndarray of bools
+            subblock : None or np.ndarray of bools, optional
                 If not None, a boolean mask which determines which sub-
                 block of parameters to run over. Default is None, i.e.
                 all the parameters.
-
-            update_derr : Bool
+            update_derr : Bool, optional
                 Set to False to not update the variable that determines
                 delta_err, preventing premature termination through errtol.
-        Comments:
-        --------
+
+        Notes
+        -----
         It might be good to do something similar to update_derr with the
         parameter values, but this is trickier because of Broyden updates
         and _fresh_J.
