@@ -1381,10 +1381,9 @@ class OptState(OptObj):
         LMOptObj
         do_levmarq_n_directions
     """
-    def __init__(self, state, directions, p0=None, dl=1e-7, be_nice=False):
+    def __init__(self, state, directions, p0=None, dl=1e-7):
         self.state = state
         self.dl = dl
-        self.be_nice = be_nice
         if p0 is None:
             self.p0 = np.array(state.state[state.params]).copy()
         else:
