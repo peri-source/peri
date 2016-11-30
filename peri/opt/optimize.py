@@ -17,8 +17,8 @@ from numpy.random import randint
 from scipy.optimize import newton, minimize_scalar
 
 from peri.util import Tile
-from peri.comp import psfs, ilms, objs
 from peri import states
+from peri import models as mdl
 from peri.logger import log
 CLOG = log.getChild('opt')
 
@@ -390,42 +390,6 @@ def get_residuals_update_tile(st, padded_tile):
     """
     inner_tile = st.ishape.intersection([st.ishape, padded_tile])
     return inner_tile.translate(-st.pad)
-#=============================================================================#
-#               ~~~~~           Fit ilm???         ~~~~~
-#=============================================================================#
-def fit_ilm(new_ilm, old_ilm, **kwargs):
-    """
-    Fits a new peri.comp.ilms instance to (mostly) match the get_field
-    of the old ilm, by creating a fake state with no particles and an
-    identity psf and using *.do_levmarq()
-
-    Parameters:
-    -----------
-    new_ilm : peri.comp.ilms instance
-        The new ilm.
-    old_ilm : peri.comp.ilms instance
-        The old ilm to match to.
-    **kwargs: The keyword args passed to the optimizers (LMGlobals through
-        do_levmarq).
-
-    See Also
-    --------
-    do_levmarq: Runs Levenberg-Marquardt minimization using a random
-        subset of the image pixels. Works for any fit blocks.
-    LMGlobals: Same, but with a cleaner engine instantiation.
-    """
-    shape = old_ilm.bkg.shape
-    psf = psfs.IdentityPSF(params=np.zeros(1), shape=shape)
-    obj = objs.SphereCollectionRealSpace(np.zeros([1,3]), np.zeros(1), shape=
-            shape, typ=np.zeros(1))
-    bkg = ilms.LegendrePoly2P1D(shape=shape, order=(1,1,1))
-    bkg.update(bkg.block, np.zeros(bkg.block.size))
-    fake_s = states.ConfocalImagePython(old_ilm.bkg.copy(), obj, psf, new_ilm,
-            varyn=True, pad=1, bkg=bkg  )
-
-    blk = fake_s.create_block('ilm')
-    do_levmarq(fake_s, blk, **kwargs)
-    return fake_s.ilm
 
 #=============================================================================#
 #         ~~~~~        Class/Engine LM minimization Stuff     ~~~~~
@@ -2127,3 +2091,32 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
 
     if collect_stats:
         return all_lp_stats, all_lm_stats, all_line_stats, all_loop_values
+
+def fit_comp(new_comp, old_comp, **kwargs):
+    """
+    Fits a new component to an old component
+
+    Calls do_levmarq to match the .get() fields of the two objects. The
+    parameters of new_comp are modified in place.
+
+    Parameters
+    ----------
+    new_comp : peri.comp
+        The new object, whose parameters to update to fit the field of
+        `old_comp`. Must have a .get() attribute which returns an ndarray
+    old_comp : peri.comp
+        The old ilm to match to.
+
+    **kwargs Parameters
+    -------------------
+        Any keyword arguments to be passed to the optimizer LMGlobals
+        through do_levmarq.
+
+    See Also
+    --------
+    do_levmarq : Levenberg-Marquardt minimization using a random subset
+        of the image pixels.
+    """
+    fake_s = states.ImageState(old_comp.get().copy(), [new_comp], pad=0,
+            mdl=mdls.SmoothFieldModel)
+    do_levmarq(fake_s, new_comp.params, **kwargs)
