@@ -399,7 +399,155 @@ def find_best_step(err_vals):
 
 class LMEngine(object):
     """
-    The engine for running levenberg-marquardt optimization on anything.
+    Levenberg-Marquardt engine with all the options from the M. Transtrum
+    J. Sethna 2012 ArXiV paper [1]_.
+
+    Parameters
+    ----------
+        damping: Float, optional
+            The initial damping factor for Levenberg-Marquardt. Adjusted
+            internally. Default is 1.
+        increase_damp_factor: Float, optional
+            The amount to increase damping by when an attempted step
+            has failed. Default is 3.
+        decrease_damp_factor: Float, optional
+            The amount to decrease damping by after a successful step.
+            Default is 8. increase_damp_factor and decrease_damp_factor
+            must not have all the same factors.
+
+        min_eigval: Float scalar, optional, <<1.
+            The minimum eigenvalue to use in inverting the JTJ matrix,
+            to avoid degeneracies in the parameter space (i.e. 'rcond'
+            in np.linalg.lstsq). Default is 1e-12.
+        marquardt_damping: Bool, optional
+            Set to False to use Levenberg damping (damping matrix
+            proportional to the identiy) instead of Marquardt damping
+            (damping matrix proportional to the diagonal terms of JTJ).
+            Default is False.
+        transtrum_damping: Float or None, optional
+            If not None, then clips the Marquardt damping diagonal
+            entries to be at least transtrum_damping. Default is None.
+
+        use_accel: Bool, optional
+            Set to True to incorporate the geodesic acceleration term
+            from M. Transtrum J. Sethna 2012. Default is False.
+        max_accel_correction: Float, optional
+            Acceleration corrections bigger than max_accel_correction*
+            the normal LM step are viewed as bad steps, causing a
+            decrease in damping. Default is 1.0. Only applies to the
+            do_run_1 method.
+
+        paramtol : Float, optional
+            Algorithm has converged when the none of the parameters
+            have changed by more than paramtol. Default is 1e-6.
+        errtol : Float, optional
+            Algorithm has converged when the error has changed
+            by less than errtol after 1 step. Default is 1e-6.
+        fractol : Float, optional
+            Algorithm has converged when the error has changed
+            by a fractional amount less than fractol after 1 step.
+            Default is 1e-6.
+        costol : Float, optional
+            Algorithm has converged when the cosine of the angle
+            between (residuals projected onto the model manifold)
+            and (the residuals) is < costol. Default is None, i.e.
+            doesn't check the cosine (since it takes a bit of time).
+        max_iter : Int, optional
+            The maximum number of iterations before the algorithm
+            stops iterating. Default is 5.
+
+        update_J_frequency: Int, optional
+            The frequency to re-calculate the full Jacobian matrix.
+            Default is 2, i.e. every other run.
+        broyden_update: Bool, optional
+            Set to True to do a Broyden partial update on J after
+            each step, updating the projection of J along the
+            parameter change direction. Cheap in time cost, but not
+            always accurate. Default is False.
+        eig_update: Bool, optional
+            Set to True to update the projection of J along the most
+            stiff eigendirections of JTJ. Slower than broyden but
+            more accurate & useful. Default is False.
+        num_eig_dirs: Int, optional
+            If eig_update == True, the number of eigendirections to
+            update when doing the eigen update. Default is 4.
+        eig_update_frequency: Int, optional
+            If eig_update, the frequency to do this partial update.
+            Default is 3.
+        broyden_update_frequency: Int, optional
+            If broyden_update, the frequency to do this partial update.
+            Default is 1.
+
+    Attributes
+    ----------
+        J : numpy.ndarray
+            The calculated J for Levenberg-Marquardt. Starts as `None`
+        JTJ : numpy.ndarray
+            The approximation to the fit Hessian; np.dot(J, J.T)
+        damping : numpy.ndarray
+            The current damping vector for the parameters.
+        _num_iter : Int
+            The number of iterations ran in the current cycle. Don't touch
+
+    Methods
+    -------
+        reset(new_damping=None)
+            Resets all counters etc so a new run can commence.
+        do_run_1()
+            Method 1 for optimization.
+        do_run_2()
+            Method 2 for optimization
+        do_internal_run()
+            Additional, slight optimization once J has been calculated
+        do_run_3()
+            Experimental... FIXME
+        do_stuckJ_run()
+            Experimental... FIXME
+        find_LM_updates(grad, do_correct_damping=True, subblock=None)
+            Returns the Levenberg-Marquardt step.
+        increase_damping()
+            Increases damping
+        decrease_damping(undo_decrease=False)
+            Decreases damping or undoes a previous decrease.
+        update_param_vals(new_vals, incremental=False)
+            Updates the current set of parameter values and previous
+            values, sets a flag to re-calculate J.
+        calc_model_cosine(decimate=None)
+            Calculates the cosine of the residuals with the current
+            model tangent space J
+        get_termination_stats(get_cos=True)
+            Returns a dict of termination statistics
+        check_completion()
+            Checks if the algorithm has found a satisfactory minimum
+        check_termination()
+            Checks if the algorithm should terminate
+        update_J()
+            Updates J, JTJ
+        calc_grad()
+            Calculates the gradient of the cost w.r.t. the parameters.
+        update_Broyden_J()
+            Execute a Broyden update of J
+        update_eig_J()
+            Execute an eigen update of J
+        calc_accel_correction(damped_JTJ, delta0)
+            Calculates the geodesic acceleration correction to the
+            standard Levenberg-Marquardt step.
+        update_select_J(blk)
+            Updates J only for certain parameters, described by the
+            boolean mask `blk`.
+
+    See Also
+    --------
+        LMFunction
+        LMGlobals
+        LMParticles
+        LMParticleGroupCollection
+        LMAugmentedState
+        LMOptObj
+
+    Notes  FIXME
+    -----
+    Broyden updates, eigen updates, damping, marquardt damping, etc
     There are 3 different options for optimizing:
         do_run_1():
             Checks to calculate full, Broyden, and eigen J, then tries a step.
@@ -432,6 +580,12 @@ class LMEngine(object):
     incompatible to be less confusing, especially since do_run_2() with
     update_J_frequency=2 just checks to decrease the damping without either
     partial updates.
+
+    References
+    ----------
+        ..[1] M. Transtrum and J. Sethna, "Improvements to the Levenberg-
+            Marquardt algorithm for nonlinear least-squares minimization,"
+            ArXiV preprint arXiv:1201.5885 (2012)
     """
     def __init__(self, damping=1., increase_damp_factor=3., decrease_damp_factor=8.,
                 min_eigval=1e-13, marquardt_damping=False, transtrum_damping=None,
@@ -440,97 +594,6 @@ class LMEngine(object):
                 update_J_frequency=1, broyden_update=True, eig_update=False,
                 eig_update_frequency=3, num_eig_dirs=8, eig_dl=1e-5,
                 broyden_update_frequency=1):
-        """
-        Levenberg-Marquardt engine with all the options from the
-        M. Transtrum J. Sethna 2012 ArXiV paper.
-
-        Inputs:
-        -------
-            damping: Float
-                The initial damping factor for Levenberg-Marquardt. Adjusted
-                internally. Default is 1.
-            increase_damp_factor: Float
-                The amount to increase damping by when an attempted step
-                has failed. Default is 3.
-            decrease_damp_factor: Float
-                The amount to decrease damping by after a successful step.
-                Default is 8. increase_damp_factor and decrease_damp_factor
-                must not have all the same factors.
-
-            min_eigval: Float scalar, <<1.
-                The minimum eigenvalue to use in inverting the JTJ matrix,
-                to avoid degeneracies in the parameter space (i.e. 'rcond'
-                in np.linalg.lstsq). Default is 1e-12.
-            marquardt_damping: Bool
-                Set to False to use Levenberg damping (damping matrix
-                proportional to the identiy) instead of Marquardt damping
-                (damping matrix proportional to the diagonal terms of JTJ).
-                Default is False.
-            transtrum_damping: Float or None
-                If not None, then clips the Marquardt damping diagonal
-                entries to be at least transtrum_damping. Default is None.
-
-            use_accel: Bool
-                Set to True to incorporate the geodesic acceleration term
-                from M. Transtrum J. Sethna 2012. Default is False.
-            max_accel_correction: Float
-                Acceleration corrections bigger than max_accel_correction*
-                the normal LM step are viewed as bad steps, causing a
-                decrease in damping. Default is 1.0. Only applies to the
-                do_run_1 method.
-
-            paramtol : Float
-                Algorithm has converged when the none of the parameters
-                have changed by more than paramtol. Default is 1e-6.
-            errtol : Float
-                Algorithm has converged when the error has changed
-                by less than errtol after 1 step. Default is 1e-6.
-            fractol : Float
-                Algorithm has converged when the error has changed
-                by a fractional amount less than fractol after 1 step.
-                Default is 1e-6.
-            costol : Float
-                Algorithm has converged when the cosine of the angle
-                between (residuals projected onto the model manifold)
-                and (the residuals) is < costol. Default is None, i.e.
-                doesn't check the cosine (since it takes a bit of time).
-            max_iter : Int
-                The maximum number of iterations before the algorithm
-                stops iterating. Default is 5.
-
-            update_J_frequency: Int
-                The frequency to re-calculate the full Jacobian matrix.
-                Default is 2, i.e. every other run.
-            broyden_update: Bool
-                Set to True to do a Broyden partial update on J after
-                each step, updating the projection of J along the
-                parameter change direction. Cheap in time cost, but not
-                always accurate. Default is False.
-            eig_update: Bool
-                Set to True to update the projection of J along the most
-                stiff eigendirections of JTJ. Slower than broyden but
-                more accurate & useful. Default is False.
-            num_eig_dirs: Int
-                If eig_update == True, the number of eigendirections to
-                update when doing the eigen update. Default is 4.
-            eig_update_frequency: Int
-                If eig_update, the frequency to do this partial update.
-                Default is 3.
-            broyden_update_frequency: Int
-                If broyden_update, the frequency to do this partial update.
-                Default is 1.
-
-        Relevant attributes
-        -------------------
-            do_run_1: Function
-                ...what you should set when you use run_1 v run_2 etc
-                For instance run_2 might stop prematurely since its
-                internal runs update last_error, last_params, and it
-                usually just runs until it takes a bad step == small
-                param update.
-            do_run_2: Function
-
-        """
         self.increase_damp_factor = float(increase_damp_factor)
         self.decrease_damp_factor = float(decrease_damp_factor)
         self.min_eigval = min_eigval
@@ -997,6 +1060,18 @@ class LMEngine(object):
             self.damping /= self.decrease_damp_factor
 
     def update_param_vals(self, new_vals, incremental=False):
+        """
+        Updates the current set of parameter values and previous values,
+        sets a flag to re-calculate J.
+
+        Parameters
+        ----------
+            new_vals : numpy.ndarray
+                The new values to update to
+            incremental : Bool, optional
+                Set to True to make it an incremental update relative
+                to the old parameters. Default is False
+        """
         self._last_vals = self.param_vals.copy()
         if incremental:
             self.param_vals += new_vals
@@ -1032,6 +1107,13 @@ class LMEngine(object):
     def get_termination_stats(self, get_cos=True):
         """
         Returns a dict of termination statistics
+
+        Parameters
+        ----------
+            get_cos : Bool, optional
+                Whether or not to calcualte the cosine of the residuals
+                with the tangent plane of the model using the current J.
+                The calculation may take some time. Default is True
         """
         delta_vals = self._last_vals - self.param_vals
         delta_err = self._last_error - self.error
@@ -1060,9 +1142,8 @@ class LMEngine(object):
 
     def check_terminate(self):
         """
-        Termination if errtol, paramtol, costol are < a certain amount
+        Termination if errtol, paramtol, costol, _num_iter are < a certain amount
         """
-
         if not self._has_run:
             return False
         else:
@@ -1110,9 +1191,7 @@ class LMEngine(object):
         return do_update
 
     def update_Broyden_J(self):
-        """
-        Broyden update of jacobian.
-        """
+        """Execute a Broyden update of J"""
         CLOG.debug('Broyden update.')
         delta_vals = self.param_vals - self._last_vals
         delta_residuals = self.calc_residuals() - self._last_residuals
@@ -1128,6 +1207,7 @@ class LMEngine(object):
         return do_update
 
     def update_eig_J(self):
+        """Execute an eigen update of J"""
         CLOG.debug('Eigen update.')
         vls, vcs = np.linalg.eigh(self.JTJ)
         res0 = self.calc_residuals()
@@ -1169,7 +1249,7 @@ class LMEngine(object):
     def update_select_J(self, blk):
         """
         Updates J only for certain parameters, described by the boolean
-        mask blk.
+        mask `blk`.
         """
         p0 = self.param_vals.copy()
         self.update_function(p0)  #in case things are not put back...
