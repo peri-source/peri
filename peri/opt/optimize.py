@@ -1189,34 +1189,40 @@ class LMEngine(object):
             raise FloatingPointError('J, JTJ have nans.')
 
 class LMFunction(LMEngine):
+    """
+    Levenberg-Marquardt optimization for a user-supplied function.
+
+    Contains alll the options from the M. Transtrum J. Sethna 2012 ArXiV
+    paper. See LMEngine for further documentation.
+
+    Parameters
+    -------
+        data : N-element numpy.ndarray
+            The measured data to fit.
+        func : Function
+            The function to evaluate. Syntax must be
+            func(param_values, *func_args, **func_kwargs), and return a
+            numpy.ndarray of the same shape as data
+        p0 : P-elemnet numpy.ndarray
+            Float array of the initial parameter guess.
+        dl : Float or P-element numpy.ndarray, optional
+            The dl used for finite-difference derivatives, i.e.
+            (f(x+dl[i])) - f(x)) / (dl[i]) in each direction. If dl is
+            a scalar, it is transformed internally to a list. Default is
+            1e-8.
+        func_args : List-like, optional
+            Extra *args to pass to the function. Default is ()
+        func_kargs : Dictionary, optional
+            Extra **kwargs to pass to the function. Default is {}
+        **kwargs : Any keyword args passed to LMEngine.
+
+    Attributes
+    ----------
+        param_vals : numpy.ndarray
+            The current best-fit parameter values of the function.
+    """
     def __init__(self, data, func, p0, func_args=(), func_kwargs={}, dl=1e-8,
             **kwargs):
-        """
-        Levenberg-Marquardt engine for a user-supplied function with all
-        the options from the M. Transtrum J. Sethna 2012 ArXiV paper. See
-        LMEngine for documentation.
-
-        Inputs:
-        -------
-            data : N-element numpy.ndarray
-                The measured data to fit.
-            func: Function
-                The function to evaluate. Syntax must be
-                func(param_values, *func_args, **func_kwargs), and return a
-                numpy.ndarray of the same shape as data
-            p0 : P-elemnet numpy.ndarray
-                Float array of the initial parameter guess.
-            dl : Float or P-element numpy.ndarray
-                The dl used for finite-difference derivatives, i.e.
-                (f(x+dl[i])) - f(x)) / (dl[i]) in each direction. If dl is
-                a scalar, it is transformed internally to a list. Default is
-                1e-8.
-            func_args : List-like
-                Extra *args to pass to the function. Optional.
-            func_kargs : Dictionary
-                Extra **kwargs to pass to the function. Optional.
-            **kwargs : Any keyword args passed to LMEngine.
-        """
         self.data = data
         self.func = func
         self.func_args = func_args
@@ -1262,7 +1268,36 @@ class LMFunction(LMEngine):
         return np.dot(d.flat, d.flat) #faster for large arrays than (d*d).sum()
 
 class LMOptObj(LMEngine):
-    """Uses an OptObj instance.... should be the syntax for all LMEngine objects?"""
+    """
+    Levenberg-Marquardt optimization on an OptObj instance.
+
+    Parameters
+    ----------
+        opt_obj : OptObj or daughter instance
+            The OptObj to optimize.
+    **kwargs Parameters
+    -------------------
+        Any kwargs for LMEngine.
+
+    Methods
+    -------
+        _set_err_paramvals()
+            Helps initialize the LMEngine.
+        calc_J()
+        calc_residuals()
+        update_function()
+            Updates the opt_obj, returns new error.
+
+    See Also
+    --------
+        LMEngine
+        OptObj
+        OptState
+
+    Notes
+    -----
+    Uses an OptObj instance.... should be the syntax for all LMEngine objects?
+    """
     def __init__(self, opt_obj, **kwargs):
         self.opt_obj = opt_obj
         super(LMOptObj, self).__init__(**kwargs)
@@ -1281,6 +1316,7 @@ class LMOptObj(LMEngine):
         return self.opt_obj.calc_residuals()
 
     def update_function(self, param_vals):
+        """Updates the opt_obj, returns new error."""
         self.opt_obj.update_function(param_vals)
         return self.opt_obj.get_error()
 
@@ -1303,11 +1339,49 @@ class OptObj(object):
         return None
 
 class OptState(OptObj):
+    """
+    A wrapper for a peri.states instance which allows for optimization
+    along any set of directions.
+
+    Parameters
+    ----------
+        state : peri.states
+            The state to optimize
+        directions : numpy.ndarray
+            [M,N] element array of the M tangent vectors determining
+            the plane, each with N dimensions.
+        p0 : numpy.ndarray or None, optional
+            The optimization is done on a hyperplane spanned by the
+            tangent vectors `directions` and passing through the point
+            `p0`. If `p0` is `None`, then `p0` is set to the current
+            state paramters. Default is None
+        dl : Float, optional
+            The step size for finite-differencing the derivative. Default
+            is 1e-7
+
+    Attributes
+    ----------
+        param_vals : numpy.ndarray
+            The parameter values of the distance moved from `p0` along
+            each of the tangent vectors.
+
+    Methods
+    -------
+        update_function(param_vals)
+            Update the state to `param_vals` on the hyperplane
+        get_error()
+            Returns self.state.error
+        calc_residuals()
+            Returns self.state.residuals.ravel()
+        calc_J()
+            Calculates J for the state as parameterized by the directions.
+
+    See Also
+    --------
+        LMOptObj
+        do_levmarq_n_directions
+    """
     def __init__(self, state, directions, p0=None, dl=1e-7, be_nice=False):
-        """
-        A wrapper for a peri.states instance which allows for optimization
-        along any set of directions.
-        """
         self.state = state
         self.dl = dl
         self.be_nice = be_nice
@@ -1359,7 +1433,7 @@ class LMGlobals(LMEngine):
 
     Parameters
     ----------
-        state : peri.states.ConfocalImagePython instance
+        state : peri.states
             The state to optimize
         param_names : List
             List of the parameter names (strings) to optimize over
@@ -1483,7 +1557,6 @@ class LMParticles(LMEngine):
         reset(new_damping=None)
             Resets counters etc to zero, allowing more runs to commence.
 
-
     Other Parameters, Attributes, and Methods
     -----------------------------------------
         See LMEngine
@@ -1497,7 +1570,16 @@ class LMParticles(LMEngine):
 
     Notes
     -----
-        Clips rads, positions to self._MINRAD, self._MAXRAD, self._MINDIST
+        To prevent the state updates from breaking, this clips the
+        particle rads to [self._MINRAD, self._MAXRAD] and the positions
+        to at least self._MINDIST from the edge of the padded image.
+        These are:
+            _MINRAD  : 1e-3
+            _MAXRAD  : 2e2
+            _MINDIST : 1e-3
+        For extremely large particles (e.g. larger than _MAXRAD or larger
+        than the pad and barely overlapping the image) these numbers might
+        be insufficient.
     """
     def __init__(self, state, particles, include_rad=True, **kwargs):
         self.state = state
@@ -1574,51 +1656,82 @@ class LMParticles(LMEngine):
 
 class LMParticleGroupCollection(object):
     """
-    Convenience wrapper for LMParticles. This generates a separate instance
-    for the particle groups each time and optimizes with that, since storing
-    J for the particles is too large.
+    Levenberg-Marquardt on all particles in a state.
 
-    Try implementing a way to save the J's via tempfile's. lp.update_J()
-    only updates J, JTJ, so you'd only have to save those (or get JTJ from J).
+    Convenience wrapper for LMParticles. Generates a separate instance
+    for the particle groups each time and optimizes with that, since
+    storing J for the particles is too large.
 
+    Parameters
+    ----------
+        state : peri.states
+            The state to optimize
+        region_size : Int or 3-element list-like of ints, optional
+            The region size for sub-blocking particles. Default is 40
+        do_calc_size : Bool, optional
+            If True, calculates the region size internally based on
+            the maximum allowed memory. Default is True
+        max_mem : Numeric, optional
+            The maximum allowed memory for J to occupy. Default is 1e9
+        get_cos : Bool, optional
+            Set to True to include the model cosine in the statistics
+            on each individual group's run, using `LMEngine`
+            get_termination_stats(). Stored in self.stats. Default is
+            False
+        save_J : Bool
+            Set to True to create a series of temp files that save J
+            for each group of particles. Needed for do_internal_run().
+            Default is False.
+        **kwargs :
+            Pass any kwargs that would be passed to LMParticles.
+            Stored in self._kwargs for reference.
+
+    Attributes
+    ----------
+        stats : List
+            A list of the termination stats for each sub-block of particles
+        particle_groups : List
+            A list of particle groups. Element [i] in the list is a
+            numpy.ndarray of the indices in group [i].
+        region_size : Int or 3-element list-like
+            The region size of the tiles. If `do_calc_size` is True,
+            region_size will be the calculated value, which may differ
+            from the input value.
+        _kwargs : Dict
+            The **kwargs passed to LMParticles.
 
     Methods
     -------
-        reset: Re-calculate all the groups
-        do_run_1: Run do_run_1 for every group of particles
-        do_run_2: Run do_run_2 for every group of particles
+        reset()
+            Re-calculate all the groups
+        do_run_1()
+            Run do_run_1 for every group of particles
+        do_run_2()
+            Run do_run_2 for every group of particles
+        do_internal_run()
+            Run do_internal_run for every group of particles
+
+    See Also
+    -------
+        LMParticles
+
+    Notes
+    -----
+    Since storing J for many particles can require a huge amount of
+    memory, this object proceeds by re-initializing a separate LMParticles
+    instance for each group of particles, calculating and then discarding
+    J each time. The calculated J's can be kept by setting `save_J` to
+    True, which saves each J for each group in a separate tempfile,
+    located in the current directory. The J's can then be loaded again to
+    attempt a second step without re-calculating J. However, for a big
+    image this can attempt to store _a_lot_ of temp files, which might be
+    more than the operating system limit (as temp files are always open),
+    which will raise an error. So use with caution. Deleting any
+    references to the temp files by deleting the LMParticleGroupCollection
+    instance will close and remove the temporary files.
     """
     def __init__(self, state, region_size=40, do_calc_size=True, max_mem=1e9,
             get_cos=False, save_J=False, **kwargs):
-        """
-        Parameters
-        ----------
-            state: peri.states instance
-                The state to optimize
-            region_size: Int or 3-element list-like of ints
-                The region size for sub-blocking particles. Default is 40
-            do_calc_size: Bool
-                If True, calculates the region size internally based on
-                the maximum allowed memory. Default is True
-            get_cos : Bool
-                Set to True to include the model cosine in the statistics
-                on each individual group's run, using
-                LMEngine.get_termination_stats(), stored in self.stats.
-                Default is False
-            save_J : Bool
-                Set to True to create a series of temp files that save J
-                for each group of particles. Needed for do_internal_run().
-                Default is False.
-            **kwargs:
-                Pass any kwargs that would be passed to LMParticles.
-                Stored in self._kwargs for reference.
-
-        Attributes
-        ----------
-            stats : List
-
-        """
-
         self.state = state
         self._kwargs = kwargs
         self.region_size = region_size
@@ -1630,7 +1743,22 @@ class LMParticleGroupCollection(object):
 
     def reset(self, new_region_size=None, do_calc_size=True, new_damping=None,
             new_max_mem=None):
-        """Resets the particle groups and optionally the region size and damping."""
+        """
+        Resets the particle groups and optionally the region size and damping.
+
+        Parameters
+        ----------
+            new_region_size : : Int or 3-element list-like of ints, optional
+                The region size for sub-blocking particles. Default is 40
+            do_calc_size : Bool, optional
+                If True, calculates the region size internally based on
+                the maximum allowed memory. Default is True
+            new_damping : Float or None, optional
+                The new damping of the optimizer. Set to None to leave
+                as the default for LMParticles. Default is None.
+            new_max_mem : Numeric, optional
+                The maximum allowed memory for J to occupy. Default is 1e9
+        """
         if new_region_size is not None:
             self.region_size = new_region_size
         if new_max_mem != None:
@@ -1675,6 +1803,7 @@ class LMParticleGroupCollection(object):
         return J, JTJ, tile
 
     def _do_run(self, mode='1'):
+        """workhorse for the self.do_run_xx methods."""
         for a in xrange(len(self.particle_groups)):
             group = self.particle_groups[a]
             lp = LMParticles(self.state, group, **self._kwargs)
@@ -1694,12 +1823,15 @@ class LMParticleGroupCollection(object):
                 self._has_saved_J[a] = True
 
     def do_run_1(self):
+        """Calls LMParticles.do_run_1 for each group of particles."""
         self._do_run(mode='1')
 
     def do_run_2(self):
+        """Calls LMParticles.do_run_2 for each group of particles."""
         self._do_run(mode='2')
 
     def do_internal_run(self):
+        """Calls LMParticles.do_internal_run for each group of particles."""
         if not self.save_J:
             raise RuntimeError('self.save_J=True required for do_internal_run()')
         if not np.all(self._has_saved_J):
@@ -1823,23 +1955,54 @@ class AugmentedState(object):
             self.state.update(self._rad_nms, rnew)
 
 class LMAugmentedState(LMEngine):
-    def __init__(self, aug_state, max_mem=1e9, opt_kwargs={}, **kwargs):
-        """
-        Levenberg-Marquardt engine for state globals with all the options
-        from the M. Transtrum J. Sethna 2012 ArXiV paper. See LMGlobals
-        for documentation.
+    """
+    Levenberg-Marquardt on an augmented state.
 
-        Inputs:
-        -------
-        aug_state: opt.AugmentedState instance
-            The augmented state to optimize
-        max_mem: Int
-            The maximum memory to use for the optimization; controls block
-            decimation. Default is 3e9.
-        opt_kwargs: Dict
+    Contains alll the options from the M. Transtrum J. Sethna 2012 ArXiV
+    paper. See LMEngine for further documentation.
+
+    Parameters
+    ----------
+        aug_state : AugmentedState
+            The state to optimize
+        max_mem : Numeric, optional
+            The maximum memory to use for the optimization; controls pixel
+            decimation. Default is 1e9.
+        opt_kwargs : Dict, optional
             Dict of **kwargs for opt implementation. Right now only for
-            opt.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
-        """
+            *.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
+            Default is `{}`
+
+    Attributes
+    ----------
+        aug_state : AugmentedState
+            The augmented state to optimize.
+        opt_kwargs : dict
+            A **kwargs-like dictionary for optimization implementation.
+        max_mem : Float or int
+            The max memory occupied by J.
+        num_pix : Int
+            The number of pixels of the residuals used to calculate J.
+
+    Methods
+    -------
+        reset(new_damping=None)
+            Resets the augmented state, counters, etc to zero, allowing
+            more runs to commence.
+
+    Other Parameters, Attributes, and Methods
+    -----------------------------------------
+        See LMEngine
+
+    See Also
+    --------
+        LMParticles
+        LMGlobals
+        AugmentedState
+        do_levmarq
+        do_levmarq_particles
+    """
+    def __init__(self, aug_state, max_mem=1e9, opt_kwargs={}, **kwargs):
         self.aug_state = aug_state
         self.opt_kwargs = opt_kwargs
         self.max_mem = max_mem
