@@ -1,10 +1,3 @@
-"""
-TODO:
-    1. burn -- 2 loops of globals is only good for the first few loops; after
-            that it's overkill. Best to make a 3rd mode now, since the
-            psf and zscale move around without a set of burns.
-    2. better optimization? things like run_3 with eigenvalue blocks
-"""
 import os
 import sys
 import time
@@ -23,12 +16,14 @@ from peri.logger import log
 CLOG = log.getChild('opt')
 
 """
-accel_correction may be wrong as checked by rosenbrock function, taking >1 step
-to find the minimum.
-
 If the LMEngine gets 'stuck' on the first loop attempt, since _last_vals ==
 param_vals the LM will check completion and terminate. Leaving as is since I've
 only got this to happen when it's at the minimum...
+TODO:
+    1. burn -- 2 loops of globals is only good for the first few loops; after
+            that it's overkill. Best to make a 3rd mode now, since the
+            psf and zscale move around without a set of burns.
+    2. better optimization? things like run_3 with eigenvalue blocks
 
 To add:
 1. AugmentedState: ILM scale options? You'd need a way to get an overall scale
@@ -63,7 +58,6 @@ J_ia for a small subset (say 1%) of the pixels in the image randomly selected,
 rather than for all the pixels (in addition to leastsq solution instead of
 linalg.solve
 """
-
 
 def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
     """
@@ -1357,25 +1351,58 @@ class OptState(OptObj):
         return np.array(J)
 
 class LMGlobals(LMEngine):
-    def __init__(self, state, param_names, max_mem=1e9, opt_kwargs={}, **kwargs):
-        """
-        Levenberg-Marquardt engine for state globals with all the options
-        from the M. Transtrum J. Sethna 2012 ArXiV paper. See LMEngine
-        for documentation.
+    """
+    Levenberg-Marquardt, optimized for state globals.
 
-        Inputs:
-        -------
-        state: peri.states.ConfocalImagePython instance
+    Contains alll the options from the M. Transtrum J. Sethna 2012 ArXiV
+    paper. See LMEngine for further documentation.
+
+    Parameters
+    ----------
+        state : peri.states.ConfocalImagePython instance
             The state to optimize
-        param_names: List of strings(???)
-            The parameternames to optimize over
-        max_mem: Int
+        param_names : List
+            List of the parameter names (strings) to optimize over
+        max_mem : Numeric, optional
             The maximum memory to use for the optimization; controls pixel
-            decimation. Default is 3e9.
-        opt_kwargs: Dict
+            decimation. Default is 1e9.
+        opt_kwargs : Dict, optional
             Dict of **kwargs for opt implementation. Right now only for
             *.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
-        """
+            Default is `{}`
+
+    Attributes
+    ----------
+        state : peri.states
+            The state to optimize.
+        opt_kwargs : dict
+            A **kwargs-like dictionary for optimization implementation.
+        max_mem : Float or int
+            The max memory occupied by J.
+        num_pix : Int
+            The number of pixels of the residuals used to calculate J.
+        param_names : List
+            The list of the parameter names being optimized.
+
+    Methods
+    -------
+        set_params(new_param_names, new_damping=None)
+            Change the parameter names to optimize.
+        reset(new_damping=None)
+            Resets counters etc to zero, allowing more runs to commence.
+
+    Other Parameters, Attributes, and Methods
+    -----------------------------------------
+        See LMEngine
+
+    See Also
+    --------
+        LMParticles
+        LMAugmnetedState
+        do_levmarq
+        do_levmarq_particles
+    """
+    def __init__(self, state, param_names, max_mem=1e9, opt_kwargs={}, **kwargs):
         self.state = state
         self.opt_kwargs = opt_kwargs
         self.max_mem = max_mem
@@ -1424,6 +1451,54 @@ class LMGlobals(LMEngine):
             raise FloatingPointError('J, JTJ have nans.')
 
 class LMParticles(LMEngine):
+    """
+    Levenberg-Marquardt, optimized for state globals.
+
+    Contains alll the options from the M. Transtrum J. Sethna 2012 ArXiV
+    paper. See LMEngine for further documentation.
+
+    Parameters
+    ----------
+        state : peri.states
+            The state to optimize
+        particles : numpy.ndarray
+            Array of the particle indices to optimize over.
+        include_rad : Bool, optional
+            Whether or not to include the particle radii in the
+            optimization. Default is True
+
+    Attributes
+    ----------
+        state : peri.states
+            The state to optimize.
+        particles : dict
+            A **kwargs-like dictionary for optimization implementation.
+        param_names : List
+            The list of the parameter names being optimized.
+
+    Methods
+    -------
+        set_particles(new_particles, new_damping=None)
+            Change the particle to optimize.
+        reset(new_damping=None)
+            Resets counters etc to zero, allowing more runs to commence.
+
+
+    Other Parameters, Attributes, and Methods
+    -----------------------------------------
+        See LMEngine
+
+    See Also
+    --------
+        LMParticles
+        LMAugmnetedState
+        do_levmarq
+        do_levmarq_particles
+
+    Notes
+    -----
+        Clips rads, positions to self._MINRAD, self._MAXRAD, self._MINDIST
+    """
     def __init__(self, state, particles, include_rad=True, **kwargs):
         self.state = state
         if len(particles) == 0:
@@ -1634,16 +1709,42 @@ class LMParticleGroupCollection(object):
 
 class AugmentedState(object):
     """
-    A state that, in addition to having normal state update options,
-    allows for updating all the particle R, xyz's depending on their
-    positions -- basically rscale(x) for everything.
-    Right now I'm just doing this with R(z)
+    Augments a state with a set of radii(z) parameters.
+
+    Operates by updating the radii as R -> R0*np.exp(legval(zp)), where
+    zp is a rescaled z coordinate. The order of the Legendre polynomial
+    for the rescaling is set by rz_order
+
+    Paramters
+    ---------
+        state : peri.states
+            The state to augment.
+        param_names : list
+            The list of the parameter names to include in the augmented
+            state. Can contain any parameters except the particle radii
+        rz_order : Int, optional
+            The order of the Legendre polynomial used for rescaling.
+            Default is 3.
+
+    Methods
+    -------
+        reset()
+            Resets the augmented state by resetting the initial positions
+            and radii used for updating the particles. Use if any pos or
+            rad has been updated outside of the augmented state.
+        update(param_vals)
+            Updates the augmented state
+
+
+    See Also
+    --------
+        LMAugmentedState
+
+    Notes
+    -----
+        This could be extended to do xyzshift(xyz), radii(xyz)
     """
     def __init__(self, state, param_names, rz_order=3):
-        """
-        block can be an array of False, that's OK
-        However it cannot have any radii blocks
-        """
         rad_nms = state.param_radii()
         has_rad = map(lambda x: x in param_names, rad_nms)
         if np.any(has_rad):
