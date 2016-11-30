@@ -13,32 +13,40 @@ def j2(x):
     to_return[x==0] = 0
     return to_return
 
-"""
-Global magic #'s for a good number of points for gauss-legendre quadrature. 20
-gives double precision (no difference between 20 and 30 and doing all the
-integrals with scipy.quad). The integrals are only over the acceptance angle of
-the lens, so they shouldn't be too rapidly varying, but you might need more
-points for large z,zint (large compared to 100).
-"""
-NPTS = 20
-PTS,WTS = np.polynomial.legendre.leggauss(NPTS)  #only used in get_K; 1ms overhead for 20
-#This was the old way for the line scans:
-PTS_HG,WTS_HG = np.polynomial.hermite.hermgauss(NPTS*2)
-PTS_HG = PTS_HG[NPTS:]
-WTS_HG = WTS_HG[NPTS:]*np.exp(PTS_HG*PTS_HG)  #only used in calculate_linescan_ilm_psf, along with calc_pts_lag
+#Two methods for calculating quadrature points for integration over the
+#illuminating line:
+def calc_pts_hg(npts=20):
+    """Returns Hermite-Gauss quadrature points for even functions"""
+    pts_hg, wts_hg = np.polynomial.hermite.hermgauss(npts*2)
+    pts_hg = pts_hg[npts:]
+    wts_hg = wts_hg[npts:] * np.exp(pts_hg*pts_hg)
+    return pts_hg, wts_hg
 
-#This is the new way:
-def calc_pts_lag(npts=20, scl=0.051532):
+def calc_pts_lag(npts=20):
     """
-    Acceptable pts/scls/approximate line integral scan error:
-    (pts,   scl  )      :         ERR
-    ------------------------------------
-    (15, 0.072144)      :       0.002193
-    (20, 0.051532)      :       0.001498
-    (25, 0.043266)      :       0.001209
+    Returns Gauss-Laguerre quadrature points rescaled for line scan integration
 
-    The previous HG(20) error was ~0.13ish
+    Parameters
+    ----------
+        npts : {15, 20, 25}, optional
+            The number of points to
+
+    Notes
+    -----
+        The scale is set internally as the best rescaling for a line scan
+        integral; it was checked numerically for the allowed npts.
+        Acceptable pts/scls/approximate line integral scan error:
+        (pts,   scl  )      :         ERR
+        ------------------------------------
+        (15, 0.072144)      :       0.002193
+        (20, 0.051532)      :       0.001498
+        (25, 0.043266)      :       0.001209
+
+        The previous HG(20) error was ~0.13ish
     """
+    scl = { 15:0.072144,
+            20:0.051532,
+            25:0.043266}[npts]
     pts0, wts0 = np.polynomial.laguerre.laggauss(npts)
     pts = np.sinh(pts0*scl)
     wts = scl*wts0*np.cosh(pts0*scl)*np.exp(pts0)
@@ -177,7 +185,7 @@ def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False,
     return to_return
 
 def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
-        Kprefactor=None, return_Kprefactor=False, **kwargs):
+        Kprefactor=None, return_Kprefactor=False, npts=20, **kwargs):
     """
     Calculates one of three electric field integrals.
 
@@ -216,6 +224,10 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
             Set to True to also return the Kprefactor (parameter above)
             to speed up the calculation for the next values of K. Default
             is False
+        npts : Int, optional
+            The number of points to use for Gauss-Legendre quadrature of
+            the integral. Default is 20, which is a good number for x,y,z
+            less than 100 or so.
 
     Returns
     -------
@@ -225,6 +237,14 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
             The prefactor that is independent of which integral is being
             calculated but does depend on the parameters; can be passed
             back to the function for speed.
+
+    Notes
+    -----
+        npts=20 gives double precision (no difference between 20, 30, and
+        doing all the integrals with scipy.quad). The integrals are only
+        over the acceptance angle of the lens, so for moderate x,y,z they
+        don't vary too rapidly. For x,y,z, zint large compared to 100, a
+        higher npts might be necessary.
     """
     # Comments:
         # This is the only function that relies on rho,z being numpy.arrays,
@@ -232,13 +252,14 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
     if type(rho) != np.ndarray or type(z) != np.ndarray or (rho.shape != z.shape):
         raise ValueError('rho and z must be np.arrays of same shape.')
 
+    pts, wts = np.polynomial.legendre.leggauss(npts)
     n1n2 = 1.0/n2n1
 
     rr = np.ravel(rho)
     zr = np.ravel(z)
 
     #Getting the array of points to quad at
-    cos_theta = 0.5*(1-np.cos(alpha))*PTS+0.5*(1+np.cos(alpha))
+    cos_theta = 0.5*(1-np.cos(alpha))*pts+0.5*(1+np.cos(alpha))
     #[cos_theta,rho,z]
 
     if Kprefactor is None:
@@ -249,27 +270,21 @@ def get_K(rho, z, alpha=1.0, zint=100.0, n2n1=0.95, get_hdet=False, K=1,
         part_1 = j0(np.outer(rr,np.sqrt(1-cos_theta**2)))*\
             np.outer(np.ones_like(rr), 0.5*(get_taus(cos_theta,n2n1=n2n1)+\
             get_taup(cos_theta,n2n1=n2n1)*csqrt(1-n1n2**2*(1-cos_theta**2))))
-
         integrand = Kprefactor * part_1
-
     elif K==2:
         part_2=j2(np.outer(rr,np.sqrt(1-cos_theta**2)))*\
             np.outer(np.ones_like(rr),0.5*(get_taus(cos_theta,n2n1=n2n1)-\
             get_taup(cos_theta,n2n1=n2n1)*csqrt(1-n1n2**2*(1-cos_theta**2))))
-
         integrand = Kprefactor * part_2
-
     elif K==3:
         part_3=j1(np.outer(rho,np.sqrt(1-cos_theta**2)))*\
             np.outer(np.ones_like(rr), n1n2*get_taup(cos_theta,n2n1=n2n1)*\
             np.sqrt(1-cos_theta**2))
-
         integrand = Kprefactor * part_3
-
     else:
         raise ValueError('K=1,2,3 only...')
 
-    big_wts=np.outer(np.ones_like(rr),WTS)
+    big_wts=np.outer(np.ones_like(rr), wts)
     kint = (big_wts*integrand).sum(axis=1) * 0.5*(1-np.cos(alpha))
 
     if return_Kprefactor:
@@ -653,7 +668,7 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
     if use_laggauss:
         x_vals, wts = calc_pts_lag()
     else:
-        x_vals, wts = PTS_HG, WTS_HG
+        x_vals, wts = calc_pts_hg()
 
     #I'm assuming that y,z are already some sort of meshgrid
     xg, yg, zg = [np.zeros( list(y.shape) + [x_vals.size] ) for a in xrange(3)]
