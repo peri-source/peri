@@ -1506,7 +1506,6 @@ class LMParticles(LMEngine):
         self.particles = particles
         self.param_names = (state.param_particle(particles) if include_rad
                 else state.param_particle_pos(particles))
-        self.error = self.state.error
         self._dif_tile = self._get_diftile()
         #Max, min rads, distance from edge for allowed updates
         self._MINRAD = 1e-3
@@ -1779,13 +1778,6 @@ class AugmentedState(object):
         self._initial_rad = np.copy(self.state.state[self._rad_nms])
         self._initial_pos = np.copy(self.state.state[self._pos_nms]).reshape((-1,3))
         self.param_vals[self.rscale_mask] = 0
-
-    def set_block(self, new_block):
-        """
-        I don't think there is a point to this since the rscale(z) aren't
-        actual parameters
-        """
-        raise NotImplementedError
 
     def rad_func(self, pos):
         """Right now exp(self._poly(z))"""
