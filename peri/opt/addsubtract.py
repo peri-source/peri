@@ -15,7 +15,7 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
 
     Parameters
     ----------
-        st : peri.states.State instance
+        st : :class:`peri.states.State`
             The state to check adding particles to.
         rad : Float
             The feature size for featuring.
@@ -80,7 +80,7 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
 
     Parameters
     ----------
-        st : peri.states.State instance
+        st : :class:`peri.states.State`
             The state to check adding particles to.
         guess : [N,3] list-like
             The positions of particles to check to add.
@@ -154,9 +154,9 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
     particle increases the error by less than max( min_derr, change in image *
     im_change_frac), then the particle is removed.
 
-    Input Parameters
-    ----------------
-        st : peri.states.State instance
+    Parameters
+    ----------
+        st : :class:`peri.states.State`
             The state to check adding particles to.
         ind : Int
             The index of the particle to check to remove.
@@ -169,7 +169,7 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
             The minimal improvement in error to add a particle. Default
             is '3sig' = 3*st.sigma.
 
-    Outputs
+    Returns
     -------
         killed : Bool
             Whether the particle was removed.
@@ -234,7 +234,7 @@ def add_missing_particles(st, rad='calc', tries=50, **kwargs):
 
     Parameters
     ----------
-        st : peri.states.State instance
+        st : :class:`peri.states.State`
             The state to check adding particles to.
         rad : Float or 'calc', optional
             The radius of the newly-added particles and of the feature
@@ -296,7 +296,7 @@ def remove_bad_particles(st, min_rad='calc', max_rad='calc', min_edge_dist=2.0,
 
     Parameters
     -----------
-    st : peri.states.State instance
+    st : :class:`peri.states.State`
         The state to remove bad particles from.
     min_rad : Float, optional
         All particles with radius below min_rad are automatically deleted.
@@ -413,7 +413,7 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
 
     Parameters
     ----------
-        st: peri.states.State instance
+        st: :class:`peri.states.State`
             The state to add and subtract particles to.
         max_iter : Int, optional
             The maximum number of add-subtract loops to use. Default is 7.
@@ -552,9 +552,9 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
     Identifies regions of missing/misfeatured particles based on the
     residuals' local deviation from uniform Gaussian noise.
 
-    Input Parameters
-    ----------------
-        st : peri.states instance
+    Parameters
+    ----------
+        st : :class:`peri.states.State`
             The state in which to identify mis-featured regions.
 
         filter_size : Int, best if odd.
@@ -570,15 +570,16 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
             practice the noise is not Gaussian so there are still some
             regions mis-identified as improperly featured.
 
-    Outputs
-    --------
+    Returns
+    -------
         tiles : List of peri.util.Tile instances.
             Each tile is the smallest bounding tile that contains an
             improperly featured region. The list is sorted by the tile's
             volume.
 
-    Algorithm
-    ---------
+    Notes
+    -----
+    Algorithm is
         1.  Create a field of the local standard deviation, as measured over
             a hypercube of size filter_size.
         2.  Find the maximum reasonable value of the field. The field should
@@ -624,7 +625,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
 
     Parameters
     ----------
-        st: ConfocalImagePython
+        st: :class:`peri.states.State`
             The state to add and subtract particles to.
         tile : peri.util.Tile instance
             The poorly-fit region to examine.
@@ -733,7 +734,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
             opt.do_levmarq_particles(st, np.array(ainds[i:i +
                     max_allowed_remove]), include_rad=True, max_iter=3)
     elif len(ainds) > 0:
-        opt.do_levmarq_particles(st, np.array([i]), include_rad=True,
+        opt.do_levmarq_particles(st, ainds, include_rad=True,
                 max_iter=3)
 
     #6. Ensure that current error after add-subtracting is lower than initial
@@ -760,7 +761,7 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
 
     Parameters
     ----------
-        st: ConfocalImagePython
+        st: :class:`peri.states.State`
             The state to add and subtract particles to.
         region_depth : Int
             The minimum amount of regions to try; the algorithm terminates

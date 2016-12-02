@@ -1486,6 +1486,11 @@ class OptState(OptObj):
         return self.state.error
 
     def calc_residuals(self):
+        """
+        See also
+        --------
+        :func:`peri.state.States.residuals`
+        """
         return self.state.residuals.ravel().copy()
 
     def calc_J(self):
@@ -2246,7 +2251,7 @@ def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
 
     Parameters
     ----------
-        s : peri.states.ConfocalImagePython instance
+        s : :class:`peri.states.State`
             The state to optimize
         directions : np.ndarray
             [n,d] element numpy.ndarray of the n directions in the d-
@@ -2274,7 +2279,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
 
     Parameters
     ----------
-        s : peri.states.ConfocalImagePython instance
+        s : :class:`peri.states.ImageState`
             The state to optimize
         n_loop : Int, optional
             The number of times to loop over in the optimizer. Default is 6.
