@@ -572,7 +572,7 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
 
     Returns
     -------
-        tiles : List of peri.util.Tile instances.
+        tiles : List of :class:`peri.util.Tile`
             Each tile is the smallest bounding tile that contains an
             improperly featured region. The list is sorted by the tile's
             volume.
@@ -627,7 +627,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     ----------
         st: :class:`peri.states.State`
             The state to add and subtract particles to.
-        tile : peri.util.Tile instance
+        tile : :class:`peri.util.Tile`
             The poorly-fit region to examine.
         rad : Float or 'calc', optional
             The initial radius for added particles; added particles radii

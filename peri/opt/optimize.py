@@ -66,7 +66,7 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
 
     Parameters
     ----------
-        s : peri.states instance
+        s : :class:`peri.states.State`
             The state to calculate J for.
         params : List
             The list of parameter names to calculate the gradient of.
@@ -108,7 +108,7 @@ def name_globals(s, remove_params=None):
 
     Parameters
     ----------
-        s : peri.states instance
+        s : :class:`peri.states.ImageState`
             The state to name the globals of.
         remove_params : Set or None
             A set of unique additional parameters to remove from the globals
@@ -141,7 +141,7 @@ def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20):
 
     Parameters
     ----------
-        s : peri.states instance
+        s : :class:`peri.states.State`
             The state on which to calculate J.
         nparams : Int
             The number of parameters that will be included in J.
@@ -237,9 +237,9 @@ def find_particles_in_tile(state, tile):
 
     Parameters
     ----------
-        state : peri.states instance
+        state : :class:`peri.states.ImageState`
             The state to locate particles in.
-        tile : peri.util.Tile instance
+        tile : :class:`peri.util.Tile` instance
             Tile of the region inside which to check for particles.
 
     Returns
@@ -260,7 +260,7 @@ def separate_particles_into_groups(s, region_size=40, bounds=None):
 
     Parameters
     ----------
-    s : peri.states instance
+    s : :class:`peri.states.ImageState`
         The peri state to find particles in.
     region_size : Int or 3-element list-like of ints, optional
         The size of the box. Groups particles into boxes of shape
@@ -308,7 +308,7 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
 
     Input Parameters
     ----------------
-        s : peri.states instance
+        s : :class:`peri.states.ImageState`
             The state with the particles
         region_size : Int or 3-element list-like of ints, optional.
             The initial guess for the region size. Default is 40
@@ -372,14 +372,14 @@ def get_residuals_update_tile(st, padded_tile):
 
     Parameters
     ----------
-        st : peri.states.state
+        st : :class:`peri.states.State`
             The state
-        padded_tile : peri.util.Tile
+        padded_tile : :class:`peri.util.Tile`
             The tile in the padded image.
 
     Returns
     -------
-        peri.util.Tile
+        :class:`peri.util.Tile`
             The tile corresponding to padded_tile in the unpadded image.
     """
     inner_tile = st.ishape.intersection([st.ishape, padded_tile])
@@ -1420,12 +1420,12 @@ class OptObj(object):
 
 class OptState(OptObj):
     """
-    A wrapper for a peri.states instance which allows for optimization
-    along any set of directions.
+    A wrapper for a :class:`peri.states.State` instance which allows for
+    optimization along any set of directions.
 
     Parameters
     ----------
-        state : peri.states
+        state : :class:`peri.states.State`
             The state to optimize
         directions : numpy.ndarray
             [M,N] element array of the M tangent vectors determining
@@ -1517,7 +1517,7 @@ class LMGlobals(LMEngine):
 
     Parameters
     ----------
-        state : peri.states
+        state : :class:`peri.states.State`
             The state to optimize
         param_names : List
             List of the parameter names (strings) to optimize over
@@ -1531,7 +1531,7 @@ class LMGlobals(LMEngine):
 
     Attributes
     ----------
-        state : peri.states
+        state : :class:`peri.states.State`
             The state to optimize.
         opt_kwargs : dict
             A **kwargs-like dictionary for optimization implementation.
@@ -1617,7 +1617,7 @@ class LMParticles(LMEngine):
 
     Parameters
     ----------
-        state : peri.states
+        state : :class:`peri.states.ImageState`
             The state to optimize
         particles : numpy.ndarray
             Array of the particle indices to optimize over.
@@ -1627,7 +1627,7 @@ class LMParticles(LMEngine):
 
     Attributes
     ----------
-        state : peri.states
+        state : :class:`peri.states.ImageState`
             The state to optimize.
         particles : dict
             A **kwargs-like dictionary for optimization implementation.
@@ -1748,7 +1748,7 @@ class LMParticleGroupCollection(object):
 
     Parameters
     ----------
-        state : peri.states
+        state : :class:`peri.states.ImageState`
             The state to optimize
         region_size : Int or 3-element list-like of ints, optional
             The region size for sub-blocking particles. Default is 40
@@ -1932,7 +1932,7 @@ class AugmentedState(object):
 
     Paramters
     ---------
-        state : peri.states
+        state : :class:`peri.states.ImageState`
             The state to augment.
         param_names : list
             The list of the parameter names to include in the augmented
