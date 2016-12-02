@@ -73,7 +73,7 @@ def _feature_guess(im, rad, minmass=None, use_tp=False, **kwargs):
     return guess[inds].copy(), npart
 
 def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
-        min_derr='3sig'):
+        min_derr='3sig', **kwargs):
     """
     Checks whether to add particles at a given position by seeing if adding
     the particle improves the fit of the state.
