@@ -114,7 +114,7 @@ def rosenbrock_dd(xd, A=10):
     A higher-dimensional modification of the rosenbrock function, as a
     set of residuals (cost = sum(residuals**2))
 
-    The standard modified function is with data = zeros(N), with a
+    The standard modified function is with data = zeros(2d-2), with a
     global minimum at xd = ones(d). It is a coupled model, quadratic in
     the first d-1 parameters. Its data-space dimension (2d-2) is greater
     than its model-space dimension (d) for d > 2.
