@@ -36,7 +36,7 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=False):
 
     Parameters
     -----------
-    image : `peri.util.Image` object
+    image : :class:`peri.util.Image` object
         Image object which defines the image file as well as the region.
 
     radius : float
@@ -81,11 +81,12 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=False):
 def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
         tile=None, invert=True, use_full_path=False, minmass=100.0, **kwargs):
     """
-    Gets a completely-optimized state from an initial image of roughly
-    monodisperse particles. The user can interactively select the image.
+    Completely optimizes a state from an image of roughly monodisperse
+    particles.
 
-    The state is periodically saved during optimization, with different
-    filename for different stages of the optimization.
+    The user can interactively select the image. The state is periodically
+    saved during optimization, with different filename for different stages
+    of the optimization.
 
     Parameters
     ----------
@@ -96,7 +97,7 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
         im_name : string, optional
             The file name of the image to load. If not set, it is selected
             interactively through Tk.
-        tile : peri.util.Tile instance, optional
+        tile : :class:`peri.util.Tile`, optional
             The tile of the raw image to be analyzed. Default is None, the
             entire image.
         invert : Bool, optional
@@ -110,7 +111,7 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
 
         **kwargs Parameters
         -------------------
-        slab : peri.comp.objs.Slab instance or None, optional
+        slab : :class:`peri.comp.objs.Slab` or None, optional
             If not None, a slab corresponding to that in the image. Default
             is None.
         max_mem : Numeric
@@ -141,7 +142,7 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
 
     Returns
     -------
-        s : peri.states.ImageState instance
+        s : :class:`peri.states.ImageState`
             The optimized state.
 
     See Also
@@ -200,13 +201,13 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
             The initial guess for the N particle radii.
         im_name : string
             The filename of the image to feature.
-        tile : peri.util.Tile instance, optional
+        tile : :class:`peri.util.Tile`, optional
             A tile of the sub-region of the image to feature. Default is
             None, i.e. entire image.
 
     **kwargs Parameters
     -------------------
-        slab : peri.comp.objs.Slab instance or None, optional
+        slab : :class:`peri.comp.objs.Slab` or None, optional
             If not None, a slab corresponding to that in the image. Default
             is None.
         max_mem : Numeric
@@ -240,7 +241,7 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
 
     Returns
     -------
-        s : peri.states.ImageState instance
+        s : :class:`peri.states.ImageState`
             The optimized state.
 
     See Also
@@ -393,7 +394,7 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
             Default is 'hi'.
     Returns
     -------
-        s : peri.states.ImageState instance
+        s : :class:`peri.states.ImageState`
             The optimized state.
 
     See Also
@@ -494,7 +495,7 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
             Default is 'hi'.
     Returns
     -------
-        s : peri.states.ImageState instance
+        s : :class:`peri.states.ImageState`
             The optimized state.
 
     See Also

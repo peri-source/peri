@@ -2441,7 +2441,7 @@ def fit_comp(new_comp, old_comp, **kwargs):
 
     Parameters
     ----------
-    new_comp : peri.comp
+    new_comp : :class:`peri.comps.comp`
         The new object, whose parameters to update to fit the field of
         `old_comp`. Must have a .get() attribute which returns an ndarray
     old_comp : peri.comp
