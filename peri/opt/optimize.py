@@ -1100,15 +1100,16 @@ class LMEngine(object):
         #And we've updated, so JTJ is no longer valid:
         self._fresh_JTJ = False
 
-    def find_expected_error(self, delta_params=None):
+    def find_expected_error(self, delta_params='calc'):
         """
         Returns the error expected after an update if the model were linear.
 
         Parameters
         ----------
-            delta_params : numpy.ndarray or None, optional
-                The relative change in parameters. If None, defaults to
-                the update calculated from the current damping, J, etc.
+            delta_params : {numpy.ndarray, 'calc', or 'perfect'}, optional
+                The relative change in parameters. If 'calc', uses update
+                calculated from the current damping, J, etc; if 'perfect',
+                uses the update calculated with zero damping.
 
         Returns
         -------
@@ -1117,9 +1118,10 @@ class LMEngine(object):
         """
         # grad = self.calc_grad()  #this is wrong!!! FIXME
         grad = 2*np.dot(self.J, self.calc_residuals())
-        if delta_params is None:
-            delta_params = self._calc_lm_step(self._calc_damped_jtj(self.JTJ),
-                self.calc_grad())
+        if delta_params in {'calc', 'perfect'}:
+            jtj = (self.JTJ if delta_params == 'perfect' else
+                    self._calc_damped_jtj(self.JTJ))
+            delta_params = self._calc_lm_step(jtj, self.calc_grad())
         #If the model were linear, then the cost would be quadratic,
         #with Hessian 2*`self.JTJ` and gradient `grad`
         expected_error = (self.error + np.dot(grad, delta_params) +
