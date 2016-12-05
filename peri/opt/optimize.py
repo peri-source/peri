@@ -669,8 +669,11 @@ class LMEngine(object):
 
     def do_run_1(self):
         """
-        LM run evaluating 1 step at a time. Broyden or eigendirection
-        updates replace full-J updates. No internal runs.
+        LM run, evaluating 1 step at a time.
+
+        Broyden or eigendirection updates replace full-J updates until
+        a full-J update occurs. Does not run with the calculated J (no
+        internal run).
         """
         while not self.check_terminate():
             self._has_run = True
@@ -724,9 +727,10 @@ class LMEngine(object):
     def do_run_2(self):
         """
         LM run evaluating 2 steps (damped and not) and choosing the best.
-        Runs with that damping + Broyden or eigendirection updates, until
-        deciding to do a full-J update. Only changes damping after full-J
-        updates.
+
+        After finding the best of 2 steps, runs with that damping + Broyden
+        or eigendirection updates, until deciding to do a full-J update.
+        Only changes damping after full-J updates.
         """
         while not self.check_terminate():
             self._has_run = True
@@ -734,6 +738,7 @@ class LMEngine(object):
             self._num_iter += 1
 
     def _run2(self):
+        """Workhorse for do_run_2"""
         if self.check_update_J():
             self.update_J()
         else:
@@ -816,6 +821,8 @@ class LMEngine(object):
 
     def do_internal_run(self, initial_count=0, subblock=None, update_derr=True):
         """
+        Takes more steps without calculating J again.
+
         Given a fixed damping, J, JTJ, iterates calculating steps, with
         optional Broyden or eigendirection updates. Iterates either until
         a bad step is taken or for self.run_length times.
@@ -1194,6 +1201,16 @@ class LMEngine(object):
                 Whether or not to calcualte the cosine of the residuals
                 with the tangent plane of the model using the current J.
                 The calculation may take some time. Default is True
+
+        Returns
+        -------
+            dict
+                Has keys
+                    delta_vals  : The last change in parameter values.
+                    delta_err   : The last change in the error.
+                    frac_err    : The fractional change in the error.
+                    num_iter    : The number of iterations completed.
+                    error       : The current error.
         """
         delta_vals = self._last_vals - self.param_vals
         delta_err = self._last_error - self.error
@@ -1208,7 +1225,7 @@ class LMEngine(object):
 
     def check_completion(self):
         """
-        Checks if the algorithm has found a satisfactory minimum
+        Returns a Bool of whether the algorithm has found a satisfactory minimum
         """
         terminate = False
         term_dict = self.get_termination_stats(get_cos=self.costol is not None)
@@ -1222,7 +1239,10 @@ class LMEngine(object):
 
     def check_terminate(self):
         """
-        Termination if errtol, paramtol, costol, _num_iter are < a certain amount
+        Returns a Bool of whether to terminate.
+
+        Checks whether a satisfactory minimum has been found or whether
+        too many iterations have occurred.
         """
         if not self._has_run:
             return False
@@ -1236,14 +1256,16 @@ class LMEngine(object):
 
     def check_update_J(self):
         """
-        Checks if the full J should be updated. Right now, just updates if
-        we've done update_J_frequency loops
+        Checks if the full J should be updated.
+
+        Right now, just updates after update_J_frequency loops
         """
         self._J_update_counter += 1
         update = self._J_update_counter >= self.update_J_frequency
         return update & (not self._fresh_JTJ)
 
     def update_J(self):
+        """Updates J, JTJ, and internal counters."""
         self.calc_J()
         self.JTJ = np.dot(self.J, self.J.T)
         self._fresh_JTJ = True
@@ -1312,6 +1334,18 @@ class LMEngine(object):
     def calc_accel_correction(self, damped_JTJ, delta0):
         """
         Geodesic acceleration correction to the LM step.
+
+        Parameters
+        ----------
+            damped_JTJ : numpy.ndarray
+                The damped JTJ used to calculate the initial step.
+            delta0 : numpy.ndarray
+                The initial LM step.
+
+        Returns
+        -------
+            corr : numpy.ndarray
+                The correction to the original LM step.
         """
         #Get the derivative:
         _ = self.update_function(self.param_vals)
