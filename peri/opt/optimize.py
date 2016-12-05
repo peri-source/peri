@@ -1005,6 +1005,25 @@ class LMEngine(object):
     def find_LM_updates(self, grad, do_correct_damping=True, subblock=None):
         """
         Calculates LM updates, with or without the acceleration correction.
+
+        Paramters
+        ---------
+            grad : numpy.ndarray
+                The gradient of the model cost.
+            do_correct_damping : Bool, optional
+                If `self.use_accel`, then set to True to correct damping
+                if the acceleration correction is too big. Default is True
+                Does nothing is `self.use_accel` is False
+            subblock : slice, numpy.ndarray, or None, optional
+                Set to a slice or a valide numpy.ndarray to use only a
+                certain subset of the parameters. Default is None, i.e.
+                use all the parameters.
+
+        Returns
+        -------
+            delta : numpy.ndarray
+                The Levenberg-Marquadt step, relative to the old
+                parameters. Size is always self.param_vals.size.
         """
         if subblock is not None:
             if (subblock.sum() == 0) or (subblock.size == 0):
@@ -1038,6 +1057,7 @@ class LMEngine(object):
         return delta
 
     def _calc_lm_step(self, damped_JTJ, grad, subblock=None):
+        """Calculates a Levenberg-Marquard step w/o acceleration"""
         delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, grad,
                 rcond=self.min_eigval)
         if self._fresh_JTJ:
@@ -1079,6 +1099,32 @@ class LMEngine(object):
             self.param_vals = new_vals.copy()
         #And we've updated, so JTJ is no longer valid:
         self._fresh_JTJ = False
+
+    def find_expected_error(self, delta_params=None):
+        """
+        Returns the error expected after an update if the model were linear.
+
+        Parameters
+        ----------
+            delta_params : numpy.ndarray or None, optional
+                The relative change in parameters. If None, defaults to
+                the update calculated from the current damping, J, etc.
+
+        Returns
+        -------
+            numpy.float64
+                The expected error after the update with `delta_params`
+        """
+        # grad = self.calc_grad()  #this is wrong!!! FIXME
+        grad = 2*np.dot(self.J, self.calc_residuals())
+        if delta_params is None:
+            delta_params = self._calc_lm_step(self._calc_damped_jtj(self.JTJ),
+                self.calc_grad())
+        #If the model were linear, then the cost would be quadratic,
+        #with Hessian 2*`self.JTJ` and gradient `grad`
+        expected_error = (self.error + np.dot(grad, delta_params) +
+                np.dot(np.dot(self.JTJ, delta_params), delta_params))
+        return expected_error
 
     def calc_model_cosine(self, decimate=None):
         """
