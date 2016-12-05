@@ -1058,7 +1058,7 @@ class LMEngine(object):
 
     def _calc_lm_step(self, damped_JTJ, grad, subblock=None):
         """Calculates a Levenberg-Marquard step w/o acceleration"""
-        delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, grad,
+        delta0, res, rank, s = np.linalg.lstsq(damped_JTJ, -0.5*grad,
                 rcond=self.min_eigval)
         if self._fresh_JTJ:
             CLOG.debug('%d degenerate of %d total directions' % (
@@ -1252,8 +1252,9 @@ class LMEngine(object):
             raise FloatingPointError('J, JTJ have nans.')
 
     def calc_grad(self):
+        """The gradient of the cost w.r.t. the parameters."""
         residuals = self.calc_residuals()
-        return -np.dot(self.J, residuals)
+        return 2*np.dot(self.J, residuals)
 
     def _rank_1_J_update(self, direction, values):
         """
