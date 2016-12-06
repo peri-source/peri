@@ -169,8 +169,8 @@ def otsu_threshold(data, bins=255):
     h0, x0 = np.histogram(data.ravel(), bins=bins)
     h = h0.astype('float') / h0.sum()  #normalize
     x = 0.5*(x0[1:] + x0[:-1])  #bin center
-    wk = array([h[:i+1].sum() for i in xrange(h.size)])  #omega_k
-    mk = array([sum(x[:i+1]*h[:i+1]) for i in xrange(h.size)])  #mu_k
+    wk = np.array([h[:i+1].sum() for i in xrange(h.size)])  #omega_k
+    mk = np.array([sum(x[:i+1]*h[:i+1]) for i in xrange(h.size)])  #mu_k
     mt = mk[-1]  #mu_T
     sb = (mt*wk - mk)**2 / (wk*(1-wk) + 1e-15)  #sigma_b
     ind = sb.argmax()

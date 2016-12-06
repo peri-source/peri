@@ -562,13 +562,14 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
             deviation; should approximately be the size of a poorly featured
             region in each dimension. Default is 5.
 
-        sigma_cutoff : Float
+        sigma_cutoff : Float or `otsu`, optional
             The max allowed deviation of the residuals from what is expected,
             in units of the residuals' standard deviation. Lower means more
             sensitive, higher = less sensitive. Default is 8.0, i.e. one
             pixel out of every 7*10^11 is mis-identified randomly. In
             practice the noise is not Gaussian so there are still some
-            regions mis-identified as improperly featured.
+            regions mis-identified as improperly featured. Set to `otsu`
+            to calculate this number based on an automatic otsu threshold.
 
     Returns
     -------
@@ -590,9 +591,12 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
             the local error is too large.
         4.  Parse the misfeatured regions into tiles.
         5.  Return the sorted tiles.
-    FIXME you could do an Otsu threshold to calculate the sigma cutoff;
-    seems to work OK in my one test; although it's a # similar to the
-    sigma cutoff.
+    The Otsu option to calculate the sigma cutoff works well for images
+    that actually contain missing particles, returning a number similar
+    to one calculated with a sigma cutoff. However, if the image is
+    well-featured with Gaussian residuals, then the Otsu threshold
+    splits the Gaussian down the middle instead of at the tails, which
+    is very bad. So use with caution.
     """
     #1. Field of local std
     r = st.residuals
@@ -601,6 +605,8 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
     f = np.sqrt(nd.filters.convolve(r*r, weights, mode='reflect'))
 
     #2. Maximal reasonable value of the field.
+    if sigma_cutoff == 'otsu':
+        max_ok = initializers.otsu_threshold(f)
     max_ok = f.mean() * (1 + sigma_cutoff / np.sqrt(weights.size))
 
     #3. Label & Identify
