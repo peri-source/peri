@@ -22,7 +22,7 @@ methods in order to have a functioning ``State``. In order to implement a
 ``State``, you must know about the following functions:
 
 .. autoclass:: peri.states.State
-    :members: __init__, data, model, update
+    :members: data, model, update
     :undoc-members:
     :noindex:
 
@@ -31,7 +31,7 @@ Example: PolyFitState
 
 To demonstrate this ``State`` class, let's implement a polynomial fit class
 which fits a one dimensional curve to an arbitrary degree polynomial.  In the
-following class, we subclass :class:`peri.states.State` and implement the
+following class, we subclass :class:`~peri.states.State` and implement the
 properties and functions that we outlined in the previous section. In
 particular, in the ``__init__``, we store the input ``x`` points as a member
 variable and ``y`` values as data. We then set up parameter names and values
@@ -156,23 +156,84 @@ provides:
 * Compartmentalization of parts of an image
 * Many optimizations including local image updates and better FFTs
 
-On top of the :class:`peri.states.State` class, we add several layers of
-complexity.  We feel these levels of complexity help, rather than harm, the
+On top of the :class:`~peri.states.State` class, we add several layers of
+complexity.  We feel these levels of complexity help, rather than hinder, the
 development of new image models and allows the flexibility to adapt to new
 brands and types of microscopes and experimental systems. Here we will describe
 these structures and along the way develop a very simple image model of
 polydisperse discs in a plane imaged with microscope described by a Gaussian
-point-spread-function (PSF).
+point-spread-function (PSF). In particular, the model we will be creating is:
 
-First, we must introduce some terminology to 
+.. math::
 
-* **Model** -- 
-* **Component** --
-* **Tile** --
-  
-Components
-----------
+    \mathcal{M}(\bvec{x}) = B(\bvec{x}) + \int P(\bvec{x} - \bvec{x}^{\prime}) S(\bvec{x}; \{\bvec{p}_i, a_i\}) \rm{d}\bvec{x}^{\prime}
 
-First, we split this 
+where :math:`P` is the point spread function and :math:`S` is the shape
+function which defines the *Platonic* solid, and :math:`B` is a spatially
+varying background which may represent any number of confounding factors
+in image formation:
 
+.. math::
 
+    P(\bvec{x}) &= \frac{1}{\sqrt{2\pi \sigma^2}} e^{ - \| \bvec{x}\|^2 / 2\sigma^2 } \\
+    S(\bvec{x}; \{\bvec{p}_, a_i\}) &= \sum_{i=0}^{N_{\rm{particles}}}  \frac{1}{1 + e^{\alpha (\|\bvec{x} - \bvec{p}_i\| - a_i)}} \\
+    B(\bvec{x}) &= \sum_{i=0}^{C_x} \sum_{j=0}^{C_y} c_{ij} L_i(x) L_j(y)
+
+That is, we have a simple image model of circular discs influenced by
+microscope optics with a non-uniform background. Since each of this functional
+form seem distinct, we separate our model into small objects which we call
+``components``. These ``components`` calculate part of the model (:math:`P`,
+:math:`S`, ...) over a certain region, or ``Tile``, then get combined back into
+the overall model. This philosophy can be expressed simply as:
+
+* **Model** (:class:`~peri.models.Model`) -- The entire equation (and derivatives) describing the image formation :math:`\mathcal{M}`
+* **Component** (:class:`~peri.comp.comp.Component`) -- Small subsections of the model e.g. :math:`P`, :math:`S`, :math:`B`
+* **Tile** (:class:`~peri.util.Tile`) -- Regions of the image over which parts of the model are calculated.
+
+ParameterGroups and Components
+------------------------------
+
+First, we split the model into small parts which break up the monolithic model
+into managable pieces. We call these objects ``Components``
+(:class:`~peri.comp.comp.Component`). In their most basic form, a ``Component``
+is a :class:`~peri.comp.comp.ParameterGroup` which also knows about tiling.
+
+ParameterGroup
+^^^^^^^^^^^^^^
+
+A :class:`~peri.comp.comp.ParameterGroup` is a container that provides a common
+interface to any object which computes "something" based on a set of
+``parameters`` (string names) and ``values`` (the values associated with those
+names). In the most basic form, a ``ParameterGroup`` must care about the following
+structure:
+
+.. autoclass:: peri.comp.comp.ParameterGroup
+    :members: get_values, set_values, update
+    :noindex:
+
+Component
+^^^^^^^^^
+
+A subclass of the ``ParameterGroup`` is a ``Component`` which specifically
+computes part of the ``Model`` computed by ``ImageState``. Therefore, in
+addition to the methods required by ``ParameterGroup``, it must also implement
+functions pertaining to *tiling*, how the ``ImageState`` deals with local and
+semi-local updates for best performance.
+
+.. autoclass:: peri.comp.comp.Component
+    :members: initialize, get_update_tile, get_padding_size, set_tile, set_shape, get
+    :noindex:
+
+ComponentCollections and Models
+-------------------------------
+
+.. autoclass:: peri.comp.comp.ComponentCollection
+    :members: get
+    :noindex:
+
+.. autoclass:: peri.models.Model
+    :members: evaluate
+    :noindex:
+
+Example: Gaussian-blurred discs
+-------------------------------

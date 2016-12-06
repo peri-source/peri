@@ -44,25 +44,25 @@ class Model(object):
         An abstraction for defining how to combine components into a complete
         model as well as derivatives with respect to different variables.
 
-        Parameters:
+        Parameters
         -----------
         modelstr : dict of strings
             (Using a custom model) The actual equations used to defined the model.
             At least one eq. is required under the key `full`. Other partial
             update equations can be added where the variable name (e.g. 'dI')
-            denotes a partial update of I, for example:
+            denotes a partial update of I, for example::
 
                 {'full': 'H(P)', 'dP': 'H(dP)'}
 
         varmap : dict
             (Using a custom model) The mapping of variables in the modelstr
-            equations to actual component types. For example:
+            equations to actual component types. For example::
 
                 {'P': 'obj', 'H': 'psf'}
 
         registry : dict
             A mapping of categories to components which this model will
-            accept. For example:
+            accept. For example::
 
                 {
                     'obj': [objs.PlatonicSpheresCollection],
@@ -136,16 +136,30 @@ class Model(object):
         return self.modelstr['full']
 
     def get_difference_model(self, category):
-        """ Get the equation corresponding to a variation wrt category """
+        """
+        Get the equation corresponding to a variation wrt category. For example
+        if::
+        
+            modelstr = {
+                'full' :'H(I) + B',
+                'dH' : 'dH(I)',
+                'dI' : 'H(dI)',
+                'dB' : 'dB'
+            }
+
+            varmap = {'H': 'psf', 'I': 'obj', 'B': 'bkg'}
+
+        then ``get_difference_model('obj') == modelstr['dI'] == 'H(dI)'``
+        """
         name = self.diffname(self.ivarmap[category])
         return self.modelstr.get(name)
 
-    def map_vars(self, comps, funcname, diffmap=None, **kwargs):
+    def map_vars(self, comps, funcname='get', diffmap=None, **kwargs):
         """
-        Map component function `funcname` result into model variables
-        dictionary for use in eval of the model. If `diffmap` is provided then
+        Map component function ``funcname`` result into model variables
+        dictionary for use in eval of the model. If ``diffmap`` is provided then
         that symbol is translated into 'd'+diffmap.key and is replaced by
-        diffmap.value. **kwargs are passed to the comp.funcname(**kwargs).
+        diffmap.value. ``**kwargs` are passed to the ``comp.funcname(**kwargs)``.
         """
         out = {}
         diffmap = diffmap or {}
@@ -162,26 +176,29 @@ class Model(object):
 
         return out
 
-    def evaluate(self, comps, funcname, diffmap=None, **kwargs):
+    def evaluate(self, comps, funcname='get', diffmap=None, **kwargs):
         """
-        Calculate the output of a model.
+        Calculate the output of a model. It is recommended that at some point
+        before using `evaluate`, that you make sure the inputs are valid using
+        :class:`~peri.models.Model.check_inputs`
 
-        Parameters:
+        Parameters
         -----------
-        comps : list of `Component`s
+        comps : list of :class:`~peri.comp.comp.Component`
             Components which will be used to evaluate the model
 
-        funcname : string
-            Name of the function which to evaluate for the components
-            which represent their output
+        funcname : string (default: 'get')
+            Name of the function which to evaluate for the components which
+            represent their output. That is, when each component is used in the
+            evaluation, it is really their ``attr(comp, funcname)`` which is used.
 
         diffmap : dictionary
             Extra mapping of derivatives or other symbols to extra variables.
             For example, the difference in a component has been evaluated as
-            diff_obj so we set {'I': diff_obj}
+            diff_obj so we set ``{'I': diff_obj}``
 
-        **kwargs:
-            Arguments passed to "funcname" of component objects
+        ``**kwargs``:
+            Arguments passed to ``funcname`` of component objects
         """
         evar = self.map_vars(comps, funcname, diffmap=diffmap)
 
@@ -199,6 +216,15 @@ class Model(object):
 
 class ConfocalImageModel(Model):
     def __init__(self):
+        """
+        Confocal microscope image with simplifications made for performance.
+        In particular, the sensing and illumination point spread functions
+        are combined into one:
+
+        .. math::
+            \\mathcal{M} = H(I(1-P) + CP) + B
+
+        """
         varmap = {
             'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'obj', 'C': 'offset'
         }
@@ -230,6 +256,13 @@ class BlurredFieldModel(Model):
         varmap = {'H': 'psf', 'I': 'ilm'}
         modelstr = {'full': 'H(I)', 'dI': 'H(dI)'}
         registry = {'psf': allpsfs, 'ilm': allfields}
+        Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
+
+class ParticlesOnlyModel(Model):
+    def __init__(self):
+        varmap = {'P': 'obj'}
+        modelstr = {'full': 'P', 'dP': 'dP'}
+        registry = {'obj': allobjs}
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
 class BlurredParticlesModel(Model):

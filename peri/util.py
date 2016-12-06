@@ -284,7 +284,15 @@ class Tile(CompatibilityPatch):
 
     @property
     def slicer(self):
-        """ numpy array slicer object for this tile """
+        """
+        Array slicer object for this tile
+
+        >>> Tile((2,3)).slicer
+        (slice(0, 2, None), slice(0, 3, None))
+
+        >>> np.arange(10)[Tile((4,)).slicer]
+        array([0, 1, 2, 3])
+        """
         return tuple(np.s_[l:r] for l,r in zip(*self.bounds))
 
     def oslicer(self, tile):
@@ -306,7 +314,12 @@ class Tile(CompatibilityPatch):
 
     @property
     def center(self):
-        """ Return the center of the tile """
+        """
+        Return the center of the tile
+
+        >>> Tile(5).center
+        array([ 2.5,  2.5,  2.5])
+        """
         return (self.r + self.l)/2.0
 
     @property
@@ -386,6 +399,24 @@ class Tile(CompatibilityPatch):
 
                 'vector' -- array is meshed and combined into one array with
                     the vector components along last dimension [Nz, Ny, Nx, 3]
+
+        Examples
+        --------
+        >>> Tile(3, dim=2).coords(form='meshed')[0]
+        array([[ 0.,  0.,  0.],
+               [ 1.,  1.,  1.],
+               [ 2.,  2.,  2.]])
+
+        >>> Tile(3, dim=2).coords(form='meshed')[1]
+        array([[ 0.,  1.,  2.],
+               [ 0.,  1.,  2.],
+               [ 0.,  1.,  2.]])
+
+        >>> Tile([4,5]).coords(form='vector').shape
+        (4, 5, 2)
+
+        >>> [i.shape for i in Tile((4,5), dim=2).coords(form='broadcast')]
+        [(4, 1), (1, 5)]
         """
         if norm is False:
             norm = 1
@@ -1008,6 +1039,11 @@ def memoize(cache_max_size=1e9):
 # patching docstrings of sub-classes
 #=============================================================================
 def patch_docs(subclass, superclass):
+    """
+    Apply the documentation from ``superclass`` to ``subclass`` by filling
+    in all overridden member function docstrings with those from the
+    parent class
+    """
     funcs0 = inspect.getmembers(subclass, predicate=inspect.ismethod)
     funcs1 = inspect.getmembers(superclass, predicate=inspect.ismethod)
 

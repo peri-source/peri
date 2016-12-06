@@ -29,11 +29,21 @@ Contents:
 
    quickstart
    installation
-   architecture
    configuration
+   architecture
+   optimization
+   parallel
+   crb
    confocal
-   brightfield
-   reference
+
+Reference:
+==========
+
+.. toctree::
+   :glob:
+   :maxdepth: 3
+
+   reference/*
 
 
 Indices and tables

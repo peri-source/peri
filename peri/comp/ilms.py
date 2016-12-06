@@ -21,8 +21,8 @@ class Polynomial3D(Component):
         """
         A polynomial 3D class for updating large fields of polys.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         shape : `peri.util.Tile`
             shape of the field (z,y,x)
 
@@ -189,8 +189,8 @@ class Polynomial2P1D(Polynomial3D):
         A polynomial 2+1D class for updating large fields of polys.  The form
         of these polynomials if P(x,y) () Q(z), separated in the z-direction.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         shape : tuple
             shape of the field (z,y,x)
 
@@ -371,14 +371,15 @@ class BarnesStreakLegPoly2P1D(Component):
         """
         A Barnes interpolant. This one is of the form
 
-            I = (1 + (\sum b_k(x) (o) L_k(y))) * (1 + z*q(z)) + c
+        .. math::
+            I = \\left[1 + \\left(\\sum b_k(x) (o) L_k(y)\\right)\\right]  (1 + z q(z)) + c
 
         where b_k are independent barnes interpolants and L_k are legendre
         polynomials. q is a polynomial strictly in z. Additionally, the
         operation (o) is settable.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         shape : iterable
             size of the field in pixels, needs to be padded shape
 
