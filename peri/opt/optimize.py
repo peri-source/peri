@@ -438,20 +438,23 @@ class LMEngine(object):
             do_run_1 method.
 
         paramtol : Float, optional
-            Algorithm has converged when the none of the parameters
-            have changed by more than paramtol. Default is 1e-6.
+            Algorithm has converged when the none of the parameters have
+            changed by more than paramtol. Default is 1e-6.
         errtol : Float, optional
-            Algorithm has converged when the error has changed
-            by less than errtol after 1 step. Default is 1e-6.
+            Algorithm has converged when the error has changed by less
+            than errtol after 1 step. Default is 1e-6.
+        exptol : Float, optional
+            Algorithm has converged when the expected change in error is
+            less than exptol. Default is 1e-3.
         fractol : Float, optional
-            Algorithm has converged when the error has changed
-            by a fractional amount less than fractol after 1 step.
+            Algorithm has converged when the error has changed by a
+            fractional amount less than fractol after 1 step.
             Default is 1e-6.
         costol : Float, optional
-            Algorithm has converged when the cosine of the angle
-            between (residuals projected onto the model manifold)
-            and (the residuals) is < costol. Default is None, i.e.
-            doesn't check the cosine (since it takes a bit of time).
+            Algorithm has converged when the cosine of the angle between
+            (residuals projected onto the model manifold) and (the
+            residuals) is < costol. Default is None, i.e. doesn't check
+            the cosine (since it takes a bit of time).
         max_iter : Int, optional
             The maximum number of iterations before the algorithm
             stops iterating. Default is 5.
@@ -590,10 +593,10 @@ class LMEngine(object):
     def __init__(self, damping=1., increase_damp_factor=3., decrease_damp_factor=8.,
                 min_eigval=1e-13, marquardt_damping=False, transtrum_damping=None,
                 use_accel=False, max_accel_correction=1., paramtol=1e-6,
-                errtol=1e-5, fractol=1e-6, costol=None, max_iter=5, run_length=5,
-                update_J_frequency=1, broyden_update=True, eig_update=False,
-                eig_update_frequency=3, num_eig_dirs=8, eig_dl=1e-5,
-                broyden_update_frequency=1):
+                errtol=1e-5, exptol=1e-3, fractol=1e-6, costol=None,
+                max_iter=5, run_length=5, update_J_frequency=1,
+                broyden_update=True, eig_update=False, eig_update_frequency=3,
+                num_eig_dirs=8, eig_dl=1e-5, broyden_update_frequency=1):
         self.increase_damp_factor = float(increase_damp_factor)
         self.decrease_damp_factor = float(decrease_damp_factor)
         self.min_eigval = min_eigval
@@ -605,6 +608,7 @@ class LMEngine(object):
 
         self.paramtol = paramtol
         self.errtol = errtol
+        self.exptol = exptol
         self.fractol = fractol
         self.costol = costol
         self.max_iter = max_iter
@@ -618,7 +622,9 @@ class LMEngine(object):
         self.eig_update_frequency = eig_update_frequency
         self.broyden_update_frequency = broyden_update_frequency
 
+        #Initializing counters etc for the first loop:
         self._num_iter = 0
+        self._exp_err = 10*self.exptol
 
         #We want to start updating JTJ
         self.J = None
@@ -1208,6 +1214,7 @@ class LMEngine(object):
                 Has keys
                     delta_vals  : The last change in parameter values.
                     delta_err   : The last change in the error.
+                    exp_err     : The expected (last) change in the error.
                     frac_err    : The fractional change in the error.
                     num_iter    : The number of iterations completed.
                     error       : The current error.
@@ -1217,7 +1224,7 @@ class LMEngine(object):
         frac_err = delta_err / self.error
         to_return = {'delta_vals':delta_vals, 'delta_err':delta_err,
                 'num_iter':1*self._num_iter, 'frac_err':frac_err,
-                'error':self.error}
+                'error':self.error, 'exp_err':self._exp_err}
         if get_cos:
             model_cosine = self.calc_model_cosine()
             to_return.update({'model_cosine':model_cosine})
@@ -1231,6 +1238,7 @@ class LMEngine(object):
         term_dict = self.get_termination_stats(get_cos=self.costol is not None)
         terminate |= np.all(np.abs(term_dict['delta_vals']) < self.paramtol)
         terminate |= (term_dict['delta_err'] < self.errtol)
+        terminate |= (term_dict['exp_err'] < self.exptol)
         terminate |= (term_dict['frac_err'] < self.fractol)
         if self.costol is not None:
             terminate |= (curcos < term_dict['model_cosine'])
@@ -1272,6 +1280,8 @@ class LMEngine(object):
         self._J_update_counter = 0
         if np.any(np.isnan(self.J)) or np.any(np.isnan(self.JTJ)):
             raise FloatingPointError('J, JTJ have nans.')
+        #Update self._exp_err
+        self._exp_err = self.error - self.find_expected_error(delta_params='perfect')
 
     def calc_grad(self):
         """The gradient of the cost w.r.t. the parameters."""
