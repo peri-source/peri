@@ -175,3 +175,66 @@ def otsu_threshold(data, bins=255):
     sb = (mt*wk - mk)**2 / (wk*(1-wk) + 1e-15)  #sigma_b
     ind = sb.argmax()
     return 0.5*(x0[ind] + x0[ind+1])
+
+def harris_feature(im, region_size=5, to_return='matrix', scale=0.05):
+    """
+    Harris-motivated feature detection on a d-dimensional image.
+
+
+    """
+    ndim = im.ndim
+    #1. Gradient of image
+    grads = (nd.sobel(fim, axis=i) for i in xrange(ndim))
+    #2. Corner response matrix
+    matrix = np.zeros((ndim, ndim) + im.shape)
+    for a in xrange(ndim):
+        for b in xrange(ndim):
+            matrix[a,b] = nd.filters.gaussian_filter(grads[a]*grads[b],
+                    region_size)
+    if to_return == 'matrix':
+        return matrix
+    #3. Trace, determinant
+    trc = np.trace(matrix, axis1=0, axis2=1)
+    det = np.linalg.det(matrix.T).T
+    #4. Harris detector:
+    harris = det - scale*trc*trc
+    return harris
+
+def identify_slab(im, sigma=5., mode='grad', region_size=10):
+    """
+    Identifies slabs in an image... doesn't work yet.
+
+    Functions by running an edge detection on the image, thresholding
+    the edge, then clustering.
+    mode = 'grad' -- gradient filters image
+    sigma : Gaussian sigma for gaussian gradient
+    region_size : size of region for Harris corner...
+    """
+    #1. edge detect:
+    mode = mode.lower()
+    if mode == 'grad':
+        gim = nd.filters.gaussian_gradient_magnitude(im, sigma)
+    elif mode == 'harris':
+        fim = nd.filters.gaussian_filter(im, sigma)
+
+        #All part of a harris corner feature....
+        ndim = im.ndim
+        grads = [nd.sobel(im, axis=i) for i in xrange(ndim)]
+        matrix = np.zeros((ndim, ndim) + im.shape)
+        for a in xrange(ndim):
+            for b in xrange(ndim):
+                matrix[a,b] = nd.filters.gaussian_filter(grads[a]*grads[b],
+                        region_size)
+        trc = np.trace(matrix, axis1=0, axis2=1)
+        det = np.linalg.det(matrix.T).T
+        #..done harris
+        #we want an edge == not a corner, so one eigenvalue is high and
+        #one is low.
+        #So -- trc high, det low:
+        trc_cut = otsu_threshold(trc)
+        det_cut = otsu_threshold(det)
+        slabs = (trc > trc_cut) & (det < det_cut)
+        pass
+    else:
+        raise ValueError('mode must be one of `grad`, `harris`')
+    pass
