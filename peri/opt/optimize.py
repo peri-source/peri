@@ -548,14 +548,12 @@ class LMEngine(object):
         LMAugmentedState
         LMOptObj
 
-    Notes  FIXME
+    Notes
     -----
-    Broyden updates, eigen updates, damping, marquardt damping, etc
     There are 3 different options for optimizing:
         do_run_1():
             Checks to calculate full, Broyden, and eigen J, then tries a step.
             If the step is accepted, decreases damping; if not, increases.
-            Checks for full, Broyden, and eigen J updates.
         do_run_2():
             Checks to calculate full, Broyden, and eigen J, then tries a
             step with the current damping and with a decreased damping,
@@ -579,10 +577,20 @@ class LMEngine(object):
         do_run_1(): update_J_frequency=2, partial_update_frequency=1
         do_run_2(): update_J_frequency=1, partial_update_frequency=1,
                     run_length=2
-    I would like to make this either a little more consistent or totally
-    incompatible to be less confusing, especially since do_run_2() with
-    update_J_frequency=2 just checks to decrease the damping without either
-    partial updates.
+
+    Partial Updates:
+    Broyden update  : an update to J (and then JTJ) by approximating the
+        derivative of the model as the finite difference of the last
+        step. (rank-1)
+    Eigen update    : a rank-num_eig_dirs update to J (and then JTJ) by
+        finite-differencing with eig_dl along the highest num_eig_dirs
+        eigendirections.
+
+    Damping:
+    marquardt : Damp proportional to the diagonal elements of JTJ
+    transtrum : Marquardt damping, clipped to be at least a certain number
+    default   : (levenberg) : Damp using something proportional to the
+            identity
 
     References
     ----------
@@ -1129,8 +1137,7 @@ class LMEngine(object):
             numpy.float64
                 The expected error after the update with `delta_params`
         """
-        # grad = self.calc_grad()  #this is wrong!!! FIXME
-        grad = 2*np.dot(self.J, self.calc_residuals())
+        grad = self.calc_grad()
         if delta_params in {'calc', 'perfect'}:
             jtj = (self.JTJ if delta_params == 'perfect' else
                     self._calc_damped_jtj(self.JTJ))
@@ -1586,6 +1593,9 @@ class OptState(OptObj):
         LMOptObj
         do_levmarq_n_directions
     """
+    #FIXME should have an allowed set of params, and then R(z) etc
+    #parameterizations should be incorporated into this to eliminate
+    #AugmentedState (or turn it into a subclass)
     def __init__(self, state, directions, p0=None, dl=1e-7):
         self.state = state
         self.dl = dl
