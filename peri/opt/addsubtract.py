@@ -501,14 +501,14 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
 
     Notes
     ------
-        Occasionally after the intial featuring a cluster of particles
-    is featured as 1 big particle. To fix these mistakes, it helps to
-    set max_rad to a physical value. This removes the big particle and
-    allows it to be re-featured by (several passes of) the adds.
+    Occasionally after the intial featuring a cluster of particles is
+    featured as 1 big particle. To fix these mistakes, it helps to set
+    max_rad to a physical value. This removes the big particle and allows
+    it to be re-featured by (several passes of) the adds.
 
-        The added/removed positions returned are whether or not the
-    position has been added or removed ever. It's possible that a
-    position is added, then removed during a later iteration.
+    The added/removed positions returned are whether or not the position
+    has been added or removed ever. It's possible that a position is
+    added, then removed during a later iteration.
     """
     if max_npart == 'calc':
         max_npart = 0.05 * st.obj_get_positions().shape[0]
@@ -685,7 +685,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
 
     Notes
     --------
-        The added/removed positions returned are whether or not the
+    The added/removed positions returned are whether or not the
     position has been added or removed ever. It's possible/probably that
     a position is added, then removed during a later iteration.
 
@@ -857,7 +857,7 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
             2c. Terminate if at least region_depth regions have been
                 checked without successfully adding a particle.
 
-        Because this algorithm is more judicious about chooosing regions
+    Because this algorithm is more judicious about chooosing regions
     to check, and more aggressive about removing particles in those
     regions, it runs faster and does a better job than the (global)
     add_subtract. However, this function usually does not work better
