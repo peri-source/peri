@@ -416,15 +416,16 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
          res_vmin=-0.1, res_vmax=0.1, edgepts='calc', do_imshow=True,
          data_cmap=plt.cm.bone, res_cmap=plt.cm.RdBu):
     """
+    Compare the data, model, and residuals of a state.
+
     Makes an image of any 2D slice of a state that compares the data,
     model, and residuals. The upper left portion of the image is the raw
-    data, the central portion the model, and the lower right portion
-    the image.
-    Either plots the image using plt.imshow() or returns a np.ndarray of
-    the image pixels for later use.
+    data, the central portion the model, and the lower right portion the
+    image. Either plots the image using plt.imshow() or returns a
+    np.ndarray of the image pixels for later use.
 
-    Inputs
-    ------
+    Parameters
+    ----------
         st : peri.ImageState object
             The state to plot.
         tile : peri.util.Tile object
@@ -432,18 +433,18 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
             projection, but it must return a valid 2D slice (the slice is
             squeezed internally).
 
-        data_vmin : Float
+        data_vmin : {Float, `calc`}, optional
             vmin for the imshow for the data and generative model (shared).
             Default is 'calc' = 0.5(data.min() + model.min())
-        data_vmax : Float
+        data_vmax : {Float, `calc`}, optional
             vmax for the imshow for the data and generative model (shared).
             Default is 'calc' = 0.5(data.max() + model.max())
-        res_vmin : Float
+        res_vmin : Float, optional
             vmin for the imshow for the residuals. Default is -0.1
             Default is 'calc' = 0.5(data.min() + model.min())
-        res_vmax : Float
+        res_vmax : Float, optional
             vmax for the imshow for the residuals. Default is +0.1
-        edgepts : Nested list-like or float.
+        edgepts : {Nested list-like, Float, 'calc'}, optional.
             The vertices of the triangles which determine the splitting of
             the image. The vertices are at (image corner, (edge, y), and
             (x,edge), where edge is the appropriate edge of the image.
@@ -462,16 +463,15 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
         res_cmap : matplotlib colormap instance
             The colormap to use for the residuals.
 
-    Outputs
+    Returns
     -------
-        If imshow == True, the returned handle from imshow.
-        If imshow == False, an [M,N,4] np.ndarray.
-
-    Comments
-    --------
-    This could be modified to take colormaps nicely... or to alpha the
-    borderline... or to embiggen the image and slice it more finely
+        image : {matplotlib.pyplot.AxesImage, numpy.ndarray}
+            If `do_imshow` == True, the returned handle from imshow.
+            If `do_imshow` == False, an [M,N,4] np.ndarray of the image
+            pixels.
     """
+    # This could be modified to alpha the borderline... or to embiggen
+    # the image and slice it more finely
     residuals = s.residuals[tile.slicer].squeeze()
     data = s.data[tile.slicer].squeeze()
     model = s.model[tile.slicer].squeeze()
@@ -553,6 +553,7 @@ def trisect_image(imshape, edgepts='calc'):
 
     center_mask= -(lower_mask | upper_mask)
     return upper_mask, center_mask, lower_mask
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 #              More of Matt's uncommented plots for generating figures
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
