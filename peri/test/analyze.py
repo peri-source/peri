@@ -276,7 +276,7 @@ def packing_fraction_obj(pos, rad, shape, inner, zscale=1):
             The volume fraction
     """
     obj = PlatonicSpheresCollection(pos, rad, shape=shape, zscale=zscale)
-    return obj.get_field()[inner].mean()
+    return obj.get()[inner].mean()
 
 def packing_fraction_state(state):
     """
@@ -291,7 +291,7 @@ def packing_fraction_state(state):
         Float
             The volume fraction
     """
-    return state.get('obj').get_field()[state.inner].mean()
+    return state.get('obj').get()[state.inner].mean()
 
 def average_packing_fraction(state, samples):
     """
