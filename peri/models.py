@@ -139,7 +139,7 @@ class Model(object):
         """
         Get the equation corresponding to a variation wrt category. For example
         if::
-        
+
             modelstr = {
                 'full' :'H(I) + B',
                 'dH' : 'dH(I)',
@@ -245,6 +245,12 @@ class ConfocalImageModel(Model):
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
 class SmoothFieldModel(Model):
+    """
+    A smooth field with one component:
+
+    .. math::
+        \\mathcal{M} = I
+    """
     def __init__(self):
         varmap = {'I': 'ilm'}
         modelstr = {'full': 'I', 'dI': 'dI'}
@@ -252,6 +258,12 @@ class SmoothFieldModel(Model):
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
 class BlurredFieldModel(Model):
+    """
+    A blurred field, with two component:
+
+    .. math::
+        \\mathcal{M} = H(I)
+    """
     def __init__(self):
         varmap = {'H': 'psf', 'I': 'ilm'}
         modelstr = {'full': 'H(I)', 'dI': 'H(dI)'}
@@ -259,6 +271,12 @@ class BlurredFieldModel(Model):
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
 class ParticlesOnlyModel(Model):
+    """
+    A model of only particles
+
+    .. math::
+        \\mathcal{M} = P
+    """
     def __init__(self):
         varmap = {'P': 'obj'}
         modelstr = {'full': 'P', 'dP': 'dP'}
@@ -266,6 +284,12 @@ class ParticlesOnlyModel(Model):
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
 class BlurredParticlesModel(Model):
+    """
+    A model of particles blurred by a PSF, with a background and scale:
+
+    .. math::
+        \\mathcal{M} = H(S*P) + C
+    """
     def __init__(self):
         varmap = {
             'P': 'obj', 'H': 'psf', 'S': 'scale', 'C': 'offset'
@@ -285,8 +309,15 @@ class BlurredParticlesModel(Model):
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
 class BrightfieldImageModel(Model):
+    """
+    Brightfield microscope image with simplifications made for performance.
+    In particular, the illumination from the condenser is presumed to be
+    Koehler and therefore slowly-varying compared to the PSF.
+
+    .. math::
+        \\mathcal{M} = I*(1+c*H(P)) + B
+    """
     def __init__(self):
-        """Model 3 or 4 or 6b (all equivalent) in Brian's writeup."""
         varmap = {
             'B': 'bkg', 'I': 'ilm', 'H': 'psf', 'P': 'obj', 'c':'contrast'
         }
