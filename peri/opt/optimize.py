@@ -1184,7 +1184,7 @@ class LMEngine(object):
         considerably less accurate, so the default is no decimation.
         """
         if mode == 'svd':
-            slicer = slice(0,-1,decimate)
+            slicer = slice(0, None, decimate)
 
             #1. Calculate projection term
             u, sig, v = np.linalg.svd(self.J[:,slicer], full_matrices=False) #slow part
