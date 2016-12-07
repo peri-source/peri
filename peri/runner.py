@@ -62,7 +62,7 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=False):
 
     Notes
     -----
-        Optionally filters the image by fitting the image I(x,y,z) to a
+    Optionally filters the image by fitting the image I(x,y,z) to a
     polynomial, then subtracts this fitted intensity variation and uses
     centroid methods to find the particles.
     """
@@ -160,7 +160,7 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
 
     Notes
     -----
-        The **kwargs parameters are passed to _optimize_from_centroid.
+    The **kwargs parameters are passed to _optimize_from_centroid.
     Proceeds by centroid-featuring the image for an initial guess of
     particle positions, then optimizing the globals + positions until
     termination as called in _optimize_from_centroid.
@@ -258,7 +258,7 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
 
     Notes
     -----
-        The **kwargs parameters are passed to _optimize_from_centroid.
+    The **kwargs parameters are passed to _optimize_from_centroid.
     Proceeds by centroid-featuring the image for an initial guess of
     particle positions, then optimizing the globals + positions until
     termination as called in _optimize_from_centroid.
@@ -411,7 +411,7 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
 
     Notes
     -----
-        The **kwargs parameters are passed to _translate_particles.
+    The **kwargs parameters are passed to _translate_particles.
     Proceeds by:
         1. Optimize particle positions only.
         2. Optimize particle positions and radii only.
@@ -433,8 +433,11 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
         use_full_path=False, actual_rad=None, minmass=100, invert=True,
         **kwargs):
     """
+    Combines centroid featuring with the globals from a previous state.
+
     Runs trackpy.locate on an image, sets the globals from a previous state,
     calls _translate_particles
+
     Parameters
     ----------
         feature_diam : Int
@@ -548,6 +551,16 @@ def _pick_state_im_name(state_name, im_name, use_full_path=False):
     """
     If state_name or im_name is None, picks them interactively through Tk,
     and then sets with or without the full path.
+
+    Parameters
+    ----------
+        state_name : {string, None}
+            The name of the state. If None, selected through Tk.
+        im_name : {string, None}
+            The name of the image. If None, selected through Tk.
+        use_full_path : Bool, optional
+            Set to True to return the names as full paths rather than
+            relative paths. Default is False (relative path).
     """
     initial_dir = os.getcwd()
     if (state_name is None) or (im_name is None):
