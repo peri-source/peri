@@ -2521,7 +2521,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
                 increase_list=[['psf-', 3e1]] + BAD_LIST)
         if a != 0 or mode != 'do-particles':
             if partial_log:
-                opt.log.set_level('debug')
+                log.set_level('debug')
             gstats = do_levmarq(s, glbl_nms, max_iter=glbl_mx_itr, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
                     eig_update_frequency=3, rz_order=rz_order, damping=
@@ -2529,7 +2529,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
                     collect_stats=collect_stats, fractol=0.1*fractol,
                     max_mem=max_mem)
             if partial_log:
-                opt.log.set_level('info')
+                log.set_level('info')
             all_lm_stats.append(gstats)
         if desc is not None:
             states.save(s, desc=desc)
