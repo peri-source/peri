@@ -1,6 +1,6 @@
 import unittest
 
-class FFTTestCase(unittest.TestCase):
+class TemplateTestCase(unittest.TestCase):
     def setUp(self):
         self.value = 'blah'
 
