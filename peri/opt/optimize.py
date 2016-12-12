@@ -1661,7 +1661,7 @@ class LMGlobals(LMEngine):
             decimation. Default is 1e9.
         opt_kwargs : Dict, optional
             Dict of **kwargs for opt implementation. Right now only for
-            *.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
+            *.get_num_px_jtj, i.e. keys of 'decimate', 'min_redundant'.
             Default is `{}`
 
     Attributes
@@ -1713,7 +1713,7 @@ class LMGlobals(LMEngine):
     def calc_J(self):
         del self.J
         self.J, self._inds = get_rand_Japprox(self.state,
-                self.param_names, num_inds=self.num_pix, **self.opt_kwargs)
+                self.param_names, num_inds=self.num_pix)
 
     def calc_residuals(self):
         return self.state.residuals.ravel()[self._inds].copy()
