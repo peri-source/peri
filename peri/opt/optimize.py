@@ -2405,7 +2405,7 @@ def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
 
 def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
         errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True,
-        do_line_min='default'):
+        do_line_min='default', partial_log=False):
     """
     Optimizes all the parameters of a state.
 
@@ -2518,14 +2518,18 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
                 BAD_DAMP], ['bkg-z-0', BAD_DAMP]]
         ####
         glbl_dmp = vectorize_damping(glbl_nms + ['rz']*rz_order, damping=1.0,
-                increase_list=[['psf-', 1e3]] + BAD_LIST)
+                increase_list=[['psf-', 3e1]] + BAD_LIST)
         if a != 0 or mode != 'do-particles':
+            if partial_log:
+                opt.log.set_level('debug')
             gstats = do_levmarq(s, glbl_nms, max_iter=glbl_mx_itr, run_length=
                     glbl_run_length, eig_update=eig_update, num_eig_dirs=10,
                     eig_update_frequency=3, rz_order=rz_order, damping=
                     glbl_dmp, decrease_damp_factor=10., use_accel=use_accel,
                     collect_stats=collect_stats, fractol=0.1*fractol,
                     max_mem=max_mem)
+            if partial_log:
+                opt.log.set_level('info')
             all_lm_stats.append(gstats)
         if desc is not None:
             states.save(s, desc=desc)
