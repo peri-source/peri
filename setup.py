@@ -9,7 +9,7 @@ setup(name='peri',
       url='http://github.com/mattbierbaum/peri/',
       license='MIT License',
       author='Matt Bierbaum, Brian Leahy',
-      version='0.1.1'  #peri.__version__,
+      version='0.1.1',  #peri.__version__,
 
       packages=[
           'peri', 'peri.mc', 'peri.comp', 'peri.viz',
