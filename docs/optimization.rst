@@ -1,8 +1,7 @@
 *************************
 Optimization and sampling
 *************************
-..using `..` for a comment
-..DOCUMENT IS THE MINIMAL AMOUNT OF KNOWLEDGE TO USE!!
+
 ..I'm assuming that `initial guess for particle positions` is not part of
 ..optimization
 
@@ -391,31 +390,3 @@ they work in the paper's Supplemental Information.
 Inventing a new algorithm for fitting in high-dimensional spaces
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Please do this.
-
-
-
-What is a good-fit?
-==================
-
-Maybe something about what fitting data is etc
-
-The optimization algorithm: Levenberg-Marquardt
-===============================================
-
-Quick Overview of Levenberg-Marquardt
--------------------------------------
-
-Geodesic acceleration in large dimensions
------------------------------------------
-
-Decimation
-----------
-
-Optimizing a State
-==================
-Still hard to do because of mem....
-
-
-opt.burn
---------
-
