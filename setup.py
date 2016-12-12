@@ -1,6 +1,6 @@
 from distutils.core import setup
 #from setuptools import setup
-import peri
+# import peri
 
 desc = open('./README.md').read()
 reqs = open('./requirements.txt').readlines()
@@ -9,7 +9,7 @@ setup(name='peri',
       url='http://github.com/mattbierbaum/peri/',
       license='MIT License',
       author='Matt Bierbaum, Brian Leahy',
-      version=peri.__version__,
+      version='0.1.1',  #peri.__version__,
 
       packages=[
           'peri', 'peri.mc', 'peri.comp', 'peri.viz',
