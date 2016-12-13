@@ -1138,7 +1138,7 @@ class LMEngine(object):
                 The expected error after the update with `delta_params`
         """
         grad = self.calc_grad()
-        if delta_params in {'calc', 'perfect'}:
+        if list(delta_params) in {list('calc'), list('perfect')}:
             jtj = (self.JTJ if delta_params == 'perfect' else
                     self._calc_damped_jtj(self.JTJ))
             delta_params = self._calc_lm_step(jtj, self.calc_grad())
