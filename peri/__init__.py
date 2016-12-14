@@ -11,4 +11,5 @@ try:
 except ImportError as e:
     pass
 
-__version__ = "0.1.1"
+import pkg_resources
+__version__ = pkg_resources.require("peri")[0].version
