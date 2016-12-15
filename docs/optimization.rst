@@ -17,7 +17,7 @@ such as the illumination field or the point-spread function. Second, the
 centroid methods frequently miss or mis-feature many particles. Third, we would
 like to completely optimize the model to get maximally-accurate position and
 radii measurements. In this section, we'll discuss how to optimize a
-`peri.states.ImageState` and accomplish all three of these goals.
+:class:`peri.states.ImageState` and accomplish all three of these goals.
 
 Initial Optimization
 --------------------
@@ -30,8 +30,9 @@ the global parameters such as the illumination and the local parameters such as
 particle positions and radii need to be reasonable before we can find the
 missing particles.
 
-`peri.opt.optimize.burn` effectively runs this initial optimization. To do this
-initial optimization, simply run
+:func:`peri.opt.optimize.burn` effectively runs this initial optimization. To do this
+initial optimization, simply run:
+
 .. code-block:: python
 
     import peri.opt.optimize as opt
@@ -43,9 +44,9 @@ to the image. If it does not, you can set ``n_loop`` to a larger value such as
 by calling ``peri.states.save(st, desc='burning')``. If you do not want to
 save the state every so oftern, set ``desc=None`` in ``opt.burn``; if you want
 to save with a different name then set ``desc`` to whatever you want; it will
-be passed through to ``peri.states.save``.
+be passed through to :func:`peri.states.save`.
 
-Briefly, what does ``opt.burn`` do? The state are optimized by
+Briefly, what does :func:`~peri.opt.optimize.burn` do? The state are optimized by
 essentially ``curve-fitting`` with a Levenberg-Marquardt algorithm. However,
 a typical state has too many parameters to optimize the entire state at once.
 To deal with this, ``opt.burn`` optimizes the parameters in groups, first
@@ -62,39 +63,41 @@ If you want more details on how ``opt.burn`` functions, see the documentation
 or code. If your specific image or model is not optimized well by ``opt.burn``,
 or you want additional functionality, then you should look at these functions
 which ``opt.burn`` calls or uses:
-    `peri.opt.optimize.do_levmarq`_
+
+    :func:`peri.opt.optimize.do_levmarq`
         Levenberg-Marquardt (LM) optimization on whatever parameter groups
         passed, additionall optimized for large parameter spaces.
-    `peri.opt.optimize.do_levmarq_all_particle_groups`_
+    :func:`peri.opt.optimize.do_levmarq_all_particle_groups`
         LM optimization on all the particles in the image.
-    `peri.opt.optimize.do_levmarq_particles`_
+    :func:`peri.opt.optimize.do_levmarq_particles`
         LM optimization on a select number of particles.
-    `peri.opt.optimize.LMGlobals`_
-        The class that `peri.opt.optimize.do_levmarq` calls to do its
+    :class:`peri.opt.optimize.LMGlobals`
+        The class that :func:`peri.opt.optimize.do_levmarq` calls to do its
         optimization. Has more options and attributes which are useful for
         checking convergence.
-    `peri.opt.optimize.LMParticleGroupCollection`_
-        The class that `peri.opt.optimize.do_levmarq_all_particle_groups` calls
+    :class:`peri.opt.optimize.LMParticleGroupCollection`
+        The class that :func:`peri.opt.optimize.do_levmarq_all_particle_groups` calls
         to do its optimization. Has more options and attributes which are
         useful for checking convergence.
-    `peri.opt.optimize.LMParticles`_
-        The class that both `peri.opt.optimize.do_levmarq_particles` and
-        `peri.opt.optimize.LMParticleGroupCollection` calls to do their
+    :class:`peri.opt.optimize.LMParticles`
+        The class that both :func:`peri.opt.optimize.do_levmarq_particles` and
+        :class:`peri.opt.optimize.LMParticleGroupCollection` calls to do their
         optimization. Has more options and attributes which are useful for
         checking convergence.
-    `peri.opt.optimize.LMAugmentedState`_
-        Like `LMGlobals` but also allows for effective parameters such as an
+    :class:`peri.opt.optimize.LMAugmentedState`
+        Like :class:`~peri.opt.optimize.LMGlobals` but also allows for effective parameters such as an
         overall radii scale or a radii scale that changes with ``z``.
-    `peri.opt.optimize.LMEngine`_
+    :class:`peri.opt.optimize.LMEngine`
         The workhorse optimizer base class, called by
-        `peri.opt.optimize.LMGlobals` and `peri.opt.optimize.LMPartilces`
+        :class:`~peri.opt.optimize.LMGlobals` and :class:`~peri.opt.optimize.LMParticles`
 
 Add-subtract
 ------------
 
 After the initial optimization we can add any missing particles and remove any
-particles that shouldn't be there. To do this, run
-..code-block:: python
+particles that shouldn't be there. To do this, run:
+
+.. code-block:: python
 
     import peri.opt.addsubtract as addsub
     num_changed, removed_positions, added_positions = addsub.add_subtract(st,
@@ -113,7 +116,7 @@ More commonly however, two particles are initially featured as one. The initial
 optimization will then split the difference by placing this one particle at a
 position between the two particles and giving it a large radius. As a result,
 the group of particles gets missed by the centroid featuring and particles are
-not added. To combat this, the ``addsub.add_subtract`` removes particles that
+not added. To combat this, the :func:`~peri.opt.addsub.add_subtract` removes particles that
 have a suspiciously large or small radii values, as determined by ``min_rad``
 and ``max_rad``. (Setting these two to ``'calc'`` uses the cutoffs at the
 median radius +/- 15 standard deviations.) With the particles removed, the
@@ -136,10 +139,10 @@ positions to no longer be correct. To deal with this, run
 This usually sets the illumination and particle positions to reasonable values.
 At this point, it's time to optimize all the state including the point-spread
 function, which we have so far ignored. This is done with
+
 .. code-block:: python
 
     opt.burn(st, mode='polish', n_loop=6, desc='')
-
 
 What does this do? First, especially if the initial guess for the point-spread
 function was correct, running another optimization with ``mode='burn'`` keeps
@@ -161,15 +164,16 @@ problems.
 
 Adding tough missing particles
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 Sometimes one pass of ``addsub.add_subtract`` is not enough to find all the
 missing particles, or running the secondary optimizations reveals that more
 particles are missing. In these cases, running another ``addsub.add_subtract``
 usually fixes the problem and gets all the particles. However, sometimes there
 are particles that the normal ``addsub.add_subtract`` just can't seem to get
 right. For these cases, there is another function in the
-``peri.opt.addsubtract`` module:
+:mod:`peri.opt.addsubtract` module:
 
-..code-block:: python
+.. code-block:: python
 
     num_added, added_positions = addsub.add_subtract_locally(st)
 
@@ -187,6 +191,7 @@ identifying particles at the edge of or slightly outside of the image.
 
 Additional Optimizations
 ^^^^^^^^^^^^^^^^^^^^^^^^
+
 Occasionally the number of optimization loops isn't enough to completely
 optimize a state. Usually this is fixed by running a few more loops of
 ``opt.burn`` with ``mode='burn'`` or ``mode='polish'``, depending on whether
@@ -199,7 +204,7 @@ are not at the minimum, then you can individually optimize certain parameters.
 For instance, if you know the PSF is not correct based on the way the residuals
 looks, you can specifically optimize the PSF by doing this:
 
-..code-block:: python
+.. code-block:: python
 
     opt.do_levmarq(st, st.get('psf').params)
 
@@ -221,7 +226,7 @@ Checking optimization with the OrthoManipulator
 
 The best tool for checking optimization is the OrhtoManipulator:
 
-..code-block:: python
+.. code-block:: python
 
     from peri.viz.interaction import OrthoManipulator
     OrthoManipulator(st)
@@ -235,9 +240,10 @@ Can you see shadows of particles? If so, then the state is not optimized. In
 contrast, if the residuals are nearly perfect white Gaussian noise, then you're
 done.
 
-The ``OrthoManipulator`` has a lot of additional functionality, including a
-view of the Fourier transform of the residuals and the ability to add, remove,
-or optimize individual particles interactively. Try it!
+The :class:`~peri.viz.interaction.OrthoManipulator` has a lot of additional
+functionality, including a view of the Fourier transform of the residuals and
+the ability to add, remove, or optimize individual particles interactively. Try
+it!
 
 Checking optimization by running more optimization
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -263,7 +269,7 @@ realistic PSF or use a higher order for the ILM.
 
 You can do similar checks by looking at either the fitted parameters of the PSF
 and other components, or the actual fields themselves using the
-``OrthoManipulator`` or ``peri.viz.interaction.OrthoViewer``.
+:class:`~peri.viz.interaction.OrthoManipulator` or :class:`~peri.viz.interaction.OrthoViewer`.
 
 As an aside, we don't find it terribly useful to check if the residuals are at
 the expected level of the noise. If you somehow knew exactly what the noise
@@ -282,7 +288,7 @@ images the same way, and the global parameters differ considerably (by
 considerably more than the Cramer-Rao Bound), then the state is either not
 fully optimized or the model is incomplete. The same applies if the particle
 radii fluctuate considerably from frame-to-frame. You can check this easily
-with ``peri.test.track.calculate_state_radii_fluctuations``.
+with :func:`peri.test.track.calculate_state_radii_fluctuations`.
 
 Speeding this process up
 ------------------------
@@ -303,7 +309,7 @@ in fitting an image. These (and others) are located in the ``runner`` module.
 For instance, if you have a previously featured state saved as ``state_name``,
 this will feature a new image ``'1.tif'``:
 
-..code-block::python
+.. code-block:: python
 
     from peri import runner
     feature_diam = 5  #or whatever feature_diam is best for centroid methods
@@ -329,7 +335,7 @@ Fitting a small image
 
 The larger the image is, the longer it takes to fit. Fitting a small image
 considerably speeds up the fit. You can change the region of the fit by setting
-the ``peri.util.Tile`` of the image, as described in section BLAH.
+the :class:`peri.util.Tile` of the image, as described in section BLAH.
 
 Fitting a small image is useful to get a good estimate of global parameters,
 especially the point-spread function. Since the exact point-spread functions
@@ -347,7 +353,7 @@ bias your fits. Make a small image and optimize it overnight -- say, 50-100
 loops of ``opt.burn`` with ``mode='polish'``. You might even want to alternate
 a loop of burn with a direct minimization of the PSF, like so:
 
-..code-block::python
+.. code-block:: python
 
     import numpy as np
     state_vals = []  #storing to check at the end
@@ -358,7 +364,8 @@ a loop of burn with a direct minimization of the PSF, like so:
 
 When it finishes, check that the parameters have stopped changing by plotting
 them. For instance, to check the parameter ``psf-alpha``:
-..code-block::python
+
+.. code-block:: python
 
     import matplotlib.pyplot as plt
     index = st.params.index('psf-alpha')
@@ -384,7 +391,7 @@ or not worrying about finding every last particle. You might also be able to
 save time by using a less accurate model -- for instance, you could use an ILM
 of lower order to create less parameters to fit, or a less accurate PSF to
 decrease the execution time for one model generation. You can find some of
-these inexact PSFs in ``peri.comp.psfs``, along with a description of how well
+these inexact PSFs in :mod:`peri.comp.psfs`, along with a description of how well
 they work in the paper's Supplemental Information.
 
 Inventing a new algorithm for fitting in high-dimensional spaces
