@@ -35,8 +35,8 @@ class ExactPSF(psfs.PSF):
         in the image, and convolving each layer independently (numerically
         the exact model of image formation).
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         shape : tuple
             Shape of the image in (z,y,x) pixel numbers (to be deprecated)
 
@@ -223,8 +223,8 @@ class ExactPSF(psfs.PSF):
         """
         Calculates the 3D psf at a particular z pixel height
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         zint : float
             z pixel height in image coordinates , converted to 1/k by the
             function using the slab position as well
@@ -495,8 +495,8 @@ class ExactLineScanConfocalPSF(ExactPSF):
         This PSF assumes that the z extent is large compared to the image size
         and so calculates the local PSF for every z layer in the image.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         shape : tuple
             Shape of the image in (z,y,x) pixel numbers (to be deprecated)
 
@@ -678,8 +678,8 @@ class ExactPinholeConfocalPSF(ExactPSF):
         This PSF assumes that the z extent is large compared to the image size
         and so calculates the local PSF for every z layer in the image.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         shape : tuple
             Shape of the image in (z,y,x) pixel numbers (to be deprecated)
 
@@ -829,13 +829,17 @@ class ChebyshevPSF(ExactPSF):
         how the PSF varies with depth into the sample. For help, see
         ExactPSF.
 
-        Additional parameters:
-        ----------------------
+        Other parameters
+        ----------------
         cheb_degree : integer
             degree of the Chebyshev approximant
 
         cheb_evals : integer
             number of interpolation points used to create the coefficient matrix
+
+        See also
+        --------
+        :class:`peri.comp.exactpsf.ExactPSF`
         """
         self.cheb_degree = cheb_degree
         self.cheb_evals = cheb_evals
@@ -880,7 +884,13 @@ class ChebyshevPSF(ExactPSF):
 
 class FixedSSChebPSF(ChebyshevPSF):
     def __init__(self, support_size=[35,17,25], *args, **kwargs):
-        """ChebyshevPSF with a fixed support size"""
+        """
+        ChebyshevPSF with a fixed support size
+
+        See also
+        --------
+        :class:`peri.comp.exactpsf.ChebyshevPSF`
+        """
         self.cutoffval = None
         self.support = np.array(support_size)
         super(FixedSSChebPSF, self).__init__(*args, **kwargs)

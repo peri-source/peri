@@ -725,11 +725,13 @@ class RawImage(Image, CompatibilityPatch):
         An image object which stores information about desired region and padding,
         etc.  There are number of ways to create an image object:
 
+        Parameters
+        ----------
         filename : str
             path of the image file.  recommended that you supply a relative path
             so that transfer between computers is possible
 
-        tile : `peri.util.Tile`
+        tile : :class:`peri.util.Tile`
             the region of the image to crop out to use for the actual featuring, etc
 
         invert : boolean
