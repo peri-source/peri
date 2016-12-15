@@ -551,6 +551,7 @@ class LMEngine(object):
     Notes
     -----
     There are 3 different options for optimizing:
+
     * do_run_1():
         Checks to calculate full, Broyden, and eigen J, then tries a step.
         If the step is accepted, decreases damping; if not, increases.
@@ -567,6 +568,7 @@ class LMEngine(object):
         not change damping during the run. Does not check do update
         the full J, but does check for Broyden, eigen updates.
         Does not work if J has not been evaluated yet.
+
     Whether to update the full J is controlled by update_J_frequency only,
     which only counts iterations of do_run_1() and do_run_2().
     Partial updates are controlled by *_update_frequency, which
@@ -574,19 +576,22 @@ class LMEngine(object):
 
     So, if you want a partial update every other run, full J the remaining,
     this would be:
+
     * do_run_1(): update_J_frequency=2, partial_update_frequency=1
-    * do_run_2(): update_J_frequency=1, partial_update_frequency=1,
-                    run_length=2
+    * do_run_2(): update_J_frequency=1, partial_update_frequency=1, run_length=2
 
     Partial Updates:
+
     * Broyden update  : an update to J (and then JTJ) by approximating the
-    derivative of the model as the finite difference of the last
-    step. (rank-1)
+        derivative of the model as the finite difference of the last
+        step. (rank-1)
+
     * Eigen update    : a rank-num_eig_dirs update to J (and then JTJ) by
-    finite-differencing with eig_dl along the highest num_eig_dirs
-    eigendirections.
+        finite-differencing with eig_dl along the highest num_eig_dirs
+        eigendirections.
 
     Damping:
+
     * marquardt : Damp proportional to the diagonal elements of JTJ
     * transtrum : Marquardt damping, clipped to be at least a certain number
     * default   : (levenberg) Damp using something proportional to the identity
