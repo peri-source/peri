@@ -116,7 +116,7 @@ pygments_style = 'sphinx'
 
 if alabaster:
     html_theme_path = [alabaster.get_path()]
-    extensions = ['alabaster']
+    extensions += ['alabaster']
     html_theme = 'alabaster'
     html_sidebars = {
         '**': [
