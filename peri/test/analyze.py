@@ -2,10 +2,43 @@ import re
 import glob
 import numpy as np
 import scipy as sp
+import scipy.ndimage as nd
+import scipy.optimize as opt
 
 from peri.priors import overlap
 from peri.util import Tile
 from peri.comp.objs import PlatonicSpheresCollection
+
+def unexplained_noise(state):
+    import pylab as pl
+    r = state.residuals
+    q = np.fft.fftn(r)
+
+    # smooth the residuals to do a cut 
+    g = nd.gaussian_filter(np.fft.fftshift(q.real), 2)
+    y,x = np.histogram(g.flat, bins=1000)
+    x = (x[:-1] + x[1:])/2
+
+    def gauss(x, s, a):
+        return a*np.exp(-x**2 / s**2 / 2)
+
+    def score(params, x, y):
+        s, a = params
+        return y - gauss(x, s, a)
+
+    (sig, amp), _ = opt.leastsq(score, [1.0, 1.0], args=(x, y))
+    m = (x**2 - sig**2) > 2*sig**2
+
+    # if we want to inspect the quality of the fit
+    pl.plot(x, y)
+    pl.plot(x, gauss(x, sig, amp))
+    pl.plot(x[m], y[m])
+
+    num = (((x-sig)**2) * (y - gauss(x, sig, amp) - 2*sig))[m].sum()
+    den = ((x**2) * y).sum()
+    return num / den
+    return sqerr(np.abs(x)*(y - gauss(x, sig, amp))) / sqerr(np.abs(x)*y)
+
 
 def sorted_files(globber, num_sort=True, num_indices=None, return_num=False):
     """
