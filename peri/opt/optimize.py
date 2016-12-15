@@ -551,22 +551,22 @@ class LMEngine(object):
     Notes
     -----
     There are 3 different options for optimizing:
-        do_run_1():
-            Checks to calculate full, Broyden, and eigen J, then tries a step.
-            If the step is accepted, decreases damping; if not, increases.
-        do_run_2():
-            Checks to calculate full, Broyden, and eigen J, then tries a
-            step with the current damping and with a decreased damping,
-            accepting whichever is lower. Decreases damping iff the lower
-            damping is better. It then calls do_internal_run() (see below).
-            Rejected steps result in increased damping until a step is
-            accepted. Checks for full, Broyden, and eigen J updates.
-        do_internal_run():
-            Checks for Broyden and eigen J updates only, then uses
-            pre-calculated J, JTJ, etc to evaluate LM steps. Does
-            not change damping during the run. Does not check do update
-            the full J, but does check for Broyden, eigen updates.
-            Does not work if J has not been evaluated yet.
+    * do_run_1():
+        Checks to calculate full, Broyden, and eigen J, then tries a step.
+        If the step is accepted, decreases damping; if not, increases.
+    * do_run_2():
+        Checks to calculate full, Broyden, and eigen J, then tries a
+        step with the current damping and with a decreased damping,
+        accepting whichever is lower. Decreases damping iff the lower
+        damping is better. It then calls do_internal_run() (see below).
+        Rejected steps result in increased damping until a step is
+        accepted. Checks for full, Broyden, and eigen J updates.
+    * do_internal_run():
+        Checks for Broyden and eigen J updates only, then uses
+        pre-calculated J, JTJ, etc to evaluate LM steps. Does
+        not change damping during the run. Does not check do update
+        the full J, but does check for Broyden, eigen updates.
+        Does not work if J has not been evaluated yet.
     Whether to update the full J is controlled by update_J_frequency only,
     which only counts iterations of do_run_1() and do_run_2().
     Partial updates are controlled by *_update_frequency, which
@@ -574,29 +574,29 @@ class LMEngine(object):
 
     So, if you want a partial update every other run, full J the remaining,
     this would be:
-        do_run_1(): update_J_frequency=2, partial_update_frequency=1
-        do_run_2(): update_J_frequency=1, partial_update_frequency=1,
+    * do_run_1(): update_J_frequency=2, partial_update_frequency=1
+    * do_run_2(): update_J_frequency=1, partial_update_frequency=1,
                     run_length=2
 
     Partial Updates:
-    Broyden update  : an update to J (and then JTJ) by approximating the
-        derivative of the model as the finite difference of the last
-        step. (rank-1)
-    Eigen update    : a rank-num_eig_dirs update to J (and then JTJ) by
-        finite-differencing with eig_dl along the highest num_eig_dirs
-        eigendirections.
+    * Broyden update  : an update to J (and then JTJ) by approximating the
+    derivative of the model as the finite difference of the last
+    step. (rank-1)
+    * Eigen update    : a rank-num_eig_dirs update to J (and then JTJ) by
+    finite-differencing with eig_dl along the highest num_eig_dirs
+    eigendirections.
 
     Damping:
-    marquardt : Damp proportional to the diagonal elements of JTJ
-    transtrum : Marquardt damping, clipped to be at least a certain number
-    default   : (levenberg) : Damp using something proportional to the
-            identity
+    * marquardt : Damp proportional to the diagonal elements of JTJ
+    * transtrum : Marquardt damping, clipped to be at least a certain number
+    * default   : (levenberg) Damp using something proportional to the identity
 
     References
     ----------
         ..[1] M. Transtrum and J. Sethna, "Improvements to the Levenberg-
             Marquardt algorithm for nonlinear least-squares minimization,"
             ArXiV preprint arXiv:1201.5885 (2012)
+
     """
     def __init__(self, damping=1., increase_damp_factor=3., decrease_damp_factor=8.,
                 min_eigval=1e-13, marquardt_damping=False, transtrum_damping=None,
@@ -1027,8 +1027,8 @@ class LMEngine(object):
         """
         Calculates LM updates, with or without the acceleration correction.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
             grad : numpy.ndarray
                 The gradient of the model cost.
             do_correct_damping : Bool, optional
@@ -1171,12 +1171,12 @@ class LMEngine(object):
         The model cosine is defined in terms of the geometric view of
         curve-fitting, as a model manifold embedded in a high-dimensional
         space. The model cosine is the cosine of the residuals vector
-        with its projection on the tangent space: cos(phi) = |P^T r|/|r|
-        where P^T is the projection operator onto the model manifold and r
-        the residuals. This can be calculated two ways: By calculating
-        the projection operator P directly with SVD (mode=`svd`), or by
-        using the expected error if the model were linear to calculate a
-        model sine first (mode=`err`). Since the SVD of a large matrix is
+        with its projection on the tangent space: :math:`cos(phi) = |P^T r|/|r|`
+        where :math:`P^T` is the projection operator onto the model manifold
+        and :math:`r` the residuals. This can be calculated two ways: By
+        calculating the projection operator P directly with SVD (mode=`svd`),
+        or by using the expected error if the model were linear to calculate
+        a model sine first (mode=`err`). Since the SVD of a large matrix is
         slow, mode=`err` is faster.
 
         `Decimate' allows for every nth pixel only to be counted in the
@@ -1566,7 +1566,7 @@ class OptState(OptObj):
             The optimization is done on a hyperplane spanned by the
             tangent vectors `directions` and passing through the point
             `p0`. If `p0` is `None`, then `p0` is set to the current
-            state paramters. Default is None
+            state parameters. Default is None
         dl : Float, optional
             The step size for finite-differencing the derivative. Default
             is 1e-7
@@ -1684,12 +1684,9 @@ class LMGlobals(LMEngine):
         reset(new_damping=None)
             Resets counters etc to zero, allowing more runs to commence.
 
-    Other Parameters, Attributes, and Methods
-    -----------------------------------------
-        See LMEngine
-
     See Also
     --------
+        LMEngine
         LMParticles
         LMAugmnetedState
         do_levmarq
@@ -1776,12 +1773,9 @@ class LMParticles(LMEngine):
         reset(new_damping=None)
             Resets counters etc to zero, allowing more runs to commence.
 
-    Other Parameters, Attributes, and Methods
-    -----------------------------------------
-        See LMEngine
-
     See Also
     --------
+        LMEngine
         LMParticles
         LMAugmnetedState
         do_levmarq
@@ -2065,8 +2059,8 @@ class AugmentedState(object):
     zp is a rescaled z coordinate. The order of the Legendre polynomial
     for the rescaling is set by rz_order
 
-    Paramters
-    ---------
+    Parameters
+    ----------
         state : :class:`peri.states.ImageState`
             The state to augment.
         param_names : list
@@ -2209,12 +2203,9 @@ class LMAugmentedState(LMEngine):
             Resets the augmented state, counters, etc to zero, allowing
             more runs to commence.
 
-    Other Parameters, Attributes, and Methods
-    -----------------------------------------
-        See LMEngine
-
     See Also
     --------
+        LMEngine
         LMParticles
         LMGlobals
         AugmentedState
@@ -2437,10 +2428,9 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
             Absolute change in error at which to terminate. Default 1e-3
         mode : {'burn', 'do-particles', or 'polish'}, optional
             What mode to optimize with.
-                'burn'          : Your state is far from the minimum.
-                'do-particles'  : Positions are far from the minimum,
-                                  globals are well-fit.
-                'polish'        : The state is close to the minimum.
+            * 'burn'          : Your state is far from the minimum.
+            * 'do-particles'  : Positions far from minimum, globals well-fit.
+            * 'polish'        : The state is close to the minimum.
             'burn' is the default. Only `polish` will get to the global
             minimum.
         max_mem : Numeric
@@ -2453,28 +2443,30 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
             of the burn()'s trajectory. In principle this should signifi-
             cantly speed up the convergence; in practice it sometimes does,
             sometimes doesn't. Default is 'default', which picks by mode:
-                'burn'          : False
-                'do-particles'  : False
-                'polish'        : True
+            * 'burn'          : False
+            * 'do-particles'  : False
+            * 'polish'        : True
 
     Notes
     -----
-        Proceeds by alternating between one Levenberg-Marquardt step
+    Proceeds by alternating between one Levenberg-Marquardt step
     optimizing the globals, one optimizing the particles, and repeating
     until termination.
-        In addition, if `do_line_min` is True, at the end of each loop
+
+    In addition, if `do_line_min` is True, at the end of each loop
     step an additional optimization is tried along the subspaced spanned
     by the steps taken during the last 3 loops. Ideally, this changes the
     convergence from linear to quadratic, but it doesn't always do much.
-        Each of the 3 options proceed by optimizing as follows:
-    burn            : lm.do_run_2(), lp.do_run_2(). No psf, 2 loops on lm.
-    do-particles    : lp.do_run_2(), scales for ilm, bkg's
-    polish          : lm.do_run_2(), lp.do_run_2(). Everything, 1 loop each.
+
+    Each of the 3 options proceed by optimizing as follows:
+    * burn            : lm.do_run_2(), lp.do_run_2(). No psf, 2 loops on lm.
+    * do-particles    : lp.do_run_2(), scales for ilm, bkg's
+    * polish          : lm.do_run_2(), lp.do_run_2(). Everything, 1 loop each.
     where lm is a globals LMGlobals instance, and lp a
     LMParticleGroupCollection instance.
-        It would be nice if some of these magic #'s (region size,
-    num_eig_dirs, etc) were calculated in a good way. FIXME
     """
+    # It would be nice if some of these magic #'s (region size,
+    # num_eig_dirs, etc) were calculated in a good way. FIXME
     mode = mode.lower()
     if mode not in {'burn', 'do-particles', 'polish'}:
         raise ValueError('mode must be one of burn, do-particles, polish')
