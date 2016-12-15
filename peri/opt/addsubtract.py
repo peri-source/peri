@@ -431,8 +431,8 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
             False, only checks for removal while particles were removed on
             the previous attempt. Default is False.
 
-    **kwargs Parameters
-    -------------------
+    Other Parameters
+    ----------------
         invert : Bool, optional
             True if the particles are dark on a bright background, False
             if they are bright on a dark background. Default is True.
@@ -583,10 +583,10 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
     Algorithm is
         1.  Create a field of the local standard deviation, as measured over
             a hypercube of size filter_size.
-        2.  Find the maximum reasonable value of the field. The field should
+        2.  Find the maximum reasonable value of the field. [The field should
             be a random variable with mean of r.std() and standard deviation
             of ~r.std() / sqrt(N), where r is the residuals and N is the
-            number of pixels in the hypercube.
+            number of pixels in the hypercube.]
         3.  Label & Identify the misfeatured regions as portions where
             the local error is too large.
         4.  Parse the misfeatured regions into tiles.
@@ -607,7 +607,9 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
     #2. Maximal reasonable value of the field.
     if sigma_cutoff == 'otsu':
         max_ok = initializers.otsu_threshold(f)
-    max_ok = f.mean() * (1 + sigma_cutoff / np.sqrt(weights.size))
+    else:
+        # max_ok = f.mean() * (1 + sigma_cutoff / np.sqrt(weights.size))
+        max_ok = f.mean() + sigma_cutoff * f.std()
 
     #3. Label & Identify
     bad = f > max_ok
