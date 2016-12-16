@@ -541,12 +541,14 @@ class LMEngine(object):
 
     See Also
     --------
-        LMFunction
-        LMGlobals
-        LMParticles
-        LMParticleGroupCollection
-        LMAugmentedState
-        LMOptObj
+        LMFunction : Levenberg-Marquardt (LM) optimization for a user-
+            supplied function.
+        LMGlobals : LM optimization designed for optimizing state globals.
+        LMParticles : LM optimization designed for optimizing state particles.
+        LMParticleGroupCollection : LM optimization on all particles in a
+            state.
+        LMAugmentedState : LMGlobals with additional R(z) parameters.
+        LMOptObj : ...
 
     Notes
     -----
@@ -1694,11 +1696,13 @@ class LMGlobals(LMEngine):
 
     See Also
     --------
-        LMEngine
-        LMParticles
-        LMAugmnetedState
-        do_levmarq
-        do_levmarq_particles
+        LMEngine : Parent class for all Levenberg-Marquardt (LM) optimization
+        LMParticles : LM optimization designed for optimizing state particles.
+        LMParticleGroupCollection : LM optimization on all particles in a
+            state.
+        LMAugmentedState : LMGlobals with additional R(z) parameters.
+        do_levmarq : Convenience function for LMGlobals
+        do_levmarq_particles : Convenience function for optimizing particles
     """
     def __init__(self, state, param_names, max_mem=1e9, opt_kwargs={}, **kwargs):
         self.state = state
@@ -1783,11 +1787,14 @@ class LMParticles(LMEngine):
 
     See Also
     --------
-        LMEngine
-        LMParticles
-        LMAugmnetedState
-        do_levmarq
-        do_levmarq_particles
+        LMEngine : Parent class for all Levenberg-Marquardt (LM) optimization
+        LMGlobals : LM optimization designed for optimizing state global
+            parameters.
+        LMParticleGroupCollection : LM optimization on all particles in a
+            state.
+        LMAugmentedState : LMGlobals with additional R(z) parameters.
+        do_levmarq : Convenience function for LMGlobals
+        do_levmarq_particles : Convenience function for optimizing particles
 
     Notes
     -----
@@ -1934,7 +1941,7 @@ class LMParticleGroupCollection(object):
 
     See Also
     -------
-        LMParticles
+        LMParticles : LM optimization designed for optimizing state particles.
 
     Notes
     -----
@@ -2090,7 +2097,8 @@ class AugmentedState(object):
 
     See Also
     --------
-        LMAugmentedState
+        LMAugmentedState : Levenberg-Marquadt optimization with an
+            ``AugmentedState``.
 
     Notes
     -----
@@ -2184,7 +2192,7 @@ class LMAugmentedState(LMEngine):
 
     Parameters
     ----------
-        aug_state : AugmentedState
+        aug_state : :class:``peri.optimize.opt.AugmentedState``
             The state to optimize
         max_mem : Numeric, optional
             The maximum memory to use for the optimization; controls pixel
@@ -2213,12 +2221,15 @@ class LMAugmentedState(LMEngine):
 
     See Also
     --------
-        LMEngine
-        LMParticles
-        LMGlobals
-        AugmentedState
-        do_levmarq
-        do_levmarq_particles
+        LMEngine : Parent class for all Levenberg-Marquardt (LM) optimization
+        LMGlobals : LM optimization on globals without an ``AugmentedState``
+        AugmentedState : The class used by ``LMAugmentedState``.
+        LMParticles : LM optimization designed for optimizing state particles.
+        LMParticleGroupCollection : LM optimization on all particles in a
+            state.
+        LMAugmentedState : LMGlobals with additional R(z) parameters.
+        do_levmarq : Convenience function for LMGlobals
+        do_levmarq_particles : Convenience function for optimizing particles
     """
     def __init__(self, aug_state, max_mem=1e9, opt_kwargs={}, **kwargs):
         self.aug_state = aug_state
@@ -2391,7 +2402,9 @@ def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
             [n,d] element numpy.ndarray of the n directions in the d-
             dimensional space to optimize along. `directions` is trans-
             formed to a unit vector internally
-        The rest are the same **kwargs in LMEngine.
+    Other Parameters
+    ----------------
+        Any parameters passed to LMEngine.
     """
     # normal = direction / np.sqrt(np.dot(direction, direction))
     normals = np.array([d/np.sqrt(np.dot(d,d)) for d in directions])
