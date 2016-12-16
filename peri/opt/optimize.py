@@ -600,7 +600,7 @@ class LMEngine(object):
 
     References
     ----------
-        ..[1] M. Transtrum and J. Sethna, "Improvements to the Levenberg-
+        .. [1] M. Transtrum and J. Sethna, "Improvements to the Levenberg-
             Marquardt algorithm for nonlinear least-squares minimization,"
             ArXiV preprint arXiv:1201.5885 (2012)
 
@@ -914,6 +914,7 @@ class LMEngine(object):
         Runs 1 step of run2, then runs with stuckJ until the # of bad
         parameter blocks is at least max_bad. Counts both run2 and stuckJ
         runs towards max_iter counter.
+
         Parameters
         ----------
             max_bad : Int or None
@@ -952,6 +953,9 @@ class LMEngine(object):
         """
         Optimization when a J is calculated, but trying to step with a full
         J results in a bad step.
+
+        Parameters
+        ----------
             stop_halving : Int
                 When the # of elements in a bad block is < stop_halving,
                 just call the whole sub-block bad. Default is 1.
@@ -1787,16 +1791,15 @@ class LMParticles(LMEngine):
 
     Notes
     -----
-        To prevent the state updates from breaking, this clips the
-        particle rads to [self._MINRAD, self._MAXRAD] and the positions
-        to at least self._MINDIST from the edge of the padded image.
-        These are:
-            _MINRAD  : 1e-3
-            _MAXRAD  : 2e2
-            _MINDIST : 1e-3
-        For extremely large particles (e.g. larger than _MAXRAD or larger
-        than the pad and barely overlapping the image) these numbers might
-        be insufficient.
+    To prevent the state updates from breaking, this clips the particle
+    rads to [self._MINRAD, self._MAXRAD] and the positions to at least
+    self._MINDIST from the edge of the padded image. These are:
+    * ``_MINRAD``  : 1e-3
+    * ``_MAXRAD``  : 2e2
+    * ``_MINDIST`` : 1e-3
+    For extremely large particles (e.g. larger than _MAXRAD or larger than
+    the pad and barely overlapping the image) these numbers might be
+    insufficient.
     """
     def __init__(self, state, particles, include_rad=True, **kwargs):
         self.state = state
