@@ -74,8 +74,8 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
             The number of pix/voxels at which to calculate the random
             approximation to J. Default is 1000.
 
-    **kwargs Parameters
-    -------------------
+    Other Parameters
+    ----------------
         All kwargs parameters get passed to s.gradmodel only.
 
     Returns
@@ -315,8 +315,8 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
         max_mem : Numeric, optional
             The maximum memory for the optimizer to take. Default is 1e9
 
-    **kwargs
-    --------
+    Other Parameters
+    ----------------
         bounds: 2-element list-like of 3-element lists.
             The sub-region of the image over which to look for particles.
                 bounds[0]: The lower-left  corner of the image region.
@@ -432,7 +432,7 @@ class LMEngine(object):
             Set to True to incorporate the geodesic acceleration term
             from M. Transtrum J. Sethna 2012. Default is False.
         max_accel_correction: Float, optional
-            Acceleration corrections bigger than max_accel_correction*
+            Acceleration corrections bigger than max_accel_correction times
             the normal LM step are viewed as bad steps, causing a
             decrease in damping. Default is 1.0. Only applies to the
             do_run_1 method.
@@ -927,14 +927,13 @@ class LMEngine(object):
                 When the size of a bad block is < stop_halving, the entire
                 block is counted as bad and updated, rather than chasing
                 down to the very last bad block. Default is 1.
-
-        Maybe you should ensure that the run2() gave a bad J first? But I
-        also don't want to end up in a situation where the optimizer moves
-        by 1e-10 for 100 steps... -- should be OK because of errtol.
-        One other issue with this is that if you move around in 1 parameter
-        you can get a small but positive change in the error, which can
-        create a premature stoppage through self.check_terminate()
         """
+        # Maybe you should ensure that the run2() gave a bad J first? But I
+        # also don't want to end up in a situation where the optimizer moves
+        # by 1e-10 for 100 steps... -- should be OK because of errtol.
+        # One other issue with this is that if you move around in 1 parameter
+        # you can get a small but positive change in the error, which can
+        # create a premature stoppage through self.check_terminate()
         n_bad = 0
         max_bad = self.param_vals.size / 4 if max_bad is None else max_bad
         while not self.check_terminate():
@@ -1413,25 +1412,28 @@ class LMFunction(LMEngine):
     paper. See LMEngine for further documentation.
 
     Parameters
-    -------
+    ----------
         data : N-element numpy.ndarray
             The measured data to fit.
         func : Function
             The function to evaluate. Syntax must be
-            func(param_values, *func_args, **func_kwargs), and return a
-            numpy.ndarray of the same shape as data
+            ``func(param_values, *func_args, **func_kwargs)``, and return
+            a numpy.ndarray of the same shape as data
         p0 : P-elemnet numpy.ndarray
             Float array of the initial parameter guess.
         dl : Float or P-element numpy.ndarray, optional
             The dl used for finite-difference derivatives, i.e.
-            (f(x+dl[i])) - f(x)) / (dl[i]) in each direction. If dl is
-            a scalar, it is transformed internally to a list. Default is
-            1e-8.
+            ``(f(x+dl[i])) - f(x)) / (dl[i])`` in each direction. If dl
+            is a scalar, it is transformed internally to a list. Default
+            is 1e-8.
         func_args : List-like, optional
-            Extra *args to pass to the function. Default is ()
+            Extra ``*args`` to pass to the function. Default is ()
         func_kargs : Dictionary, optional
-            Extra **kwargs to pass to the function. Default is {}
-        **kwargs : Any keyword args passed to LMEngine.
+            Extra ``**kwargs`` to pass to the function. Default is {}
+
+    Other Parameters
+    ----------------
+        Any keyword args passed to LMEngine.
 
     Attributes
     ----------
@@ -1492,7 +1494,8 @@ class LMOptObj(LMEngine):
     ----------
         opt_obj : OptObj or daughter instance
             The OptObj to optimize.
-    **kwargs Parameters
+
+    Other Parameters
     -------------------
         Any kwargs for LMEngine.
 
