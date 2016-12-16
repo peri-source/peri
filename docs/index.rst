@@ -33,8 +33,6 @@ Contents:
    architecture
    optimization
    parallel
-   crb
-   confocal
 
 Reference:
 ==========

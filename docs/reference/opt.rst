@@ -5,8 +5,8 @@ peri.opt
 peri.opt.optimize
 =================
 
-peri.opt.do_*
--------------
+peri.opt.optimize functions
+---------------------------
 
 .. autofunction:: peri.opt.optimize.do_levmarq
 
@@ -14,8 +14,8 @@ peri.opt.do_*
 
 .. autofunction:: peri.opt.optimize.do_levmarq_particles
 
-peri.opt.LM*
-------------
+peri.opt.optimize classes
+-------------------------
 
 .. autoclass:: peri.opt.optimize.LMEngine
     :members:
@@ -28,8 +28,8 @@ peri.opt.LM*
 
 .. autoclass:: peri.opt.optimize.LMAugmentedState
 
-peri.opt.burn
--------------
+peri.opt.optimize.burn
+----------------------
 
 .. autofunction:: peri.opt.optimize.burn
 
