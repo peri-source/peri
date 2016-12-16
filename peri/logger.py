@@ -134,14 +134,15 @@ class Logger(object):
         """
         Set the verbosity level of a certain log handler or of all handlers.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         verbosity : 'v' to 'vvvvv'
             the level of verbosity, more v's is more verbose
 
         handlers : string, or list of strings
-            handler names can be found in `peri.logger.types.keys()`
-            Current set is
+            handler names can be found in ``peri.logger.types.keys()``
+            Current set is::
+
                 ['console-bw', 'console-color', 'rotating-log']
         """
         self.verbosity = sanitize(verbosity)

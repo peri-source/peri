@@ -202,9 +202,11 @@ class ExactPSF(psfs.PSF):
 
     def psffunc(self, *args, **kwargs):
         """
-        The function to evaluate the exact psf. Syntax must be
-            psf = psffunc(x, y, z, **kwargs)
-        and return a [x.size, y.size, z.size] numpy.ndarray, where x,y,z
+        The function to evaluate the exact psf. Syntax must be:
+        
+            psf = psffunc(x, y, z, \**kwargs)
+
+        and return a ``[x.size, y.size, z.size]`` numpy.ndarray, where x,y,z
         are 1D arrays.
         Implement in subclass.
         """

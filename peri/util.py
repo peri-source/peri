@@ -207,6 +207,7 @@ class Tile(CompatibilityPatch):
         of left, right, size if provided not as an integer. If it not provided there
         then it is assumed to be 3D. This can be overridden by setting dim in the
         arguments. For example:
+
             * Tile(3)         : ``[0,0,0] -> [3,3,3]``
             * Tile(3, dim=2)  : ``[0,0] -> [3,3]``
             * Tile([3])       : ``[0] -> [3]``
@@ -669,9 +670,10 @@ class Image(object):
         --------
         To remove a two Fourier peaks in the data at q=(10, 10, 10) &
         (245, 245, 245), where im is an Image object:
-            slices = [(10,10,10), (245, 245, 245)]
-            values = np.fft.fftn(im.get_image())
-            im.set_filter(slices, values)
+
+            * slices = [(10,10,10), (245, 245, 245)]
+            * values = np.fft.fftn(im.get_image())
+            * im.set_filter(slices, values)
         """
         self.filters = [[sl,values[sl]] for sl in slices]
 
@@ -823,11 +825,12 @@ class ProgressBar(object):
         """
         ProgressBar class which creates a dynamic ASCII progress bar of two
         different varieties:
+
             1) A bar chart that looks like the following:
-                Progress [================      ]  63.00%
+                ``Progress [================      ]  63.00%``
 
             2) A simple number completed look:
-                Progress :   17 / 289
+                ``Progress :   17 / 289``
 
         Parameters
         -----------
@@ -856,11 +859,11 @@ class ProgressBar(object):
             Characters to use as the end caps of the.  The string will be split in
             half and each half put on a side of the chart
 
-        bar_decimals: integer [default: 2]
-            Number of decimal places to include in the _percentage
+        bar_decimals : integer [default: 2]
+            Number of decimal places to include in the percentage
 
         display : boolean [default: True]
-            a crutch so that we don't have a lot of `if`s later.  display
+            a crutch so that we don't have a lot of ``if``s later.  display
             or don't display the progress bar
         """
         # TODO -- add estimated time remaining
