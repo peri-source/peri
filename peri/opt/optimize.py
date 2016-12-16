@@ -1899,9 +1899,11 @@ class LMParticleGroupCollection(object):
             Set to True to create a series of temp files that save J
             for each group of particles. Needed for do_internal_run().
             Default is False.
-        **kwargs :
-            Pass any kwargs that would be passed to LMParticles.
-            Stored in self._kwargs for reference.
+
+    Other Parameters
+    ----------------
+        Pass any kwargs that would be passed to LMParticles. Stored in
+        self._kwargs for reference.
 
     Attributes
     ----------
@@ -1915,7 +1917,7 @@ class LMParticleGroupCollection(object):
             region_size will be the calculated value, which may differ
             from the input value.
         _kwargs : Dict
-            The **kwargs passed to LMParticles.
+            The ``**kwargs`` passed to LMParticles.
 
     Methods
     -------
@@ -2059,9 +2061,10 @@ class AugmentedState(object):
     """
     Augments a state with a set of radii(z) parameters.
 
-    Operates by updating the radii as R -> R0*np.exp(legval(zp)), where
-    zp is a rescaled z coordinate. The order of the Legendre polynomial
-    for the rescaling is set by rz_order
+    Operates by updating the radii as ``R`` -> ``R0*np.exp(legval(zp))``,
+    where ``zp`` is a rescaled ``z`` coordinate and ``R0`` the initial
+    radii. The order of the Legendre polynomial for the rescaling is set
+    by ``rz_order``.
 
     Parameters
     ----------
@@ -2182,23 +2185,17 @@ class LMAugmentedState(LMEngine):
     Parameters
     ----------
         aug_state : :class:``peri.optimize.opt.AugmentedState``
-            The state to optimize
+            The state to optimize. Stored as self.aug_state
         max_mem : Numeric, optional
             The maximum memory to use for the optimization; controls pixel
-            decimation. Default is 1e9.
+            decimation. Default is 1e9. Stored as self.max_mem.
         opt_kwargs : Dict, optional
-            Dict of **kwargs for opt implementation. Right now only for
-            *.get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
-            Default is `{}`
+            Dict of ``**kwargs`` for opt implementation. Right now only for
+            get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
+            Default is `{}`. Stored as self.opt_kwargs.
 
     Attributes
     ----------
-        aug_state : AugmentedState
-            The augmented state to optimize.
-        opt_kwargs : dict
-            A **kwargs-like dictionary for optimization implementation.
-        max_mem : Float or int
-            The max memory occupied by J.
         num_pix : Int
             The number of pixels of the residuals used to calculate J.
 
