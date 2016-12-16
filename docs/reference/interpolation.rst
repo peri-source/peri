@@ -2,6 +2,11 @@
 peri.interpolation
 ******************
 
+Index of module ``peri.interpolation``
+
+* :class:`peri.interpolation.BarnesInterpolation1D`
+* :class:`peri.interpolation.ChebyshevInterpolation1D`
+
 peri.interpolation.BarnesInterpolation1D
 ========================================
 

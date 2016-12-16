@@ -2,6 +2,36 @@
 peri.opt
 ********
 
+* :ref:`peri.opt.optimize`
+
+  * Functions:
+
+    * :func:`peri.opt.optimize.burn`
+    * :func:`peri.opt.optimize.do_levmarq`
+    * :func:`peri.opt.optimize.do_levmarq_particles`
+    * :func:`peri.opt.optimize.do_levmarq_all_particle_groups`
+
+  * Classes:
+
+    * :class:`peri.opt.optimize.LMEngine`
+    * :class:`peri.opt.optimize.LMGlobals`
+    * :class:`peri.opt.optimize.LMParticles`
+    * :class:`peri.opt.optimize.LMParticleGroupCollection`
+    * :class:`peri.opt.optimize.LMAugmentedState`
+
+* :ref:`peri.opt.addsubtract`
+
+  * :func:`peri.opt.addsubtract.add_subtract`
+  * :func:`peri.opt.addsubtract.feature_guess`
+
+peri.opt.optimize.burn
+----------------------
+
+.. autofunction:: peri.opt.optimize.burn
+
+
+.. _peri.opt.optimize:
+
 peri.opt.optimize
 =================
 
@@ -32,6 +62,8 @@ peri.opt.optimize.burn
 ----------------------
 
 .. autofunction:: peri.opt.optimize.burn
+
+.. _peri.opt.addsubtract:
 
 peri.opt.addsubtract
 ====================
