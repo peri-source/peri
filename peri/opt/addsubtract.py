@@ -244,9 +244,9 @@ def add_missing_particles(st, rad='calc', tries=50, **kwargs):
             How many particles to attempt to add. Only tries to add the first
             tries particles, in order of mass. Default is 50.
 
-    **kwargs Parameters
-    -------------------
-        invert : Bool, optional
+    Other Parameters
+    ----------------
+    invert : Bool, optional
             Whether to invert the image. Default is True, i.e. particles
             are dark.
         minmass : Float or None, optionals
@@ -655,8 +655,8 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
             warning. If more than this many particles are added, they are
             optimized in blocks of max_allowed_remove. Default is 20.
 
-    **kwargs Parameters
-    -------------------
+    Other Parameters
+    ----------------
         im_change_frac : Float, between 0 and 1.
             If adding or removing a particle decreases the error less than
             im_change_frac*the change in the image, the particle is deleted.
@@ -775,14 +775,13 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
             The minimum amount of regions to try; the algorithm terminates
             if region_depth regions have been tried without adding particles.
 
-    Parameters to identify_misfeatured_regions
-    ------------------------------------------
-        filter_size : Int, best if odd.
+    Other Parameters
+    ----------------
+        filter_size : Int, optional
             The size of the filter for calculating the local standard
             deviation; should approximately be the size of a poorly featured
-            region in each dimension. Default is 5.
-
-        sigma_cutoff : Float
+            region in each dimension. Best if odd. Default is 5.
+        sigma_cutoff : Float, optional
             The max allowed deviation of the residuals from what is expected,
             in units of the residuals' standard deviation. Lower means more
             sensitive, higher = less sensitive. Default is 8.0, i.e. one
@@ -790,8 +789,6 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
             practice the noise is not Gaussian so there are still some
             regions mis-identified as improperly featured.
 
-    **kwargs Parameters, to add_subtract_misfeatured_tile
-    ------------------------------------------------------
         rad : Float or 'calc', optional
             The initial radius for added particles; added particles radii
             are not fit until the end of add_subtract. Default is 'calc',
