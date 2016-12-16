@@ -573,7 +573,7 @@ class LMEngine(object):
 
     Whether to update the full J is controlled by update_J_frequency only,
     which only counts iterations of do_run_1() and do_run_2().
-    Partial updates are controlled by *_update_frequency, which
+    Partial updates are controlled by `*_update_frequency`, which
     counts internal runs in do_internal_run and full runs in do_run_1.
 
     So, if you want a partial update every other run, full J the remaining,
@@ -1185,7 +1185,7 @@ class LMEngine(object):
         a model sine first (mode=`err`). Since the SVD of a large matrix is
         slow, mode=`err` is faster.
 
-        `Decimate' allows for every nth pixel only to be counted in the
+        `decimate` allows for every nth pixel only to be counted in the
         SVD matrix of J for speed. While this is n x faster, it is
         considerably less accurate, so the default is no decimation.
         """
@@ -1663,29 +1663,22 @@ class LMGlobals(LMEngine):
     Parameters
     ----------
         state : :class:`peri.states.State`
-            The state to optimize
+            The state to optimize. Stored as self.state.
         param_names : List
-            List of the parameter names (strings) to optimize over
+            List of the parameter names (strings) to optimize over. Stored
+            as self.param_names.
         max_mem : Numeric, optional
             The maximum memory to use for the optimization; controls pixel
-            decimation. Default is 1e9.
+            decimation. Default is 1e9. Stored as self.max_mem
         opt_kwargs : Dict, optional
-            Dict of **kwargs for opt implementation. Right now only for
-            *.get_num_px_jtj, i.e. keys of 'decimate', 'min_redundant'.
-            Default is `{}`
+            Dict of ``**kwargs`` for opt implementation. Right now only for
+            get_num_px_jtj, i.e. keys of 'decimate', 'min_redundant'.
+            Default is `{}`. Stored as self.opt_kwargs
 
     Attributes
     ----------
-        state : :class:`peri.states.State`
-            The state to optimize.
-        opt_kwargs : dict
-            A **kwargs-like dictionary for optimization implementation.
-        max_mem : Float or int
-            The max memory occupied by J.
         num_pix : Int
             The number of pixels of the residuals used to calculate J.
-        param_names : List
-            The list of the parameter names being optimized.
 
     Methods
     -------
@@ -1771,10 +1764,6 @@ class LMParticles(LMEngine):
 
     Attributes
     ----------
-        state : :class:`peri.states.ImageState`
-            The state to optimize.
-        particles : dict
-            A **kwargs-like dictionary for optimization implementation.
         param_names : List
             The list of the parameter names being optimized.
 
