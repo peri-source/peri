@@ -30,7 +30,7 @@ RLOG = logger.log.getChild('runner')
 import peri.opt.optimize as opt
 import peri.opt.addsubtract as addsub
 
-def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=True):
+def locate_spheres(image, feature_rad, dofilter=True, order=(7,7,7), **kwargs):
     """
     Get an initial featuring of sphere positions in an image.
 
@@ -39,8 +39,10 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=True):
     image : :class:`peri.util.Image` object
         Image object which defines the image file as well as the region.
 
-    radius : float
-        Radius of objects to find, in pixels
+    feature_rad : float
+        Radius of objects to find, in pixels. This is a featuring radius
+        and not a real radius, so a better value is frequently smaller
+        than the real radius (half the actual radius is good).
 
     dofilter : boolean, optional
         Whether to remove the background before featuring. Doing so can often
@@ -51,9 +53,17 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=True):
         If `dofilter`, the 2+1D Leg Poly approximation to the background
         illumination field. Default is (7,7,7).
 
+    Other Parameters
+    ----------------
     invert : boolean, optional
         Whether to invert the image for featuring. Set to True if the
         image is dark particles on a bright background. Default is True
+    minmass : Float or None, optional
+        The minimum mass/masscut of a particle. Default is None, which
+        calculates internally.
+    use_tp : Bool, optional
+        Whether or not to use trackpy. Default is False, since trackpy
+        cuts out particles at the edge.
 
     Returns
     --------
@@ -76,10 +86,11 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=True):
     if dofilter:
         opt.do_levmarq(s, s.params)
 
-    return addsub.feature_guess(s, radius, invert=invert)[0]
+    return addsub.feature_guess(s, feature_rad, **kwargs)[0]
 
 def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
-        tile=None, invert=True, use_full_path=False, minmass=100.0, **kwargs):
+        tile=None, invert=True, use_full_path=False, minmass=0.39,
+        featuring_params={}, **kwargs):
     """
     Completely optimizes a state from an image of roughly monodisperse
     particles.
@@ -107,10 +118,14 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
             Set to True to use the full path name for the image. Default
             is False.
         minmass : Float, optional
-            minmass for featuring, as passed to trackpy. Default is 100.
+            minmass for featuring, as passed to locate_spheres. Default
+            is 0.39.
+        featuring_params : Dict, optional
+            kwargs-like dict of any additional keyword arguments to pass to
+            get_initial_featuring. Default is ``{}``.
 
-        **kwargs Parameters
-        -------------------
+    Other Parameters
+    ----------------
         slab : :class:`peri.comp.objs.Slab` or None, optional
             If not None, a slab corresponding to that in the image. Default
             is None.
@@ -160,10 +175,10 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
 
     Notes
     -----
-    The **kwargs parameters are passed to _optimize_from_centroid.
     Proceeds by centroid-featuring the image for an initial guess of
     particle positions, then optimizing the globals + positions until
     termination as called in _optimize_from_centroid.
+    The ``Other Parameters`` are passed to _optimize_from_centroid.
     """
     if actual_rad is None:
         actual_rad = feature_diam * 0.5
@@ -171,15 +186,8 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
     _,  im_name = _pick_state_im_name('', im_name, use_full_path=use_full_path)
     im = util.RawImage(im_name, tile=tile)
 
-    ###FIXME why isn't this using locate_spheres?
-    f = peri.trackpy.locate(im.get_image()*255, feature_diam, invert=invert,
-            minmass=minmass)
-    npart = f['x'].size
-    pos = np.zeros([npart,3])
-    pos[:,0] = f['z']
-    pos[:,1] = f['y']
-    pos[:,2] = f['x']
-    ####
+    pos = locate_spheres(image, feature_rad, invert=invert, minmass=minmass,
+            **featuring_params)
 
     rad = np.ones(npart, dtype='float') * actual_rad
     s = _optimize_from_centroid(pos, rad, im, invert=invert, **kwargs)
