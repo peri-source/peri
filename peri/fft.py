@@ -54,7 +54,7 @@ def load_wisdom(wisdomfile):
         return
 
     try:
-        pyfftw.import_wisdom(pickle.load(open(wisdomfile)))
+        pyfftw.import_wisdom(pickle.load(open(wisdomfile, 'rb')))
     except IOError as e:
         log.warn("No wisdom present, generating some at %r" % wisdomfile)
         save_wisdom(wisdomfile)
