@@ -2233,13 +2233,13 @@ class AugmentedState(object):
 
     def update(self, param_vals):
         """Updates all the parameters of the state + rscale(z)"""
-        self.update_rscl_x_params(param_vals[self.rscale_mask], do_reset=False)
+        self.update_rscl_x_params(param_vals[self.rscale_mask])
         self.state.update(self.param_names, param_vals[self.globals_mask])
         self.param_vals[:] = param_vals.copy()
         if np.any(np.isnan(self.state.residuals)):
             raise FloatingPointError('state update caused nans in residuals')
 
-    def update_rscl_x_params(self, new_rscl_params, do_reset=True):
+    def update_rscl_x_params(self, new_rscl_params):
         #1. What to change:
         p = self._initial_pos
 
@@ -2248,18 +2248,15 @@ class AugmentedState(object):
         new_scale = self.rad_func(p)
 
         rnew = self._initial_rad * new_scale
-        if do_reset:
-            self.state.update(self._rad_nms, rnew)
-        else:
-            #FIXME you can do this without the extra convolution if you pass
-            #all at once... right now don't worry about it
-            self.state.update(self._rad_nms, rnew)
+        #FIXME you can do a full update without the extra convolution
+        #... right now don't worry about it
+        self.state.update(self._rad_nms, rnew)
 
 class LMAugmentedState(LMEngine):
     """
     Levenberg-Marquardt on an augmented state.
 
-    Contains alll the options from the M. Transtrum J. Sethna 2012 ArXiV
+    Contains all the options from the M. Transtrum J. Sethna 2012 ArXiV
     paper. See LMEngine for further documentation.
 
     Parameters
@@ -2326,15 +2323,17 @@ class LMAugmentedState(LMEngine):
         old_aug_vals = sa.param_vals[sa.rscale_mask].copy()
         dl = 1e-6
         J_aug = []
-        i0 = s.residuals
+        i0 = s.residuals.copy()
         for a in xrange(old_aug_vals.size):
             dx = np.zeros(old_aug_vals.size)
             dx[a] = dl
-            sa.update_rscl_x_params(old_aug_vals + dl, do_reset=True)
-            i1 = s.residuals
+            sa.update_rscl_x_params(old_aug_vals + dx)
+            i1 = s.residuals.copy()
             #J = grad(residuals)
             der = (i1-i0)/dl
             J_aug.append(der.ravel()[self._inds].copy())
+        #resetting to prev. params:
+        sa.update_rscl_x_params(old_aug_vals)
 
         if J_st.size == 0:
             self.J = np.array(J_aug)
