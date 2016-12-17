@@ -82,13 +82,44 @@ def generate_sphere(radius):
     sphere = r < radius
     return sphere
 
-def local_max_featuring(im, radius=10, smooth=4, masscut=None):
-    g = nd.gaussian_filter(im, smooth, mode='mirror')
+def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
+        masscut=None):
+    """
+    Local max featuring to identify spherical particles in an image.
+
+    Parameters
+    ----------
+        im : numpy.ndarray
+            The image to identify particles in.
+        radius : Float, optional
+            Featuring radius of the particles. Default is 2.5
+        noise_size : Float, optional
+            Size of Gaussian kernel for smoothing out noise. Default is 1.
+        masscut : Float or None, optional
+            Return only particles with a ``mass > masscut``. Default is
+            None, which returns all particles.
+
+    Returns
+    -------
+        positions : numpy.ndarray
+        e : numpy.ndarray
+            The maximum-filtered array...
+        [, mass] : numpy.ndarray
+            Particle masses; if ``masscut`` is not None.
+    """
+    #1. Remove noise
+    g = nd.gaussian_filter(im, noise_size, mode='mirror')
+    #2. Remove long-wavelength background:
+    if bkg_size is None:
+        bkg_size = 2*radius
+    g -= nd.gaussian_filter(g, bkg_size, mode='mirror')
+    #3. Local max feature
     footprint = generate_sphere(radius)
     e = nd.maximum_filter(g, footprint=footprint)
     lbl = nd.label(e == g)[0]
     ind = np.sort(np.unique(lbl))[1:]
-    pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
+    # pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
+    pos = np.transpose(np.nonzero(e==g))
     if masscut is not None:
         m = nd.convolve(im, footprint, mode='reflect')
         mass = np.array(map(lambda x: m[x[0],x[1],x[2]], pos.astype('int')))
