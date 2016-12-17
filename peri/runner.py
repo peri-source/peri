@@ -30,7 +30,7 @@ RLOG = logger.log.getChild('runner')
 import peri.opt.optimize as opt
 import peri.opt.addsubtract as addsub
 
-def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=False):
+def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=True):
     """
     Get an initial featuring of sphere positions in an image.
 
@@ -53,7 +53,7 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=False):
 
     invert : boolean, optional
         Whether to invert the image for featuring. Set to True if the
-        image is bright particles on a dark background. Default is False
+        image is dark particles on a bright background. Default is True
 
     Returns
     --------
@@ -76,7 +76,7 @@ def locate_spheres(image, radius, dofilter=True, order=(7,7,7), invert=False):
     if dofilter:
         opt.do_levmarq(s, s.params)
 
-    return addsub.feature_guess(s, radius, invert=not invert)[0]
+    return addsub.feature_guess(s, radius, invert=invert)[0]
 
 def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
         tile=None, invert=True, use_full_path=False, minmass=100.0, **kwargs):
