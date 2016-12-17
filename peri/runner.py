@@ -30,7 +30,7 @@ RLOG = logger.log.getChild('runner')
 import peri.opt.optimize as opt
 import peri.opt.addsubtract as addsub
 
-def locate_spheres(image, feature_rad, dofilter=True, order=(7,7,7), **kwargs):
+def locate_spheres(image, feature_rad, dofilter=False, order=(3,3,3), **kwargs):
     """
     Get an initial featuring of sphere positions in an image.
 
@@ -45,13 +45,17 @@ def locate_spheres(image, feature_rad, dofilter=True, order=(7,7,7), **kwargs):
         than the real radius (half the actual radius is good).
 
     dofilter : boolean, optional
-        Whether to remove the background before featuring. Doing so can often
-        greatly increase the success of initial featuring and decrease later
-        optimization time. Default is True.
+        Whether to remove the background before featuring. Doing so can
+        often greatly increase the success of initial featuring and
+        decrease later optimization time. Filtering functions by fitting
+        the image to a low-order polynomial and featuring the residuals.
+        In doing so, this will change the mean intensity of the featured
+        image and hence the good value of ``minmass`` will change when
+        ``dofilter`` is True. Default is False.
 
     order : 3-element tuple, optional
         If `dofilter`, the 2+1D Leg Poly approximation to the background
-        illumination field. Default is (7,7,7).
+        illumination field. Default is (3,3,3).
 
     Other Parameters
     ----------------
