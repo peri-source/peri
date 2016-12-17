@@ -74,9 +74,12 @@ def normalize(im, invert=False, scale=None, dtype=np.float64):
     return out.astype(dtype)
 
 def generate_sphere(radius):
-    x,y,z = np.mgrid[0:2*radius,0:2*radius,0:2*radius]
-    r = np.sqrt((x-radius-0.5)**2 + (y-radius-0.5)**2 + (z-radius-0.5)**2)
-    sphere = r < radius - 1
+    """Generates a centered boolean mask of a 3D sphere"""
+    rint = np.ceil(radius).astype('int')
+    t = np.arange(-rint, rint+1, 1)
+    x,y,z = np.meshgrid(t, t, t, indexing='ij')
+    r = np.sqrt(x*x + y*y + z*z)
+    sphere = r < radius
     return sphere
 
 def local_max_featuring(im, radius=10, smooth=4, masscut=None):
