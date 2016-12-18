@@ -9,7 +9,7 @@ import numpy as np
 from numpy.random import randint
 from scipy.optimize import newton, minimize_scalar
 
-from peri.util import Tile
+from peri.util import Tile, Image
 from peri import states
 from peri import models as mdl
 from peri.logger import log
@@ -2674,6 +2674,6 @@ def fit_comp(new_comp, old_comp, **kwargs):
     do_levmarq : Levenberg-Marquardt minimization using a random subset
         of the image pixels.
     """
-    fake_s = states.ImageState(old_comp.get().copy(), [new_comp], pad=0,
-            mdl=mdls.SmoothFieldModel)
+    fake_s = states.ImageState(Image(old_comp.get().copy()), [new_comp], pad=0,
+            mdl=mdl.SmoothFieldModel())
     do_levmarq(fake_s, new_comp.params, **kwargs)
