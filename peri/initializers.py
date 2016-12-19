@@ -83,7 +83,7 @@ def generate_sphere(radius):
     return sphere
 
 def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
-        masscut=None):
+        masscut=1., trim_edge=False):
     """
     Local max featuring to identify spherical particles in an image.
 
@@ -95,9 +95,12 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
             Featuring radius of the particles. Default is 2.5
         noise_size : Float, optional
             Size of Gaussian kernel for smoothing out noise. Default is 1.
-        masscut : Float or None, optional
-            Return only particles with a ``mass > masscut``. Default is
-            None, which returns all particles.
+        masscut : Float, optional
+            Return only particles with a ``mass > masscut``. Default is 1.
+        trim_edge : Bool, optional
+            Set to True to omit particles identified exactly at the edge of
+            the image. False features frequently occur here because of the
+            reflected bandpass featuring. Default is False.
 
     Returns
     -------
@@ -116,16 +119,15 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
     #3. Local max feature
     footprint = generate_sphere(radius)
     e = nd.maximum_filter(g, footprint=footprint)
-    if masscut is not None:
-        mass_im = nd.convolve(g, footprint, mode='mirror')
-        good_im = (e==g) * (mass_im > masscut)
-        pos = np.transpose(np.nonzero(good_im))
-        # pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
-        masses = mass_im[pos[:,0], pos[:,1], pos[:,2]].copy()
-        return pos, e, masses
-    else:
-        pos = np.transpose(np.nonzero(e==g))
-        return pos, e
+    mass_im = nd.convolve(g, footprint, mode='mirror')
+    good_im = (e==g) * (mass_im > masscut)
+    pos = np.transpose(np.nonzero(good_im))
+    # pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
+    if trim_edge:
+        good = np.all(pos > 0, axis=1) & np.all(pos+1 < im.shape)
+        pos = pos[good, :].copy()
+    masses = mass_im[pos[:,0], pos[:,1], pos[:,2]].copy()
+    return pos, e, masses
 
 def trackpy_featuring(im, size=10):
     from trackpy.feature import locate
