@@ -116,16 +116,15 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
     #3. Local max feature
     footprint = generate_sphere(radius)
     e = nd.maximum_filter(g, footprint=footprint)
-    lbl = nd.label(e == g)[0]
-    ind = np.sort(np.unique(lbl))[1:]
-    # pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
-    pos = np.transpose(np.nonzero(e==g))
     if masscut is not None:
-        m = nd.convolve(im, footprint, mode='reflect')
-        mass = np.array(map(lambda x: m[x[0],x[1],x[2]], pos.astype('int')))
-        good = mass > masscut
-        return pos[good].copy(), e, mass[good].copy()
+        mass_im = nd.convolve(g, footprint, mode='mirror')
+        good_im = (e==g) * (mass_im > masscut)
+        pos = np.transpose(np.nonzero(good_im))
+        # pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
+        masses = mass_im[pos[:,0], pos[:,1], pos[:,2]].copy()
+        return pos, e, masses
     else:
+        pos = np.transpose(np.nonzero(e==g))
         return pos, e
 
 def trackpy_featuring(im, size=10):
