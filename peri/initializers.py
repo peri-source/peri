@@ -111,23 +111,23 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
             Particle masses; if ``masscut`` is not None.
     """
     #1. Remove noise
-    g = nd.gaussian_filter(im, noise_size, mode='mirror')
+    filtered = nd.gaussian_filter(im, noise_size, mode='mirror')
     #2. Remove long-wavelength background:
     if bkg_size is None:
         bkg_size = 2*radius
-    g -= nd.gaussian_filter(g, bkg_size, mode='mirror')
+    filtered -= nd.gaussian_filter(filtered, bkg_size, mode='mirror')
     #3. Local max feature
     footprint = generate_sphere(radius)
-    e = nd.maximum_filter(g, footprint=footprint)
-    mass_im = nd.convolve(g, footprint, mode='mirror')
-    good_im = (e==g) * (mass_im > masscut)
+    e = nd.maximum_filter(filtered, footprint=footprint)
+    mass_im = nd.convolve(filtered, footprint, mode='mirror')
+    good_im = (e==filtered) * (mass_im > masscut)
     pos = np.transpose(np.nonzero(good_im))
-    # pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
+    # pos = np.array(nd.measurements.center_of_mass(e==filtered, lbl, ind))
     if trim_edge:
-        good = np.all(pos > 0, axis=1) & np.all(pos+1 < im.shape)
+        good = np.all(pos > 0, axis=1) & np.all(pos+1 < im.shape, axis=1)
         pos = pos[good, :].copy()
     masses = mass_im[pos[:,0], pos[:,1], pos[:,2]].copy()
-    return pos, e, masses
+    return pos, masses
 
 def trackpy_featuring(im, size=10):
     from trackpy.feature import locate
