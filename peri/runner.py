@@ -30,7 +30,8 @@ RLOG = logger.log.getChild('runner')
 import peri.opt.optimize as opt
 import peri.opt.addsubtract as addsub
 
-def locate_spheres(image, feature_rad, dofilter=False, order=(3,3,3), **kwargs):
+def locate_spheres(image, feature_rad, dofilter=False, order=(3,3,3),
+        trim_edge=True, **kwargs):
     """
     Get an initial featuring of sphere positions in an image.
 
@@ -90,7 +91,7 @@ def locate_spheres(image, feature_rad, dofilter=False, order=(3,3,3), **kwargs):
     if dofilter:
         opt.do_levmarq(s, s.params)
 
-    return addsub.feature_guess(s, feature_rad, **kwargs)[0]
+    return addsub.feature_guess(s, feature_rad, trim_edge=trim_edge, **kwargs)[0]
 
 def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
         tile=None, invert=True, use_full_path=False, minmass=0.39,

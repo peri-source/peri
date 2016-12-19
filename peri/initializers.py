@@ -83,7 +83,7 @@ def generate_sphere(radius):
     return sphere
 
 def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
-        masscut=1., trim_edge=False):
+        minmass=1., trim_edge=False):
     """
     Local max featuring to identify spherical particles in an image.
 
@@ -95,8 +95,8 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
             Featuring radius of the particles. Default is 2.5
         noise_size : Float, optional
             Size of Gaussian kernel for smoothing out noise. Default is 1.
-        masscut : Float, optional
-            Return only particles with a ``mass > masscut``. Default is 1.
+        minmass : Float, optional
+            Return only particles with a ``mass > minmass``. Default is 1.
         trim_edge : Bool, optional
             Set to True to omit particles identified exactly at the edge of
             the image. False features frequently occur here because of the
@@ -104,11 +104,8 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
 
     Returns
     -------
-        positions : numpy.ndarray
-        e : numpy.ndarray
-            The maximum-filtered array...
-        [, mass] : numpy.ndarray
-            Particle masses; if ``masscut`` is not None.
+        pos, mass : numpy.ndarray
+            Particle positions and masses
     """
     #1. Remove noise
     filtered = nd.gaussian_filter(im, noise_size, mode='mirror')
@@ -120,7 +117,7 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
     footprint = generate_sphere(radius)
     e = nd.maximum_filter(filtered, footprint=footprint)
     mass_im = nd.convolve(filtered, footprint, mode='mirror')
-    good_im = (e==filtered) * (mass_im > masscut)
+    good_im = (e==filtered) * (mass_im > minmass)
     pos = np.transpose(np.nonzero(good_im))
     # pos = np.array(nd.measurements.center_of_mass(e==filtered, lbl, ind))
     if trim_edge:
