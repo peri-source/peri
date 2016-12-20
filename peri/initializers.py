@@ -74,25 +74,57 @@ def normalize(im, invert=False, scale=None, dtype=np.float64):
     return out.astype(dtype)
 
 def generate_sphere(radius):
-    x,y,z = np.mgrid[0:2*radius,0:2*radius,0:2*radius]
-    r = np.sqrt((x-radius-0.5)**2 + (y-radius-0.5)**2 + (z-radius-0.5)**2)
-    sphere = r < radius - 1
+    """Generates a centered boolean mask of a 3D sphere"""
+    rint = np.ceil(radius).astype('int')
+    t = np.arange(-rint, rint+1, 1)
+    x,y,z = np.meshgrid(t, t, t, indexing='ij')
+    r = np.sqrt(x*x + y*y + z*z)
+    sphere = r < radius
     return sphere
 
-def local_max_featuring(im, radius=10, smooth=4, masscut=None):
-    g = nd.gaussian_filter(im, smooth, mode='mirror')
+def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
+        minmass=1., trim_edge=False):
+    """
+    Local max featuring to identify spherical particles in an image.
+
+    Parameters
+    ----------
+        im : numpy.ndarray
+            The image to identify particles in.
+        radius : Float, optional
+            Featuring radius of the particles. Default is 2.5
+        noise_size : Float, optional
+            Size of Gaussian kernel for smoothing out noise. Default is 1.
+        minmass : Float, optional
+            Return only particles with a ``mass > minmass``. Default is 1.
+        trim_edge : Bool, optional
+            Set to True to omit particles identified exactly at the edge of
+            the image. False features frequently occur here because of the
+            reflected bandpass featuring. Default is False.
+
+    Returns
+    -------
+        pos, mass : numpy.ndarray
+            Particle positions and masses
+    """
+    #1. Remove noise
+    filtered = nd.gaussian_filter(im, noise_size, mode='mirror')
+    #2. Remove long-wavelength background:
+    if bkg_size is None:
+        bkg_size = 2*radius
+    filtered -= nd.gaussian_filter(filtered, bkg_size, mode='mirror')
+    #3. Local max feature
     footprint = generate_sphere(radius)
-    e = nd.maximum_filter(g, footprint=footprint)
-    lbl = nd.label(e == g)[0]
-    ind = np.sort(np.unique(lbl))[1:]
-    pos = np.array(nd.measurements.center_of_mass(e==g, lbl, ind))
-    if masscut is not None:
-        m = nd.convolve(im, footprint, mode='reflect')
-        mass = np.array(map(lambda x: m[x[0],x[1],x[2]], pos.astype('int')))
-        good = mass > masscut
-        return pos[good].copy(), e, mass[good].copy()
-    else:
-        return pos, e
+    e = nd.maximum_filter(filtered, footprint=footprint)
+    mass_im = nd.convolve(filtered, footprint, mode='mirror')
+    good_im = (e==filtered) * (mass_im > minmass)
+    pos = np.transpose(np.nonzero(good_im))
+    # pos = np.array(nd.measurements.center_of_mass(e==filtered, lbl, ind))
+    if trim_edge:
+        good = np.all(pos > 0, axis=1) & np.all(pos+1 < im.shape, axis=1)
+        pos = pos[good, :].copy()
+    masses = mass_im[pos[:,0], pos[:,1], pos[:,2]].copy()
+    return pos, masses
 
 def trackpy_featuring(im, size=10):
     from trackpy.feature import locate

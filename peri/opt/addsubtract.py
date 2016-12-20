@@ -9,7 +9,8 @@ import peri.opt.optimize as opt
 from peri.logger import log
 CLOG = log.getChild('addsub')
 
-def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
+def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
+        trim_edge=False, **kwargs):
     """
     Makes a guess at particle positions using heuristic centroid methods.
 
@@ -42,23 +43,22 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False, **kwargs):
         im = 1 - st.residuals
     else:
         im = st.residuals
-    return _feature_guess(im, rad, invert=invert, minmass=minmass,
-            use_tp=use_tp, **kwargs)
+    return _feature_guess(im, rad, minmass=minmass, use_tp=use_tp,
+            trim_edge=trim_edge)
 
-def _feature_guess(im, rad, minmass=None, use_tp=False, **kwargs):
+def _feature_guess(im, rad, minmass=None, use_tp=False, trim_edge=False):
     """Workhorse of feature_guess"""
     #FIXME does not use the **kwargs, but needs them because of add_subtract_locally
     if minmass == None:
         #30% of the feature size mass is a good cutoff empirically for
         #initializers.local_max_featuring, less for trackpy;
         #it's easier to remove than to add
-        minmass = rad**3 * 4/3.*np.pi * 0.3
-        if use_tp:
-            minmass *= 0.1 #magic #; works well
+        minmass = rad**3 * 4/3.*np.pi * 0.03
+        #0.03 is a magic number; works well
     if use_tp:
         diameter = np.ceil(2*rad)
         diameter += 1-(diameter % 2)
-        df = peri.trackpy.locate(im, int(diameter), minmass = minmass)
+        df = peri.trackpy.locate(im, int(diameter), minmass=minmass)
         npart = np.array(df['mass']).size
         guess = np.zeros([npart,3])
         guess[:,0] = df['z']
@@ -66,7 +66,8 @@ def _feature_guess(im, rad, minmass=None, use_tp=False, **kwargs):
         guess[:,2] = df['x']
         mass = df['mass']
     else:
-        guess, _, mass = initializers.local_max_featuring(im, radius=rad, masscut=minmass)
+        guess, mass = initializers.local_max_featuring(im, radius=rad,
+                minmass=minmass, trim_edge=trim_edge)
         npart = guess.shape[0]
     #I want to return these sorted by mass:
     inds = np.argsort(mass)[::-1] #biggest mass first
@@ -746,7 +747,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
                 max_iter=3)
 
     #6. Ensure that current error after add-subtracting is lower than initial
-    did_something = (rinds.size > 0) and (len(ainds)>0)
+    did_something = (rinds.size > 0) or (len(ainds)>0)
     if did_something & (st.error > initial_error):
         CLOG.info('Failed addsub, Tile {} -> {}'.format(tile.l.tolist(), tile.r.tolist()))
         if len(ainds) > 0:
