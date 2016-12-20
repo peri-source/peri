@@ -748,7 +748,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
                 max_iter=3)
 
     #6. Ensure that current error after add-subtracting is lower than initial
-    did_something = (rinds.size > 0) and (len(ainds)>0)
+    did_something = (rinds.size > 0) or (len(ainds)>0)
     if did_something & (st.error > initial_error):
         CLOG.info('Failed addsub, Tile {} -> {}'.format(tile.l.tolist(), tile.r.tolist()))
         if len(ainds) > 0:
