@@ -746,15 +746,23 @@ class ImageState(State, comp.ComponentCollection):
                         'l':      [np.float16, np.float16]
                     }
         hi_lvl, lo_lvl = mem_levels[key]
+        cat_lvls = {'obj':lo_lvl,
+                    'ilm':hi_lvl,
+                    'bkg':lo_lvl
+                    }  #no psf...
 
         self.image.float_precision = hi_lvl
         self.image.image = self.image.image.astype(lo_lvl)
         self.set_image(self.image)
 
-        for c in ['ilm','bkg']:
-            self.get(c).float_precision = hi_lvl
-        for c in self.get('obj').comps:
-            c.float_precision = lo_lvl
+        for cat in cat_lvls.keys():
+            obj = self.get(cat)
+            #check if it's a component collection
+            if hasattr(obj, 'comps'):
+                for c in obj.comps:
+                    c.float_precision = lo_lvl
+            else:
+                obj.float_precision = lo_lvl
         self._model = self._model.astype(hi_lvl)
         self._residuals = self._model.astype(hi_lvl)
         self.reset()
