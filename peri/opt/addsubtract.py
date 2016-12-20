@@ -53,9 +53,8 @@ def _feature_guess(im, rad, minmass=None, use_tp=False, trim_edge=False):
         #30% of the feature size mass is a good cutoff empirically for
         #initializers.local_max_featuring, less for trackpy;
         #it's easier to remove than to add
-        minmass = rad**3 * 4/3.*np.pi * 0.3
-        if use_tp:
-            minmass *= 0.1 #magic #; works well
+        minmass = rad**3 * 4/3.*np.pi * 0.03
+        #0.03 is a magic number; works well
     if use_tp:
         diameter = np.ceil(2*rad)
         diameter += 1-(diameter % 2)
