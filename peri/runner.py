@@ -217,8 +217,8 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
             A tile of the sub-region of the image to feature. Default is
             None, i.e. entire image.
 
-    **kwargs Parameters
-    -------------------
+    Other Parameters
+    ----------------
         slab : :class:`peri.comp.objs.Slab` or None, optional
             If not None, a slab corresponding to that in the image. Default
             is None.
@@ -270,7 +270,7 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
 
     Notes
     -----
-    The **kwargs parameters are passed to _optimize_from_centroid.
+    The ``Other Parameters`` are passed to _optimize_from_centroid.
     Proceeds by centroid-featuring the image for an initial guess of
     particle positions, then optimizing the globals + positions until
     termination as called in _optimize_from_centroid.
@@ -423,7 +423,7 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
 
     Notes
     -----
-    The **kwargs parameters are passed to _translate_particles.
+    The ``Other Parameters`` are passed to _translate_particles.
     Proceeds by:
         1. Optimize particle positions only.
         2. Optimize particle positions and radii only.
@@ -530,7 +530,7 @@ def get_particles_featuring(feature_rad, state_name=None, im_name=None,
 
     Notes
     -----
-        The **kwargs parameters are passed to _translate_particles.
+        The ``Other Parameters`` are passed to _translate_particles.
     Proceeds by:
         1. Find a guess of the particle positions through centroid methods.
         2. Optimize particle positions only.
@@ -546,7 +546,7 @@ def get_particles_featuring(feature_rad, state_name=None, im_name=None,
     if actual_rad == None:
         actual_rad = np.median(s.obj_get_radii())
     im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
-    pos = locate_spheres(im.get_image(), feature_rad, invert=invert,
+    pos = locate_spheres(im, feature_rad, invert=invert,
             **featuring_params)
     _ = s.obj_remove_particle(np.arange(s.obj_get_radii().size))
     s.obj_add_particle(pos, np.ones(pos.shape[0])*actual_rad)
