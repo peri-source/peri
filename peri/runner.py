@@ -111,7 +111,7 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
         feature_rad : Int, odd
             The particle radius for featuring, as passed to locate_spheres.
         actual_rad : Float, optional
-            The actual radius of the particles. Default is 0.5 * feature_diam
+            The actual radius of the particles. Default is feature_rad
         im_name : string, optional
             The file name of the image to load. If not set, it is selected
             interactively through Tk.
@@ -188,7 +188,7 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
     The ``Other Parameters`` are passed to _optimize_from_centroid.
     """
     if actual_rad is None:
-        actual_rad = feature_diam * 0.5
+        actual_rad = feature_rad
 
     _,  im_name = _pick_state_im_name('', im_name, use_full_path=use_full_path)
     im = util.RawImage(im_name, tile=tile)
@@ -444,9 +444,8 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
     _translate_particles(s, **kwargs)
     return s
 
-def get_particles_featuring(feature_diam, state_name=None, im_name=None,
-        use_full_path=False, actual_rad=None, minmass=100, invert=True,
-        **kwargs):
+def get_particles_featuring(feature_rad, state_name=None, im_name=None,
+        use_full_path=False, actual_rad=None, invert=True, minmass=0.4, **kwargs):
     """
     Combines centroid featuring with the globals from a previous state.
 
@@ -455,9 +454,8 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
 
     Parameters
     ----------
-        feature_diam : Int
-            The diameters of the features in the new image, sent to
-            trackpy.locate.
+        feature_rad : Int, odd
+            The particle radius for featuring, as passed to locate_spheres.
 
         state_name : String or None, optional
             The name of the initially-optimized state. Default is None,
@@ -471,17 +469,17 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
             Set to True to use the full path of the state instead of
             partial path names (e.g. C:\Users\Me\Desktop\state.pkl vs
             state.pkl). Default is False
-        actual_rad : Float or None
-            The initial guess for the particle radii, which can be distinct
-            from feature_diam/2. If None, then defaults to feature_diam/2.
-        minmass : Float
-            The minimum mass, as pased to trackpy.locate. Default is 100.
+        actual_rad : Float or None, optional
+            The initial guess for the particle radii. Default is the median
+            of the previous state.
         invert : Bool
             Whether to invert the image for featuring, as passed to
             addsubtract.add_subtract. Default is True.
+        minmass : Float
+            The minimum mass, as pased to trackpy.locate. Default is 0.4
 
-    **kwargs Parameters
-    -------------------
+    Other Parameters
+    ----------------
         max_mem : Numeric
             The maximum additional memory to use for the optimizers, as
             passed to optimize.burn. Default is 1e9.
@@ -545,16 +543,10 @@ def get_particles_featuring(feature_diam, state_name=None, im_name=None,
     s = states.load(state_name)
 
     if actual_rad == None:
-        actual_rad = np.median(s.obj_get_radii())  #or 2 x feature_diam?
+        actual_rad = np.median(s.obj_get_radii())
     im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
-    f = peri.trackpy.locate(im.get_image()*255, feature_diam, invert=invert,
-            minmass=minmass)
-    npart = f['x'].size
-    pos = np.zeros([npart,3])
-    pos[:,0] = f['z']
-    pos[:,1] = f['y']
-    pos[:,2] = f['x']
-
+    pos = locate_spheres(im.get_image(), feature_rad, invert=invert,
+            minmass=minmass, **featuring_params)
     _ = s.obj_remove_particle(np.arange(s.obj_get_radii().size))
     s.obj_add_particle(pos, np.ones(pos.shape[0])*actual_rad)
 
