@@ -546,7 +546,7 @@ def get_particles_featuring(feature_rad, state_name=None, im_name=None,
     if actual_rad == None:
         actual_rad = np.median(s.obj_get_radii())
     im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
-    pos = locate_spheres(im.get_image(), feature_rad, invert=invert, 
+    pos = locate_spheres(im.get_image(), feature_rad, invert=invert,
             **featuring_params)
     _ = s.obj_remove_particle(np.arange(s.obj_get_radii().size))
     s.obj_add_particle(pos, np.ones(pos.shape[0])*actual_rad)
