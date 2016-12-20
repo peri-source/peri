@@ -43,7 +43,9 @@ def locate_spheres(image, feature_rad, dofilter=False, order=(3,3,3),
     feature_rad : float
         Radius of objects to find, in pixels. This is a featuring radius
         and not a real radius, so a better value is frequently smaller
-        than the real radius (half the actual radius is good).
+        than the real radius (half the actual radius is good). If ``use_tp``
+        is True, then the twice ``feature_rad`` is passed as trackpy's
+        ``diameter`` keyword.
 
     dofilter : boolean, optional
         Whether to remove the background before featuring. Doing so can
@@ -93,7 +95,7 @@ def locate_spheres(image, feature_rad, dofilter=False, order=(3,3,3),
 
     return addsub.feature_guess(s, feature_rad, trim_edge=trim_edge, **kwargs)[0]
 
-def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
+def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
         tile=None, invert=True, use_full_path=False, minmass=0.39,
         featuring_params={}, **kwargs):
     """
@@ -106,8 +108,8 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
 
     Parameters
     ----------
-        feature_diam : Int, odd
-            The particle diameter for featuring, as passed to trackpy.locate
+        feature_rad : Int, odd
+            The particle radius for featuring, as passed to locate_spheres.
         actual_rad : Float, optional
             The actual radius of the particles. Default is 0.5 * feature_diam
         im_name : string, optional
@@ -191,10 +193,10 @@ def get_initial_featuring(feature_diam, actual_rad=None, im_name=None,
     _,  im_name = _pick_state_im_name('', im_name, use_full_path=use_full_path)
     im = util.RawImage(im_name, tile=tile)
 
-    pos = locate_spheres(image, feature_rad, invert=invert, minmass=minmass,
+    pos = locate_spheres(im, feature_rad, invert=invert, minmass=minmass,
             **featuring_params)
 
-    rad = np.ones(npart, dtype='float') * actual_rad
+    rad = np.ones(pos.shape[0], dtype='float') * actual_rad
     s = _optimize_from_centroid(pos, rad, im, invert=invert, **kwargs)
     return s
 

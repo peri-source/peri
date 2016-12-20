@@ -43,8 +43,8 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
         im = 1 - st.residuals
     else:
         im = st.residuals
-    return _feature_guess(im, rad, invert=invert, minmass=minmass,
-            use_tp=use_tp, trim_edge=trim_edge)
+    return _feature_guess(im, rad, minmass=minmass, use_tp=use_tp,
+            trim_edge=trim_edge)
 
 def _feature_guess(im, rad, minmass=None, use_tp=False, trim_edge=False):
     """Workhorse of feature_guess"""
