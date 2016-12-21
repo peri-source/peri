@@ -240,15 +240,39 @@ def harris_feature(im, region_size=5, to_return='harris', scale=0.05):
         harris = det - scale*trc*trc
         return harris
 
-def identify_slab(im, sigma=5., region_size=10, masscut=1e4, todict=False):
+def identify_slab(im, sigma=5., region_size=10, masscut=1e4, asdict=False):
     """
-    Identifies slabs in an image... doesn't work yet.
+    Identifies slabs in an image.
 
-    Functions by running an edge detection on the image, thresholding
-    the edge, then clustering.
-    mode = 'grad' -- gradient filters image
-    sigma : Gaussian sigma for gaussian gradient
-    region_size : size of region for Harris corner...
+    Functions by running a Harris-inspired edge detection on the image,
+    thresholding the edge, then clustering.
+
+    Parameters
+    ----------
+        im : numpy.ndarray
+            3D array of the image to analyze.
+        sigma : Float, optional
+            Gaussian blurring kernel to remove non-slab features such as
+            noise and particles. Default is 5.
+        region_size : Int, optional
+            The size of region for Harris corner featuring. Default is 10
+        masscut : Float, optional
+            The minimum number of pixels for a feature to be identified as
+            a slab. Default is 1e4; should be smaller for smaller images.
+        asdict : Bool, optional
+            Set to True to return a list of dicts, with keys of ``'theta'``
+            and ``'phi'`` as rotation angles about the x- and z- axes, and
+            of ``'zpos'`` for the z-position, i.e. a list of dicts which
+            can be unpacked into a :class:``peri.comp.objs.Slab``
+
+    Returns
+    -------
+        [poses, normals] : numpy.ndarray
+            The positions and normals of each slab in the image; ``poses[i]``
+            and ``normals[i]`` are the ``i``th slab. Returned if ``asdict``
+            is False
+        [list]
+            A list of dictionaries. Returned if ``asdict`` is True
     """
     #1. edge detect:
     fim = nd.filters.gaussian_filter(im, sigma)
@@ -281,14 +305,14 @@ def identify_slab(im, sigma=5., region_size=10, masscut=1e4, todict=False):
         cov = [[np.sum(xi*xj*wts) for xi in [zc,yc,xc]] for xj in [zc,yc,xc]]
         vl, vc = np.linalg.eigh(cov)
         #lowest eigenvalue is the normal:
-        normal = vc[0]
+        normal = vc[:,0]
         #Removing the sign ambiguity:
         gn = np.sum([n*g[tuple(p.astype('int'))] for g,n in zip(gim, normal)])
-        normals *= np.sign(gn)
+        normal *= np.sign(gn)
         normals.append(normal)
-    if todict:
-        get_theta = lambda n: np.arccos(n[0])
-        get_phi = lambda n: np.arctan2(n[1],n[2])
+    if asdict:
+        get_theta = lambda n: -np.arctan2(n[1], -n[0])
+        get_phi = lambda n: np.arcsin(n[2])
         return [{'zpos':p[0], 'angles':(get_theta(n), get_phi(n))}
                 for p, n in zip(poses, normals)]
     else:
