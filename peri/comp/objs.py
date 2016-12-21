@@ -642,8 +642,12 @@ class Slab(Component):
         zpos : float
             position of the center of the slab in pixels
 
-        angles : tuple of float (2,)
-            (theta, phi) angles of rotation of the normal with respect to z
+        angles : tuple of float (2,), optional
+            Angles of rotation of the normal with respect to the z-axis,
+            i.e. ``angles=(0., 0.)`` gives a slab with a normal along z.
+            The first angle theta is the rotation about the x-axis; the
+            second angle phi is the rotation about the y-axis. Default is
+            (0,0).
 
         float_precision : numpy float datatype
             One of numpy.float16, numpy.float32, numpy.float64; precision
@@ -672,11 +676,21 @@ class Slab(Component):
             self.initialize()
 
     def rmatrix(self):
-        a0 = np.array([0,0,1])
-        r0 = expm3(np.cross(np.eye(3), a0*self.param_dict[self.lbl_theta]))
+        """
+        Generate the composite rotation matrix that rotates the slab normal.
 
-        a1 = np.array([0,1,0])
-        r1 = expm3(np.cross(np.eye(3), a1*self.param_dict[self.lbl_phi]))
+        The rotation is a rotation about the x-axis, followed by a rotation
+        about the z-axis.
+        """
+        t = self.param_dict[self.lbl_theta]
+        r0 = np.array([ [np.cos(t),  -np.sin(t), 0],
+                        [np.sin(t), np.cos(t), 0],
+                        [0, 0, 1]])
+
+        p = self.param_dict[self.lbl_phi]
+        r1 = np.array([ [np.cos(p), 0, np.sin(p)],
+                        [0, 1, 0],
+                        [-np.sin(p), 0, np.cos(p)]])
         return np.dot(r1, r0)
 
     def normal(self):
