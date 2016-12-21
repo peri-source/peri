@@ -208,15 +208,20 @@ def otsu_threshold(data, bins=255):
     ind = sb.argmax()
     return 0.5*(x0[ind] + x0[ind+1])
 
-def harris_feature(im, region_size=5, to_return='matrix', scale=0.05):
+def harris_feature(im, region_size=5, to_return='harris', scale=0.05):
     """
     Harris-motivated feature detection on a d-dimensional image.
 
+    Parameters
+    ---------
+        im
+        region_size
+        to_return : {'harris','matrix','trace-determinant'}
 
     """
     ndim = im.ndim
     #1. Gradient of image
-    grads = (nd.sobel(fim, axis=i) for i in xrange(ndim))
+    grads = [nd.sobel(im, axis=i) for i in xrange(ndim)]
     #2. Corner response matrix
     matrix = np.zeros((ndim, ndim) + im.shape)
     for a in xrange(ndim):
@@ -228,11 +233,14 @@ def harris_feature(im, region_size=5, to_return='matrix', scale=0.05):
     #3. Trace, determinant
     trc = np.trace(matrix, axis1=0, axis2=1)
     det = np.linalg.det(matrix.T).T
-    #4. Harris detector:
-    harris = det - scale*trc*trc
-    return harris
+    if to_return == 'trace-determinant':
+        return trc, det
+    else:
+        #4. Harris detector:
+        harris = det - scale*trc*trc
+        return harris
 
-def identify_slab(im, sigma=5., mode='grad', region_size=10):
+def identify_slab(im, sigma=5., region_size=10, masscut=1e4, todict=False):
     """
     Identifies slabs in an image... doesn't work yet.
 
@@ -243,30 +251,45 @@ def identify_slab(im, sigma=5., mode='grad', region_size=10):
     region_size : size of region for Harris corner...
     """
     #1. edge detect:
-    mode = mode.lower()
-    if mode == 'grad':
-        gim = nd.filters.gaussian_gradient_magnitude(im, sigma)
-    elif mode == 'harris':
-        fim = nd.filters.gaussian_filter(im, sigma)
-
-        #All part of a harris corner feature....
-        ndim = im.ndim
-        grads = [nd.sobel(im, axis=i) for i in xrange(ndim)]
-        matrix = np.zeros((ndim, ndim) + im.shape)
-        for a in xrange(ndim):
-            for b in xrange(ndim):
-                matrix[a,b] = nd.filters.gaussian_filter(grads[a]*grads[b],
-                        region_size)
-        trc = np.trace(matrix, axis1=0, axis2=1)
-        det = np.linalg.det(matrix.T).T
-        #..done harris
-        #we want an edge == not a corner, so one eigenvalue is high and
-        #one is low.
-        #So -- trc high, det low:
-        trc_cut = otsu_threshold(trc)
-        det_cut = otsu_threshold(det)
-        slabs = (trc > trc_cut) & (det < det_cut)
-        pass
+    fim = nd.filters.gaussian_filter(im, sigma)
+    trc, det = harris_feature(fim, region_size, to_return='trace-determinant')
+    #we want an edge == not a corner, so one eigenvalue is high and
+    #one is low compared to the other.
+    #So -- trc high, normalized det low:
+    dnrm = det / (trc*trc)
+    trc_cut = otsu_threshold(trc)
+    det_cut = otsu_threshold(dnrm)
+    slabs = (trc > trc_cut) & (dnrm < det_cut)
+    labeled, nslabs = nd.label(slabs)
+    #masscuts:
+    masses = [(labeled == i).sum() for i in xrange(1, nslabs+1)]
+    good = np.array([m > masscut for m in masses])
+    inds = np.nonzero(good)[0] + 1  #+1 b/c the lowest label is the bkg
+    #Slabs are identifiied, now getting the coords:
+    poses = np.array(nd.measurements.center_of_mass(trc, labeled, inds))
+    #normals from eigenvectors of the covariance matrix
+    normals = []
+    z = np.arange(im.shape[0]).reshape(-1,1,1).astype('float')
+    y = np.arange(im.shape[1]).reshape(1,-1,1).astype('float')
+    x = np.arange(im.shape[2]).reshape(1,1,-1).astype('float')
+    #We also need to identify the direction of the normal:
+    gim = [nd.sobel(fim, axis=i) for i in xrange(fim.ndim)]
+    for i, p in zip(range(1, nslabs+1), poses):
+        wts = trc * (labeled == i)
+        wts /= wts.sum()
+        zc, yc, xc = [xi-pi for xi, pi in zip([z,y,x],p.squeeze())]
+        cov = [[np.sum(xi*xj*wts) for xi in [zc,yc,xc]] for xj in [zc,yc,xc]]
+        vl, vc = np.linalg.eigh(cov)
+        #lowest eigenvalue is the normal:
+        normal = vc[0]
+        #Removing the sign ambiguity:
+        gn = np.sum([n*g[tuple(p.astype('int'))] for g,n in zip(gim, normal)])
+        normals *= np.sign(gn)
+        normals.append(normal)
+    if todict:
+        get_theta = lambda n: np.arccos(n[0])
+        get_phi = lambda n: np.arctan2(n[1],n[2])
+        return [{'zpos':p[0], 'angles':(get_theta(n), get_phi(n))}
+                for p, n in zip(poses, normals)]
     else:
-        raise ValueError('mode must be one of `grad`, `harris`')
-    pass
+        return poses, np.array(normals)
