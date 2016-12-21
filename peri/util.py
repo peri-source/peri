@@ -626,8 +626,14 @@ class Image(object):
             The image in float format with dimensions arranged as [z,y,x]
 
         tile : `peri.util.Tile`
-            the region of the image to crop out to use for the actual featuring, etc
+            The region of the image to crop out to use for the actual
+            featuring, etc. Coordinates are in pixel-space.
 
+        filters : list of tuples
+            A list of (slice, value) pairs which are Fourier-space domain
+            filters that are to be applied to an image. In Fourier-space,
+            each filter is a numpy slice object and the Fourier values
+            to be subtracted from those slices.
          """
         self.filters = filters or []
         self.image = image
@@ -659,20 +665,20 @@ class Image(object):
 
         Parameters
         ----------
-            slices : List of indices or slice objects.
-                The q-values in Fourier space to filter.
-            values : np.ndarray
-                The complete array of Fourier space peaks to subtract off.
-                values should be the same size as the FFT of the image;
-                only the portions of values at slices will be removed.
+        slices : List of indices or slice objects.
+            The q-values in Fourier space to filter.
+        values : np.ndarray
+            The complete array of Fourier space peaks to subtract off.  values
+            should be the same size as the FFT of the image; only the portions
+            of values at slices will be removed.
 
         Examples
         --------
         To remove a two Fourier peaks in the data at q=(10, 10, 10) &
-        (245, 245, 245), where im is an Image object:
+        (245, 245, 245), where im is the residuals of a model:
 
             * slices = [(10,10,10), (245, 245, 245)]
-            * values = np.fft.fftn(im.get_image())
+            * values = np.fft.fftn(im)
             * im.set_filter(slices, values)
         """
         self.filters = [[sl,values[sl]] for sl in slices]
@@ -724,14 +730,17 @@ class RawImage(Image, CompatibilityPatch):
     def __init__(self, filename, tile=None, invert=False, exposure=None,
             float_precision=np.float64):
         """
-        An image object which stores information about desired region and padding,
-        etc.  There are number of ways to create an image object:
+        An image object which stores information about desired region, exposure
+        compensation, color inversion, and filters to remove certain fourier
+        peaks.
 
         Parameters
         ----------
         filename : str
-            path of the image file.  recommended that you supply a relative path
-            so that transfer between computers is possible
+            Path of the image file. Recommended that you supply a relative path
+            so that transfer between computers is possible, i.e. if the file is located
+            at ``/home/user/data/1.tif`` then work in the directory ``/home/user/data``
+            and supply the filename ``1.tif``.
 
         tile : :class:`peri.util.Tile`
             the region of the image to crop out to use for the actual featuring, etc
@@ -739,11 +748,15 @@ class RawImage(Image, CompatibilityPatch):
         invert : boolean
             Whether to invert the image.
 
-        exposure : tuple of floats (min, max) | None
-            If set, it is the values used to normalize the image instead of setting
-            min to 0 and max to 1 (which depends on noise, exposure). Setting this
-            values allows a series of images to be initialized with the same
-            ILM, PSF etc. Should be the bit value of the camera.
+        exposure : tuple of numbers (min, max) | None
+            If set, it is the values used to normalize the image. It is the
+            values which map to 0 and 1 in the loaded version of the image, the
+            default being for 8-bit images, mapping raw values (0, 255) to
+            loaded values (0, 1). This functionality is provided since the
+            noise and exposure may change between images where a common scaling
+            is desired for proper comparison.  Setting this values allows a
+            series of images to be initialized with the same ILM, PSF etc.
+            Should be the bit value of the camera.
 
         float_precision : numpy float datatype
             One of numpy.float16, numpy.float32, numpy.float64; precision
@@ -763,25 +776,70 @@ class RawImage(Image, CompatibilityPatch):
         super(RawImage, self).__init__(image, tile=tile)
 
     def load_image(self):
+        """ Read the file and perform any transforms to get a loaded image """
         try:
             image = initializers.load_tiff(self.filename)
             image = initializers.normalize(
-                    image, invert=self.invert, scale=self.exposure,
-                    dtype=self.float_precision)
+                image, invert=self.invert, scale=self.exposure,
+                dtype=self.float_precision
+            )
         except IOError as e:
             log.error("Could not find image '%s'" % self.filename)
             raise e
 
         return image
 
+    def set_scale(self, exposure):
+        """
+        Set the exposure parameter for this image, which determines the
+        values which get mapped to (0,1) in the output image. 
+
+        See also
+        --------
+        :class:`peri.util.RawImage`
+        """
+        self.exposure = exposure
+
     def get_scale(self):
+        """
+        If exposure was not set in the __init__, get the exposure associated
+        with this RawImage so that it may be used in other
+        :class:`~peri.util.RawImage`. This is useful for transferring exposure
+        parameters to a series of images.
+
+        Returns
+        -------
+        exposure : tuple of floats
+            The (emin, emax) which get mapped to (0, 1)
+        """
         if self.exposure is not None:
             return self.exposure
 
         raw = initializers.load_tiff(self.filename)
-        scaled = initializers.normalize(
-            self.image, invert=self.invert, scale=self.exposure
-        )
+        return raw.min(), raw.max()
+
+    @staticmethod
+    def get_scale_from_raw(raw, scaled):
+        """
+        When given a raw image and the scaled version of the same image, it
+        extracts the ``exposure`` parameters associated with those images.
+        This is useful when 
+
+        Parameters
+        ----------
+        raw : array_like
+            The image loaded fresh from a file
+
+        scaled : array_like
+            Image scaled using :func:`peri.initializers.normalize`
+
+        Returns
+        -------
+        exposure : tuple of numbers
+            Returns the exposure parameters (emin, emax) which get mapped to
+            (0, 1) in the scaled image. Can be passed to
+            :func:`~peri.util.RawImage.__init__`
+        """
         t0, t1 = scaled.min(), scaled.max()
         r0, r1 = float(raw.min()), float(raw.max())
 
