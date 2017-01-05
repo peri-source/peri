@@ -1,10 +1,15 @@
+import os
 import re
 import glob
+import json
+from collections import OrderedDict
+
 import numpy as np
 import scipy as sp
 import scipy.ndimage as nd
 import scipy.optimize as opt
 
+from peri import states
 from peri.priors import overlap
 from peri.util import Tile
 from peri.comp.objs import PlatonicSpheresCollection
@@ -14,7 +19,7 @@ def unexplained_noise(state):
     r = state.residuals
     q = np.fft.fftn(r)
 
-    # smooth the residuals to do a cut 
+    # smooth the residuals to do a cut
     g = nd.gaussian_filter(np.fft.fftshift(q.real), 2)
     y,x = np.histogram(g.flat, bins=1000)
     x = (x[:-1] + x[1:])/2
@@ -80,6 +85,68 @@ def dict_to_pos_rad(d):
         except KeyError:
             break
     return np.array(p), np.array(r)
+
+def state_to_ordereddict(st, include_iminfo=True):
+    """Represents a state as an OrderedDict
+
+    Parameters
+    ----------
+        st : :class:``peri.states.State``
+        include_iminfo : Bool, optional
+            If set, includes two additional keys, ``'image.filename'`` and
+            ``'image.tile'`` with corresponding info about the image.
+            Default is True.
+
+    Returns
+    -------
+        ``collections.OrderedDict``
+    """
+    od = OrderedDict()
+    for p in st.params:
+        od.update({p:st.state[p]})
+    if include_iminfo:
+        od.update({ 'image.filename':st.image.filename,
+                    'image.tile':str(st.image.tile)})
+    return od
+
+def batch_saveasdict(load_dir, load_names, save_dir, align_text=True,
+        include_iminfo=True):
+    """
+    Batch loads state, transforms to an OrderedDict, saves as a json with
+    extension ``.json``.
+
+    Parameters
+    ---------
+        load_dir : String
+            The name of the directory to load the states from.
+        load_names : Iterable
+            Names of the states to load, without the ``.pkl`` extension.
+        save_dir: String
+            The name of the directory to save the json dicts to.
+        align_text : Bool, optional
+            Changes json separators to include a newline and tab, to make
+            the saved dict easier to read by humans. Default is True.
+        include_iminfo : Bool, optional
+            If set, includes two additional keys, ``'image.filename'`` and
+            ``'image.tile'`` with corresponding info about the image.
+            Default is True.
+    """
+    os.chdir(load_dir)
+    if align_text:
+        separators=(',\n', ':\t')
+    else:
+        separators=(', ', ': ')
+    for nm in load_names:
+        save_name = os.path.join(save_dir, nm + '.json')
+        try:
+            st = states.load(nm+'.pkl')
+        except IOError:
+            print 'Missing {}'.format(nm)
+            continue
+        print 'Saving {}'.format(nm)
+        with open(save_name, 'wb') as f:
+            json.dump(state_to_ordereddict(st, include_iminfo=include_iminfo),
+                    f, separators=separators)
 
 def good_particles(state, inbox=True, inboxrad=False, fullinbox=False,
         pos=None, rad=None, ishape=None):
