@@ -2473,6 +2473,8 @@ def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
     """
     # normal = direction / np.sqrt(np.dot(direction, direction))
     normals = np.array([d/np.sqrt(np.dot(d,d)) for d in directions])
+    if np.isnan(normals).any():
+        raise ValueError('`directions` must not be 0s or contain nan')
     obj = OptState(s, normals)
     lo = LMOptObj(obj, max_iter=max_iter, run_length=run_length, damping=
             damping, marquardt_damping=marquardt_damping, **kwargs)
