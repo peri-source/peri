@@ -200,7 +200,7 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
 def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
     """
     Gets a completely-optimized state from an image and an initial guess of
-    particle positions and radii. The user can interactively select the image.
+    particle positions and radii.
 
     The state is periodically saved during optimization, with different
     filename for different stages of the optimization.
@@ -275,7 +275,6 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
     particle positions, then optimizing the globals + positions until
     termination as called in _optimize_from_centroid.
     """
-    #FIXME the user cannot select the image right now
     im = util.RawImage(im_name, tile=tile)
     s = _optimize_from_centroid(pos, rad, im, **kwargs)
     return s
