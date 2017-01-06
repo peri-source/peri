@@ -317,8 +317,8 @@ def get_hsym_asym(rho, z, get_hdet=False, include_K3_det=True, **kwargs):
             is True, i.e. calculates the K3 component as if the focusing
             lens is high-aperture
 
-    **kwargs Parameters
-    -------------------
+    Other Parameters
+    ----------------
         alpha : Float, optional
             The acceptance angle of the lens, on (0,pi/2). Default is 1.
         zint : Float, optional
@@ -377,8 +377,9 @@ def calculate_pinhole_psf(x, y, z, kfki=0.89, zint=100.0, normalize=False,
             Set to True to normalize the psf correctly, accounting for
             intensity variations with depth. This will give a psf that does
             not sum to 1.
-    **kwargs Parameters
-    -------------------
+
+    Other Parameters
+    ----------------
         alpha : Float
             The opening angle of the lens. Default is 1.
         n2n1 : Float
@@ -491,8 +492,8 @@ def calculate_polychrome_pinhole_psf(x, y, z, normalize=False, kfki=0.889,
             intensity variations with depth. This will give a psf that does
             not sum to 1. Default is False.
 
-    **kwargs Parameters
-    -------------------
+    Other Parameters
+    ----------------
         alpha : Float
             The opening angle of the lens. Default is 1.
         n2n1 : Float
@@ -525,7 +526,7 @@ def calculate_polychrome_pinhole_psf(x, y, z, normalize=False, kfki=0.889,
 
     #1. Hilm
     hsym, hasym = get_hsym_asym(rho, z, zint=zint, get_hdet=False, **kwargs)
-    hilm = (hsym + np.cos(2*phi)*hasym)  #FIXME in a separate function?
+    hilm = (hsym + np.cos(2*phi)*hasym)
 
     #2. Hdet
     hdet_func = lambda kfki: get_hsym_asym(rho*kfki, z*kfki,
@@ -648,8 +649,8 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
             in the same amount of time). Default is False for backwards
             compatibility.  FIXME what did we do here?
 
-    **kwargs Parameters
-    -------------------
+    Other Parameters
+    ----------------
         alpha : Float, optional
             The acceptance angle of the lens, on (0,pi/2). Default is 1.
         zint : Float, optional
@@ -737,8 +738,8 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
             The polarization angle of the light (radians) with respect to
             the line direction (x). Default is 0.
 
-        **kwargs Parameters
-        --------------------
+    Other Parameters
+    ----------------
         alpha : Float
             The opening angle of the lens. Default is 1.
         n2n1 : Float
@@ -840,8 +841,8 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
             the input x, y are regularly-spaced points. If x,y are not
             regularly spaced then `wrap` must be set to False. Default is True.
 
-        **kwargs Parameters
-        --------------------
+    Other Parameters
+    ----------------
         polar_angle : Float, optional
             The polarization angle of the light (radians) with respect to
             the line direction (x). Default is 0.
@@ -931,8 +932,9 @@ def calculate_monochrome_fluorescence_psf(x, y, z, normalize=False, **kwargs):
             Set to True to normalize the psf correctly such that each
             z-slice sums to 1. This will change the relative values of
             psf(z) at fixed rho. Default is False
-    **kwargs Parameters
-    -------------------
+
+    Other Parameters
+    ----------------
         zint : Float
             The (scalar) distance from the interface, in units of
             1/k_incoming. Default is 100.0
@@ -979,8 +981,8 @@ def calculate_polychrome_fluorescence_psf(x, y, z, k0=1., sigk=0.1, npts=3,
         npts : Int, optional
             The order of the Gauss-Hermite quadrature to use. Default is 3
 
-    **kwargs Parameters
-    -------------------
+    Other Parameters
+    ----------------
         normalize : Bool, optional
             Set to True to normalize the psf correctly such that each
             z-slice sums to 1. This will change the relative values of
