@@ -1,6 +1,7 @@
 import os
 import sys
 import pickle
+import json
 import numpy as np
 import trackpy as tp
 from pandas import DataFrame
@@ -151,3 +152,51 @@ def calculate_state_radii_fluctuations(state_list, inbox=True, fullinbox=True,
         return z, y, x, rm, rs
     else:
         return rs
+
+def jsons_to_dataframe(filenames, **kwargs):
+    """
+    Transforms a folder of json dictionaries into a single DataFrame.
+
+    Parameters
+    ----------
+        filenames : Iterable
+            A list or other iterable/generator of filenames to load, time
+            ordered.
+
+    Other Parameters
+    ----------------
+        inbox : Bool, optional
+            Whether to only return particles inside the image. Requires a
+            key ``'image.tile'`` in the saved json dictionary. Default is
+            True.
+        inboxrad : Bool, optional
+            Whether to only return particles that at least partially
+            overlap the image. Requires a key ``'image.tile'`` in the saved
+            json dictionary. Default is False.
+        fullinbox : Bool, optional
+            Whether to only return particles completely inside the image.
+            Requires a key ``'image.tile'`` in the saved json dictionary.
+            Default is False.
+
+    Returns
+    -------
+        ``pandas.DataFrame``
+            Trackable ``DataFrame`` of the positions and radii, with keys
+            ``'x'``, ``'y'``, ``'z'``, ``'a'``, and ``'frame'``
+
+    See Also
+    --------
+        ``peri.test.analyze.parse_json``
+    """
+    x, y, z, r, t = [[] for a in xrange(5)]
+    frame = 0
+    for nm in filenames:
+        this_pos, this_rad = analyze.parse_json(nm, **kwargs)
+        z.extend(this_pos[:,0])
+        y.extend(this_pos[:,1])
+        x.extend(this_pos[:,2])
+        r.extend(this_rad)
+        t.extend(np.zeros(this_rad.size) + frame)
+        frame += 1
+    df = DataFrame({'x':x, 'y':y, 'z':z, 'a':r, 'frame':t})
+    return df
