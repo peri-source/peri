@@ -29,6 +29,10 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
         use_tp : Bool, optional
             Whether or not to use trackpy. Default is False, since
             trackpy cuts out particles at the edge.
+        trim_edge : Bool, optional
+            Whether to trim particles at the edge pixels of the image. Can
+            be useful for initial featuring but is bad for adding missing
+            particles as they are frequently at the edge. Default is False.
 
     Returns
     -------
@@ -38,7 +42,7 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
         npart : Int
             The number of added particles.
     """
-    #FIXME does not use the **kwargs, but needs them b/c called with wrong kwargs
+    #FIXME does not use the **kwargs, but needs b/c called with wrong kwargs
     if invert:
         im = 1 - st.residuals
     else:
@@ -48,7 +52,6 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
 
 def _feature_guess(im, rad, minmass=None, use_tp=False, trim_edge=False):
     """Workhorse of feature_guess"""
-    #FIXME does not use the **kwargs, but needs them because of add_subtract_locally
     if minmass == None:
         #30% of the feature size mass is a good cutoff empirically for
         #initializers.local_max_featuring, less for trackpy;
@@ -108,6 +111,7 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
             List of the positions of the added particles. If do_opt==True,
             then these positions will differ from the input 'guess'.
     """
+    #FIXME does not use the **kwargs, but needs b/c called with wrong kwargs
     if min_derr == '3sig':
         min_derr = 3 * st.sigma
     accepts = 0
@@ -130,7 +134,6 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
         present_d = st.residuals.copy()
         dont_kill = should_particle_exist(absent_err, present_err, absent_d,
                 present_d, im_change_frac=im_change_frac, min_derr=min_derr)
-        # did_kill, p, r = check_remove_particle(st, ind, **kwargs)
         if dont_kill:
             accepts += 1
             p = tuple(st.obj_get_positions()[ind].ravel())
@@ -176,6 +179,7 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
         r : Tuple
             The radius of the removed particle.
     """
+    #FIXME does not use the **kwargs, but needs b/c called with wrong kwargs
     if min_derr == '3sig':
         min_derr = 3 * st.sigma
     present_err = st.error; present_d = st.residuals.copy()
