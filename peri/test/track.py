@@ -95,8 +95,8 @@ def calculate_state_radii_fluctuations(state_list, inbox=True, fullinbox=True,
 
     Parameters
     ----------
-        state_list : list
-            List of peri.states objects to analyze.
+        state_list : iterable
+            List or any iterator/generator of peri.states objects to analyze.
 
         inbox : Bool
             Set to False to include all particles, not just the ones in the
@@ -134,12 +134,12 @@ def calculate_state_radii_fluctuations(state_list, inbox=True, fullinbox=True,
             The standard deviation of each particle's radius across all
             states.
     """
-    #FIXME This could be updated to get the mask, pos, rad all at once
-    #   and make state_list a generator
-    mask_list = [analyze.good_particles(s, inbox=inbox, inboxrad=inboxrad,
-            fullinbox=fullinbox) for s in state_list]
-    pos = [s.obj_get_positions()[m] for s, m in zip(state_list, mask_list)]
-    rad = [s.obj_get_radii()[m] for s, m in zip(state_list, mask_list)]
+    pos, rad = [], []
+    for s in state_list:
+        m = analyze.good_particles(s, inbox=inbox, inboxrad=inboxrad,
+            fullinbox=fullinbox)
+        pos.append(s.obj_get_positions()[m])
+        rad.append(s.obj_get_radii()[m])
     df = track(pos, rad, maxdisp=maxdisp, threshold=threshold)
 
     zyxr_t = []
