@@ -434,7 +434,7 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
                 use_full_path=use_full_path)
 
     s = states.load(state_name)
-    im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
+    im = util.RawImage(im_name, tile=s.image.tile)
 
     s.set_image(im)
     _translate_particles(s, **kwargs)
@@ -544,7 +544,7 @@ def get_particles_featuring(feature_rad, state_name=None, im_name=None,
 
     if actual_rad == None:
         actual_rad = np.median(s.obj_get_radii())
-    im = util.RawImage(im_name, tile=s.image.tile)  #should have get_scale? FIXME
+    im = util.RawImage(im_name, tile=s.image.tile)
     pos = locate_spheres(im, feature_rad, invert=invert,
             **featuring_params)
     _ = s.obj_remove_particle(np.arange(s.obj_get_radii().size))
