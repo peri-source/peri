@@ -108,9 +108,6 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
             List of the positions of the added particles. If do_opt==True,
             then these positions will differ from the input 'guess'.
     """
-    #FIXME right now this adds, removes, adds again if good. It should be
-    #add, remove if bad (always 1 update faster).
-    #sub-function out the bit from check_remove_particle
     if min_derr == '3sig':
         min_derr = 3 * st.sigma
     accepts = 0
