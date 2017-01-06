@@ -1,4 +1,5 @@
 import os
+import itertools
 import re
 import glob
 import json
@@ -147,6 +148,59 @@ def batch_saveasdict(load_dir, load_names, save_dir, align_text=True,
         with open(save_name, 'wb') as f:
             json.dump(state_to_ordereddict(st, include_iminfo=include_iminfo),
                     f, separators=separators)
+
+def parse_json(filename, inbox=True, inboxrad=False, fullinbox=False):
+    """
+    Parse a json file as saved by batch_saveasdict into positions & radii
+
+    Parameters
+    ----------
+        filename : String
+            The file name of the json dict to load.
+        inbox : Bool, optional
+            Whether to only return particles inside the image. Requires a
+            key ``'image.tile'`` in the saved json dictionary. Default is
+            True.
+        inboxrad : Bool, optional
+            Whether to only return particles that at least partially
+            overlap the image. Requires a key ``'image.tile'`` in the saved
+            json dictionary. Default is False.
+        fullinbox : Bool, optional
+            Whether to only return particles completely inside the image.
+            Requires a key ``'image.tile'`` in the saved json dictionary.
+            Default is False.
+
+    Returns
+    -------
+        pos, rad : numpy.ndarray
+            The particle positions [N, [z,y,x]] and radii [N,].
+    """
+    dct = json.load(open(filename, 'rb'))
+    #1. Get the particles:
+    zyxr = []
+    for a in itertools.count():
+        try:
+            zyxr.append([dct['sph-{}-{}'.format(a, c)] for c in 'zyxa'])
+        except KeyError:
+            break
+    zyxr = np.array(zyxr)
+    pos = zyxr[:,:3].copy()
+    rad = zyxr[:,-1].copy()
+
+    if inbox or inboxrad or fullinbox:
+        try:
+            imtile = dct['image.tile']
+            #using the fact the tile repr is enclosed in ()'s:
+            ishape_l = eval(imtile.split('(')[-1].split(')')[0])
+            ishape = np.array(ishape_l)
+            #alternatively the tile shape could be better saved
+        except KeyError:
+            raise KeyError('image.tile not saved in json file.')
+        mask = good_particles(None, inbox=inbox, inboxrad=inboxrad,
+                fullinbox=fullinbox, pos=pos, rad=rad, ishape=ishape)
+        pos = pos[mask].copy()
+        rad = rad[mask].copy()
+    return pos, rad
 
 def good_particles(state, inbox=True, inboxrad=False, fullinbox=False,
         pos=None, rad=None, ishape=None):
