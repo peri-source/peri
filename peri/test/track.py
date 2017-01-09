@@ -155,7 +155,7 @@ def calculate_state_radii_fluctuations(state_list, inbox=True, fullinbox=True,
 
 def jsons_to_dataframe(filenames, **kwargs):
     """
-    Transforms a folder of json dictionaries into a single DataFrame.
+    Transforms a group of json dictionaries into a single DataFrame.
 
     Parameters
     ----------
