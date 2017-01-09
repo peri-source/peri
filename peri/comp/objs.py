@@ -268,7 +268,6 @@ class PlatonicSpheresCollection(Component):
 
     def initialize(self):
         """ Start from scratch and initialize all objects """
-        self.rvecs = self.shape.coords(form='vector')
         self.particles = np.zeros(self.shape.shape, dtype=self.float_precision)
 
         for i, (p0, r0) in enumerate(zip(self.pos, self.rad)):
@@ -435,7 +434,7 @@ class PlatonicSpheresCollection(Component):
         r = np.round(np.array([1.0/self.zscale,1,1])*np.ceil(rad)+self.support_pad)
 
         tile = Tile(p-r, p+r, 0, self.shape.shape)
-        rvec = self.rvecs[tile.slicer + (np.s_[:],)]
+        rvec = tile.coords(form='vector')
 
         # if required, do an iteration to find the best radius to produce
         # the goal volume as given by the particular goal radius
@@ -696,8 +695,7 @@ class Slab(Component):
         return np.dot(self.rmatrix(), np.array([1,0,0]))
 
     def _setup(self):
-        rz, ry, rx = self.shape.coords(form='flat')
-        self.rvecs = [rz.reshape(-1,1,1), ry.reshape(1,-1,1), rx.reshape(1,1,-1)]
+        self.rvecs = self.shape.coords(form='broadcast')
         self.image = np.zeros(self.shape.shape, dtype=self.float_precision)
 
     def _draw_slab(self):
