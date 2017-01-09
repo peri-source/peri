@@ -1,6 +1,5 @@
 import numpy as np
 from scipy.special import erf
-from scipy.linalg import expm3
 
 try:
     from scipy.weave import inline
@@ -708,14 +707,11 @@ class Slab(Component):
         ])
         pos = pos + self.inner.l
 
-        # p = self.rvecs.dot(self.normal()) - pos).dot(self.normal())
-        n = self.normal()
         p = (np.sum([r*n for r, n in zip(self.rvecs, self.normal())]) -
                 pos.dot(self.normal()))
         m1 = p < -4.
         m0 = p > 4.
         mp = -(m1 | m0)
-        # self.image[:] = 1.0/(1.0 + np.exp(7*p))  #FIXME why is this not an erf???
         self.image[m1] = 1.
         self.image[mp] = 1.0/(1.0 + np.exp(7*p[mp]))  #FIXME why is this not an erf???
         self.image[m0] = 0.
