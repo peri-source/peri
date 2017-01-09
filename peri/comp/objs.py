@@ -697,7 +697,8 @@ class Slab(Component):
         return np.dot(self.rmatrix(), np.array([1,0,0]))
 
     def _setup(self):
-        self.rvecs = self.shape.coords(form='vector')
+        rz, ry, rx = self.shape.coords(form='flat')
+        self.rvecs = [rz.reshape(-1,1,1), ry.reshape(1,-1,1), rx.reshape(1,1,-1)]
         self.image = np.zeros(self.shape.shape, dtype=self.float_precision)
 
     def _draw_slab(self):
@@ -707,7 +708,10 @@ class Slab(Component):
         ])
         pos = pos + self.inner.l
 
-        p = (self.rvecs - pos).dot(self.normal())
+        # p = self.rvecs.dot(self.normal()) - pos).dot(self.normal())
+        n = self.normal()
+        p = (np.sum([r*n for r, n in zip(self.rvecs, self.normal())]) -
+                pos.dot(self.normal()))
         m1 = p < -4.
         m0 = p > 4.
         mp = -(m1 | m0)
