@@ -59,7 +59,7 @@ rather than for all the pixels (in addition to leastsq solution instead of
 linalg.solve)
 """
 
-def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
+def get_rand_Japprox(s, params, num_inds=1000, include_cost=False, **kwargs):
     """
     Calculates a random approximation to J by returning J only at a
     set of random pixel/voxel locations.
@@ -73,6 +73,9 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
         num_inds : Int, optional.
             The number of pix/voxels at which to calculate the random
             approximation to J. Default is 1000.
+        include_cost : Bool, optional
+            Set to True to append a finite-difference measure of the full
+            cost gradient onto the returned J.
 
     Other Parameters
     ----------------
@@ -97,8 +100,10 @@ def get_rand_Japprox(s, params, num_inds=1000, **kwargs):
         inds = None
         return_inds = slice(0, None)
         slicer = [slice(0, None)]*len(s.residuals.shape)
-    #J = d/dx( residuals ) = d/dx( data - model) = -d/dx( model)
-    J = -s.gradmodel(params=params, inds=inds, slicer=slicer, flat=False, **kwargs)
+    if include_cost:
+        J = s.J_e(params=params, inds=inds, slicer=slicer,flat=False, **kwargs)
+    else:
+        J = s.J(params=params, inds=inds, slicer=slicer, flat=False, **kwargs)
     CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
     return J, return_inds
 
@@ -1718,8 +1723,15 @@ class LMGlobals(LMEngine):
 
     def calc_J(self):
         del self.J
-        self.J, self._inds = get_rand_Japprox(self.state,
-                self.param_names, num_inds=self.num_pix)
+        # self.J, self._inds = get_rand_Japprox(self.state,
+                # self.param_names, num_inds=self.num_pix)
+        je, self._inds = get_rand_Japprox(self.state, self.param_names,
+                num_inds=self.num_pix, include_cost=True)
+        self.J = je[:,:-1]
+        #Storing the _direction_ of the exact gradient of the model, rescaled
+        #as to the size we expect from the inds:
+        rescale = float(self.J.shape[1])/self.state.residuals.size
+        self._graderr = je[:,-1] * rescale
 
     def calc_residuals(self):
         return self.state.residuals.ravel()[self._inds].copy()
@@ -1825,6 +1837,14 @@ class LMGlobals(LMEngine):
             abs_cos = super(self.__class__, self).calc_model_cosine(decimate=
                     decimate, mode=mode)
         return abs_cos
+
+    def calc_grad(self):
+        """The gradient of the cost w.r.t. the parameters."""
+        if self._fresh_JTJ:
+            return self._graderr
+        else:
+            residuals = self.calc_residuals()
+            return 2*np.dot(self.J, residuals)
 
 class LMParticles(LMEngine):
     """
