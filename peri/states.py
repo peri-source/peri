@@ -267,7 +267,7 @@ class State(comp.ParameterGroup):
         # get the shape of the entire gradient to return and make an array
         shape = f0.shape if isinstance(f0, np.ndarray) else (1,)
         shape = (len(ps),) + shape
-        grad = np.zeros(shape)
+        grad = np.zeros(shape)  #must be preallocated for mem reasons
 
         for i, p in enumerate(ps):
             grad[i] = self._grad_one_param(funct, p, dl=dl, rts=rts, **kwargs)
@@ -325,6 +325,10 @@ class State(comp.ParameterGroup):
         def l():
             return self.loglikelihood
 
+        def r_e(**kwargs):
+            """sliced etc residuals, with state.error appended on"""
+            return np.append(r(**kwargs), np.copy(self.error), axis=None)
+
         # set the member functions using partial
         self.fisherinformation = partial(self._jtj, funct=m)
         self.gradloglikelihood = partial(self._grad, funct=l)
@@ -333,6 +337,7 @@ class State(comp.ParameterGroup):
         self.hessmodel = partial(self._hess, funct=m)
         self.JTJ = partial(self._jtj, funct=r)
         self.J = partial(self._grad, funct=r)
+        self.J_e = partial(self._grad, funct=r_e)
 
         # add the appropriate documentation to the following functions
         self.fisherinformation.__doc__ = _graddoc + _sampledoc
