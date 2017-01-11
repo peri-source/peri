@@ -145,7 +145,8 @@ class State(comp.ParameterGroup):
         Class property: Sum of the squared errors,
         :math:`E = \sum_i (D_i - M_i(\\theta))^2`
         """
-        return np.dot(self.residuals.flat, self.residuals.flat)
+        r = self.residuals.ravel()
+        return np.dot(r,r)  #faster than flatiter
 
     @property
     def loglikelihood(self):
@@ -205,7 +206,7 @@ class State(comp.ParameterGroup):
         """
         Context manager to temporarily perform a parameter update (by using the
         stack structure). To use:
-        
+
             with state.temp_update(params, values):
                 # measure the cost or something
                 state.error
