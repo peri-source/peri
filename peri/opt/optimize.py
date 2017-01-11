@@ -1777,7 +1777,7 @@ class LMGlobals(LMEngine):
             numpy.float64
                 The expected error after the update with `delta_params`
         """
-        expected_error = super(self.__class__, self).find_expected_error(
+        expected_error = super(LMGlobals, self).find_expected_error(
                 delta_params=delta_params)
         if adjust:
             #adjust for num_pix
@@ -2272,7 +2272,7 @@ class AugmentedState(object):
         #... right now don't worry about it
         self.state.update(self._rad_nms, rnew)
 
-class LMAugmentedState(LMEngine):
+class LMAugmentedState(LMGlobals):
     """
     Levenberg-Marquardt on an augmented state.
 
@@ -2316,11 +2316,13 @@ class LMAugmentedState(LMEngine):
     """
     def __init__(self, aug_state, max_mem=1e9, opt_kwargs={}, **kwargs):
         self.aug_state = aug_state
+        self.state = aug_state.state
         self.opt_kwargs = opt_kwargs
         self.max_mem = max_mem
         self.num_pix = get_num_px_jtj(aug_state.state, aug_state.param_vals.size,
                 max_mem=max_mem, **self.opt_kwargs)
-        super(LMAugmentedState, self).__init__(**kwargs)
+        # super(LMAugmentedState, self).__init__(**kwargs)
+        LMEngine.__init__(self, **kwargs)
 
     def _set_err_paramvals(self):
         self.error = self.aug_state.state.error
@@ -2335,23 +2337,31 @@ class LMAugmentedState(LMEngine):
         #1. J for the state:
         s = self.aug_state.state
         sa = self.aug_state
-        J_st, inds = get_rand_Japprox(s, self.aug_state.param_names,
-                num_inds=self.num_pix, **self.opt_kwargs)
-        self._inds = inds
+        params = sa.param_names
+        je, self._inds = get_rand_Japprox(s, params, num_inds=self.num_pix,
+                include_cost=True, **self.opt_kwargs)
+        if len(params) > 0:
+            J_st = je[:,:-1]
+            graderr = je[:,-1].tolist()  #storing the direction of the exact cost grad
+        else:
+            J_st = np.array([])
+            graderr = []
 
         #2. J for the augmented portion:
         old_aug_vals = sa.param_vals[sa.rscale_mask].copy()
         dl = 1e-6
-        J_aug = []
-        i0 = s.residuals.copy()
+        i0 = s.residuals.ravel()[self._inds].copy()
+        J_aug = np.zeros([old_aug_vals.size, i0.size])
+        er0 = s.error
         for a in xrange(old_aug_vals.size):
             dx = np.zeros(old_aug_vals.size)
             dx[a] = dl
             sa.update_rscl_x_params(old_aug_vals + dx)
-            i1 = s.residuals.copy()
+            i1 = s.residuals.ravel()[self._inds].copy()
             #J = grad(residuals)
             der = (i1-i0)/dl
-            J_aug.append(der.ravel()[self._inds].copy())
+            J_aug[a] = der.copy()
+            graderr.append((s.error - er0)/dl)
         #resetting to prev. params:
         sa.update_rscl_x_params(old_aug_vals)
 
@@ -2361,18 +2371,24 @@ class LMAugmentedState(LMEngine):
             self.J = J_st
         else:
             self.J = np.append(J_st, np.array(J_aug), axis=0)
+        #Rescaling the grad of cost to the size we expect from the inds:
+        rescale = float(self.J.shape[1])/self.state.residuals.size
+        self._graderr = np.array(graderr) * rescale
 
-    def calc_residuals(self):
-        return self.aug_state.state.residuals.ravel()[self._inds]
-
-    def update_function(self, params):
-        self.aug_state.update(params)
+    def update_function(self, values):
+        self.aug_state.update(values)
         return self.aug_state.state.error
 
     def reset(self, **kwargs):
         """Resets the aug_state and the LMEngine"""
         self.aug_state.reset()
         super(LMAugmentedState, self).reset(**kwargs)
+
+    def set_params(self, *args, **kwargs):
+        raise NotImplementedError('Not supported for LMAugmentedState')
+
+    def update_select_J(self, *args, **kwargs):
+        raise NotImplementedError('Not yet implemented for LMAugmentedState')
 
 #=============================================================================#
 #         ~~~~~             Convenience Functions             ~~~~~
