@@ -95,7 +95,7 @@ def get_rand_Japprox(s, params, num_inds=1000, include_cost=False, **kwargs):
     if num_inds < tot_pix:
         inds = np.random.choice(tot_pix, size=num_inds, replace=False)
         slicer = None
-        return_inds = inds
+        return_inds = np.sort(inds)
     else:
         inds = None
         return_inds = slice(0, None)
