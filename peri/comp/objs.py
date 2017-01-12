@@ -179,7 +179,7 @@ class PlatonicSpheresCollection(Component):
             [
                 'bool', 'lerp', 'logistic', 'triangle', 'constrained-cubic',
                 'exact-gaussian', 'exact-gaussian-trim', 'exact-gaussian-fast',
-                'user-method'
+                'user-defined'
             ]
 
         Parameters
@@ -212,7 +212,7 @@ class PlatonicSpheresCollection(Component):
             element of tuple is function with call signature `func(dr, a, *args)`
             where the second element is the `*args` that are not the distance
             to edge (dr) or particles radius (a). `method` must be set to
-            'user-method'.
+            'user-defined'.
 
         exact_volume : boolean
             whether to iterate effective particle size until exact volume
@@ -239,6 +239,8 @@ class PlatonicSpheresCollection(Component):
             rad = rad*np.ones(pos.shape[0])
         if rad.size != pos.shape[0]:
             raise ValueError('pos, rad must have the same number of particles.')
+        if pos.ndim != 2:
+            raise ValueError('pos must be of shape (N,3)')
 
         self.category = category
         self.support_pad = support_pad
