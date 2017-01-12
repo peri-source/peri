@@ -1084,7 +1084,7 @@ class LMEngine(object):
             elif do_correct_damping:
                 CLOG.debug('Untrustworthy step! Increasing damping...')
                 self.increase_damping()
-                damped_JTJ = self._calc_damped_jtj(JTJ, subblock=subblock)
+                damped_JTJ = self._calc_damped_jtj(self.JTJ, subblock=subblock)
                 delta = self._calc_lm_step(damped_JTJ, grad, subblock=subblock)
 
         if np.any(np.isnan(delta)):
