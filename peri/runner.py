@@ -320,8 +320,10 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     states.save(s, desc=desc+'initial')
 
     RLOG.info('Initial burn:')
-    opt.burn(s, mode='burn', n_loop=6, fractol=0.1, desc=desc+'initial-burn',
-            max_mem=max_mem)
+    opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc+'initial-burn',
+            max_mem=max_mem, include_rad=False)
+    opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc+'initial-burn',
+            max_mem=max_mem, include_rad=True)
 
     RLOG.info('Start add-subtract')
     addsub.add_subtract(s, tries=30, min_rad=min_rad, max_rad=max_rad,
