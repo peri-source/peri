@@ -16,6 +16,9 @@ Comments:
 If you start from featured globals it seems that slab etc is off enough where
 particles get added in regions they shouldn't be (e.g. below the slab).
 So maybe you do a polish or a burn before an addsubtract?
+
+FIXME link zscale -- right now all states are made with a linked zscale.
+Option?
 """
 import os
 import Tkinter as tk
@@ -308,6 +311,7 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     b = ilms.LegendrePoly2P1D(order=(9,3,5), category='bkg') #FIXME order needs to be based on image size, slab
     c = comp.GlobalScalar('offset', 0.0)
     s = states.ImageState(im, [o, i, b, c, p])
+    link_zscale(s)
     if mem_level != 'hi':
         s.set_mem_level(mem_level)
     RLOG.info('State Created.')
@@ -615,3 +619,14 @@ def _translate_particles(s, max_mem=1e9, desc='', min_rad='calc',
         RLOG.info('Final Polish:')
         opt.burn(s, mode='polish', n_loop=4, fractol=3e-4, desc=desc+
             'addsub-polish', max_mem=max_mem, rz_order=rz_order)
+
+def link_zscale(st):
+    """Links the state ``st`` psf zscale with the global zscale"""
+    #Should be made more generic to other parameters and categories
+    psf = st.get('psf')
+    psf.param_dict['zscale'] = psf.param_dict['psf-zscale']
+    psf.params[2] = 'zscale'
+    psf.global_zscale = True
+    psf.param_dict.pop('psf-zscale')
+    st.trigger_parameter_change()
+    st.reset()
