@@ -2535,8 +2535,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
             The number of times to loop over in the optimizer. Default is 6.
         collect_stats : Bool, optional
             Whether or not to collect information on the optimizer's
-            performance. Default is False, because True tends to increase
-            the memory usage above max_mem.
+            performance. Default is False.
         desc : string, optional
             Description to append to the states.save() call every loop.
             Set to None to avoid saving. Default is '', which selects
@@ -2557,11 +2556,11 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
             * 'polish'        : The state is close to the minimum.
             'burn' is the default. Only `polish` will get to the global
             minimum.
-        max_mem : Numeric
+        max_mem : Numeric, optional
             The maximum amount of memory allowed for the optimizers' J's,
             for both particles & globals. Default is 1e9, i.e. 1GB per
             optimizer.
-        do_line_min : Bool or 'default'.
+        do_line_min : Bool or 'default', optional
             Set to True to do an additional, third optimization per loop
             which optimizes along the subspace spanned by the last 3 steps
             of the burn()'s trajectory. In principle this should signifi-
@@ -2649,7 +2648,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
             all_lm_stats.append(gstats)
         if desc is not None:
             states.save(s, desc=desc)
-        CLOG.info('Globals, loop %d:\t%f' % (a, s.error))
+        CLOG.info('Globals,   loop {}:\t{}'.format(a, s.error))
         all_loop_values.append(s.values)
 
         #2b. Particles
@@ -2663,7 +2662,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
         all_lp_stats.append(pstats)
         if desc is not None:
             states.save(s, desc=desc)
-        CLOG.info('Particles, loop %d:\t%f' % (a, s.error))
+        CLOG.info('Particles, loop {}:\t{}'.format(a, s.error))
         gc.collect()
         all_loop_values.append(s.values)
 
@@ -2675,7 +2674,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
                     collect_stats=collect_stats))
             if desc is not None:
                 states.save(s, desc=desc)
-            CLOG.info('Line min, loop %d:\t%f' % (a, s.error))
+            CLOG.info('Line min., loop {}:\t{}'.format(a, s.error))
             all_loop_values.append(s.values)
 
         #2d. terminate?
@@ -2686,6 +2685,75 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
 
     if collect_stats:
         return all_lp_stats, all_lm_stats, all_line_stats, all_loop_values
+
+def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True):
+    """
+    Crawls slowly to the minimum-cost state.
+
+    Blocks the global parameters into small enough sections such that each
+    can be optimized separately while including all the pixels (i.e. no
+    decimation). Optimizes the globals, then the psf separately if desired,
+    then particles, then a line minimization along the step direction to
+    speed up convergence.
+
+    Parameters
+    ----------
+        s : :class:`peri.states.ImageState`
+            The state to optimize
+        desc : string, optional
+            Description to append to the states.save() call every loop.
+            Set to `None` to avoid saving. Default is `'finish'`.
+        n_loop : Int, optional
+            The number of times to loop over in the optimizer. Default is 4.
+        max_mem : Numeric, optional
+            The maximum amount of memory allowed for the optimizers' J's,
+            for both particles & globals. Default is 1e9.
+        separate_psf : Bool, optional
+            If True, does the psf optimization separately from the rest of
+            the globals, since the psf has a more tortuous fit landscape.
+            Default is True.
+
+    Returns
+    -------
+        numpy.ndarray
+            [n_loop+1, N] element array of the state's values, at the start
+            of optimization and at the end of each loop, before the line
+            minimization.
+    """
+    values = [np.copy(s.state[s.params])]
+    remove_params = s.get('psf').params if separate_psf else None
+    globals = name_globals(s, remove_params=remove_params)
+    #FIXME this could be done much better, since much of the globals such
+    #as the ilm are local. Could be done with sparse matrices and/or taking
+    #nearby globals in a group and using the update tile only as the slicer,
+    #rather than the full residuals.
+    gs = np.floor(max_mem / s.residuals.nbytes).astype('int')
+    groups = [globals[a:a+gs] for a in xrange(0, len(globals), gs)]
+    CLOG.info('Start  ``finish``:\t{}'.format(s.error))
+    for a in xrange(n_loop):
+        #1. Min globals:
+        for g in groups:
+            do_levmarq(s, g, damping=0.1, decrease_damp_factor=20.,
+                    max_iter=1, max_mem=max_mem, eig_update=False)
+        if separate_psf:
+            do_levmarq(s, remove_params, max_mem=max_mem, max_iter=4,
+                    eig_update=False)
+        CLOG.info('Globals,   loop {}:\t{}'.format(a, s.error))
+        if desc is not None:
+            states.save(s, desc=desc)
+        #2. Min particles
+        do_levmarq_all_particle_groups(s, max_iter=1, max_mem=max_mem)
+        CLOG.info('Particles, loop {}:\t{}'.format(a, s.error))
+        if desc is not None:
+            states.save(s, desc=desc)
+        #3. Append vals, line min:
+        values.append(np.copy(s.state[s.params]))
+        dv = (np.array(values[1:]) - np.array(values[0]))[-3:]
+        do_levmarq_n_directions(s, dv, damping=1e-2, max_iter=2, errtol=3e-4)
+        CLOG.info('Line min., loop {}:\t{}'.format(a, s.error))
+        if desc is not None:
+            states.save(s, desc=desc)
+    return np.array(values)
 
 def fit_comp(new_comp, old_comp, **kwargs):
     """
