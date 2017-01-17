@@ -2712,6 +2712,10 @@ def fit_comp(new_comp, old_comp, **kwargs):
     do_levmarq : Levenberg-Marquardt minimization using a random subset
         of the image pixels.
     """
+    #resetting the category to ilm:
+    new_cat = new_comp.category
+    new_comp.category = 'ilm'
     fake_s = states.ImageState(Image(old_comp.get().copy()), [new_comp], pad=0,
             mdl=mdl.SmoothFieldModel())
     do_levmarq(fake_s, new_comp.params, **kwargs)
+    new_comp.category = new_cat
