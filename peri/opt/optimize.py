@@ -2570,6 +2570,15 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
             * 'do-particles'  : False
             * 'polish'        : True
 
+    Returns
+    -------
+        all_loop_values : numpy.ndarray
+            The values of the state's parameters after each part of the
+            loop: globals, particles, linemin.
+        [, all_lm_stats, all_lp_stats, all_line_stats] : dict
+            Dictionaries of convergence statistics for globals, particles,
+            and line min, respectively. Returned if `collect_stats` is True.
+
     Notes
     -----
     Proceeds by alternating between one Levenberg-Marquardt step
@@ -2684,7 +2693,9 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
             break
 
     if collect_stats:
-        return all_lp_stats, all_lm_stats, all_line_stats, all_loop_values
+        return all_loop_values, all_lm_stats, all_lp_stats, all_line_stats
+    else:
+        return all_loop_values
 
 def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True):
     """
