@@ -200,13 +200,15 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
     s = _optimize_from_centroid(pos, rad, im, invert=invert, **kwargs)
     return s
 
-def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
+def feature_from_pos_rad(pos, rad, im_name=None, tile=None,
+        use_full_path=False, **kwargs):
     """
     Gets a completely-optimized state from an image and an initial guess of
     particle positions and radii.
 
     The state is periodically saved during optimization, with different
-    filename for different stages of the optimization.
+    filename for different stages of the optimization. The user can select
+    the image.
 
     Parameters
     ----------
@@ -214,11 +216,15 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
             The initial guess for the N particle positions.
         rad : N element numpy.ndarray.
             The initial guess for the N particle radii.
-        im_name : string
-            The filename of the image to feature.
+        im_name : string or None, optional
+            The filename of the image to feature. Default is None, in which
+            the user selects the image.
         tile : :class:`peri.util.Tile`, optional
             A tile of the sub-region of the image to feature. Default is
             None, i.e. entire image.
+        use_full_path : Bool, optional
+            Set to True to use the full path name for the image. Default
+            is False.
 
     Other Parameters
     ----------------
@@ -278,6 +284,7 @@ def feature_from_pos_rad(pos, rad, im_name, tile=None, **kwargs):
     particle positions, then optimizing the globals + positions until
     termination as called in _optimize_from_centroid.
     """
+    _,  im_name = _pick_state_im_name('', im_name, use_full_path=use_full_path)
     im = util.RawImage(im_name, tile=tile)
     s = _optimize_from_centroid(pos, rad, im, **kwargs)
     return s
