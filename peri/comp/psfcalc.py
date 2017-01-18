@@ -60,7 +60,7 @@ def f_theta(cos_theta, zint, z, n2n1=0.95, sph6_ab=None, **kwargs):
     """
     Returns the wavefront aberration for an aberrated, defocused lens.
 
-    Calculates the portions of the wavefront "aberration" due to z, theta
+    Calculates the portions of the wavefront distortion due to z, theta
     only, for a lens with defocus and spherical aberration induced by
     coverslip mismatch. (The rho portion can be analytically integrated
     to Bessels.)
@@ -176,7 +176,6 @@ def get_Kprefactor(z, cos_theta, zint=100.0, n2n1=0.95, get_hdet=False,
             The prefactor, of size [`z.size`, `cos_theta.size`], sampled
             at the values [`z`, `cos_theta`]
     """
-
     phase = f_theta(cos_theta, zint, z, n2n1=n2n1, **kwargs)
     to_return = np.exp(-1j*phase)
     if not get_hdet:
@@ -1017,7 +1016,8 @@ def calculate_polychrome_fluorescence_psf(x, y, z, k0=1., sigk=0.1, npts=3,
 #                               Brightfield PSFs
 #######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
 
-def calc_monochrome_brightfield_pointdipole(rho, z, normalize=False, **kwargs):
+def calc_monochrome_brightfield_pointdipole(rho, z, normalize=False,
+        alpha=1.0, n2n1=0.95, zint=100.):
     """
     Calculates a brightfield psf, for monochromatic illumination.
 
@@ -1036,17 +1036,15 @@ def calc_monochrome_brightfield_pointdipole(rho, z, normalize=False, **kwargs):
             which to evaluate the psf. Units of 1/k.
         normalize : Bool
             Set to True to normalize the psf internally. Default is False
-
-    **kwargs (to get_K)
-    -------------------
-        alpha : Float
-            Float scalar; The opening angle of the lens aperture.
-        n2n1 : Float
+        alpha : Float, optional
+            Float scalar; The opening angle of the lens aperture. Passed
+            to get_K. Default is 1.0
+        n2n1 : Float, optional
             Float scalar, the ratio of the index of the suspending fluid
-            to the optics index.
-        zint : Float
+            to the optics index. Default is 0.95
+        zint : Float, optional
             Float scalar. The distance between the optical interface and
-            the lens's nominal focal point.
+            the lens's nominal focal point. Default is 100.
 
     Returns
     -------
@@ -1057,13 +1055,15 @@ def calc_monochrome_brightfield_pointdipole(rho, z, normalize=False, **kwargs):
     if rho.shape != z.shape:
         raise ValueError('rho.shape != z.shape')
 
-    I1a = get_K(rho, z, K=1, get_hdet=True, **kwargs)
-    I2a = get_K(rho, z, K=2, get_hdet=True, **kwargs)
+    kw = {'alpha':alpha, 'zint':zint, 'n2n1':n2n1}
+    I1a = get_K(rho, z, K=1, get_hdet=True, **kw)
+    I2a = get_K(rho, z, K=2, get_hdet=True, **kw)
     #The new version, assuming that the wavefront is coherent on the
     #scale of the PSF, but not the lens. Note psf-working-distance is not used.
     #Also note that in get_K there is an i->-i transformation as compared to
     #the brightfield writeup, hence the conj in hetero.
-    hetero = 2*np.real(1j*np.exp(1j*z) * I1a.conj())
+    hetero = -2*np.real(1j * np.exp(-1j*(1-n2n1)*zint) * np.exp(1j*n2n1*z) *
+            I1a.conj())
     homo = np.real(I1a*I1a.conj() + I2a*I2a.conj())
 
     if normalize:
