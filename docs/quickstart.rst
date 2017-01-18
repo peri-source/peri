@@ -16,9 +16,9 @@ PERI States
 The centerpiece of ``peri`` is an object known as a ``State`` or ``ImageState``,
 as described in detail in :doc:`Architecture </architecture>`. An ``ImageState``
 is a complete description of a ``peri``'s fit of an image, containing the raw
-data itself, the fitted particle and microscope parameters, the quality of the 
+data itself, the fitted particle and microscope parameters, the quality of the
 fit (the fit error and fit residuals), and even the mathematical model used to
-describe the image. 
+describe the image.
 
 The featured images are stored as ``ImageState`` s, which can be saved and
 loaded through ``peri.states.save`` and ``peri.states.load`` . Featuring an
@@ -28,7 +28,7 @@ parameters. To do this, keep reading....
 Featuring an Image, from a Python IDE
 -------------------------------------
 
-Open your favorite version of Python terminal or Jupyter notebook. Type
+Open your favorite version of a Python IDE or Jupyter notebook. Type
 
 .. code-block:: python
 
@@ -36,16 +36,16 @@ Open your favorite version of Python terminal or Jupyter notebook. Type
 
 to import ``peri``'s ``runner`` module, which contains most of the convenience
 functions for analyzing images. The ``runner`` module contains several functions
-which will let you get a completely feature an image from various starting points:
+which will let you completely feature an image from various starting points:
 
- * featuring from scratch
- * featuring from a guess of positions and radii
- * featuring using the microscope parameters from another state
- * featuring using the microscope parameters and positions from another state
+ * from scratch
+ * from a guess of positions and radii
+ * using the microscope parameters from another state
+ * using the microscope parameters and positions from another state
 
-All of these ``runner`` functions allow you to select the images and previously-
-featured states interactively through dialog boxes, for convenience. If this is
-not convenient you can instead pass the filenames for the states and images 
+All of these ``runner`` functions allow you to select the images and
+previously-featured states interactively through dialog boxes, for convenience.
+If this is not convenient you can instead pass the filenames for the states and images
 directly to the runner functions, along with a whole lot more options. Read the
 documentation if you want to know more!
 
@@ -55,7 +55,7 @@ To feature an image of dark spherical particles with a radius of roughly 5
 pixels on a bright background, type:
 
 .. code-block:: python
-    
+
     runner.get_initial_featuring(5)
 
 This will pull up a file dialog box asking you to select the image to feature.
@@ -81,7 +81,7 @@ state.
 ...using the microscope parameters from another state
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-You've already featured a few images from your dataset and have a good 
+You've already featured a few images from your dataset and have a good
 ``peri`` state for your microscope. You don't want to spend a ton of time
 re-featuring the microscope parameters again; you just want the positions in
 the next image. If the particles in the new image have a radius of roughly
@@ -114,7 +114,7 @@ Getting your Data
 
     from peri import states
     st = states.load('your-state-name.pkl')  #use your appropriate filename
-    
+
 * Check the state.
 
 .. code-block:: python
@@ -127,12 +127,14 @@ doesn't fit the image, then the extracted parameters like particle positions
 and radii will be incorrect. The ``OrthoManipulator`` lets you check the fit.
 Cycle through various views by hitting ``Q``. If you can see shadows of
 particles in the residuals view, or structure in the residuals in Fourier
-space, then your fit is far from the minimum. You can improve the fit by 
+space, then your fit is far from the minimum. You can improve the fit by
 running
 
 .. code-block:: python
 
     runner.finish_state(st)
+
+See :doc:`Optimization </optimization>` for additional details, tips, and tricks.
 
 * Get the positions and radii:
 
