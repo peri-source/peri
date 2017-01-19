@@ -195,6 +195,9 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
     im = util.RawImage(im_name, tile=tile)
 
     pos = locate_spheres(im, feature_rad, invert=invert, **featuring_params)
+    if np.size(pos) == 0:
+        msg = 'No particles found. Try using a smaller `feature_rad`.'
+        raise ValueError(msg)
 
     rad = np.ones(pos.shape[0], dtype='float') * actual_rad
     s = _optimize_from_centroid(pos, rad, im, invert=invert, **kwargs)
@@ -284,6 +287,10 @@ def feature_from_pos_rad(pos, rad, im_name=None, tile=None,
     particle positions, then optimizing the globals + positions until
     termination as called in _optimize_from_centroid.
     """
+    if np.size(pos) == 0:
+        raise ValueError('`pos` is an empty array.')
+    elif np.shape(pos)[1] != 3:
+        raise ValueError('`pos` must be an [N,3] element numpy.ndarray.')
     _,  im_name = _pick_state_im_name('', im_name, use_full_path=use_full_path)
     im = util.RawImage(im_name, tile=tile)
     s = _optimize_from_centroid(pos, rad, im, **kwargs)
