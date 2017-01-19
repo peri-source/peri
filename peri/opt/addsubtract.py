@@ -9,6 +9,7 @@ import peri.opt.optimize as opt
 from peri.logger import log
 CLOG = log.getChild('addsub')
 
+
 def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
         trim_edge=False, **kwargs):
     """
@@ -42,7 +43,7 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
         npart : Int
             The number of added particles.
     """
-    #FIXME does not use the **kwargs, but needs b/c called with wrong kwargs
+    # FIXME does not use the **kwargs, but needs b/c called with wrong kwargs
     if invert:
         im = 1 - st.residuals
     else:
@@ -50,30 +51,32 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
     return _feature_guess(im, rad, minmass=minmass, use_tp=use_tp,
             trim_edge=trim_edge)
 
+
 def _feature_guess(im, rad, minmass=None, use_tp=False, trim_edge=False):
     """Workhorse of feature_guess"""
-    if minmass == None:
-        #we use 1% of the feature size mass as a cutoff;
-        #it's easier to remove than to add
+    if minmass is None:
+        # we use 1% of the feature size mass as a cutoff;
+        # it's easier to remove than to add
         minmass = rad**3 * 4/3.*np.pi * 0.01
-        #0.03 is a magic number; works well
+        # 0.03 is a magic number; works well
     if use_tp:
         diameter = np.ceil(2*rad)
         diameter += 1-(diameter % 2)
         df = peri.trackpy.locate(im, int(diameter), minmass=minmass)
         npart = np.array(df['mass']).size
-        guess = np.zeros([npart,3])
-        guess[:,0] = df['z']
-        guess[:,1] = df['y']
-        guess[:,2] = df['x']
+        guess = np.zeros([npart, 3])
+        guess[:, 0] = df['z']
+        guess[:, 1] = df['y']
+        guess[:, 2] = df['x']
         mass = df['mass']
     else:
         guess, mass = initializers.local_max_featuring(im, radius=rad,
                 minmass=minmass, trim_edge=trim_edge)
         npart = guess.shape[0]
-    #I want to return these sorted by mass:
-    inds = np.argsort(mass)[::-1] #biggest mass first
+    # I want to return these sorted by mass:
+    inds = np.argsort(mass)[::-1]  # biggest mass first
     return guess[inds].copy(), npart
+
 
 def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
         min_derr='3sig', **kwargs):
@@ -110,7 +113,7 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
             List of the positions of the added particles. If do_opt==True,
             then these positions will differ from the input 'guess'.
     """
-    #FIXME does not use the **kwargs, but needs b/c called with wrong kwargs
+    # FIXME does not use the **kwargs, but needs b/c called with wrong kwargs
     if min_derr == '3sig':
         min_derr = 3 * st.sigma
     accepts = 0
@@ -126,9 +129,9 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
         absent_d = st.residuals.copy()
         ind = st.obj_add_particle(p0, rad)
         if do_opt:
+            # the slowest part of this
             opt.do_levmarq_particles(st, ind, damping=1.0, max_iter=1,
                     run_length=3, eig_update=False, include_rad=False)
-                    #the slowest part of this
         present_err = st.error
         present_d = st.residuals.copy()
         dont_kill = should_particle_exist(absent_err, present_err, absent_d,
@@ -147,6 +150,7 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
             if np.abs(absent_err - st.error) > 1e-4:
                 raise RuntimeError('updates not exact?')
     return accepts, new_poses
+
 
 def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs):
     """
@@ -178,7 +182,7 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
         r : Tuple
             The radius of the removed particle.
     """
-    #FIXME does not use the **kwargs, but needs b/c called with wrong kwargs
+    # FIXME does not use the **kwargs, but needs b/c called with wrong kwargs
     if min_derr == '3sig':
         min_derr = 3 * st.sigma
     present_err = st.error; present_d = st.residuals.copy()
@@ -193,6 +197,7 @@ def check_remove_particle(st, ind, im_change_frac=0.2, min_derr='3sig', **kwargs
     else:
         killed = True
     return killed, tuple(p), (r,)
+
 
 def should_particle_exist(absent_err, present_err, absent_d, present_d,
         im_change_frac=0.2, min_derr=0.1):
@@ -223,7 +228,9 @@ def should_particle_exist(absent_err, present_err, absent_d, present_d,
     """
     delta_im = np.ravel(present_d - absent_d)
     im_change = np.dot(delta_im, delta_im)
-    return (absent_err - present_err) >= max([im_change_frac * im_change, min_derr])
+    err_cutoff = max([im_change_frac * im_change, min_derr])
+    return (absent_err - present_err) >= err_cutoff
+
 
 def add_missing_particles(st, rad='calc', tries=50, **kwargs):
     """
@@ -288,6 +295,7 @@ def add_missing_particles(st, rad='calc', tries=50, **kwargs):
             **kwargs)
     return accepts, new_poses
 
+
 def remove_bad_particles(st, min_rad='calc', max_rad='calc', min_edge_dist=2.0,
         check_rad_cutoff=[3.5,15], check_outside_im=True, tries=50,
         im_change_frac=0.2, **kwargs):
@@ -339,12 +347,12 @@ def remove_bad_particles(st, min_rad='calc', max_rad='calc', min_edge_dist=2.0,
     """
     is_near_im_edge = lambda pos, pad: (((pos + st.pad) < pad) | (pos >
             np.array(st.ishape.shape) + st.pad - pad)).any(axis=1)
-    #returns True if the position is within 'pad' of the _outer_ image edge
+    # returns True if the position is within 'pad' of the _outer_ image edge
     removed = 0
     attempts = 0
 
     n_tot_part = st.obj_get_positions().shape[0]
-    q10 = int(0.1 * n_tot_part)#10% quartile
+    q10 = int(0.1 * n_tot_part)  # 10% quartile
     r_sig = np.sort(st.obj_get_radii())[q10:-q10].std()
     r_med = np.median(st.obj_get_radii())
     if max_rad == 'calc':
@@ -354,7 +362,7 @@ def remove_bad_particles(st, min_rad='calc', max_rad='calc', min_edge_dist=2.0,
     if check_rad_cutoff == 'calc':
         check_rad_cutoff = [r_med - 7.5*r_sig, r_med + 7.5*r_sig]
 
-    #1. Automatic deletion:
+    # 1. Automatic deletion:
     rad_wrong_size = np.nonzero((st.obj_get_radii() < min_rad) |
             (st.obj_get_radii() > max_rad))[0]
     near_im_edge = np.nonzero(is_near_im_edge(st.obj_get_positions(),
@@ -376,7 +384,7 @@ def remove_bad_particles(st, min_rad='calc', max_rad='calc', min_edge_dist=2.0,
             CLOG.info(part_msg)
         removed += 1
 
-    #2. Conditional deletion:
+    # 2. Conditional deletion:
     check_rad_inds = np.nonzero((st.obj_get_radii() < check_rad_cutoff[0]) |
             (st.obj_get_radii() > check_rad_cutoff[1]))[0]
     if check_outside_im:
@@ -395,13 +403,14 @@ def remove_bad_particles(st, min_rad='calc', max_rad='calc', min_edge_dist=2.0,
         killed, p, r = check_remove_particle(st, ind, im_change_frac=im_change_frac)
         if killed:
             removed += 1
-            check_inds[check_inds > ind] -= 1  #cleaning up indices....
+            check_inds[check_inds > ind] -= 1  # cleaning up indices....
             delete_poses.append(pos)
             part_msg = '%2.2f\t%3.2f\t%3.2f\t%3.2f\t|\t%4.3f  \t%4.3f' % (
                     p + r + (old_err, st.error))
             with log.noformat():
                 CLOG.info(part_msg)
     return removed, delete_poses
+
 
 def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
         always_check_remove=False, **kwargs):
@@ -520,7 +529,7 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
     added_poses0 = []
     added_poses = []
 
-    nr = 1  #Check removal on the first loop
+    nr = 1  # Check removal on the first loop
     for _ in xrange(max_iter):
         if (nr != 0) or (always_check_remove):
             nr, rposes = remove_bad_particles(st, **kwargs)
@@ -541,12 +550,13 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
                     use_accel=True)
             CLOG.info('Add_subtract optimization:\t%f' % st.error)
 
-    #Optimize the added particles' radii:
+    # Optimize the added particles' radii:
     for p in added_poses0:
         i = st.obj_closest_particle(p)
         opt.do_levmarq_particles(st, np.array([i]), max_iter=2, damping=0.3)
         added_poses.append(st.obj_get_positions()[i])
     return total_changed, np.array(removed_poses), np.array(added_poses)
+
 
 def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
     """
@@ -599,32 +609,33 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
     splits the Gaussian down the middle instead of at the tails, which
     is very bad. So use with caution.
     """
-    #1. Field of local std
+    # 1. Field of local std
     r = st.residuals
     weights = np.ones([filter_size]*len(r.shape), dtype='float')
     weights /= weights.sum()
     f = np.sqrt(nd.filters.convolve(r*r, weights, mode='reflect'))
 
-    #2. Maximal reasonable value of the field.
+    # 2. Maximal reasonable value of the field.
     if sigma_cutoff == 'otsu':
         max_ok = initializers.otsu_threshold(f)
     else:
         # max_ok = f.mean() * (1 + sigma_cutoff / np.sqrt(weights.size))
         max_ok = f.mean() + sigma_cutoff * f.std()
 
-    #3. Label & Identify
+    # 3. Label & Identify
     bad = f > max_ok
     labels, n = nd.measurements.label(bad)
     inds = []
     for i in xrange(1,n+1):
         inds.append( np.nonzero(labels == i))
 
-    #4. Parse into tiles
+    # 4. Parse into tiles
     tiles = [Tile(np.min(ind, axis=1), np.max(ind, axis=1)+1) for ind in inds]
 
-    #5. Sort and return
+    # 5. Sort and return
     volumes = [t.volume for t in tiles]
     return [tiles[i] for i in np.argsort(volumes)[::-1]]
+
 
 def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
         invert=True, max_allowed_remove=20, **kwargs):
@@ -705,7 +716,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     """
     if rad == 'calc':
         rad = np.median(st.obj_get_radii())
-    #1. Remove all possibly bad particles within the tile.
+    # 1. Remove all possibly bad particles within the tile.
     initial_error = np.copy(st.error)
     rinds = np.nonzero(tile.contains(st.obj_get_positions()))[0]
     if rinds.size >= max_allowed_remove:
@@ -716,7 +727,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     elif rinds.size > 0:
         rpos, rrad = st.obj_remove_particle(rinds)
 
-    #2-4. Feature and add particles to the tile, optimize, run until none added
+    # 2-4. Feature and add particles to the tile, optimize, run until none added
     n_added = -rinds.size
     added_poses = []
     for _ in xrange(max_iter):
@@ -731,10 +742,10 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
         n_added += accepts
         if accepts == 0:
             break
-    else:  #for-break-else
+    else:  # for-break-else
         CLOG.warn('Runaway adds or insufficient max_iter')
 
-    #5. Optimize added pos + rad:
+    # 5. Optimize added pos + rad:
     ainds = []
     for p in added_poses:
         ainds.append(st.obj_closest_particle(p))
@@ -746,10 +757,11 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
         opt.do_levmarq_particles(st, ainds, include_rad=True,
                 max_iter=3)
 
-    #6. Ensure that current error after add-subtracting is lower than initial
+    # 6. Ensure that current error after add-subtracting is lower than initial
     did_something = (rinds.size > 0) or (len(ainds)>0)
     if did_something & (st.error > initial_error):
-        CLOG.info('Failed addsub, Tile {} -> {}'.format(tile.l.tolist(), tile.r.tolist()))
+        CLOG.info('Failed addsub, Tile {} -> {}'.format(tile.l.tolist(),
+                tile.r.tolist()))
         if len(ainds) > 0:
             _ = st.obj_remove_particle(ainds)
         if rinds.size > 0:
@@ -757,6 +769,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
                 _ = st.obj_add_particle(p, r)
         n_added = 0; ainds = []
     return n_added, ainds
+
 
 def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
         **kwargs):
@@ -868,10 +881,10 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
     As a result, it's usually best to do a normal add_subtract first and
     using this function for tough missing or double-featured particles.
     """
-    #1. Find regions of poor tiles:
+    # 1. Find regions of poor tiles:
     tiles = identify_misfeatured_regions(st, filter_size=filter_size,
             sigma_cutoff=sigma_cutoff)
-    #2. Add and subtract in the regions:
+    # 2. Add and subtract in the regions:
     n_empty = 0
     n_added = 0
     new_poses = []
@@ -883,9 +896,9 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
             n_added += curn
             new_poses.extend(st.obj_get_positions()[curinds])
         if n_empty > region_depth:
-            break  #some message or something?
-    else:  #for-break-else
+            break  # some message or something?
+    else:  # for-break-else
         pass
         # CLOG.info('All regions contained particles.')
-        #something else?? this is not quite true
+        # something else?? this is not quite true
     return n_added, new_poses

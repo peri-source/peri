@@ -27,14 +27,14 @@ import numpy as np
 import peri
 from peri import initializers, util, models, states, logger
 from peri.comp import ilms, objs, psfs, exactpsf, comp
-
-RLOG = logger.log.getChild('runner')
-
 import peri.opt.optimize as opt
 import peri.opt.addsubtract as addsub
 
-def locate_spheres(image, feature_rad, dofilter=False, order=(3,3,3),
-        trim_edge=True, **kwargs):
+RLOG = logger.log.getChild('runner')
+
+
+def locate_spheres( image, feature_rad, dofilter=False, order=(3 ,3, 3),
+                    trim_edge=True, **kwargs):
     """
     Get an initial featuring of sphere positions in an image.
 
@@ -78,7 +78,7 @@ def locate_spheres(image, feature_rad, dofilter=False, order=(3,3,3),
     Returns
     --------
     positions : np.ndarray [N,3]
-        Positions of the particles in order (z,y,x) in pixel units of the image.
+        Positions of the particles in order (z,y,x) in image pixel units.
 
     Notes
     -----
@@ -89,14 +89,13 @@ def locate_spheres(image, feature_rad, dofilter=False, order=(3,3,3),
     # We just want a smoothed field model of the image so that the residuals
     # are simply the particles without other complications
     m = models.SmoothFieldModel()
-
     I = ilms.LegendrePoly2P1D(order=order, constval=image.get_image().mean())
     s = states.ImageState(image, [I], pad=0, mdl=m)
-
     if dofilter:
         opt.do_levmarq(s, s.params)
+    pos = addsub.feature_guess(s, feature_rad, trim_edge=trim_edge, **kwargs)[0]
+    return pos
 
-    return addsub.feature_guess(s, feature_rad, trim_edge=trim_edge, **kwargs)[0]
 
 def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
         tile=None, invert=True, use_full_path=False, featuring_params={},
@@ -203,6 +202,7 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
     s = _optimize_from_centroid(pos, rad, im, invert=invert, **kwargs)
     return s
 
+
 def feature_from_pos_rad(pos, rad, im_name=None, tile=None,
         use_full_path=False, **kwargs):
     """
@@ -296,6 +296,7 @@ def feature_from_pos_rad(pos, rad, im_name=None, tile=None,
     s = _optimize_from_centroid(pos, rad, im, **kwargs)
     return s
 
+
 def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
         min_rad=None, max_rad=None, invert=True, rz_order=0, zscale=1.0,
         mem_level='hi'):
@@ -307,7 +308,7 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     if min_rad is None:
         min_rad = 0.5 * rad.mean()
     if max_rad is None:
-        max_rad = 1.5 * rad.mean() #FIXME this could be a problem for bidisperse suspensions
+        max_rad = 1.5 * rad.mean()  # FIXME this could be a problem for bidisperse suspensions
     if slab is not None:
         o = comp.ComponentCollection(
                 [
@@ -322,7 +323,7 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     p = exactpsf.FixedSSChebLinePSF()
     npts, iorder = _calc_ilm_order(im.get_image().shape)
     i = ilms.BarnesStreakLegPoly2P1D(npts=npts, zorder=iorder)
-    b = ilms.LegendrePoly2P1D(order=(9,3,5), category='bkg') #FIXME order needs to be based on image size, slab
+    b = ilms.LegendrePoly2P1D(order=(9 ,3, 5), category='bkg') # FIXME order needs to be based on image size, slab
     c = comp.GlobalScalar('offset', 0.0)
     s = states.ImageState(im, [o, i, b, c, p])
     link_zscale(s)
@@ -334,9 +335,9 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     states.save(s, desc=desc+'initial')
 
     RLOG.info('Initial burn:')
-    opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc+'initial-burn',
+    opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc + 'initial-burn',
             max_mem=max_mem, include_rad=False)
-    opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc+'initial-burn',
+    opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc + 'initial-burn',
             max_mem=max_mem, include_rad=True)
 
     RLOG.info('Start add-subtract')
@@ -345,26 +346,28 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     states.save(s, desc=desc+'initial-addsub')
 
     RLOG.info('Final polish:')
-    opt.burn(s, mode='polish', n_loop=8, fractol=3e-4, desc=desc+
+    opt.burn(s, mode='polish', n_loop=8, fractol=3e-4, desc=desc +
             'addsub-polish', max_mem=max_mem, rz_order=rz_order)
     return s
+
 
 def _calc_ilm_order(imshape):
     """
     Calculates an ilm order based on the shape of an image. Bleeding-edge...
     """
-    #FIXME this needs to be general, with loads from the config file
+    # FIXME this needs to be general, with loads from the config file
     # Right now I'm calculating as if imshape is the unpadded shape but
     # perhaps it should be the padded shape?
-    zorder = int(imshape[0] / 6.25) + 1  #might be overkill for big z images
+    zorder = int(imshape[0] / 6.25) + 1  # might be overkill for big z images
     l_npts = int(imshape[1] / 42.5)+1
     npts = ()
     for a in xrange(l_npts):
         if a < 5:
-            npts += ( int(imshape[2] * [59,39,29,19,14][a]/512.) + 1,)
+            npts += (int(imshape[2] * [59, 39, 29, 19, 14][a]/512.) + 1,)
         else:
-            npts += ( int(imshape[2] * 11/512.) + 1,)
+            npts += (int(imshape[2] * 11/512.) + 1,)
     return npts, zorder
+
 
 def translate_featuring(state_name=None, im_name=None, use_full_path=False,
         **kwargs):
@@ -450,8 +453,8 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
         4. If polish, optimize the illumination, background, and particles.
         5. If polish, optimize everything.
     """
-    state_name, im_name = _pick_state_im_name(state_name, im_name,
-                use_full_path=use_full_path)
+    state_name, im_name = _pick_state_im_name(
+            state_name, im_name, use_full_path=use_full_path)
 
     s = states.load(state_name)
     im = util.RawImage(im_name, tile=s.image.tile)
@@ -459,6 +462,7 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
     s.set_image(im)
     _translate_particles(s, **kwargs)
     return s
+
 
 def get_particles_featuring(feature_rad, state_name=None, im_name=None,
         use_full_path=False, actual_rad=None, invert=True, featuring_params={},
@@ -558,21 +562,21 @@ def get_particles_featuring(feature_rad, state_name=None, im_name=None,
         5. If polish, optimize the illumination, background, and particles.
         6. If polish, optimize everything.
     """
-    state_name, im_name = _pick_state_im_name(state_name, im_name,
-            use_full_path=use_full_path)
+    state_name, im_name = _pick_state_im_name(
+            state_name, im_name, use_full_path=use_full_path)
     s = states.load(state_name)
 
-    if actual_rad == None:
+    if actual_rad is None:
         actual_rad = np.median(s.obj_get_radii())
     im = util.RawImage(im_name, tile=s.image.tile)
-    pos = locate_spheres(im, feature_rad, invert=invert,
-            **featuring_params)
+    pos = locate_spheres(im, feature_rad, invert=invert, **featuring_params)
     _ = s.obj_remove_particle(np.arange(s.obj_get_radii().size))
     s.obj_add_particle(pos, np.ones(pos.shape[0])*actual_rad)
 
     s.set_image(im)
     _translate_particles(s, invert=invert, **kwargs)
     return s
+
 
 def _pick_state_im_name(state_name, im_name, use_full_path=False):
     """
@@ -594,13 +598,13 @@ def _pick_state_im_name(state_name, im_name, use_full_path=False):
         wid = tk.Tk()
         wid.withdraw()
     if state_name is None:
-        state_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-                'Select pre-featured state')
+        state_name = tkfd.askopenfilename(
+                initialdir=initial_dir, title='Select pre-featured state')
         os.chdir(os.path.dirname(state_name))
 
     if im_name is None:
-        im_name = tkfd.askopenfilename(initialdir=initial_dir, title=
-                'Select new image')
+        im_name = tkfd.askopenfilename(
+                initialdir=initial_dir, title='Select new image')
 
     if (not use_full_path) and (os.path.dirname(im_name) != ''):
         im_path = os.path.dirname(im_name)
@@ -610,13 +614,14 @@ def _pick_state_im_name(state_name, im_name, use_full_path=False):
         os.chdir(initial_dir)
     return state_name, im_name
 
+
 def _translate_particles(s, max_mem=1e9, desc='', min_rad='calc',
         max_rad='calc', invert=True, rz_order=0, do_polish=True,
         mem_level='hi'):
     """
     Workhorse for translating particles. See get_particles_featuring for docs.
     """
-    s.set_mem_level(mem_level)  #overkill because always sets mem, but w/e
+    s.set_mem_level(mem_level)  # overkill because always sets mem, but w/e
     RLOG.info('Translate Particles:')
     opt.burn(s, mode='do-particles', n_loop=4, fractol=0.1, desc=desc+
             'translate-particles', max_mem=max_mem, include_rad=False)
@@ -630,15 +635,16 @@ def _translate_particles(s, max_mem=1e9, desc='', min_rad='calc',
 
     if do_polish:
         RLOG.info('Final Burn:')
-        opt.burn(s, mode='burn', n_loop=3, fractol=3e-4, desc=desc+
-            'addsub-burn', max_mem=max_mem, rz_order=rz_order)
+        opt.burn(s, mode='burn', n_loop=3, fractol=3e-4, desc=desc +
+                'addsub-burn', max_mem=max_mem, rz_order=rz_order)
         RLOG.info('Final Polish:')
-        opt.burn(s, mode='polish', n_loop=4, fractol=3e-4, desc=desc+
-            'addsub-polish', max_mem=max_mem, rz_order=rz_order)
+        opt.burn(s, mode='polish', n_loop=4, fractol=3e-4, desc=desc +
+                'addsub-polish', max_mem=max_mem, rz_order=rz_order)
+
 
 def link_zscale(st):
     """Links the state ``st`` psf zscale with the global zscale"""
-    #Should be made more generic to other parameters and categories
+    # Should be made more generic to other parameters and categories
     psf = st.get('psf')
     psf.param_dict['zscale'] = psf.param_dict['psf-zscale']
     psf.params[2] = 'zscale'
@@ -646,6 +652,7 @@ def link_zscale(st):
     psf.param_dict.pop('psf-zscale')
     st.trigger_parameter_change()
     st.reset()
+
 
 def finish_state(st, desc='finish-state'):
     """
@@ -668,7 +675,6 @@ def finish_state(st, desc='finish-state'):
         `peri.opt.addsubtract.add_subtract_locally`
         `peri.opt.optimize.finish`
     """
-    #1. Missing particles
     for _ in xrange(3):
         npart, poses = addsub.add_subtract_locally(st, region_depth=7)
         if npart == 0:

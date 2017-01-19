@@ -5,6 +5,7 @@ https://en.wikipedia.org/wiki/Test_functions_for_optimization
 """
 import numpy as np
 
+
 def himmelblau(xy):
     """
     Himmelblau's function, as a set of residuals (cost = sum(residuals**2))
@@ -28,10 +29,11 @@ def himmelblau(xy):
     ------
     https://en.wikipedia.org/wiki/Himmelblau%27s_function
     """
-    x,y = xy
+    x, y = xy
     r1 = x*x + y
     r2 = y*y + x
     return np.array([r1, r2])
+
 
 def simple_sphere(xy):
     """
@@ -50,6 +52,7 @@ def simple_sphere(xy):
             The residuals, which are just xy
     """
     return xy
+
 
 def rosenbrock(xy, A=10):
     """
@@ -72,10 +75,11 @@ def rosenbrock(xy, A=10):
         2-element list-like
             The residuals of the model.
     """
-    x,y = xy
+    x, y = xy
     r1 = x
     r2 = A*(y-x*x)
-    return np.array([r1,r2])
+    return np.array([r1, r2])
+
 
 def rosenbrock_gen(xy, A=10, order=3):
     """
@@ -104,10 +108,11 @@ def rosenbrock_gen(xy, A=10, order=3):
         2-element list-like
             The residuals of the model.
     """
-    x,y = xy
+    x, y = xy
     r1 = x
     r2 = A*(y-x**order / order)
-    return np.array([r1,r2])
+    return np.array([r1, r2])
+
 
 def rosenbrock_dd(xd, A=10):
     """
@@ -143,6 +148,7 @@ def rosenbrock_dd(xd, A=10):
     r1 = A*(xp - xi*xi)
     r2 = 1 - xi
     return np.append(r1, r2)
+
 
 def rosenbrock_gendd(xd, A=10, order=3):
     """
@@ -181,6 +187,7 @@ def rosenbrock_gendd(xd, A=10, order=3):
     r2 = 1 - xi
     return np.append(r1, r2)
 
+
 def beale(xy):
     """
     The Beale function, as a set of residuals (cost = sum(residuals**2))
@@ -204,7 +211,8 @@ def beale(xy):
     r1 = x - x*y
     r2 = x - x*y*y
     r3 = x - x*y*y*y
-    return np.array([r1,r2,r3])
+    return np.array([r1, r2, r3])
+
 
 def booth(xy):
     """
@@ -224,10 +232,10 @@ def booth(xy):
         2-element list-like
             The residuals of the model.
     """
-    x,y = xy
+    x, y = xy
     r1 = x + 2*y
     r2 = y + 2*x
-    return np.array([r1,r2])
+    return np.array([r1, r2])
 
 # def increase_model_dimension(func):
     # """
@@ -235,4 +243,3 @@ def booth(xy):
     # [xD, xN] where x is an int..? coupling would be nice...
     # """
     # pass
-
