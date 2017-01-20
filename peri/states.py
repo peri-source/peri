@@ -61,6 +61,11 @@ rts : boolean
     If True, functions return the final answer along with the final func
     evaluation so that it may be passed onto other calls.
 
+nout : Int, optional
+    How many objects the function returns. Allows for gradient of multiple
+    things (e.g. residuals + error) at the same time in a nice, contiguous
+    way. Default is 1
+
 **kwargs :
     Arguments to `func`
 """
@@ -218,7 +223,7 @@ class State(comp.ParameterGroup):
     def param_all(self):
         return self.params
 
-    def _grad_one_param(self, funct, p, dl=2e-5, rts=False, **kwargs):
+    def _grad_one_param(self, funct, p, dl=2e-5, rts=False, nout=1, **kwargs):
         """
         Gradient of `func` wrt a single parameter `p`. (see _graddoc)
         """
@@ -230,7 +235,10 @@ class State(comp.ParameterGroup):
 
         if rts:
             self.update(p, vals)
-        return (f1 - f0) / dl
+        if nout == 1:
+            return (f1 - f0) / dl
+        else:
+            return [(f1[i] - f0[i]) / dl for i in xrange(nout)]
 
     def _hess_two_param(self, funct, p0, p1, dl=2e-5, rts=False, **kwargs):
         """
@@ -255,7 +263,7 @@ class State(comp.ParameterGroup):
             self.update(p1, vals1)
         return (f11 - f10 - f01 + f00) / (dl**2)
 
-    def _grad(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
+    def _grad(self, funct, params=None, dl=2e-5, rts=False, nout=1, **kwargs):
         """
         Gradient of `func` wrt a set of parameters params. (see _graddoc)
         """
@@ -266,13 +274,26 @@ class State(comp.ParameterGroup):
         f0 = funct(**kwargs)
 
         # get the shape of the entire gradient to return and make an array
-        shape = f0.shape if isinstance(f0, np.ndarray) else (1,)
-        shape = (len(ps),) + shape
-        grad = np.zeros(shape)  #must be preallocated for mem reasons
+        calc_shape = (
+                lambda ar: (len(ps),) + (ar.shape if isinstance(
+                ar, np.ndarray) else (1,)))
+        if nout == 1:
+            shape = calc_shape(f0)
+            grad = np.zeros(shape)  # must be preallocated for mem reasons
+        else:
+            shape = [calc_shape(f0[i]) for i in xrange(nout)]
+            grad = [np.zeros(shp) for shp in shape]
 
         for i, p in enumerate(ps):
-            grad[i] = self._grad_one_param(funct, p, dl=dl, rts=rts, **kwargs)
-        return grad #was np.squeeze(grad)
+            if nout == 1:
+                grad[i] = self._grad_one_param(funct, p, dl=dl, rts=rts,
+                        nout=nout, **kwargs)
+            else:
+                stuff = self._grad_one_param(funct, p, dl=dl, rts=rts,
+                        nout=nout, **kwargs)
+                for a in xrange(nout): grad[a][i] = stuff[a]
+        return grad  # was np.squeeze(grad)
+
 
     def _jtj(self, funct, params=None, dl=2e-5, rts=False, **kwargs):
         """
@@ -328,7 +349,11 @@ class State(comp.ParameterGroup):
 
         def r_e(**kwargs):
             """sliced etc residuals, with state.error appended on"""
-            return np.append(r(**kwargs), np.copy(self.error), axis=None)
+            return r(**kwargs), np.copy(self.error)
+
+        def m_e(**kwargs):
+            """sliced etc residuals, with state.error appended on"""
+            return r(**kwargs), np.copy(self.error)
 
         # set the member functions using partial
         self.fisherinformation = partial(self._jtj, funct=m)
@@ -338,7 +363,8 @@ class State(comp.ParameterGroup):
         self.hessmodel = partial(self._hess, funct=m)
         self.JTJ = partial(self._jtj, funct=r)
         self.J = partial(self._grad, funct=r)
-        self.J_e = partial(self._grad, funct=r_e)
+        self.J_e = partial(self._grad, funct=r_e, nout=2)
+        self.gradmodel_e = partial(self._grad, funct=m_e, nout=2)
 
         # add the appropriate documentation to the following functions
         self.fisherinformation.__doc__ = _graddoc + _sampledoc

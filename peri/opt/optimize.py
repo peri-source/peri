@@ -101,10 +101,14 @@ def get_rand_Japprox(s, params, num_inds=1000, include_cost=False, **kwargs):
         return_inds = slice(0, None)
         slicer = [slice(0, None)]*len(s.residuals.shape)
     if include_cost:
-        J = s.J_e(params=params, inds=inds, slicer=slicer,flat=False, **kwargs)
+        Jact, ge = s.gradmodel_e(params=params, inds=inds, slicer=slicer,flat=False,
+                **kwargs)
+        Jact *= -1
+        J = [Jact, ge]
     else:
-        J = s.J(params=params, inds=inds, slicer=slicer, flat=False, **kwargs)
-    CLOG.debug('JTJ:\t%f' % (time.time()-start_time))
+        J = -s.gradmodel(params=params, inds=inds, slicer=slicer, flat=False,
+                **kwargs)
+    CLOG.debug('J:\t%f' % (time.time()-start_time))
     return J, return_inds
 
 def name_globals(s, remove_params=None):
@@ -236,6 +240,8 @@ def halve_randomly(blk):
 
 def low_mem_sq(m, step=100000):
     """np.dot(m, m.T) with low mem usage, by doing it in small steps"""
+    if not m.flags.c_contiguous:
+        raise ValueError('m must be C ordered for this to work with less mem.')
     # -- can make this even faster with pre-allocating arrays, but not worth it
     # right now
     # mmt = np.zeros([m.shape[0], m.shape[0]])  #6us
@@ -1323,6 +1329,8 @@ class LMEngine(object):
         # np.dot(j, j.T) is slightly faster but 2x as much mem
         step = np.ceil(1e-2 * self.J.shape[1]).astype('int')  # 1% more mem...
         self.JTJ = low_mem_sq(self.J, step=step)
+        #copies still, since J is not C -ordered but a slice of j_e...
+        #doing self.J.copy() works but takes 2x as much ram..
         self._fresh_JTJ = True
         self._J_update_counter = 0
         if np.any(np.isnan(self.JTJ)):
@@ -1752,11 +1760,11 @@ class LMGlobals(LMEngine):
                 # self.param_names, num_inds=self.num_pix)
         je, self._inds = get_rand_Japprox(self.state, self.param_names,
                 num_inds=self.num_pix, include_cost=True)
-        self.J = je[:,:-1]
+        self.J = je[0]
         #Storing the _direction_ of the exact gradient of the model, rescaled
         #as to the size we expect from the inds:
         rescale = float(self.J.shape[1])/self.state.residuals.size
-        self._graderr = je[:,-1] * rescale
+        self._graderr = je[1] * rescale
 
     def calc_residuals(self):
         return self.state.residuals.ravel()[self._inds].copy()
