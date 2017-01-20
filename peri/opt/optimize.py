@@ -233,6 +233,29 @@ def halve_randomly(blk):
     blk2[inds[inds.size/2:]] = True
     return [blk1,blk2]
 
+
+def low_mem_sq(m, step=100000):
+    """np.dot(m, m.T) with low mem usage, by doing it in small steps"""
+    # -- can make this even faster with pre-allocating arrays, but not worth it
+    # right now
+    # mmt = np.zeros([m.shape[0], m.shape[0]])  #6us
+    # mt_tmp = np.zeros([step, m.shape[0]])
+    # for a in xrange(0, m.shape[1], step):
+        # mx = min(a+step, m.shape[1])
+        # mt_tmp[:mx-a,:] = m.T[a:mx]
+        # # np.dot(m_tmp, m.T, out=mmt[a:mx])
+        # # np.dot(m, m[a:mx].T, out=mmt[:, a:mx])
+        # np.dot(m[:,a:mx], mt_tmp[:mx], out=mmt)
+    # return mmt
+    mmt = np.zeros([m.shape[0], m.shape[0]])  #6us
+    # m_tmp = np.zeros([step, m.shape[1]])
+    for a in xrange(0, m.shape[0], step):
+        mx = min(a+step, m.shape[1])
+        # m_tmp[:] = m[a:mx]
+        # np.dot(m_tmp, m.T, out=mmt[a:mx])
+        np.dot(m, m[a:mx].T, out=mmt[:, a:mx])
+    return mmt
+
 #=============================================================================#
 #               ~~~~~  Particle Optimization stuff  ~~~~~
 #=============================================================================#
@@ -1297,10 +1320,12 @@ class LMEngine(object):
     def update_J(self):
         """Updates J, JTJ, and internal counters."""
         self.calc_J()
-        self.JTJ = np.dot(self.J, self.J.T)
+        # np.dot(j, j.T) is slightly faster but 2x as much mem
+        step = np.ceil(1e-2 * self.J.shape[1]).astype('int')  # 1% more mem...
+        self.JTJ = low_mem_sq(self.J, step=step)
         self._fresh_JTJ = True
         self._J_update_counter = 0
-        if np.any(np.isnan(self.J)) or np.any(np.isnan(self.JTJ)):
+        if np.any(np.isnan(self.JTJ)):
             raise FloatingPointError('J, JTJ have nans.')
         #Update self._exp_err
         self._exp_err = self.error - self.find_expected_error(delta_params='perfect')
