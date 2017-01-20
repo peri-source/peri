@@ -3,7 +3,9 @@ import matplotlib as mpl
 import matplotlib.pylab as pl
 from matplotlib.gridspec import GridSpec
 
-from peri.mc import sample
+from peri.mc import sample  # FIXME should be opt
+from peri.util import Tile
+
 
 class OrthoManipulator(object):
     def __init__(self, state, size=8, cmap_abs='bone', cmap_diff='RdBu',
@@ -360,42 +362,6 @@ class OrthoManipulator(object):
 
         self.register_events()
 
-from peri.comp import ilms, objs, psfs, comp
-from peri import states
-class OrthoPrefeature(OrthoManipulator):
-    def __init__(self, im, pos, rad, slab=None, zscale=1.0, **kwargs):
-        """
-        Parameters
-        ----------
-            im : peri.util.Image or RawImage instance
-                The image to check pre-featuring on. 
-            pos : [N,3] numpy.ndarray
-                The initial guess for the particle positions
-            rad : N-element numpy.ndarray
-                The initial guess for the particle radii
-            slab : peri.comp object or None
-                If not None, the [collection of] any slabs in the image.
-            zscale : Float
-                zscale for object
-            **kwargs : All keyword args to OrthoManipulator. 
-        """
-        if slab is not None:
-            o = comp.ComponentCollection(
-                    [
-                        objs.PlatonicSpheresCollection(pos, rad,zscale=zscale),
-                        slab
-                    ],
-                    category='obj'
-                )
-        else:
-            o = objs.PlatonicSpheresCollection(pos, rad, zscale=zscale)
-        p = psfs.IdentityPSF()
-        i = ilms.LegendrePoly2P1D(order=(1,1,1), category='ilm')
-        b = ilms.LegendrePoly2P1D(order=(1,1,1), category='bkg')
-        c = comp.GlobalScalar('offset', 0.0)
-        st = states.ImageState(im, [o, i, b, c, p])
-        super(OrthoPrefeature, self).__init__(st, **kwargs)
-
 #=============================================================================
 # A simpler version for a single 3D field viewer
 #=============================================================================
@@ -543,3 +509,142 @@ class OrthoViewer(object):
         if p is not None:
             self.slices = p
         self.draw()
+
+class OrthoPrefeature(OrthoViewer):
+    def __init__(self, image, pos, rad=None, cmap='Greys_r', part_col=
+                [0., 1., 1., 1.], **kwargs):
+        """
+        Interactive viewing of a featured image, showing which particles
+        are missing.
+
+        Parameters
+        ----------
+            im : numpy.ndarray
+                The image to check pre-featuring on.
+            pos : [N,3] numpy.ndarray
+                The initial guess for the particle positions, in pixel units
+            rad : Float, for now, optional.
+                The width of the particles to plot. Default is 1.
+            part_col : list-like, optional
+                Color of the particles.... RGBA. Default is cyan.
+            **kwargs : All keyword args to OrthoViewer....
+        """
+        #Idea is this:
+        #we plt.cmap(image) and combine with an alpha'd overlay of an iamge
+        #of Gaussian blurs on the particle positions, of a complementary
+        #color.
+        #2nd step: we can add a add/remove/etc function to add particles
+        #3rd step: radii
+        self.image = image.copy()
+        self.pos = pos
+        if rad is None:
+            self.rad = 2.
+        else:
+            self.rad = rad
+        super(OrthoPrefeature, self).__init__(image, cmap=cmap, **kwargs)
+        if self.vmin is None:
+            self.vmin = image.min()
+        if self.vmax is None:
+            self.vmax = image.max()
+
+        if type(self.cmap) == str:
+            self._cmap = mpl.cm.get_cmap(self.cmap)
+        else:  #better be a cmap function
+            self._cmap = self.cmap
+        self.particle_field = np.zeros(image.shape, dtype='float')
+        self.part_col = part_col
+
+        self._draw_im()
+        self.update_particle_field(poses=None)
+        self.update_field()
+        self.draw()
+
+    def _draw_im(self):
+        rscl = np.clip((self.image - self.vmin) / (self.vmax - self.vmin), 0,1)
+        self._image = self._cmap(rscl)
+
+    def _particle_func(self, coords, pos, wid):
+        """Draws a gaussian. Coords = [3,n]"""
+        dx, dy, dz = [c - p for c,p in zip(coords, pos)]
+        dr2 = dx*dx + dy*dy + dz*dz
+        return np.exp(-dr2/(2*wid*wid))
+
+    def update_particle_field(self, poses=None, add=True):
+        if poses is None:
+            poses = self.pos
+        wid = self.rad
+        for p in poses:
+            #1. get tile
+            t = Tile(p-2*wid, p+2*wid, mins=0, maxs=self.image.shape)
+            #2. update:
+            c = t.coords(form='broadcast')
+            if add:
+                self.particle_field[t.slicer] += self._particle_func(c, p, wid)
+            else:
+                self.particle_field[t.slicer] -= self._particle_func(c, p, wid)
+
+    def update_field(self, poses=None):
+        """updates self.field"""
+        m = self.particle_field
+        part_color = np.zeros(self._image.shape)
+        for a in xrange(4): part_color[:,:,:,a] = self.part_col[a]
+        self.field = np.zeros(self._image.shape)
+        for a in xrange(4):
+            self.field[:,:,:,a] = m*part_color[:,:,:,a] + (1-m) * self._image[:,:,:,a]
+
+    def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
+        im, vmin, vmax, cmap = self.field, self.vmin, self.vmax, self.cmap
+
+        if self.fourier:
+            im = np.abs(im)
+
+        slices = self.slices
+        int_slice = np.clip(np.round(slices), 0,
+                            np.array(im.shape[:3])-1).astype('int')
+
+        # if vmin is None:
+            # vmin = im.min()
+        # if vmax is None:
+            # vmax = im.max()
+
+        # if self.cmap == 'RdBu_r':
+            # val = np.max(np.abs([vmin, vmax]))
+            # vmin = -val
+            # vmax = val
+
+        self.g['xy'].cla()
+        self.g['yz'].cla()
+        self.g['xz'].cla()
+        self.g['in'].cla()
+
+        self.g['xy'].imshow(im[int_slice[0],:,:], cmap=cmap)
+        self.g['xy'].hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
+        self.g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(self.g['xy'])
+
+        self.g['yz'].imshow(im[:,int_slice[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
+        self.g['yz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
+        self.g['yz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(self.g['yz'])
+
+        self.g['xz'].imshow(np.rollaxis(im[:,:,int_slice[2]], 1), cmap=cmap)
+        self.g['xz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
+        self.g['xz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
+        self._format_ax(self.g['xz'])
+
+        if self.dohist:
+            tt = np.real(self.field).ravel()
+            c, s = tt.mean(), 5*tt.std()
+            y,x = np.histogram(tt, bins=np.linspace(c-s, c+s, 700), normed=True)
+            x = (x[1:] + x[:-1])/2
+
+            self.g['in'].plot(x, y, 'k-', lw=1)
+            self.g['in'].fill_between(x, y, 1e-10, alpha=0.5)
+            self.g['in'].set_yscale('log', nonposy='clip')
+
+            self.g['in'].set_xlim(c-s, c+s)
+            self.g['in'].set_ylim(1e-3*y.max(), 1.4*y.max())
+
+        self._format_ax(self.g['in'])
+
+        pl.draw()
