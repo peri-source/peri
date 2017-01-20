@@ -353,7 +353,7 @@ class State(comp.ParameterGroup):
 
         def m_e(**kwargs):
             """sliced etc residuals, with state.error appended on"""
-            return r(**kwargs), np.copy(self.error)
+            return m(**kwargs), np.copy(self.error)
 
         # set the member functions using partial
         self.fisherinformation = partial(self._jtj, funct=m)
