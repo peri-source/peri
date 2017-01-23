@@ -3,7 +3,7 @@ import matplotlib as mpl
 import matplotlib.pylab as pl
 from matplotlib.gridspec import GridSpec
 
-from peri.mc import sample  # FIXME should be opt
+import peri.opt.optimize as opt
 from peri.util import Tile
 
 
@@ -317,8 +317,10 @@ class OrthoManipulator(object):
         if p is not None:
             print "Optimizing particle near", p
             n = self.state.obj_closest_particle(p)
-            bl = self.state.param_particle(n)
-            sample.sample_state(self.state, bl, stepout=0.1, doprint=True, N=3)
+            old_err = self.state.error
+            _ = opt.do_levmarq_particles(self.state, np.array([n]), max_iter=2)
+            new_err = self.state.error
+            print '{}->{}'.format(old_err, new_err)
 
         self.set_field()
         self.draw()
