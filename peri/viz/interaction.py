@@ -514,8 +514,15 @@ class OrthoPrefeature(OrthoViewer):
     def __init__(self, image, pos, rad=None, cmap='Greys_r', part_col=
                 [0., 1., 1., 1.], **kwargs):
         """
-        Interactive viewing of a featured image, showing which particles
-        are missing.
+        Interactive viewing of a 3D featured image, to examine the quality of
+        initial featuring.
+
+        There are 3 modes of the viewer, accessed by pressing these keys:
+         * 'V' : switch to view mode (click window to move view)
+         * 'A' : add particle mode (click position to add)
+         * 'R' : remove particle mode (click position to remove)
+        The viewer starts in view mode.
+        The complete list of particle positions is stored in ``self.pos``
 
         Parameters
         ----------
@@ -523,24 +530,22 @@ class OrthoPrefeature(OrthoViewer):
                 The image to check pre-featuring on.
             pos : [N,3] numpy.ndarray
                 The initial guess for the particle positions, in pixel units
-            rad : Float, for now, optional.
-                The width of the particles to plot. Default is 1.
+            rad : Float or None, optional.
+                The width of the particles to plot. Default is 2.
+            cmap : String, optional
+                A valid matplotlib colormap. Default is `'Greys_r'`.s
             part_col : list-like, optional
                 Color of the particles.... RGBA. Default is cyan.
             **kwargs : All keyword args to OrthoViewer....
         """
-        #Idea is this:
-        #we plt.cmap(image) and combine with an alpha'd overlay of an iamge
-        #of Gaussian blurs on the particle positions, of a complementary
-        #color.
-        #2nd step: we can add a add/remove/etc function to add particles
-        #3rd step: radii
+        #Possible to modify this to include varying radii
         self.image = image.copy()
         self.pos = pos
         if rad is None:
             self.rad = 2.
         else:
             self.rad = rad
+        self.mode = 'view'
         super(OrthoPrefeature, self).__init__(image, cmap=cmap, **kwargs)
         if self.vmin is None:
             self.vmin = image.min()
@@ -648,3 +653,95 @@ class OrthoPrefeature(OrthoViewer):
         self._format_ax(self.g['in'])
 
         pl.draw()
+
+    def register_events(self):
+        self._calls = []
+        self._calls.append(self.fig.canvas.mpl_connect('key_press_event',
+                self.key_press_event))
+
+        if self.mode == 'view':
+            self._calls.append(self.fig.canvas.mpl_connect(
+                    'button_press_event', self.mouse_press_view))
+        elif self.mode == 'add':
+            self._calls.append(self.fig.canvas.mpl_connect(
+                    'button_press_event', self.mouse_press_add))
+        elif self.mode == 'remove':
+            self._calls.append(self.fig.canvas.mpl_connect(
+                    'button_press_event', self.mouse_press_remove))
+
+    def key_press_event(self, event):
+        self.event = event
+
+        if event.key == 'v':
+            self.mode = 'view'
+        elif event.key == 'a':
+            self.mode = 'add'
+        elif event.key == 'r':
+            self.mode = 'remove'
+
+        print "Switching mode to", self.mode
+
+        for c in self._calls:
+            self.fig.canvas.mpl_disconnect(c)
+
+        self.register_events()
+
+    def mouse_press_add(self, event):
+        self.event = event
+
+        p = self._pt_xyz(event)
+        if p is not None:
+            p = np.array(p)
+
+            print "Adding particle at", p
+            self.pos = np.append(self.pos, p.reshape((1,-1)), axis=0)
+        self.update_particle_field(poses=p.reshape((1,-1)))
+        self.update_field()
+        self.draw()
+
+    def mouse_press_remove(self, event):
+        self.event = event
+
+        p = self._pt_xyz(event)
+        if p is not None:
+            print "Removing particle near", p
+            rp = self._remove_closest_particle(p)
+        self.update_particle_field(poses=rp.reshape((1,-1)), add=False)
+        self.update_field()
+        self.draw()
+
+    def _remove_closest_particle(self, p):
+        """removes the closest particle in self.pos to ``p``"""
+        #1. find closest pos:
+        dp = self.pos - p
+        dist2 = (dp*dp).sum(axis=1)
+        ind = dist2.argmin()
+        rp = self.pos[ind].copy()
+        #2. delete
+        self.pos = np.delete(self.pos, ind, axis=0)
+        return rp
+
+    def _pt_xyz(self, event):
+        x0 = event.xdata
+        y0 = event.ydata
+
+        f = False
+        if event.inaxes == self.g['xy']:
+            x = x0
+            y = y0
+            z = self.slices[0]
+            f = True
+        if event.inaxes == self.g['yz']:
+            x = x0
+            y = self.slices[1]
+            z = y0
+            f = True
+        if event.inaxes == self.g['xz']:
+            x = self.slices[2]
+            y = y0
+            z = x0
+            f = True
+
+        if f:
+            return np.array((z,y,x))
+        return None
