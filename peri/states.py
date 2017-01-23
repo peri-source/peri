@@ -161,7 +161,7 @@ class State(comp.ParameterGroup):
         \\left(\\frac{D_i - M_i(\\theta)}{\sigma}\\right)^2
         + \\log{(2\pi \sigma^2)} \\right]`
         """
-        sig = self.hyper_parameters.get_values('sigma')
+        sig = self.hyper_parameters.get_values('sigma')  # FIXME there is no self.hyperparameters anywhere in the module
         err = self.error
         N = np.size(self.residuals)
         return -0.5*err/sig**2 - np.log(np.sqrt(2*np.pi)*sig)*N
@@ -710,6 +710,10 @@ class ImageState(State, comp.ComponentCollection):
         sig, isig = self.sigma, 1.0/self.sigma
         nlogs = -np.log(np.sqrt(2*np.pi)*sig)*res.size
         return -0.5*isig*isig*np.dot(res.flat, res.flat) + nlogs
+
+    def update_sigma(self, sigma):
+        self.sigma = sigma
+        self._loglikelihood = self._calc_loglikelihood()
 
     def update_from_model_change(self, oldmodel, newmodel, tile):
         """
