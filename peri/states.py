@@ -89,7 +89,8 @@ flat : boolean
 # Super class of State, has all basic components and structure
 #=============================================================================
 class State(comp.ParameterGroup):
-    def __init__(self, params, values, logpriors=None, **kwargs):
+    def __init__(self, params, values, logpriors=None, hyper_params=['sigma'],
+                hyper_values=[0.04], **kwargs):
         """
         A model and corresponding functions to perform a fit to data using a
         variety of optimization routines. A model takes parameters and values
@@ -107,6 +108,13 @@ class State(comp.ParameterGroup):
         logpriors : list of `peri.prior.Prior`
             Priors (constraints) to apply to parameters
 
+        hyper_params : list of strings, optional
+            The names of any hyper-parameters (should be a unique set).
+            Default is `['sigma']`
+
+        hyper_values : list of numbers, optional
+            The corresponding values of the hyper-parameters. Default `[0.04]`
+
         kwargs :
             Arguments to pass to super class :class:`peri.comp.ParameterGroup`
             including `ordered` and `category`.
@@ -115,6 +123,7 @@ class State(comp.ParameterGroup):
         self.logpriors = logpriors
 
         super(State, self).__init__(params, values, **kwargs)
+        self.hyper_parameters = comp.ParameterGroup(hyper_params, hyper_values)
         self.build_funcs()
 
     @property
@@ -161,7 +170,8 @@ class State(comp.ParameterGroup):
         \\left(\\frac{D_i - M_i(\\theta)}{\sigma}\\right)^2
         + \\log{(2\pi \sigma^2)} \\right]`
         """
-        sig = self.hyper_parameters.get_values('sigma')  # FIXME there is no self.hyperparameters anywhere in the module
+        # FIXME must include priors! either in this or in another @property
+        sig = self.hyper_parameters.get_values('sigma')
         err = self.error
         N = np.size(self.residuals)
         return -0.5*err/sig**2 - np.log(np.sqrt(2*np.pi)*sig)*N
@@ -171,7 +181,7 @@ class State(comp.ParameterGroup):
         """
         Class property: logprior calculated from the sum of all prior objects
         """
-        pass
+        pass  # FIXME should return the sum of the log priors
 
     def update(self, params, values):
         """
@@ -186,7 +196,7 @@ class State(comp.ParameterGroup):
         value : number or list of numbers
             Values of those parameters which to update
         """
-        return super(State, self).update(params, values)
+        return super(State, self).update(params, values)  # FIXME needs to update priors
 
     def push_update(self, params, values):
         """
@@ -500,7 +510,7 @@ class ImageState(State, comp.ComponentCollection):
         model_as_data : boolean
             Whether to use the model image as the true image after initializing
         """
-        self.dim = len(image.get_image().shape)
+        self.dim = image.get_image().ndim
 
         self.sigma = sigma
         self.priors = priors
@@ -631,6 +641,7 @@ class ImageState(State, comp.ComponentCollection):
         number. If there is only one component affected then difference image
         updates will be employed.
         """
+        # FIXME needs to update priors
         comps = self.affected_components(params)
 
         if len(comps) == 0:
@@ -699,9 +710,11 @@ class ImageState(State, comp.ComponentCollection):
         return self._data - self._model
 
     def _calc_logprior(self):
-        return 1.0 # FIXME
+        return 1.0 # FIXME this should be moved to State.logprior
 
     def _calc_loglikelihood(self, model=None, tile=None):
+        # FIXME delete this and put in state, or leave it here as something
+        # explicitly local
         if model is None:
             res = self.residuals
         else:
@@ -712,6 +725,7 @@ class ImageState(State, comp.ComponentCollection):
         return -0.5*isig*isig*np.dot(res.flat, res.flat) + nlogs
 
     def update_sigma(self, sigma):
+        # FIXME hyperparameters....
         self.sigma = sigma
         self._loglikelihood = self._calc_loglikelihood()
 
