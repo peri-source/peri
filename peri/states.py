@@ -858,4 +858,4 @@ def load(filename):
     path = path or '.'
 
     with util.indir(path):
-        return pickle.load(open(filename, 'rb'))
+        return pickle.load(open(name, 'rb'))
