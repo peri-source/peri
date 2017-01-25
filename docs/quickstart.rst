@@ -142,3 +142,9 @@ See :doc:`Optimization </optimization>` for additional details, tips, and tricks
 
     positions = st.obj_get_positions()
     radii = st.obj_get_radii()
+
+
+Missing things:
+* tile
+* slab, component collection
+* starting with a small state

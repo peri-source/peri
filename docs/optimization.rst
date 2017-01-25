@@ -2,22 +2,21 @@
 Optimization and sampling
 *************************
 
-..I'm assuming that `initial guess for particle positions` is not part of
-..optimization
+As mentioned in the :doc:`Walkthrough </walkthrough>`, PERI works by fitting a 
+generative model to data. In the :doc:`Walkthrough </walkthrough>`, we obtained 
+an initial guess for the particle positions and radii from centroid methods. We 
+used this initial guess to create a state ``st`` with all the components of the 
+model. We now need to optimize the model. 
 
-As mentioned in the `Introduction`_, PERI works by fitting a generative model
-to the data. Now that you've selected or designed a `Generative Model`_, the
-next step is optimizing that model.
-
-In section BLAH, we obtained an initial guess for the particle positions and
-radii from centroid methods. We used this initial guess to create a state
-``st`` with all the components of the model. We now need to optimize the model.
-First, the centroid methods do not provide a guess for global parameters
-such as the illumination field or the point-spread function. Second, the
-centroid methods frequently miss or mis-feature many particles. Third, we would
-like to completely optimize the model to get maximally-accurate position and
-radii measurements. In this section, we'll discuss how to optimize a
+First, the centroid methods do not provide a guess for global parameters such 
+as the illumination field or the point-spread function. Second, the centroid 
+methods frequently miss or mis-feature many particles. Third, we would like to 
+completely optimize the model to get maximally-accurate position and radii 
+measurements. In this section, we'll discuss how to optimize a
 :class:`peri.states.ImageState` and accomplish all three of these goals.
+
+Most of these steps are implemented in the ``peri.runner`` convenience 
+functions. **you need to update this since runner has changed**
 
 Initial Optimization
 --------------------
