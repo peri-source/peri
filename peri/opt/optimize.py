@@ -2814,8 +2814,8 @@ def fit_comp(new_comp, old_comp, **kwargs):
     old_comp : peri.comp
         The old ilm to match to.
 
-    **kwargs Parameters
-    -------------------
+    Other Parameters
+    ----------------
         Any keyword arguments to be passed to the optimizer LMGlobals
         through do_levmarq.
 
