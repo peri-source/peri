@@ -32,8 +32,10 @@ import peri.opt.addsubtract as addsub
 
 RLOG = logger.log.getChild('runner')
 
+# FIXME would be good to copy particular things from a state..... e.g. an
+# optimized ilm or switching out an optimized psf
 
-def locate_spheres( image, feature_rad, dofilter=False, order=(3 ,3, 3),
+def locate_spheres(image, feature_rad, dofilter=False, order=(3 ,3, 3),
                     trim_edge=True, **kwargs):
     """
     Get an initial featuring of sphere positions in an image.
@@ -305,10 +307,6 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
     guess.
     See get_initial_featuring's __doc__ for params.
     """
-    if min_rad is None:
-        min_rad = 0.5 * rad.mean()
-    if max_rad is None:
-        max_rad = 1.5 * rad.mean()  # FIXME this could be a problem for bidisperse suspensions
     if slab is not None:
         o = comp.ComponentCollection(
                 [
@@ -333,7 +331,16 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
 
     opt.do_levmarq(s, ['ilm-scale'], max_iter=1, run_length=6, max_mem=max_mem)
     states.save(s, desc=desc+'initial')
+    optimize_from_initial(s, max_mem=max_mem, invert=invert, desc=desc,
+            rz_order=rz_order)
 
+
+def optimize_from_initial(s, max_mem=1e9, invert=True, desc='', rz_order=3,
+        min_rad=None, max_rad=None):
+    """
+    Optimizes a state from an initial set of positions and radii, without
+    any known microscope parameters.
+    """
     RLOG.info('Initial burn:')
     opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc + 'initial-burn',
             max_mem=max_mem, include_rad=False)
@@ -341,6 +348,11 @@ def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
             max_mem=max_mem, include_rad=True)
 
     RLOG.info('Start add-subtract')
+    rad = s.obj_get_radii()
+    if min_rad is None:
+        min_rad = 0.5 * rad.mean()
+    if max_rad is None:
+        max_rad = 1.5 * rad.mean()  # FIXME this could be a problem for bidisperse suspensions
     addsub.add_subtract(s, tries=30, min_rad=min_rad, max_rad=max_rad,
             invert=invert)
     states.save(s, desc=desc+'initial-addsub')
@@ -647,7 +659,7 @@ def link_zscale(st):
     # Should be made more generic to other parameters and categories
     psf = st.get('psf')
     psf.param_dict['zscale'] = psf.param_dict['psf-zscale']
-    psf.params[2] = 'zscale'
+    psf.params[2] = 'zscale'  # FIXME magic 2
     psf.global_zscale = True
     psf.param_dict.pop('psf-zscale')
     st.trigger_parameter_change()
