@@ -110,10 +110,12 @@ class State(comp.ParameterGroup):
 
         hyper_params : list of strings, optional
             The names of any hyper-parameters (should be a unique set).
-            Default is `['sigma']`
+            Stored as a `peri.comp.ParameterGroup`. Default is `['sigma']`,
+            the standard-deviation of the noise distribution.
 
         hyper_values : list of numbers, optional
-            The corresponding values of the hyper-parameters. Default `[0.04]`
+            The corresponding values of the hyper-parameters. Stored as a
+            `peri.comp.ParameterGroup`. Default is `[0.04]`
 
         kwargs :
             Arguments to pass to super class :class:`peri.comp.ParameterGroup`
@@ -170,18 +172,27 @@ class State(comp.ParameterGroup):
         \\left(\\frac{D_i - M_i(\\theta)}{\sigma}\\right)^2
         + \\log{(2\pi \sigma^2)} \\right]`
         """
-        # FIXME must include priors! either in this or in another @property
         sig = self.hyper_parameters.get_values('sigma')
         err = self.error
-        N = np.size(self.residuals)
+        N = np.size(self.data)
         return -0.5*err/sig**2 - np.log(np.sqrt(2*np.pi)*sig)*N
+
+    @property
+    def logposterior(self):
+        """
+        Class property: log of posterior prob (including likelihood
+        calculated by the model error and priors):
+
+        self.logprior + self.loglikelihood
+        """
+        return self.logprior + self.loglikelihood
 
     @property
     def logprior(self):
         """
         Class property: logprior calculated from the sum of all prior objects
         """
-        pass  # FIXME should return the sum of the log priors
+        return 0  # FIXME should return the sum of the log priors
 
     def update(self, params, values):
         """
@@ -196,7 +207,26 @@ class State(comp.ParameterGroup):
         value : number or list of numbers
             Values of those parameters which to update
         """
-        return super(State, self).update(params, values)  # FIXME needs to update priors
+        return super(State, self).update(params, values)
+
+    def update_hyper(self, params, values):
+        """
+        Update any single hyper parameter or group of parameters ``params``
+        with ``values``.
+
+        Parameters
+        ----------
+        params : string or list of strings
+            Parameter names which to update
+
+        value : number or list of numbers
+            Values of those parameters which to update
+        """
+        self.hyper_parameters.update(params, values)
+
+    def update_sigma(self, sigma):
+        """Updates the expected sigma of the noise distribution"""
+        self.update_hyper('sigma', sigma)
 
     def push_update(self, params, values):
         """
@@ -452,17 +482,6 @@ class PolyFitState(State):
         """ Get the current model fit to the data """
         return self._model
 
-    @property
-    def loglikelihood(self):
-        sig = self.param_dict['sigma']
-        return (
-            -(0.5 * (self.residuals/sig)**2).sum()
-            -np.log(np.sqrt(2*np.pi)*sig)*self._data.shape[0]
-        )
-
-    @property
-    def logprior(self):
-        return 1.0
 
 #=============================================================================
 # Image state which specializes to components with regions, etc.
@@ -600,7 +619,7 @@ class ImageState(State, comp.ComponentCollection):
 
     @property
     def loglikelihood(self):
-        return self._logprior + self._loglikelihood
+        return self._loglikelihood
 
     def get_update_io_tiles(self, params, values):
         """
@@ -710,11 +729,11 @@ class ImageState(State, comp.ComponentCollection):
         return self._data - self._model
 
     def _calc_logprior(self):
-        return 1.0 # FIXME this should be moved to State.logprior
+        """Allows for fast local updates of log-priors"""
+        return 0. # FIXME this should be incorporated somewhere
 
     def _calc_loglikelihood(self, model=None, tile=None):
-        # FIXME delete this and put in state, or leave it here as something
-        # explicitly local
+        """Allows for fast local updates of log-likelihood"""
         if model is None:
             res = self.residuals
         else:
