@@ -6,29 +6,41 @@ class BarnesInterpolation1D(object):
         """
         A class for 1-d barnes interpolation. Give data points d at locations x.
 
+        See [1]_, equations 1-7 for implementation.
+
         Parameters
         ----------
-        x : ndarrays, 1-dimensional
+        x : ndarray, 1-dimensional
             input positions, x values for data points
 
-        d : ndarrays, 1-dimensional
+        d : ndarray, 1-dimensional
             input values, y values for data points
 
-        filter_size : float
-            control parameter for weight function (sigma), should be the average
-            data spacing
+        filter_size : float, optional.
+            control parameter for weight function (sigma), should be the
+            average data spacing. Defaults to the average distance for
+            sorted ``x``.
 
-        iterations : integer
+        iterations : integer, optional
             how many iterations to perform. only two needed with a high damping
+            Defaults to 4
 
-        clip : boolean
+        clip : boolean, optional
             whether to clip the number of data points used by the filtersize
+            Default is False
 
-        clipsize : float
+        clipsize : float, optional
             Total clipsize is determined by clipsize * filter_size
+            Default is 3
 
-        damp : float
-            the damping parameter used in Koch 1983 J. Climate Appl. Meteor. 22 1487-1503
+        damp : float, optional
+            the damping parameter used in accelerating convergence. Default
+            is 0.95
+
+        References
+        ----------
+        .. [1] S. E. Koch, M. DesJardins, P. J. Kocin, J. Climate Appl.
+                Meteor. 22 1487-1503 (1983)
         """
         self.x = x
         self.d = d
@@ -37,13 +49,17 @@ class BarnesInterpolation1D(object):
         self.iterations = iterations
 
         if filter_size is None:
-            self.filter_size = (x[1:] - x[:-1]).mean()/2
+            self.filter_size = self._default_filter_size()
         else:
             self.filter_size = filter_size
 
         self.clipsize = clipsize * self.filter_size
 
+    def _default_filter_size(self):
+        return (self.x[1:] - self.x[:-1]).mean()/2
+
     def _weight(self, rsq, size=None):
+        """weighting function for Barnes"""
         size = size or self.filter_size
 
         o = np.exp(-rsq / (2*size**2))
@@ -51,6 +67,7 @@ class BarnesInterpolation1D(object):
         return o
 
     def _outer(self, a, b):
+        """Pairwise distance between each point in `a` and each point in `b`"""
         return (a[:,None] - b[None,:])**2
 
     def __call__(self, rvecs):
@@ -70,6 +87,38 @@ class BarnesInterpolation1D(object):
             tmp = tmp + self._weight(dist0, g).dot(self.d - tmp)
             g *= self.damp
         return out
+
+class BarnesInterpolationND(BarnesInterpolation1D):
+    """Barnes interpolant in N dimensions"""
+    def __init__(self, *args, **kwargs):
+        """
+        A class for barnes interpolation in N dimensions.
+
+        Parameters
+        ----------
+        x : ndarray, 2-dimensional
+            input positions, x values for data points. x[i] is the ith position
+
+        d : ndarray, 1-dimensional
+            input values, y values for data points. Same number of points as
+            x has positions.
+
+        See Also
+        --------
+        BarnesInterpolation1D
+        """
+        super(BarnesInterpolationND, self).__init__(*args, **kwargs)
+
+    def _outer(self, a, b):
+        """Pairwise distance between each point in `a` and each point in `b`"""
+        sq = lambda x: (x*x)
+        matrix = np.sum(map(lambda a,b: sq(a[:,None] - b[None,:]),
+                a.T, b.T), axis=0)
+        return matrix
+
+    def _default_filter_size(self):
+        dist = lambda x: np.sqrt(np.sum(x*x, axis=1))
+        return dist(self.x[1:] - self.x[:-1]).mean()/2
 
 class ChebyshevInterpolation1D(object):
     def __init__(self, func, args=(), window=(0.,1.), degree=3, evalpts=4):
