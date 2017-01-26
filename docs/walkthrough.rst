@@ -330,7 +330,7 @@ the residuals. Look at the error by typing
     print st.error
 
 Right now the fit's error is pretty bad. We can fit the state and improve the
-error significantly using ``peri`` 's convenience functions:
+error significantly using the convenience functions in :mod:`peri.runner`:
 
 .. code-block:: python
 
@@ -371,9 +371,7 @@ region in the image to see the orthogonal cross-sections of these modes. If you
 see structure in the residuals of your fit -- shadows of particles or stripes
 and long-wavelength variation in the residuals -- then your model isn't
 complete or your fit isn't the best. For my state, we see that the fit is
-pretty good, as you can see below. There are a few slight shadows of particles,
-and one missing particle all the way on the edge of the image, but other than
-that it's pretty good.  FIXME you should fix runner then run this again & update caption
+pretty good, as you can see below.
 
 .. figure:: ./_static/OM-finish-st.png
    :scale: 100%

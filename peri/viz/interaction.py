@@ -528,17 +528,17 @@ class OrthoPrefeature(OrthoViewer):
 
         Parameters
         ----------
-            im : numpy.ndarray
-                The image to check pre-featuring on.
-            pos : [N,3] numpy.ndarray
-                The initial guess for the particle positions, in pixel units
-            viewrad : Float or None, optional.
-                The width of the particles to plot. Default is 2.
-            cmap : String, optional
-                A valid matplotlib colormap. Default is `'Greys_r'`.s
-            part_col : list-like, optional
-                Color of the particles.... RGBA. Default is cyan.
-            **kwargs : All keyword args to OrthoViewer....
+        im : numpy.ndarray
+            The image to check pre-featuring on.
+        pos : [N,3] numpy.ndarray
+            The initial guess for the particle positions, in pixel units
+        viewrad : Float or None, optional.
+            The width of the particles to plot. Default is 2.
+        cmap : String, optional
+            A valid matplotlib colormap. Default is `'Greys_r'`.s
+        part_col : list-like, optional
+            Color of the particles.... RGBA. Default is cyan.
+        **kwargs : All keyword args to OrthoViewer....
         """
         #Possible to modify this to include varying radii
         self.image = image.copy()
