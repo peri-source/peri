@@ -2378,7 +2378,7 @@ class LMAugmentedState(LMGlobals):
         if len(params) > 0:
             J_st = je[0]
             #the _direction_ of the exact gradient of the model, rescaled later
-            graderr = je[1]
+            graderr = je[1].tolist()
         else:
             J_st = np.array([])
             graderr = []
