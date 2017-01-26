@@ -513,7 +513,7 @@ class OrthoViewer(object):
         self.draw()
 
 class OrthoPrefeature(OrthoViewer):
-    def __init__(self, image, pos, rad=None, cmap='Greys_r', part_col=
+    def __init__(self, image, pos, viewrad=None, cmap='Greys_r', part_col=
                 [0., 1., 1., 1.], **kwargs):
         """
         Interactive viewing of a 3D featured image, to examine the quality of
@@ -532,7 +532,7 @@ class OrthoPrefeature(OrthoViewer):
                 The image to check pre-featuring on.
             pos : [N,3] numpy.ndarray
                 The initial guess for the particle positions, in pixel units
-            rad : Float or None, optional.
+            viewrad : Float or None, optional.
                 The width of the particles to plot. Default is 2.
             cmap : String, optional
                 A valid matplotlib colormap. Default is `'Greys_r'`.s
@@ -543,10 +543,10 @@ class OrthoPrefeature(OrthoViewer):
         #Possible to modify this to include varying radii
         self.image = image.copy()
         self.pos = pos
-        if rad is None:
-            self.rad = 2.
+        if viewrad is None:
+            self.viewrad = 2.
         else:
-            self.rad = rad
+            self.viewrad = viewrad
         self.mode = 'view'
         super(OrthoPrefeature, self).__init__(image, cmap=cmap, **kwargs)
         if self.vmin is None:
@@ -571,7 +571,7 @@ class OrthoPrefeature(OrthoViewer):
         self._image = self._cmap(rscl)
 
     def _particle_func(self, coords, pos, wid):
-        """Draws a gaussian. Coords = [3,n]"""
+        """Draws a gaussian, range is (0,1]. Coords = [3,n]"""
         dx, dy, dz = [c - p for c,p in zip(coords, pos)]
         dr2 = dx*dx + dy*dy + dz*dz
         return np.exp(-dr2/(2*wid*wid))
@@ -579,7 +579,7 @@ class OrthoPrefeature(OrthoViewer):
     def update_particle_field(self, poses=None, add=True):
         if poses is None:
             poses = self.pos
-        wid = self.rad
+        wid = self.viewrad
         for p in poses:
             #1. get tile
             t = Tile(p-2*wid, p+2*wid, mins=0, maxs=self.image.shape)
@@ -592,7 +592,7 @@ class OrthoPrefeature(OrthoViewer):
 
     def update_field(self, poses=None):
         """updates self.field"""
-        m = self.particle_field
+        m = np.clip(self.particle_field, 0, 1)
         part_color = np.zeros(self._image.shape)
         for a in xrange(4): part_color[:,:,:,a] = self.part_col[a]
         self.field = np.zeros(self._image.shape)
