@@ -659,7 +659,7 @@ def link_zscale(st):
     # Should be made more generic to other parameters and categories
     psf = st.get('psf')
     psf.param_dict['zscale'] = psf.param_dict['psf-zscale']
-    psf.params[2] = 'zscale'  # FIXME magic 2
+    psf.params[psf.params.index('psf-zscale')] = 'zscale'
     psf.global_zscale = True
     psf.param_dict.pop('psf-zscale')
     st.trigger_parameter_change()
@@ -687,10 +687,12 @@ def finish_state(st, desc='finish-state'):
         `peri.opt.addsubtract.add_subtract_locally`
         `peri.opt.optimize.finish`
     """
-    for _ in xrange(3):
-        npart, poses = addsub.add_subtract_locally(st, region_depth=7)
-        if npart == 0:
-            break
+    for minmass in [None, 0]:
+        for _ in xrange(3):
+            npart, poses = addsub.add_subtract_locally(st, region_depth=7,
+                    minmass=minmass)
+            if npart == 0:
+                break
     opt.finish(st, n_loop=1, separate_psf=True, desc=desc)
     opt.burn(st, mode='polish', desc=desc, n_loop=2)
     opt.finish(st, desc=desc, n_loop=4)
