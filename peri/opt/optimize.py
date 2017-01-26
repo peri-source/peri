@@ -2364,6 +2364,8 @@ class LMAugmentedState(LMGlobals):
         self._last_vals = self.param_vals.copy()
 
     def calc_J(self):
+        #FIXME this will still cause a mem spike because of the copy in the
+        #np.append(J_st, J_aug)
         #0.
         del self.J
 
@@ -2374,8 +2376,9 @@ class LMAugmentedState(LMGlobals):
         je, self._inds = get_rand_Japprox(s, params, num_inds=self.num_pix,
                 include_cost=True, **self.opt_kwargs)
         if len(params) > 0:
-            J_st = je[:,:-1]
-            graderr = je[:,-1].tolist()  #storing the direction of the exact cost grad
+            J_st = je[0]
+            #the _direction_ of the exact gradient of the model, rescaled later
+            graderr = je[1]
         else:
             J_st = np.array([])
             graderr = []
