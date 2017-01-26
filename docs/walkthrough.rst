@@ -62,8 +62,9 @@ This is all you. A word to the wise though -- analysis with ``peri`` takes time
 takes even more time. You can save a lot of time by taking the cleanest
 possible data and avoiding as many imaging artifacts as possible.
 
-We'll start by loading a small demo image with the package ``peri``. Open your
-Python interpreter and type:
+We'll start by loading a small demo image with the package ``peri``. First,
+:download:`download my test image <./_static/small_confocal_image.tif>`.
+Then, open your Python interpreter and type:
 
 .. code-block:: python
 
@@ -111,8 +112,9 @@ Let's do a concrete example with our image above.
 First, we need to figure out what components form our model.
 
 Looking at the image, we see that the sample is composed of a coverslip slide
-and a lot of spheres. We can start by creating those objects with the following
-code:
+and a lot of spheres. We can start by creating those objects with an initial
+guess for the :download:`particle positions <./_static/particle-positions.npy>`
+and the following code:
 
 .. code-block:: python
 
