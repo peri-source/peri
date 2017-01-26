@@ -73,7 +73,7 @@ Then, open your Python interpreter and type:
 
 This creates an object which contains rescaled raw data and allows for small
 manipulations of the image by ``peri``. If you'd like to look at the image
-interactively, you can use the ``OrthoViewer``
+interactively, you can use the :class:`~peri.viz.interaction.OrthoViewer`.
 
 .. code-block:: python
 
@@ -128,9 +128,9 @@ and the following code:
 All the model components in ``peri`` are stored in the module ``peri.comp``.
 The components describing the microscope sample being imaged are stored in
 ``peri.comp.objs``, which we import in the first line. In the next line, we
-create a coverslip, which is described by a ``peri.comp.objs.Slab`` object.
-Finally, in the last line we create a collection of spheres, described by
-``peri.comp.objs.PlatonicSpheresCollection``.
+create a coverslip, which is described by a :class:`peri.comp.objs.Slab`
+object. Finally, in the last line we create a collection of spheres, described
+by :class:`peri.comp.objs.PlatonicSpheresCollection`.
 
 To speed up ``peri`` 's fit of the model, I've created both of these objects
 with reasonable initial guesses for the objects' parameters. By looking at the
@@ -141,8 +141,8 @@ flat coverslip is a good enough initial guess. Likewise, I've used a centroid
 algorithm (trackpy) to do a reasonable job finding most of the spheres in the
 image; the position guess for this is saved as ``'particle-positions.npy'`` 
 [1]_. You can check the quality of this initial guess with the 
-``OrthoPrefeature``, which overlays the image with the extracted particle
-positions:
+:class:`~peri.viz.interaction.OrthoPrefeature`, which overlays the image with
+the extracted particle positions:
 
 .. code-block:: python
 
@@ -177,7 +177,7 @@ separately. We can do this by grouping these two objects together:
     objects = comp.ComponentCollection([particles, coverslip], category='obj')
 
 A group of any model components is described by a
-``peri.comp.ComponentCollection``. Since we've collected these components
+:class:`peri.comp.ComponentCollection`. Since we've collected these components
 together, we describe them (``category='obj'``) so ``peri`` can identify to
 which part of the model they belong.
 
@@ -192,7 +192,7 @@ imperfections. We can create this object with this snippet:
 
 Mathematically, we can describe the illumination as some sort of continuous
 field defined over the image. These field-like descriptions are stored in the
-module ``peri.comp.ilms``, which we import in the first line. A quick look at
+module :mod:`peri.comp.ilms`, which we import in the first line. A quick look at
 the module shows that there are a sizeable number of possible illumination
 field descriptions. All of these conceptually do the same thing, but they are
 each parameterized slightly differently. After a lot of experimentation, I've
@@ -260,13 +260,13 @@ function:
     point_spread_function = exactpsf.FixedSSChebLinePSF()
 
 Representations of point-spread functions that use exact optical models are
-stored in the exactpsf module. I've chosen to describe my image with an optical
-model of a line-scanning point-spread function (the LinePSF bit), with some
-special numerical implementations made for speed and reliability (the
-FixedSSCheb bit). If you don't want or need an exact optical description of
-your point-spread function, then you can use one of the heuristic functions
-stored in the module ``peri.comp.psfs`` (such as a Gaussian or a Gaussian that
-changes in z).
+stored in the :mod:`~peri.comp.exactpsf` module. I've chosen to describe my
+image with an optical model of a line-scanning point-spread function (the
+LinePSF bit), with some special numerical implementations made for speed and
+reliability (the FixedSSCheb bit). If you don't want or need an exact optical
+description of your point-spread function, then you can use one of the
+heuristic functions stored in the module :mod:`peri.comp.psfs` (such as a
+Gaussian or a Gaussian that changes in z).
 
 Now that we have all the *components* of the mathematical model, we need to
 describe how they *interact*. We do this by using the relationship for a
@@ -278,11 +278,11 @@ confocal image:
     model = models.ConfocalImageModel()
 
 The model tells ``peri`` how to combine all the objects together to create an
-image. Our ConfocalImageModel knows that the objects in the sample excludes dye
-from certain regions, the dye gets illuminated by a laser, blurred by the
-point-spread function with microscope optics, and imaged on a detector with a
-spatially-varying background. You can see what this model mathematically is by
-typing
+image. Our :class:`~peri.models.ConfocalImageModel` knows that the objects in
+the sample excludes dye from certain regions, the dye gets illuminated by a
+laser, blurred by the point-spread function with microscope optics, and imaged
+on a detector with a spatially-varying background. You can see what this model
+mathematically is by typing
 
 .. code-block:: python
 
@@ -291,7 +291,8 @@ typing
 Finally, we need to combine the mathematical model and its components together
 to create a model image. In ``peri``, the image, the mathematical model, its
 parameters and values, and the model image are all stored in an object called a
-``State`` or ``ImageState``. We're now ready to create our state:
+:class:`~peri.states.State` or :class:`~peri.states.ImageState`. We're now
+ready to create our state:
 
 .. code-block:: python
 
@@ -300,8 +301,8 @@ parameters and values, and the model image are all stored in an object called a
             point_spread_function, offset], mdl=model)
 
 If we want to save our state or load a saved state, we can use
-``peri.states.save`` and ``peri.states.load``. Finally, ``peri`` allows the
-same parameter to describe multiple components of the model. For instance,
+:func:`peri.states.save` and :func:`peri.states.load`. Finally, ``peri`` allows
+the same parameter to describe multiple components of the model. For instance,
 physically we know that the ratio of the z-pixel to xy-pixel size is the same
 whether we're calculating an optical model of the point-spread function or
 drawing the Platonic particles. We can link these parameters with
@@ -356,7 +357,7 @@ documentation's :doc:`Optimization </optimization>` section, including how
 
 Now that we've fit our data, we need to check if the fit is good. ``peri``
 provides several ways to do this for a single state. The first step is the
-``OrthoManipulator``:
+:class:`~peri.viz.interaction.OrthoManipulator`:
 
 .. code-block:: python
 
@@ -379,9 +380,9 @@ that it's pretty good.  FIXME you should fix runner then run this again & update
    :alt: ``OrthoManipulator(st)``
    :align: center
 
-   The ``OrthoManipulator`` . You can see the raw data on the left and the fit
-   residuals on the right. The residuals are almost perfect Gaussian white
-   noise.
+   The :class:`~peri.viz.interaction.OrthoManipulator`. You can see the raw
+   data on the left and the fit residuals on the right. The residuals are
+   almost perfect Gaussian white noise.
 
 You can look closer for structure in the residuals by looking at the Fourier
 transform of the residuals (hit ``W``). Again, if you see structure in the
@@ -452,9 +453,9 @@ component! See the developer's section of the documentation to get started.
 5. If the fit is good, use the extracted information from the fit.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``ImageState`` contains all the fitted parameters from the image and their
-values. The parameters are named with human-readable names that describe
-briefly which component and/or what the parameter describes.
+The :class:`~peri.states.ImageState` contains all the fitted parameters from
+the image and their values. The parameters are named with human-readable names
+that describe briefly which component and/or what the parameter describes.
 
 You can get the parameters and values by typing
 
@@ -485,11 +486,11 @@ positions or radii of all the particles in the state through these commands:
 
 These will return information on *all* the particles in the state, including
 ones fit to be outside the image! You can select only the particles inside an
-image by using ``peri.test.analyze.good_particles``, which will return a
+image by using :func:`peri.test.analyze.good_particles`, which will return a
 Boolean mask that is True for particles inside the image and False for those
-outside. The ``analyze`` module has many other useful things for analyzing
-data, such as ways to calculate the packing fraction of the state and ways to
-save and load states as rapidly-loadable json files.
+outside. The :mod:`~peri.test.analyze` module has many other useful things for
+analyzing data, such as ways to calculate the packing fraction of the state and
+ways to save and load states as rapidly-loadable json files.
 
 
 Making this faster
@@ -497,7 +498,7 @@ Making this faster
 Now that we have a completely-featured image, there is no point in repeating
 the tedium above to find the best positions and radii for the next image in
 your data. You can shortcut a lot of the human time by using some of the
-convenience functions in ``peri.runner``, as described in the
+convenience functions in :mod:`peri.runner`, as described in the
 :doc:`Quickstart </quickstart>` tutorial.
 
 Checking your model even more
@@ -514,5 +515,5 @@ cause changes in the fitted parameters abover the Cramer-Rao bound. For our
 confocal images of spheres, we've found that checking the radii variation from
 frame-to-frame in a movie of freely-diffusing particles is a stringent test of
 the quality of the fit and model. This is implemented in
-``peri.test.track.calculate_state_radii_fluctuations``, which uses the
-``trackpy`` package.
+:func:`peri.test.track.calculate_state_radii_fluctuations`, which uses the
+`trackpy <http://soft-matter.github.io/trackpy/v0.3.2/>`_ package.
