@@ -343,9 +343,9 @@ def optimize_from_initial(s, max_mem=1e9, invert=True, desc='', rz_order=3,
     """
     RLOG.info('Initial burn:')
     opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc + 'initial-burn',
-            max_mem=max_mem, include_rad=False)
+            max_mem=max_mem, include_rad=False, dowarn=False)
     opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc + 'initial-burn',
-            max_mem=max_mem, include_rad=True)
+            max_mem=max_mem, include_rad=True, dowarn=False)
 
     RLOG.info('Start add-subtract')
     rad = s.obj_get_radii()
@@ -358,8 +358,10 @@ def optimize_from_initial(s, max_mem=1e9, invert=True, desc='', rz_order=3,
     states.save(s, desc=desc+'initial-addsub')
 
     RLOG.info('Final polish:')
-    opt.burn(s, mode='polish', n_loop=8, fractol=3e-4, desc=desc +
-            'addsub-polish', max_mem=max_mem, rz_order=rz_order)
+    d = opt.burn(s, mode='polish', n_loop=8, fractol=3e-4, desc=desc +
+            'addsub-polish', max_mem=max_mem, rz_order=rz_order, dowarn=False)
+    if not d['converged']:
+        RLOG.warn('Optimization did not converge; consider re-running')
     return s
 
 
@@ -636,9 +638,11 @@ def _translate_particles(s, max_mem=1e9, desc='', min_rad='calc',
     s.set_mem_level(mem_level)  # overkill because always sets mem, but w/e
     RLOG.info('Translate Particles:')
     opt.burn(s, mode='do-particles', n_loop=4, fractol=0.1, desc=desc+
-            'translate-particles', max_mem=max_mem, include_rad=False)
+            'translate-particles', max_mem=max_mem, include_rad=False,
+            dowarn=False)
     opt.burn(s, mode='do-particles', n_loop=4, fractol=0.05, desc=desc+
-            'translate-particles', max_mem=max_mem, include_rad=True)
+            'translate-particles', max_mem=max_mem, include_rad=True,
+            dowarn=False)
 
     RLOG.info('Start add-subtract')
     addsub.add_subtract(s, tries=30, min_rad=min_rad, max_rad=max_rad,
@@ -648,10 +652,13 @@ def _translate_particles(s, max_mem=1e9, desc='', min_rad='calc',
     if do_polish:
         RLOG.info('Final Burn:')
         opt.burn(s, mode='burn', n_loop=3, fractol=3e-4, desc=desc +
-                'addsub-burn', max_mem=max_mem, rz_order=rz_order)
+                'addsub-burn', max_mem=max_mem, rz_order=rz_order,dowarn=False)
         RLOG.info('Final Polish:')
-        opt.burn(s, mode='polish', n_loop=4, fractol=3e-4, desc=desc +
-                'addsub-polish', max_mem=max_mem, rz_order=rz_order)
+        d = opt.burn(s, mode='polish', n_loop=4, fractol=3e-4, desc=desc +
+                'addsub-polish', max_mem=max_mem, rz_order=rz_order,
+                dowarn=False)
+        if not d['converged']:
+            RLOG.warn('Optimization did not converge; consider re-running')
 
 
 def link_zscale(st):
@@ -693,6 +700,8 @@ def finish_state(st, desc='finish-state'):
                     minmass=minmass)
             if npart == 0:
                 break
-    opt.finish(st, n_loop=1, separate_psf=True, desc=desc)
-    opt.burn(st, mode='polish', desc=desc, n_loop=2)
-    opt.finish(st, desc=desc, n_loop=4)
+    opt.finish(st, n_loop=1, separate_psf=True, desc=desc, dowarn=False)
+    opt.burn(st, mode='polish', desc=desc, n_loop=2, dowarn=False)
+    d = opt.finish(st, desc=desc, n_loop=4, dowarn=False)
+    if not d['converged']:
+        RLOG.warn('Optimization did not converge; consider re-running')

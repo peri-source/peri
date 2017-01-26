@@ -2554,9 +2554,9 @@ def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
     if collect_stats:
         return lo.get_termination_stats()
 
-def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
-        errtol=1e-3, mode='burn', max_mem=1e9, include_rad=True,
-        do_line_min='default', partial_log=False):
+def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-4,
+        errtol=1e-2, mode='burn', max_mem=1e9, include_rad=True,
+        do_line_min='default', partial_log=False, dowarn=True):
     """
     Optimizes all the parameters of a state.
 
@@ -2582,9 +2582,9 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
             rz_order is the order of the polynomial approximate for R(z).
             Default is 0 (no augmented state).
         fractol : Float, optional
-            Fractional change in error at which to terminate. Default 1e-7
+            Fractional change in error at which to terminate. Default 1e-4
         errtol : Float, optional
-            Absolute change in error at which to terminate. Default 1e-3
+            Absolute change in error at which to terminate. Default 1e-2
         mode : {'burn', 'do-particles', or 'polish'}, optional
             What mode to optimize with.
             * 'burn'          : Your state is far from the minimum.
@@ -2605,15 +2605,21 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
             * 'burn'          : False
             * 'do-particles'  : False
             * 'polish'        : True
+        dowarn : Bool, optional
+            Whether to log a warning if termination results from finishing
+            loops rather than from convergence. Default is True.
 
     Returns
     -------
-        all_loop_values : numpy.ndarray
+        dictionary
+            Dictionary of convergence information. Contains whether the
+            optimization has converged (key ``'converged'``), the values of the
+            state after each loop (key ``'all_loop_values'``).
             The values of the state's parameters after each part of the
-            loop: globals, particles, linemin.
-        [, all_lm_stats, all_lp_stats, all_line_stats] : dict
-            Dictionaries of convergence statistics for globals, particles,
-            and line min, respectively. Returned if `collect_stats` is True.
+            loop: globals, particles, linemin. If ``collect_stats`` is set,
+            then also contains lists of termination dicts from globals,
+            particles, and line minimization (keys ``'global_stats'``,
+            ``'particle_stats'``, and ``'line_stats``').
 
     Notes
     -----
@@ -2725,15 +2731,21 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-7,
         #2d. terminate?
         new_err = s.error
         derr = start_err - new_err
-        if (derr/new_err < fractol) or (derr < errtol):
+        dobreak = (derr/new_err < fractol) or (derr < errtol)
+        if dobreak:
             break
 
-    if collect_stats:
-        return all_loop_values, all_lm_stats, all_lp_stats, all_line_stats
-    else:
-        return all_loop_values
+    if dowarn and (not dobreak):
+        CLOG.warn('burn() did not converge; consider re-running')
 
-def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True):
+    d = {'converged':dobreak, 'all_loop_values':all_loop_values}
+    if collect_stats:
+        d.update({'global_stats':all_lm_stats, 'particle_stats':all_lp_stats,
+                'line_stats':all_line_stats})
+    return d
+
+def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True,
+        fractol=1e-7, errtol=1e-3, dowarn=False):
     """
     Crawls slowly to the minimum-cost state.
 
@@ -2759,13 +2771,23 @@ def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True):
             If True, does the psf optimization separately from the rest of
             the globals, since the psf has a more tortuous fit landscape.
             Default is True.
+        fractol : Float, optional
+            Fractional change in error at which to terminate. Default 1e-4
+        errtol : Float, optional
+            Absolute change in error at which to terminate. Default 1e-2
+        dowarn : Bool, optional
+            Whether to log a warning if termination results from finishing
+            loops rather than from convergence. Default is True.
 
     Returns
     -------
-        numpy.ndarray
-            [n_loop+1, N] element array of the state's values, at the start
-            of optimization and at the end of each loop, before the line
-            minimization.
+        dictionary
+            Information about the optimization. Has two keys: ``'converged'``,
+            a Bool which of whether optimization stopped due to convergence
+            (True) or due to max number of iterations (False), and
+            ``'loop_values'``, a [n_loop+1, N] ``numpy.ndarray`` of the
+            state's values, at the start of optimization and at the end of
+            each loop, before the line minimization.
     """
     values = [np.copy(s.state[s.params])]
     remove_params = s.get('psf').params if separate_psf else None
@@ -2778,6 +2800,7 @@ def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True):
     groups = [globals[a:a+gs] for a in xrange(0, len(globals), gs)]
     CLOG.info('Start  ``finish``:\t{}'.format(s.error))
     for a in xrange(n_loop):
+        start_err = s.error
         #1. Min globals:
         for g in groups:
             do_levmarq(s, g, damping=0.1, decrease_damp_factor=20.,
@@ -2800,7 +2823,13 @@ def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True):
         CLOG.info('Line min., loop {}:\t{}'.format(a, s.error))
         if desc is not None:
             states.save(s, desc=desc)
-    return np.array(values)
+        #4. terminate?
+        new_err = s.error
+        derr = start_err - new_err
+        dobreak = (derr/new_err < fractol) or (derr < errtol)
+        if dobreak:
+            break
+    return {'converged':dobreak, 'loop_values':np.array(values)}
 
 def fit_comp(new_comp, old_comp, **kwargs):
     """
