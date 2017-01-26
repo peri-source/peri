@@ -283,28 +283,28 @@ class ParticlesOnlyModel(Model):
         registry = {'obj': allobjs}
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
-class BlurredParticlesModel(Model):
+class ConfocalDyedParticlesModel(Model):
     """
     A model of particles blurred by a PSF, with a background and scale:
 
     .. math::
-        \\mathcal{M} = H(S*P) + C
+        \\mathcal{M} = H(I*P) + B
     """
     def __init__(self):
         varmap = {
-            'P': 'obj', 'H': 'psf', 'S': 'scale', 'C': 'offset'
+            'P': 'obj', 'H': 'psf', 'I': 'ilm', 'B': 'bkg'
         }
         modelstr = {
-            'full': 'H(S*P) + C',
-            'dP': 'H(S*dP)',
-            'dS': 'H(dS*P)',
-            'dC': 'dC',
+            'full': 'H(I*P) + B',
+            'dP': 'H(I*dP)',
+            'dS': 'H(dI*P)',
+            'dB': 'dB',
         }
         registry = {
             'psf': allpsfs,
             'obj': allobjs,
-            'scale': {'const': GlobalScalar},
-            'offset': {'const': GlobalScalar},
+            'bkg': allfields,
+            'ilm': allfields,
         }
         Model.__init__(self, modelstr=modelstr, varmap=varmap, registry=registry)
 
@@ -339,7 +339,7 @@ class BrightfieldImageModel(Model):
 
 models = {
     'confocal-dyedfluid': ConfocalImageModel,
-    'confocal-dyedobjects': BlurredParticlesModel,
+    'confocal-dyedobjects': ConfocalDyedParticlesModel,
     'smooth-field': SmoothFieldModel,
     'blurred-field': BlurredFieldModel
 }
