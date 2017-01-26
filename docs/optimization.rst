@@ -15,8 +15,8 @@ completely optimize the model to get maximally-accurate position and radii
 measurements. In this section, we'll discuss how to optimize a
 :class:`peri.states.ImageState` and accomplish all three of these goals.
 
-Most of these steps are implemented in the ``peri.runner`` convenience 
-functions. **you need to update this since runner has changed**
+Most of these steps are implemented in the :mod:`peri.runner` convenience 
+functions.
 
 Initial Optimization
 --------------------
@@ -35,7 +35,7 @@ initial optimization, simply run:
 .. code-block:: python
 
     import peri.opt.optimize as opt
-    opt.burn(st, mode='burn', n_loop=3, desc='')
+    opt.burn(st, mode='burn', n_loop=4, desc='', fractol=0.1)
 
 This will usually optimize a state sufficiently enough to add missing particles
 to the image. If it does not, you can set ``n_loop`` to a larger value such as
@@ -46,17 +46,32 @@ to save with a different name then set ``desc`` to whatever you want; it will
 be passed through to :func:`peri.states.save`.
 
 Briefly, what does :func:`~peri.opt.optimize.burn` do? The state are optimized by
-essentially ``curve-fitting`` with a Levenberg-Marquardt algorithm. However,
-a typical state has too many parameters to optimize the entire state at once.
-To deal with this, ``opt.burn`` optimizes the parameters in groups, first
+essentially curve-fitting with a `Levenberg-Marquardt algorithm
+<https://en.wikipedia.org/wiki/Levenberg%E2%80%93Marquardt_algorithm>`_.
+However, a typical state has too many parameters to optimize the entire state
+at once. To deal with this, ``opt.burn`` optimizes the parameters in groups, first
 optimizing the global parameters such as the illumination and background, then
 optimizing the particle parameters. Since these two groups of parameters are
 coupled, ``opt.burn`` then alternates back and forth between globals and
-particles ``n_loop`` times or until a sufficient convergence is met. Finally,
-we've found empirically that it's best to avoid optimizing some parameters of
-the model (such as the point-spread function and the particle zscale) until the
-end. Calling ``opt.burn`` with ``mode='burn'`` combines all these nuances into
-one convenience function.
+particles ``n_loop`` times or until a sufficient convergence is met -- here
+if the error changes by less than 10% of its best value (``fractol=0.1``) [1]_.
+Finally, we've found empirically that it's best to avoid optimizing some
+parameters of the model (such as the point-spread function and the particle
+zscale) until the end. Calling :func:`~peri.opt.optimize.burn` with 
+``mode='burn'`` combines all these nuances into one convenience function [2]_. 
+
+.. [1] If ``burn`` doesn't converge sufficiently and instead stops because
+       it has iterated for ``n_loop``, then it will log a warning. For this
+       initial optimization we'll ignore it, since we'll keep optimizing the
+       state later. However, if you get a warning like this in the later steps,
+       it might be worthwile to heed the warning and re-optimize the state.
+
+.. [2] In addition, when the point-spread function or illumination are far
+       from their correct values, the particle radii tend to drift to bad
+       values before slowly coming back to the correct values. If you have a
+       pretty good initial guess for the radii, you can speed this up by
+       having ``opt.burn`` ignore the particle radii with the flag
+       ``include_rad=False``.
 
 If you want more details on how ``opt.burn`` functions, see the documentation
 or code. If your specific image or model is not optimized well by ``opt.burn``,
@@ -118,26 +133,28 @@ the group of particles gets missed by the centroid featuring and particles are
 not added. To combat this, the :func:`~peri.opt.addsub.add_subtract` removes particles that
 have a suspiciously large or small radii values, as determined by ``min_rad``
 and ``max_rad``. (Setting these two to ``'calc'`` uses the cutoffs at the
-median radius +/- 15 standard deviations.) With the particles removed, the
-missing particles can be featured. The function repeatedly removes bad
-particles and adds missing particles until either no change is made or it has
-iterated over the maximum number of loops.
+median radius +/- 15 radii standard deviations.) With the incorrect large
+particles removed, the missing particles can be featured. The function
+repeatedly removes bad particles and adds missing particles until either no
+change is made or it has iterated over the maximum number of loops.
 
 
-Final Optimization
-------------------
+Main Optimization
+-----------------
 
 After adding all the particles, it's time to completely optimize the state. In
-my experience, usually adding particles causes the globals and the old particle
-positions to no longer be correct. To deal with this, run
+my experience, sometimes adding particles causes the globals and the old
+particle positions to no longer be correct. To deal with this, run something
+like
 
 .. code-block:: python
 
-    opt.burn(st, mode='burn', n_loop=6, desc='')
+    opt.burn(st, mode='burn', n_loop=6, desc='', fractol=1e-2)
 
 This usually sets the illumination and particle positions to reasonable values.
 At this point, it's time to optimize all the state including the point-spread
-function, which we have so far ignored. This is done with
+function, which we have so far ignored. We can include this with rest of the
+parameters with :func:`~peri.opt.optimize.burn` again:
 
 .. code-block:: python
 
@@ -147,8 +164,8 @@ What does this do? First, especially if the initial guess for the point-spread
 function was correct, running another optimization with ``mode='burn'`` keeps
 the point-spread function from drifting to a bad space because of its strong
 coupling with the illumination field. Setting ``mode='polish'`` then causes
-burn to optimize everything, alternating between an iteration of optimzing all
-the global parameters (including the PSF) and an iteration of optimizaing all
+burn to optimize everything, alternating between an iteration of optimizing all
+the global parameters (including the PSF) and an iteration of optimizing all
 the particle positions. Similar to ``mode='burn'``, setting ``mode='polish'``
 saves the state after each iteration by calling
 ``peri.states.save(st, desc='polishing')``; you can set ``desc`` to something
@@ -158,45 +175,78 @@ Achieving the best-possible state
 ---------------------------------
 
 Sometimes, after all this, particles are still missing or the fit is still not
-perfect. There are still a few more tricks in the peri package to fix these
-problems.
+perfect. There are still a few more tricks in the ``peri`` package to fix these
+problems. These tricks are incorporated in the :func:`peri.runner.finish_state`
+for convenience. In case you find a better protocol for your images, here are
+the tricks below.
 
 Adding tough missing particles
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Sometimes one pass of ``addsub.add_subtract`` is not enough to find all the
-missing particles, or running the secondary optimizations reveals that more
-particles are missing. In these cases, running another ``addsub.add_subtract``
-usually fixes the problem and gets all the particles. However, sometimes there
-are particles that the normal ``addsub.add_subtract`` just can't seem to get
-right. For these cases, there is another function in the
-:mod:`peri.opt.addsubtract` module:
+Sometimes one pass of :func:`~peri.opt.addsubtract.add_subtract` is not enough
+to find all the missing particles, or running the secondary optimizations
+reveals that more particles are missing. In these cases, running another 
+:func:`~peri.opt.addsubtract.add_subtract` usually fixes the problem and gets
+all the particles. However, sometimes there are particles that the normal
+:func:`~peri.opt.addsubtract.add_subtract` just can't seem to get right, such
+as particles on the edge or tough clusters of particles. For these cases, there
+is another function in the :mod:`peri.opt.addsubtract` module:
 
 .. code-block:: python
 
     num_added, added_positions = addsub.add_subtract_locally(st)
 
-Briefly, ``add_subtract_locally`` looks for poorly-fit regions where the
-residuals deviate from white Gaussian noise, with the size of the region
-roughly set by the optional parameter ``filter_size``, and the threshold for
-badness set by ``sigma_cutoff``. The function then removes *all* the particles
-in that region and re-adds them based on centroid featuring again. Since
-``add_subtract_locally`` removes all the particles in the region, it's best not
-to use ``add_subtract_locally`` until the image is fairly well fit. Otherwise,
-the function will attempt to remove nearly all the particles in the image and
-re-add them, which takes a long time and will probably fail. That being said,
-this function is excellent at fixing doubly-featured particle and at
-identifying particles at the edge of or slightly outside of the image.
+Briefly, :func:`~peri.opt.addsubtract.add_subtract_locally` looks for poorly-
+fit regions where the residuals deviate from white Gaussian noise, with the
+size of the region roughly set by the optional parameter ``filter_size``, and
+the threshold for badness set by ``sigma_cutoff``. The function then removes
+*all* the particles in that region and re-adds them based on centroid featuring
+again. Since :func:`~peri.opt.addsubtract.add_subtract_locally` removes all the
+particles in the region, it's best not to use it until the image is fairly well
+fit. Otherwise, the function will attempt to remove nearly all the particles in
+the image and re-add them, which takes a long time and will probably fail. That
+being said, this function is excellent at fixing doubly-featured particle and
+at identifying particles at the edge of or slightly outside of the image. You
+can improve its chances of identifying particles at the very edge of the image
+by passing a ``minmass`` parameter; I find that ``minmass=0`` frequently works
+for particles at the edge of a well-fit state.
 
 Additional Optimizations
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 Occasionally the number of optimization loops isn't enough to completely
-optimize a state. Usually this is fixed by running a few more loops of
-``opt.burn`` with ``mode='burn'`` or ``mode='polish'``, depending on whether
-the illumination is sufficiently far from the minimum as to bias the PSF. Since
-I like to be sure that I'm at a global minimum, I always run a few extra loops
-of ``opt.burn`` with ``mode='polish'`` no matter what.
+optimize a state. You can try to fix this by running a few more loops of
+:func:`~peri.opt.optimize.burn` with ``mode='burn'`` or ``mode='polish'``,
+depending on whether the illumination is sufficiently far from the minimum as
+to bias the PSF. But especially for large states, sometimes this is not enough.
+In this case use
+
+.. code-block:: python
+
+    opt.finish(st)
+
+:func:`~peri.opt.optimize.burn` makes some numerical approximations in the
+least-squares fit to accelerate convegence. However, when the fit is near the
+global minimum, sometimes ``burn`` can get stuck.
+:func:`~peri.opt.optimize.finish` gets around this, taking a slightly slower
+but surer descent to the minimum [3]_.
+
+.. [3] For the algorithm-savvy: A Levenberg-Marquardt algorithm works by
+       evaluating the derivative of the each residuals pixel with respect to
+       each parameter. A typical microscope image with ``peri`` has a few
+       million pixels and a few thousand parameters, making these derivatives
+       much too big to store in memory. ``burn`` gets around this by treating
+       the particles separately from the microscope parameters, and only
+       fitting the microscope parameters with a random subset of the image. But
+       taking this random subset causes ``burn`` to get slightly stuck with the
+       microscope parameters. ``finish`` gets around this by using the entire
+       image and alternating between fitting only a small subset of the
+       parameters at once. In addition, by default ``finish`` treats the PSF
+       separately, since it is more difficult to fit.
+
+Since I like to be sure that I'm at a global minimum, I always run a few extra
+loops of ``opt.burn`` with ``mode='polish'`` or of ``opt.finish`` no matter
+what.
 
 What if the optimizer gets stuck? If the optimizer is stuck, and you know you
 are not at the minimum, then you can individually optimize certain parameters.
@@ -209,7 +259,7 @@ looks, you can specifically optimize the PSF by doing this:
 
 or whatever global component you think is poorly optimized. If the error of the
 state decreases significantly, then the state was not at the global minimum and
-should be sent through another few loops of ``opt.burn``.
+should be sent through another few loops of ``opt.burn`` or ``opt.finish``.
 
 When is the state optimized?
 ----------------------------
@@ -223,7 +273,7 @@ the Supplemental Information for our paper.
 Checking optimization with the OrthoManipulator
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The best tool for checking optimization is the OrhtoManipulator:
+The best tool for checking optimization is the :class:`peri.viz.interaction.OrthoManipulator`:
 
 .. code-block:: python
 
@@ -247,17 +297,18 @@ it!
 Checking optimization by running more optimization
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Another way to check is simply to run more loops of ``opt.burn``. If the
-error or the parameters you care about change significantly, then you probably
-needed to run more optimization loops. If not, then you were near the minimum.
-While doing this for every image is probably impractical, you can check a few
-images or a smaller section of an image to see if your protocol is good.
+Another way to check is simply to run more loops of ``opt.burn`` or 
+``opt.finish``. If the error or the parameters you care about change
+significantly, then you probably needed to run more optimization loops. If not,
+then you were near the minimum. While doing this for every image is probably
+impractical, you can check a few images or a smaller section of an image to
+see if your protocol is good.
 
 Seeing if the fitted values are reasonable
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Frequently it's possible to tell if the fit is good simply by looking at the
-parameters themselves. Do the particle radii change systematically with ``x``,
+parameters themselves. Do the particle radii vary systematically with ``x``,
 ``y``, or ``z``? If so, then the image is probbaly not at a good fit. We've
 found that variations in ``x`` or ``y`` tend to be due to imperfections in the
 ILM, which varies strongly in these directions for us, and variations in ``z``
@@ -301,7 +352,7 @@ Using a Good Initial Guess; The Runner Functions
 The best method for speeding up the featuring is to use a good initial guess.
 If you know the ILM or the PSF accurately, then you can certainly save time by
 avoiding the initial fits in `Initial Optimization`_, and possibly even the
-final fits in `Final Optimization`_.
+final fits in `Main Optimization`_.
 
 ``peri`` has convenience functions to use previously-optimized global paramters
 in fitting an image. These (and others) are located in the ``runner`` module.
@@ -349,8 +400,9 @@ state to get an accurate PSF will do more than save a *lot* of time later. For
 larger states the optimizer can even get stuck and terminate, thinking it is at
 a good fit when it reality the PSF is far from the minimum, which can severely
 bias your fits. Make a small image and optimize it overnight -- say, 50-100
-loops of ``opt.burn`` with ``mode='polish'``. You might even want to alternate
-a loop of burn with a direct minimization of the PSF, like so:
+loops of ``opt.burn`` with ``mode='polish'`` to ensure that you've found the
+global minimum. You might even want to alternate a loop of burn with a direct
+minimization of the PSF, like so:
 
 .. code-block:: python
 
