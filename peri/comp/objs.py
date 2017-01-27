@@ -643,11 +643,11 @@ class Slab(Component):
             position of the center of the slab in pixels
 
         angles : tuple of float (2,), optional
-            Angles of rotation of the normal with respect to the z-axis,
-            i.e. ``angles=(0., 0.)`` gives a slab with a normal along z.
-            The first angle theta is the rotation about the x-axis; the
-            second angle phi is the rotation about the y-axis. Default is
-            (0,0).
+            Euler-like Angles of rotation of the normal with respect to the
+            z-axis, i.e. ``angles=(0., 0.)`` gives a slab with a normal
+            along z. The first angle theta is the rotation about the x-axis;
+            the second angle phi is the rotation about the y-axis. Default
+            is (0,0).
 
         float_precision : numpy float datatype
             One of numpy.float16, numpy.float32, numpy.float64; precision
