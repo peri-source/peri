@@ -33,6 +33,24 @@ This will install ``peri`` onto your :code:`PYTHONPATH`. Make sure that the
 appropriate path is also added to your path so the ``peri`` executable is
 available. It can be found in :code:`$PYTHONPATH/bin`.
 
+If you don't have Python, you'll first need to install 64-bit Python,
+version 2.7. Download `Python <https://www.python.org/downloads/>`_.
+
+In addition, you'll want 64-bit versions of the following packages
+ * ``numpy`` (required)
+ * ``scipy`` (required)
+ * ``matplotlib`` (required)
+ * ``pillow`` (required)
+ * ``pyfftw`` (makes calculations *much* faster; all-but-required)
+ * ``trackpy`` (useful for analyzing the results and getting initial guesses;
+   not required)
+
+Running ``pip install peri`` should install ``peri`` and its dependencies
+automatically. Sometimes I have trouble with dependencies on Windows machines.
+In these cases, I like to download the dependencies in 64-bit from Christopher
+Gohlke's helpful website `here <http://www.lfd.uci.edu/~gohlke/pythonlibs/>`_.
+
+
 Source code
 -----------
 
@@ -64,7 +82,7 @@ Contributing
 ============
 
 If you find that featuring performance is poor for a particular image or you
-encounter a bug / issue, please reach out to the developers. 
+encounter a bug / issue, please reach out to the developers.
 
 Bugs and issues
 ---------------

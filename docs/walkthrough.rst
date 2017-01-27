@@ -11,11 +11,11 @@ PERI is a general, methodological framework to extract the maximum amount of
 information from a single microscope image. The idea of PERI is simple and
 short:
 
-1. Take a microscope image
-2. Create a mathematical model of the image formation process.
-3. Fit that mathematical model to the image.
-4. If the fit is not good, improve the mathematical model.
-5. If the fit is good, use the extracted information from the fit.
+1. `Take a microscope image.`_
+2. `Create a mathematical model of the image formation process.`_
+3. `Fit that mathematical model to the image.`_
+4. `If the fit is not good, improve the mathematical model.`_
+5. `If the fit is good, use the extracted information from the fit.`_
 
 The Python package ``peri`` contains both a general implementation of this
 framework and a detailed implementation of it for confocal images. In this
@@ -26,37 +26,11 @@ along the way but trying to avoid getting mired in details. Finally, I'll show
 you some convenience functions implemented in ``peri`` that make this process
 faster, both for you and your computer.
 
-Installation
-------------
-Before we start, we have to install ``peri``. If you already have a 64-bit
-Python installation and know how to use pip, this is easy. Just type:
+Before you begin, you'll need to install ``peri``. See the :doc:`Installation
+</installation>` section for how to do this.
 
-
-.. code-block:: python
-
-	pip install peri
-
-and you're done.
-
-If you don't, you'll first need to install 64-bit Python, version 2.7. If you
-don't have it, download `Python <https://www.python.org/downloads/>`_.
-
-In addition, you'll want 64-bit versions of the following packages
- * ``numpy`` (required)
- * ``scipy`` (required)
- * ``matplotlib`` (required)
- * ``pillow`` (required)
- * ``pyfftw`` (makes calculations *much* faster; all-but-required)
- * ``trackpy`` (useful for analyzing the results and getting initial guesses; 
-   not required)
-
-I like to download these files in 64-bit from Christopher Gohlke's helpful
-website `here <http://www.lfd.uci.edu/~gohlke/pythonlibs/>`_.
-
-Now, we're ready to begin.
-
-1. Take a microscope image.
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Take a microscope image.
+------------------------
 This is all you. A word to the wise though -- analysis with ``peri`` takes time
 (step 3), and figuring out what the best mathematical model is (steps 2 and 4)
 takes even more time. You can save a lot of time by taking the cleanest
@@ -89,8 +63,8 @@ views on the region you clicked.
    :alt: ``OrthoViewer(im.get_image())``
 
 
-2. Create a mathematical model for the image formation process.
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Create a mathematical model of the image formation process.
+-----------------------------------------------------------
 
 The method PERI needs a mathematical model to reconstruct the experimental
 image. At the grossest level, the model just needs to create a model image.
@@ -139,8 +113,8 @@ z=6 pixels above the bottom of the image. If I wanted, I could also pass a
 selection of Euler angles to describe the coverslip's orientation. However, a
 flat coverslip is a good enough initial guess. Likewise, I've used a centroid
 algorithm (trackpy) to do a reasonable job finding most of the spheres in the
-image; the position guess for this is saved as ``'particle-positions.npy'`` 
-[1]_. You can check the quality of this initial guess with the 
+image; the position guess for this is saved as ``'particle-positions.npy'``
+[1]_. You can check the quality of this initial guess with the
 :class:`~peri.viz.interaction.OrthoPrefeature`, which overlays the image with
 the extracted particle positions:
 
@@ -297,7 +271,7 @@ ready to create our state:
 .. code-block:: python
 
     from peri import states
-    st = states.ImageState(im, [objects, illumination, background, 
+    st = states.ImageState(im, [objects, illumination, background,
             point_spread_function, offset], mdl=model)
 
 If we want to save our state or load a saved state, we can use
@@ -316,8 +290,8 @@ drawing the Platonic particles. We can link these parameters with
 is the zscale the same because of the difference between nominal and actual
 focal positions? FIXME**
 
-3. Fit that mathematical model to the image.
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Fit that mathematical model to the image.
+-----------------------------------------
 
 Our state contains information about the quality of the fit through the
 difference between the model and the image through two main attributes:
@@ -338,7 +312,7 @@ error significantly using the convenience functions in :mod:`peri.runner`:
     runner.optimize_from_initial(st)
 
 This fits the state, printing information to your screen and saving progress
-to your current directory along the way. If running this code doesn't fit the 
+to your current directory along the way. If running this code doesn't fit the
 state well enough, you can either re-run the code above again, or run:
 
 .. code-block:: python
@@ -352,8 +326,8 @@ details of the optimization methods, you can read about them in the
 documentation's :doc:`Optimization </optimization>` section, including how
 ``peri`` can automatically add missing particles and remove bad ones.
 
-4. If the fit is not good, improve the mathematical model.
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If the fit is not good, improve the mathematical model.
+-------------------------------------------------------
 
 Now that we've fit our data, we need to check if the fit is good. ``peri``
 provides several ways to do this for a single state. The first step is the
@@ -448,8 +422,8 @@ If this is the case, you'll need to develop ``peri`` to include a new model or
 component! See the developer's section of the documentation to get started.
 
 
-5. If the fit is good, use the extracted information from the fit.
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If the fit is good, use the extracted information from the fit.
+---------------------------------------------------------------
 
 The :class:`~peri.states.ImageState` contains all the fitted parameters from
 the image and their values. The parameters are named with human-readable names
@@ -492,7 +466,7 @@ ways to save and load states as rapidly-loadable json files.
 
 
 Making this faster
-~~~~~~~~~~~~~~~~~~
+------------------
 Now that we have a completely-featured image, there is no point in repeating
 the tedium above to find the best positions and radii for the next image in
 your data. You can shortcut a lot of the human time by using some of the
@@ -500,7 +474,7 @@ convenience functions in :mod:`peri.runner`, as described in the
 :doc:`Quickstart </quickstart>` tutorial.
 
 Checking your model even more
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------
 
 Once you have multiple images featured, you can check the quality of your model
 even more by looking at the variation of parameters from image to image. If
