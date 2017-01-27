@@ -383,9 +383,9 @@ class BarnesStreakLegPoly2P1D(Component):
         shape : iterable
             size of the field in pixels, needs to be padded shape
 
-        npts : int
+        npts : tuple of ints, optional
             Number of control points used for the Barnes interpolant b_k
-            in the x-y sum.
+            in the x-y sum. Default is (40,20)
 
         zorder : integer
             Number of orders for the z-polynomial.
@@ -652,7 +652,7 @@ class BarnesStreakLegPoly2P1D(Component):
         if self._parent:
             param = self.category+'-scale'
             self.trigger_update(param, self.get_values(param))
-    
+
     def nopickle(self):
         return super(BarnesStreakLegPoly2P1D, self).nopickle() + [
             'poly', 'b_in', 'b_out', 'r', 'field',
@@ -678,4 +678,151 @@ class BarnesStreakLegPoly2P1D(Component):
         if self.shape:
             self.initialize()
 
+class BarnesXYLegPolyZ(BarnesStreakLegPoly2P1D):
+    def __init__(self, npts=(40,20), zorder=7, op='*', barnes_dist=1.75,
+            barnes_clip_size=3, local_updates=False, category='ilm', shape=None,
+            float_precision=np.float64):
+        """
+        A Barnes interpolant. This one is of the form
 
+        .. math::
+            I = \\left[1 + B(x,y) \\right]  (1 + z q(z)) + c
+
+        where B is a Barnes interpolants and q is a polynomial strictly in z.
+        Additionally.... operation multiply or x for poly?
+
+        Parameters
+        ----------
+        shape : iterable
+            size of the field in pixels, needs to be padded shape
+
+        npts : 2-element tuple of ints, optional
+            Number of control points used for the Barnes interpolant
+            in x & y. Default is (40,20)
+
+        zorder : integer
+            Number of orders for the z-polynomial.
+
+        op : string
+            The operation to perform between Barnes and LegPoly, '*' or '+'.
+
+        barnes_dist : float
+            Fractional distance to use for the barnes interpolator
+
+        local_updates : boolean
+            Whether to perform local updates on the ILM
+
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
+        """
+        self.shape = shape
+        self.local_updates = local_updates
+        self.barnes_clip_size = barnes_clip_size
+        self.barnes_dist = barnes_dist  # FIXME what?????
+        self.category = category
+        self.zorder = zorder
+        self.npts = npts
+        self.op = op
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
+
+        c = self.category
+        # set up the various parameter mappings and out local cache of how to
+        # distinguish them quickly from one another
+        params, values = [c+'-scale', c+'-off'], [1.0, 0.0]
+        self.barnes_params = []
+        ###~~~~~~~~~~~~~~~~only bit changed from barnes init~~~~~~~~~~~~~~~~###
+        for i in xrange(npts[0]):
+            for j in xrange(npts[1]):
+                self.barnes_params.append(c+'-b-%i-%i' % (i, j))
+                values.append(0.0)
+        params.extend(self.barnes_params)
+        ###~~~~~~~~~~~~~~~~end  bit changed from barnes init~~~~~~~~~~~~~~~~###
+
+        # tack on the z-poly parameters on the end
+        self.poly_params = {c+'-z-%i' % i:i+1 for i in xrange(zorder)}
+        params.extend(self.poly_params.keys())
+        values.extend([0.0]*len(self.poly_params))
+
+        super(BarnesStreakLegPoly2P1D, self).__init__(
+            params=params, values=values, category=category
+        )
+
+        # this next variable is to allow for randomize_parameters before the
+        # object has a shape by leaving a breadcrumb for normalization
+        self._norm_stat = None
+
+        if self.shape:
+            self.initialize()
+
+    def _barnes(self, pos):
+        """Creates a barnes interpolant & calculates its values"""
+        b_in = self.b_in
+        dist = lambda x: np.sqrt(np.dot(x,x))
+        #we take a filter size as the max distance between the grids along
+        #x or y:
+        sz = self.npts[1]
+        coeffs = self.get_values(self.barnes_params)
+
+        b = BarnesInterpolationND(
+            b_in, coeffs, filter_size=self.filtsize, damp=0.9, iterations=3,
+            clip=self.local_updates, clipsize=self.barnes_clip_size
+        )
+        return b(pos)  # (N,) shape
+
+    def _barnes_val(self):
+        """Returns the raveled values of the barnes on the field"""
+        return self._barnes(self.b_out)
+
+    def _setup_rvecs(self):
+        o = self.shape.shape
+        self.r = [np.linspace(-1, 1, i) for i in o]
+        self.r[0] = self.r[0][:,None,None]
+        self.r[1] = self.r[1][None,:,None]
+        self.r[2] = self.r[2][None,None,:]
+
+        self.b_out = np.array([[y,x] for y in self.r[1].flat for x in self.r[2].flat])
+        _b_in = [np.linspace(r.min(), r.max(), n) for r, n in zip(self.r[1:],
+                self.npts)]
+        self.b_in = np.array([[y,x] for y in _b_in[0] for x in _b_in[1]])
+        dxs = [b[1] - b[0] for b in _b_in]
+        self.filtsize = np.sqrt(np.dot(dxs, dxs))
+
+    def _barnes_full(self):
+        """Returns the shaped values of the barnes on the (x,y)"""
+        return np.reshape(self._barnes_val(), self.shape.shape[1:])[None, :, :]
+
+    def get_update_tile(self, params, values):
+        if not self.local_updates:
+            return self.shape.copy()
+
+        params = util.listify(params)
+        values = util.listify(values)
+
+        c = self.category
+        # check for global update requiring parameters:
+        for p in params:
+            if p in self.poly_params or p == c+'-scale' or p == c+'-off':
+                return self.shape.copy()
+
+        # now look for the local update sizes
+        orig_values = self.get_values(params)  #see for loop...
+        tiles = []
+        for p,v in zip(params, values):
+            # figure out the barnes local update size
+            # looks like matt does this by changing each param, then seeing
+            # manually which points have changed....
+            raise NotImplementedError('Local updates not implemented yet')
+        if len(tiles) == 0:
+            return None
+        return util.Tile.boundingtile(tiles)
+
+    def randomize_parameters(self, **kwargs):
+        raise NotImplementedError
+
+    def nopickle(self):
+         return super(BarnesXYLegPolyZ, self).nopickle()
