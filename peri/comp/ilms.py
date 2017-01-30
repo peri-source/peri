@@ -10,7 +10,7 @@ from itertools import product, chain
 
 from peri import util
 from peri.comp import Component
-from peri.interpolation import BarnesInterpolation1D
+from peri.interpolation import BarnesInterpolation1D,BarnesInterpolationND
 
 #=============================================================================
 # Pure 3d functional representations of ILMs
@@ -797,6 +797,7 @@ class BarnesXYLegPolyZ(BarnesStreakLegPoly2P1D):
         return np.reshape(self._barnes_val(), self.shape.shape[1:])[None, :, :]
 
     def get_update_tile(self, params, values):
+        #a lot of this is duplicated from parent to here
         if not self.local_updates:
             return self.shape.copy()
 
@@ -816,7 +817,25 @@ class BarnesXYLegPolyZ(BarnesStreakLegPoly2P1D):
             # figure out the barnes local update size
             # looks like matt does this by changing each param, then seeing
             # manually which points have changed....
-            raise NotImplementedError('Local updates not implemented yet')
+            if not p in self.barnes_params:
+                raise RuntimeError('Im confused...')
+            val0 = self._barnes(self.b_out)
+            self.set_values(p, v)
+            val1 = self._barnes(self.b_out)
+
+            inds = np.arange(self.b_out.shape[0])
+            inds = inds[np.abs(val1 - val0) > 1e-12]
+            if len(inds) < 2:
+                continue
+
+            l, r = inds.min(), inds.max()
+
+            tile = self.shape.copy()
+            tile.l[2] = l
+            tile.r[2] = r
+            tiles.append(util.Tile(tile.l, tile.r))
+
+            # raise NotImplementedError('Local updates not implemented yet')
         if len(tiles) == 0:
             return None
         return util.Tile.boundingtile(tiles)
