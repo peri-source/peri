@@ -23,8 +23,8 @@ In these documents you will find information about:
 * :ref:`ref-developing-models`
 * :ref:`ref-implementing-components`
 
-Contents:
-=========
+Documentation:
+==============
 
 .. toctree::
    :maxdepth: 3
