@@ -23,7 +23,6 @@ TODO:
     1. burn -- 2 loops of globals is only good for the first few loops; after
             that it's overkill. Best to make a 3rd mode now, since the
             psf and zscale move around without a set of burns.
-    2. better optimization? things like run_3 with eigenvalue blocks
 
 To add:
 1. AugmentedState: ILM scale options? You'd need a way to get an overall scale
@@ -32,7 +31,9 @@ To add:
     put stuff back on the card again....
 
 To fix:
-1.  In the engine, make do_run_1() and do_run_2() play nicer with each other.
+1.  AgumentedState relies on the particles having radii, and some like
+    LMParticles need the particles to have radii if include_rad is True (the
+    default).
 2.  Right now, when marquardt_damping=False (the default, which works nicely),
     the correct damping parameter scales with the image size. For each element
     of J is O(1), so JTJ[i,j]~1^2 * N ~ N where N is the number of residuals
@@ -130,9 +131,7 @@ def name_globals(s, remove_params=None):
             remove_params removed.
     """
     all_params = s.params
-    for p in s.param_positions():  #FIXME s.param_particle()??
-        all_params.remove(p)
-    for p in s.param_radii():
+    for p in s.param_particle(range(s.obj_get_positions().shape[0])):
         all_params.remove(p)
     if remove_params is not None:
         for p in set(remove_params):
@@ -208,35 +207,6 @@ def vectorize_damping(params, damping=1.0, increase_list=[['psf-', 1e4]]):
             if nm in params[a]:
                 damp_vec[a] *= fctr
     return damp_vec
-
-def halve_randomly(blk):
-    """
-    Randomly halves a block.
-
-    Given an array blk of bools, returns two arrays `blk1`, `blk2` such
-    that `blk1` | `blk2` = `blk`, `blk1` & `blk2` = 0, and `blk1` and
-    `blk2` have an equal amount of True's.
-
-    Parameters
-    ----------
-        blk : numpy.ndarray
-            1D ndarray of booleans
-
-    Returns
-    -------
-        blk1 : numpy.ndarray
-            The first boolean block.
-        blk2 : numpy.ndarray
-            The second boolean block.
-    """
-    inds = np.nonzero(blk)[0]
-    np.random.shuffle(inds)  #in-place shuffling
-    blk1 = np.zeros_like(blk, dtype='bool')
-    blk2 = np.zeros_like(blk, dtype='bool')
-    blk1[inds[:inds.size/2]] = True
-    blk2[inds[inds.size/2:]] = True
-    return [blk1,blk2]
-
 
 def low_mem_sq(m, step=100000):
     """np.dot(m, m.T) with low mem usage, by doing it in small steps"""
@@ -319,16 +289,17 @@ def separate_particles_into_groups(s, region_size=40, bounds=None):
     """
     bounding_tile = (s.oshape.translate(-s.pad) if bounds is None else
             Tile(bounds[0], bounds[1]))
-    rs = (np.array([region_size, region_size, region_size]).ravel() if
+    rs = (np.ones(bounding_tile.dim, dtype='int')*region_size if
             np.size(region_size) == 1 else np.array(region_size))
 
     n_translate = np.ceil(bounding_tile.shape.astype('float')/rs).astype('int')
     particle_groups = []
     tile = Tile(left=bounding_tile.l, right=bounding_tile.l + rs)
-    d0s, d1s, d2s = np.meshgrid(*[np.arange(i) for i in n_translate])
+    deltas = np.meshgrid(*[np.arange(i) for i in n_translate])
 
-    groups = map(lambda d0, d1, d2: find_particles_in_tile(s, tile.translate(
-            np.array([d0,d1,d2]) * rs)), d0s.ravel(), d1s.ravel(), d2s.ravel())
+    groups = map(lambda *args: find_particles_in_tile(s, tile.translate(
+            np.array(args) * rs)), *[d.ravel() for d in deltas])
+
     for i in xrange(len(groups)-1, -1, -1):
         if groups[i].size == 0:
             groups.pop(i)
@@ -1831,7 +1802,7 @@ class LMParticles(LMEngine):
         self._MINDIST= 1e-3
 
         #is_rad, is_pos masks:
-        rad_nms = self.state.param_radii()
+        rad_nms = self.state.param_radii() if include_rad else []
         self._is_rad = np.array(map(lambda x: x in rad_nms, self.param_names))
         pos_nms = self.state.param_positions()
         self._is_pos = []
@@ -2144,7 +2115,7 @@ class AugmentedState(object):
         if any of the particle radii or positions have been changed
         external to the augmented state.
         """
-        inds = range(self.state.obj_get_radii().size)
+        inds = range(self.state.obj_get_positions().shape[0])
         self._rad_nms = self.state.param_particle_rad(inds)
         self._pos_nms = self.state.param_particle_pos(inds)
         self._initial_rad = np.copy(self.state.state[self._rad_nms])
