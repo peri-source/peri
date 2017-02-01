@@ -337,6 +337,30 @@ class BrightfieldImageModel(Model):
         }
         super(BrightfieldImageModel, self).__init__(modelstr=modelstr, varmap=varmap)#registry=registry)
 
+class IlluminatedParticlesModel(Model):
+    """
+    A model of particles illuminated by light, with a background.
+
+    .. math::
+        \\mathcal{M} = I * P + B
+    """
+    def __init__(self):
+        varmap = {'P': 'obj', 'I':'ilm', 'B':'bkg'}
+        modelstr = {
+            'full' : 'I*P + B',
+            'dI' : 'dI*P',
+            'dP' : 'I*dP',
+            'dB' : 'dB',
+        }
+        registry = {
+            'bkg': allfields,
+            'ilm': allfields,
+            'obj': allobjs,
+        }
+        super(IlluminatedParticlesModel, self).__init__(
+                modelstr=modelstr, varmap=varmap, registry=registry)
+
+
 models = {
     'confocal-dyedfluid': ConfocalImageModel,
     'confocal-dyedobjects': ConfocalDyedParticlesModel,
