@@ -632,7 +632,7 @@ class ImageState(State, comp.ComponentCollection):
         otile = self.get_update_tile(params, values)
         if otile is None:
             return [None]*3
-        ptile = self.get_padding_size(otile) or util.Tile(0)
+        ptile = self.get_padding_size(otile) or util.Tile(0, dim=otile.dim)
 
         otile = util.Tile.intersection(otile, self.oshape)
 
