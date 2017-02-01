@@ -13,6 +13,272 @@ from peri.util import Tile, cdd, listify, delistify
 # maximum number of iterations to get an exact volume
 MAX_VOLUME_ITERATIONS = 10
 
+
+#=============================================================================
+# Superclass for collections of particles
+#=============================================================================
+
+class PlatonicParticlesCollection(Component):
+    def __init__(self, pos, shape=None, param_prefix='sph', category='obj',
+                support_pad=4, float_precision=np.float64):
+        """
+        Parent class for a large collection of particles, such as spheres or
+        points or ellipsoids or rods.
+
+        This class is good for a collection of objects which each have a
+        position as well as (possibly) some other parameters, like particle
+        radius, aspect ratio, or brightness. Its .get() method returns a
+        field of the drawn particles, selected on the current tile. Any
+        daughter classes need the following methods:
+
+        * _draw_particle
+        * _update_type
+        * setup_variables
+        * get_values
+        * set_values
+        * add_particle
+        * remove_particle
+
+        In addition, the following methods should be modified for particles
+        with more parameters than just positions:
+
+        * _drawargs
+        * _tile
+        * param_particle
+        * exports
+        * _p2i
+
+        If you have a few objects to group, like 2 or 3 slabs, group them
+        with a `peri.comp.ComponentCollection` instead.
+
+        Parameters
+        ----------
+        pos : ndarray [N,d]
+            Initial positions of the particles. Re-cast as float internally
+
+        shape : ``peri.util.Tile``, optional
+            Shape of the field over which to draw the platonic spheres.
+            Default is None.
+
+        param_prefix : string, optional
+            Prefix for the particle parameter names. Default is `'sph'`
+
+        category : string, optional
+            Category, as in comp.Component. Default is `'obj'`.
+
+        support_pad : Int, optional
+            How much to pad the boundary of particles when calculating the
+            support so that particles do not leak out the edges. Default is 4
+
+        float_precision : numpy float datatype, optional
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
+        """
+        if pos.ndim != 2:
+            raise ValueError('pos must be of shape (N,d)')
+
+        self.category = category
+        self.support_pad = support_pad
+        self.pos = pos.astype('float')
+        self.param_prefix = param_prefix
+
+        if float_precision not in (np.float64, np.float32, np.float16):
+            raise ValueError('float_precision must be one of np.float64, ' +
+                    'np.float32, np.float16')
+        self.float_precision = float_precision
+
+        self.shape = shape
+        self.setup_variables()
+
+        if self.shape:
+            self.inner = self.shape.copy()
+            self.tile = self.inner.copy()
+            self.initialize()
+
+    def _draw_particle(self, pos, sign=1):
+        """
+        Updates ``self.particles`` by drawing a particle at position ``pos``,
+        with possible additional unnamed arguments between ``pos`` and
+        ``sign``. If ``sign`` is -1, un-draws the particle instead.
+
+        To be able to fit this component in a model, _draw_particle must
+        create an image that is numerically continuous as pos changes --
+        i.e. the edge of the particle must alias smoothly to 0.
+        """
+        raise NotImplementedError('Implement in subclasss')
+
+    def _update_type(self, params):
+        """
+        Given a list of parameters, returns a bool of whether or not any of
+        the parameters require a global update, and a list of particle indices
+        which are included in ``params``, e.g.
+        ``return doglobal, particles``
+        """
+        raise NotImplementedError('Implement in subclasss')
+
+    def setup_variables(self):
+        """Creates an ordered list of parameters and stores in self._params"""
+        raise NotImplementedError('Implement in subclass')
+
+    def get_values(self, params):
+        """
+        Returns a util.delisty-d assortment of values and parameters, e.g.
+        (get values for the parameters, both particle positions and globals)
+        (return delistify(values, params))
+        """
+        #FIXME seems stupid that this can't be done intelligently, like with
+        #a Component's dict
+        raise NotImplementedError('Implement in subclasss')
+
+    def set_values(self, params, values):
+        """Sets the parameters and values"""
+        #FIXME seems stupid that this can't be done intelligently, like with
+        #a Component's dict
+        raise NotImplementedError('Implement in subclasss')
+
+    def add_particle(pos):
+        raise NotImplementedError('Implement in subclasss')
+
+    def remove_particle(pos):
+        raise NotImplementedError('Implement in subclasss')
+
+
+    def _drawargs(self):
+        """
+        Returns a list of arguments for self._draw_particle, of the same
+        length as `self.pos`. For example, if drawing a sphere, _drawargs
+        could return a list of radii.
+        """
+        return [[] for p in self.pos]
+
+    def _tile(self, n):
+        """Get the update tile surrounding particle `n` """
+        pos = self._trans(self.pos[n])
+        return Tile(pos, pos).pad(self.support_pad)
+
+    def param_particle(self, ind):
+        return self.param_particle_pos(ind)
+
+    def exports(self):
+        return [
+            self.add_particle, self.remove_particle, self.closest_particle,
+            self.get_positions
+        ]
+
+    def _p2i(self, param):
+        """
+        Parameter to indices, returns (coord, index), e.g. for a pos
+        pos     : ('x', 100)
+        """
+        g = param.split('-')
+        if len(g) == 3:
+            return g[2], int(g[1])
+        else:
+            raise ValueError('`param` passed as incorrect format')
+
+
+    def initialize(self):
+        """Start from scratch and initialize all objects / draw self.particles"""
+        self.particles = np.zeros(self.shape.shape, dtype=self.float_precision)
+
+        for p0, arg0 in zip(self.pos, self._drawargs()):
+            self._draw_particle(p0, *listify(arg0))
+
+    def get(self):
+        return self.particles[self.tile.slicer]
+
+    @property
+    def N(self):
+        return self.pos.shape[0]
+
+    def _vps(self, inds):
+        """Clips a list of inds to be on [0, self.N]"""
+        return [j for j in inds if j >= 0 and j < self.N]
+
+    def param_positions(self):
+        """ Return params of all positions """
+        return self.param_particle_pos(range(self.N))
+
+    def param_particle_pos(self, ind):
+        """ Get position of one or more particles """
+        #FIXME assumes 3D and x,y,z labels right now....
+        ind = self._vps(listify(ind))
+        return [self._i2p(i, j) for i in ind for j in ['z', 'y', 'x']]
+
+    def _trans(self, pos):
+        return pos + self.inner.l
+
+    def get_positions(self):
+        return self.pos.copy()
+
+    def closest_particle(self, x):
+        """ Get the index of the particle closest to vector `x` """
+        return (((self.pos - x)**2).sum(axis=-1)).argmin()
+
+    @property
+    def params(self):
+        return self._params
+
+    @property
+    def values(self):
+        return self.get_values(self._params)
+
+    def _i2p(self, ind, coord):
+        """ Translate index info to parameter name """
+        return '-'.join([self.param_prefix, str(ind), coord])
+
+    def get_update_tile(self, params, values):
+        """ Get the amount of support size required for a particular update."""
+        doglobal, particles = self._update_type(params)
+        if doglobal:
+            return self.shape.copy()
+
+        # 1) store the current parameters of interest
+        values0 = self.get_values(params)
+        # 2) calculate the current tileset
+        tiles0 = [self._tile(n) for n in particles]
+
+        # 3) update to newer parameters and calculate tileset
+        self.set_values(params, values)
+        tiles1 = [self._tile(n) for n in particles]
+
+        # 4) revert parameters & return union of all tiles
+        self.set_values(params, values0)
+        return Tile.boundingtile(tiles0 + tiles1)
+
+    def update(self, params, values):
+        """
+        Update the particles field given new parameter values
+        """
+        #1. Figure out if we're going to do a global update, in which
+        #   case we just draw from scratch.
+        global_update, particles = self._update_type(params)
+
+        # if we are updating the zscale, everything must change, so just start
+        # fresh will be faster instead of add subtract
+        if global_update:
+            self.set_values(params, values)
+            self.initialize()
+            return
+
+        # otherwise, update individual particles. delete the current versions
+        # of the particles update the particles, and redraw them anew at the
+        # places given by (params, values)
+        oldargs = self._drawargs()
+        for n in particles:
+            self._draw_particle(self.pos[n], *listify(oldargs[n]), sign=-1)
+
+        self.set_values(params, values)
+
+        newargs = self._drawargs()
+        for n in particles:
+            self._draw_particle(self.pos[n], *listify(newargs[n]), sign=+1)
+
+    def __str__(self):
+        return "{} N={}".format(self.__class__.__name__, self.N)
+
+
 #=============================================================================
 # Forms of the platonic sphere interpolation function
 #=============================================================================
@@ -164,7 +430,7 @@ def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
 #=============================================================================
 # Actual sphere collection (and slab)
 #=============================================================================
-class PlatonicSpheresCollection(Component):
+class PlatonicSpheresCollection(PlatonicParticlesCollection):
     def __init__(self, pos, rad, shape=None, zscale=1.0, support_pad=4,
             method='exact-gaussian-fast', alpha=None, user_method=None,
             exact_volume=True, volume_error=1e-5, max_radius_change=1e-2,
@@ -242,38 +508,22 @@ class PlatonicSpheresCollection(Component):
         if pos.ndim != 2:
             raise ValueError('pos must be of shape (N,3)')
 
-        self.category = category
-        self.support_pad = support_pad
-        self.pos = pos.astype('float')
         self.rad = rad.astype('float')
         self.zscale = zscale
         self.exact_volume = exact_volume
         self.volume_error = volume_error
         self.max_radius_change = max_radius_change
         self.user_method = user_method
-        self.param_prefix = param_prefix
         self.grouping = grouping
-        if float_precision not in (np.float64, np.float32, np.float16):
-            raise ValueError('float_precision must be one of np.float64, ' +
-                    'np.float32, np.float16')
-        self.float_precision = float_precision
 
         self.set_draw_method(method=method, alpha=alpha, user_method=user_method)
 
-        self.shape = shape
-        self.setup_variables()
+        super(PlatonicSpheresCollection, self).__init__(pos=pos, shape=shape,
+                param_prefix=param_prefix, category=category, support_pad=
+                support_pad, float_precision=float_precision)
 
-        if self.shape:
-            self.inner = self.shape.copy()
-            self.tile = self.inner.copy()
-            self.initialize()
-
-    def initialize(self):
-        """ Start from scratch and initialize all objects """
-        self.particles = np.zeros(self.shape.shape, dtype=self.float_precision)
-
-        for i, (p0, r0) in enumerate(zip(self.pos, self.rad)):
-            self._draw_particle(p0, r0)
+    def _drawargs(self):
+        return self.rad
 
     def setup_variables(self):
         self._params = []
@@ -286,32 +536,6 @@ class PlatonicSpheresCollection(Component):
             for i, (p0, r0) in enumerate(zip(self.pos, self.rad)):
                 self._params.extend([self._i2p(i, c) for c in ['z','y','x','a']])
         self._params += ['zscale']
-
-    def update(self, params, values):
-        """
-        Update the platonic image of spheres given new parameter values
-        """
-        # figure out which particles are going to be updated, or if the
-        # zscale needs to be updated
-        dozscale, particles = self._update_type(params)
-
-        # if we are updating the zscale, everything must change, so just start
-        # fresh will be faster instead of add subtract
-        if dozscale:
-            self.set_values(params, values)
-            self.initialize()
-            return
-
-        # otherwise, update individual particles. delete the current versions
-        # of the particles update the particles, and redraw them anew at the
-        # places given by (params, values)
-        for n in particles:
-            self._draw_particle(self.pos[n], self.rad[n], -1)
-
-        self.set_values(params, values)
-
-        for n in particles:
-            self._draw_particle(self.pos[n], self.rad[n], +1)
 
     def get_values(self, params):
         values = []
@@ -342,45 +566,6 @@ class PlatonicSpheresCollection(Component):
                 self.pos[ind][0] = v
             elif typ == 'a':
                 self.rad[ind] = v
-
-    @property
-    def params(self):
-        return self._params
-
-    @property
-    def values(self):
-        return self.get_values(self._params)
-
-    def get_update_tile(self, params, values):
-        """ Get the amount of support size required for a particular update. """
-        dozscale, particles = self._update_type(params)
-
-        # if we are updating the zscale then really everything should change
-        if dozscale:
-            return self.shape.copy()
-
-        # 1) calculate the current tileset
-        # 2) store the current parameters of interest
-        # 3) update to newer parameters and calculate tileset
-        # 4) revert parameters & return union of all tiles
-        values0 = self.get_values(params)
-
-        tiles0 = [self._tile(n) for n in particles]
-        self.set_values(params, values)
-
-        tiles1 = [self._tile(n) for n in particles]
-        self.set_values(params, values0)
-
-        return Tile.boundingtile(tiles0 + tiles1)
-
-    @property
-    def N(self):
-        return self.rad.shape[0]
-
-    def set_pos_rad(self, pos, rad):
-        self.pos = pos.astype('float')
-        self.rad = rad.astype('float')
-        self.initialize()
 
     def set_draw_method(self, method, alpha=None, user_method=None):
         self.methods = [
@@ -421,9 +606,6 @@ class PlatonicSpheresCollection(Component):
         else:
             self.alpha = tuple(listify(self.alpha_defaults[self.method]))
 
-    def _trans(self, pos):
-        return pos + self.inner.l
-
     def _draw_particle(self, pos, rad, sign=1):
         # we can't draw 0 radius particles correctly, abort
         if rad == 0.0:
@@ -452,19 +634,6 @@ class PlatonicSpheresCollection(Component):
             t = sign*self.sphere_functions[self.method](dr, rad, *self.alpha)
 
         self.particles[tile.slicer] += t
-
-    def set_tile(self, tile):
-        self.tile = tile
-
-    def get(self):
-        return self.particles[self.tile.slicer]
-
-    def _vps(self, inds):
-        return [j for j in inds if j >= 0 and j < self.N]
-
-    def param_positions(self):
-        """ Return params of all positions """
-        return [self._i2p(i, j) for i in xrange(self.N) for j in ['x','y','z']]
 
     def param_radii(self):
         """ Return params of all radii """
@@ -549,34 +718,20 @@ class PlatonicSpheresCollection(Component):
         self.trigger_parameter_change()
         return np.array(pos).reshape(-1,3), np.array(rad).reshape(-1)
 
-    def get_positions(self):
-        return self.pos.copy()
-
     def get_radii(self):
         return self.rad.copy()
 
-    def closest_particle(self, x):
-        """ Get the index of the particle closest to vector `x` """
-        return (((self.pos - x)**2).sum(axis=-1)).argmin()
-
     def exports(self):
-        return [
-            self.add_particle, self.remove_particle, self.closest_particle,
-            self.get_positions, self.get_radii
-        ]
-
-    def _i2p(self, ind, coord):
-        """ Translate index info to parameter name """
-        return '-'.join([self.param_prefix, str(ind), coord])
+        return (super(PlatonicSpheresCollection, self).exports() +
+                [self.get_radii])
 
     def _p2i(self, param):
         """
-        Parameter to indices, returns (type, index, coord). Therefore, for a
-        pos    : (100, 'x')
-        rad    : (100, 'a')
+        Parameter to indices, returns (coord, index). Therefore, for a
+        pos    : ('x', 100)
+        rad    : ('a', 100)
         zscale : ('zscale, None)
         """
-        q = {'x': 2, 'y': 1, 'z': 0}
         g = param.split('-')
         if len(g) == 1:
             return 'zscale', None
