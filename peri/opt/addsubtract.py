@@ -794,7 +794,7 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
         The max allowed deviation of the residuals from what is expected,
         in units of the residuals' standard deviation. Lower means more
         sensitive, higher = less sensitive. Default is 8.0, i.e. one pixel
-        out of every 7*10^11 is mis-identified randomly. In practice the
+        out of every ``7*10^11`` is mis-identified randomly. In practice the
         noise is not Gaussian so there are still some regions mis-
         identified as improperly featured.
 
@@ -817,7 +817,7 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
 
     im_change_frac : Float, between 0 and 1.
         If adding or removing a particle decreases the error less than
-        ``im_change_frac``*the change in the image, the particle is deleted.
+        ``im_change_frac *`` the change in the image, the particle is deleted.
         Default is 0.2.
 
     min_derr : Float
