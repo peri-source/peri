@@ -2,6 +2,7 @@
 peri.runner
 ***********
 
+.. autofunction:: peri.runner.locate_spheres
 
 .. autofunction:: peri.runner.optimize_from_initial
 

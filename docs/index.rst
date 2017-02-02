@@ -29,10 +29,8 @@ Documentation:
 .. toctree::
    :maxdepth: 3
 
-   quickstart
-   walkthrough
    installation
-   configuration
+   walkthrough
    architecture
    optimization
    parallel

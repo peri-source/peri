@@ -1,9 +1,9 @@
 .. role:: python(code)
    :language: python
 
-******************************
-Installation and contributing
-******************************
+************
+Installation
+************
 
 Installation
 ============

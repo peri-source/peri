@@ -137,8 +137,8 @@ pixels.
 
 .. [1] If and when you're analyzing your own confocal images of spheres you can
    pass your initial guess for the positions as an [N,3] numpy.ndarray, which
-   you can get however your heart desires, including using the methods I
-   mention in the :doc:`quickstart </quickstart>`.
+   you can get however your heart desires, including through
+   :func:`~peri.runner.locate_spheres`.
 
 Looking at the image, we see that the coverslip and particles behave the same
 way -- both exclude dye from regions of the image. Thus, it seems best to treat
@@ -470,8 +470,69 @@ Making this faster
 Now that we have a completely-featured image, there is no point in repeating
 the tedium above to find the best positions and radii for the next image in
 your data. You can shortcut a lot of the human time by using some of the
-convenience functions in :mod:`peri.runner`, as described in the
-:doc:`Quickstart </quickstart>` tutorial.
+convenience functions in :mod:`peri.runner`.
+
+All of these ``runner`` functions allow you to select the images and
+previously-featured states interactively through dialog boxes, for convenience.
+If this is not convenient you can instead pass the filenames for the states
+and images directly to the runner functions, along with a whole lot more
+options. Read the documentation if you want to know more!
+
+Here's how to feature an image quickly...
+
+...using the microscope parameters from another state
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You've already featured a few images from your dataset and have a good
+``peri`` state for your microscope. You don't want to spend a ton of time
+re-featuring the microscope parameters again; you just want the positions in
+the next image. If the particles in the new image have a radius of roughly
+5 pixels, run
+
+.. code-block:: python
+
+    runner.get_particles_featuring(5)
+
+This will pull up a file dialog box asking you to select the image to feature
+and the previously-featured state to take the microscope parameters from.
+Once you've done this, it will run on its own and save the state to the same
+directory as the image.
+
+...using the microscope parameters and positions from another state
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If the particles haven't moved by a whole lot from one frame in your dataset
+to the next, then you can use
+
+.. code-block:: python
+
+    runner.translate_featuring()
+
+which also allows for you to select the image through dialog boxes.
+
+
+...from scratch
+~~~~~~~~~~~~~~~
+To feature an image of dark spherical particles with a radius of roughly 5
+pixels on a bright background, type:
+
+.. code-block:: python
+
+    runner.get_initial_featuring(5, makestatefunction=None)
+
+You'll select the image through dialog boxes.
+
+
+...from a guess of positions and radii
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Perhaps you've already spent a lot of time with another method and have a
+pretty good guess for all the particle positions and radii. In that case, run
+
+.. code-block:: python
+
+    runner.feature_from_pos_rad(pos, rad, makestatefunction=None)
+
 
 Checking your model even more
 -----------------------------
