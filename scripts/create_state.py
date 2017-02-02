@@ -1,10 +1,5 @@
-import pickle
-import pylab as pl
-import numpy as np
-
-from peri import states, runner, util, models
-from peri.comp import psfs, objs, ilms, exactpsf, GlobalScalar, ComponentCollection
-from peri.viz import interaction
+from peri import states, util, models
+from peri.comp import psfs, objs, ilms, GlobalScalar, ComponentCollection
 from peri.test import nbody
 
 import peri.opt.optimize as opt
