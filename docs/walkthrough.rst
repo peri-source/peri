@@ -538,14 +538,21 @@ which also allows for you to select the image through dialog boxes.
 
 ...from scratch
 ~~~~~~~~~~~~~~~
-To feature an image of dark spherical particles with a radius of roughly 5
-pixels on a bright background, type:
+The ``runner`` functions also allow for featuring images from scratch, without
+having a previously featured state. However, you'll need to write and supply a
+statemaker function that makes a complete ``ImageState``. The statemaker
+function needs to provide a model that can accurately describe your microscope
+image formation. See the ``runner`` documentation or the example statemaker
+in scripts/statemaker_example.py for details. To feature an image of dark
+spherical particles with a radius of roughly 5 pixels on a bright background,
+type:
 
 .. code-block:: python
 
-    runner.get_initial_featuring(5, makestatefunction=None)
+    runner.get_initial_featuring(statemaker, 5)
 
-You'll select the image through dialog boxes.
+where ``statemaker`` is the statemaker function. You'll select the image
+through dialog boxes.
 
 
 ...from a guess of positions and radii
@@ -556,8 +563,10 @@ pretty good guess for all the particle positions and radii. In that case, run
 
 .. code-block:: python
 
-    runner.feature_from_pos_rad(pos, rad, makestatefunction=None)
+    runner.feature_from_pos_rad(statemaker, pos, rad)
 
+Once again, you'll need a statemaker function. You will be able to select the
+image through dialog boxes.
 
 Checking your model even more
 -----------------------------
