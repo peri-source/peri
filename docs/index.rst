@@ -1,11 +1,10 @@
 Welcome to PERI's documentation!
 ================================
 
-.. topic:: Quick start
+.. topic:: Getting Started
 
-    To start featuring immediately, see the :doc:`quick start guide. </quickstart>`
     For an introduction to how ``peri`` works and how to use it, see the
-    :doc:`walkthrough`</walkthrough>`.
+    :doc:`walkthrough </walkthrough>`.
 
 Parameter Extraction from Reconstruction of Images (PERI) is a package that
 extracts features from microscope images by fitting a physics-based model to
@@ -19,7 +18,6 @@ In these documents you will find information about:
 
 * :doc:`Installation </installation>`
 * :doc:`Package overview </architecture>`
-* :doc:`Configuration options </configuration>`
 * :ref:`ref-developing-models`
 * :ref:`ref-implementing-components`
 
