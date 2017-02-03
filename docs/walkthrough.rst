@@ -361,7 +361,32 @@ transform of the residuals (hit ``W``). Again, if you see structure in the
 residuals in Fourier space, your model isn't complete or your fit isn't the
 best.
 
-**plots of gaussianities of residuals?**
+If the residuals look OK by eye, check their distribution and deviation from
+gaussianity. You can do this quickly with
+
+.. code-block:: python
+
+    from peri.viz import plots
+    plots.examine_unexplained_noise(st)
+
+This will bring up a figure that plots the distribution of residuals in real
+and Fourier space and compares them with a normal distribution expected from
+the variance of the residuals. If you see significant deviation of the data
+from a Gaussian, then your model isn't complete or your fit isn't good.
+
+.. figure:: ./_static/unexplained-noise.png
+    :scale: 100%
+    :alt: ``plots.examine_unexplained_noise(st)``
+    :align: center
+
+    The distribution of residuals in real and Fourier space. They should be
+    perfect Gaussians. While the distribution of real-space residuals is an
+    amazingly perfect Gaussian, there are some deviations in Fourier space at
+    large :math:`x/\sigma`. Looking at the 
+    :class:`~peri.viz.interaction.OrthoManipulator`, these arise from a
+    combination of scanning noise on our detector (some lines at
+    :math:`q_x=0, q_z=0`) and from incompleteness in our model (a faint ring at
+    moderate :math:`q` values).
 
 What should you do if the fit is bad? First, I would try more optimizations of
 the state. If you optimize the state and the error changes, then you weren't at
