@@ -2602,7 +2602,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-4,
     return d
 
 def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True,
-        fractol=1e-7, errtol=1e-3, dowarn=False):
+        fractol=1e-7, errtol=1e-3, dowarn=True):
     """
     Crawls slowly to the minimum-cost state.
 
