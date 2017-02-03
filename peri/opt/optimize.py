@@ -229,7 +229,7 @@ def low_mem_sq(m, step=100000):
         mx = min(a+step, m.shape[1])
         # m_tmp[:] = m[a:mx]
         # np.dot(m_tmp, m.T, out=mmt[a:mx])
-        np.dot(m, m[a:mx].T, out=mmt[:, a:mx])
+        mmt[:, a:mx] = np.dot(m, m[a:mx].T)
     return mmt
 
 #=============================================================================#
