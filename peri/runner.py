@@ -26,14 +26,12 @@ import tkFileDialog as tkfd
 import numpy as np
 import peri
 from peri import initializers, util, models, states, logger
-from peri.comp import ilms, objs, psfs, exactpsf, comp
+from peri.comp import ilms
 import peri.opt.optimize as opt
 import peri.opt.addsubtract as addsub
 
 RLOG = logger.log.getChild('runner')
 
-# FIXME would be good to copy particular things from a state..... e.g. an
-# optimized ilm or switching out an optimized psf
 
 def locate_spheres(image, feature_rad, dofilter=False, order=(3 ,3, 3),
                     trim_edge=True, **kwargs):
@@ -99,9 +97,9 @@ def locate_spheres(image, feature_rad, dofilter=False, order=(3 ,3, 3),
     return pos
 
 
-def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
-        tile=None, invert=True, use_full_path=False, featuring_params={},
-        **kwargs):
+def get_initial_featuring(statemaker, feature_rad, actual_rad=None,
+        im_name=None, tile=None, invert=True, desc='', use_full_path=False,
+        featuring_params={}, statemaker_kwargs={}, **kwargs):
     """
     Completely optimizes a state from an image of roughly monodisperse
     particles.
@@ -112,6 +110,12 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
 
     Parameters
     ----------
+        statemaker : Function
+            A statemaker function. Given arguments `im` (a
+            :class:`~peri.util.Image`), `pos` (numpy.ndarray), `rad` (ndarray),
+            and any additional `statemaker_kwargs`, must return a
+            :class:`~peri.states.ImageState`.  There is an example function in
+            scripts/statemaker_example.py
         feature_rad : Int, odd
             The particle radius for featuring, as passed to locate_spheres.
         actual_rad : Float, optional
@@ -125,6 +129,9 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
         invert : Bool, optional
             Whether to invert the image for featuring, as passed to trackpy.
             Default is True.
+        desc : String, optional
+            A description to be inserted in saved state. The save name will
+            be, e.g., '0.tif-peri-' + desc + 'initial-burn.pkl'. Default is ''
         use_full_path : Bool, optional
             Set to True to use the full path name for the image. Default
             is False.
@@ -132,18 +139,15 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
             kwargs-like dict of any additional keyword arguments to pass to
             ``get_initial_featuring``, such as ``'use_tp'`` or ``'minmass'``.
             Default is ``{}``.
+        statemaker_kwargs : Dict, optional
+            kwargs-like dict of any additional keyword arguments to pass to
+            the statemaker function. Default is ``{}``.
 
     Other Parameters
     ----------------
-        slab : :class:`peri.comp.objs.Slab` or None, optional
-            If not None, a slab corresponding to that in the image. Default
-            is None.
         max_mem : Numeric
             The maximum additional memory to use for the optimizers, as
             passed to optimize.burn. Default is 1e9.
-        desc : String, optional
-            A description to be inserted in saved state. The save name will
-            be, e.g., '0.tif-peri-' + desc + 'initial-burn.pkl'. Default is ''
         min_rad : Float, optional
             The minimum particle radius, as passed to addsubtract.add_subtract.
             Particles with a fitted radius smaller than this are identified
@@ -159,10 +163,6 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
             optimization.
         zscale : Float, optional
             The zscale of the image. Default is 1.0
-        mem_level : String, optional
-            Set to one of 'hi', 'med-hi', 'med', 'med-lo', 'lo' to control
-            the memory overhead of the state at the expense of accuracy.
-            Default is 'hi'.
 
     Returns
     -------
@@ -201,12 +201,15 @@ def get_initial_featuring(feature_rad, actual_rad=None, im_name=None,
         raise ValueError(msg)
 
     rad = np.ones(pos.shape[0], dtype='float') * actual_rad
-    s = _optimize_from_centroid(pos, rad, im, invert=invert, **kwargs)
+    s = statemaker(im, pos, rad, **statemaker_kwargs)
+    RLOG.info('State Created.')
+    states.save(s, desc=desc+'initial')
+    optimize_from_initial(s, invert=invert, desc=desc, **kwargs)
     return s
 
 
-def feature_from_pos_rad(pos, rad, im_name=None, tile=None,
-        use_full_path=False, **kwargs):
+def feature_from_pos_rad(statemaker, pos, rad, im_name=None, tile=None,
+        desc='', use_full_path=False, statemaker_kwargs={}, **kwargs):
     """
     Gets a completely-optimized state from an image and an initial guess of
     particle positions and radii.
@@ -217,6 +220,12 @@ def feature_from_pos_rad(pos, rad, im_name=None, tile=None,
 
     Parameters
     ----------
+        statemaker : Function
+            A statemaker function. Given arguments `im` (a
+            :class:`~peri.util.Image`), `pos` (numpy.ndarray), `rad` (ndarray),
+            and any additional `statemaker_kwargs`, must return a
+            :class:`~peri.states.ImageState`.  There is an example function in
+            scripts/statemaker_example.py
         pos : [N,3] element numpy.ndarray.
             The initial guess for the N particle positions.
         rad : N element numpy.ndarray.
@@ -227,21 +236,21 @@ def feature_from_pos_rad(pos, rad, im_name=None, tile=None,
         tile : :class:`peri.util.Tile`, optional
             A tile of the sub-region of the image to feature. Default is
             None, i.e. entire image.
-        use_full_path : Bool, optional
-            Set to True to use the full path name for the image. Default
-            is False.
-
-    Other Parameters
-    ----------------
-        slab : :class:`peri.comp.objs.Slab` or None, optional
-            If not None, a slab corresponding to that in the image. Default
-            is None.
-        max_mem : Numeric
-            The maximum additional memory to use for the optimizers, as
-            passed to optimize.burn. Default is 1e9.
         desc : String, optional
             A description to be inserted in saved state. The save name will
             be, e.g., '0.tif-peri-' + desc + 'initial-burn.pkl'. Default is ''
+        use_full_path : Bool, optional
+            Set to True to use the full path name for the image. Default
+            is False.
+        statemaker_kwargs : Dict, optional
+            kwargs-like dict of any additional keyword arguments to pass to
+            the statemaker function. Default is ``{}``.
+
+    Other Parameters
+    ----------------
+        max_mem : Numeric
+            The maximum additional memory to use for the optimizers, as
+            passed to optimize.burn. Default is 1e9.
         min_rad : Float, optional
             The minimum particle radius, as passed to addsubtract.add_subtract.
             Particles with a fitted radius smaller than this are identified
@@ -260,10 +269,6 @@ def feature_from_pos_rad(pos, rad, im_name=None, tile=None,
             optimization.
         zscale : Float, optional
             The zscale of the image. Default is 1.0
-        mem_level : String, optional
-            Set to one of 'hi', 'med-hi', 'med', 'med-lo', 'lo' to control
-            the memory overhead of the state at the expense of accuracy.
-            Default is 'hi'.
 
     Returns
     -------
@@ -295,44 +300,11 @@ def feature_from_pos_rad(pos, rad, im_name=None, tile=None,
         raise ValueError('`pos` must be an [N,3] element numpy.ndarray.')
     _,  im_name = _pick_state_im_name('', im_name, use_full_path=use_full_path)
     im = util.RawImage(im_name, tile=tile)
-    s = _optimize_from_centroid(pos, rad, im, **kwargs)
-    return s
-
-
-def _optimize_from_centroid(pos, rad, im, slab=None, max_mem=1e9, desc='',
-        min_rad=None, max_rad=None, invert=True, rz_order=0, zscale=1.0,
-        mem_level='hi'):
-    """
-    Workhorse for creating & optimizing states with an initial centroid
-    guess.
-    See get_initial_featuring's __doc__ for params.
-    """
-    if slab is not None:
-        o = comp.ComponentCollection(
-                [
-                    objs.PlatonicSpheresCollection(pos, rad, zscale=zscale),
-                    slab
-                ],
-                category='obj'
-            )
-    else:
-        o = objs.PlatonicSpheresCollection(pos, rad, zscale=zscale)
-
-    p = exactpsf.FixedSSChebLinePSF()
-    npts, iorder = _calc_ilm_order(im.get_image().shape)
-    i = ilms.BarnesStreakLegPoly2P1D(npts=npts, zorder=iorder)
-    b = ilms.LegendrePoly2P1D(order=(9 ,3, 5), category='bkg') # FIXME order needs to be based on image size, slab
-    c = comp.GlobalScalar('offset', 0.0)
-    s = states.ImageState(im, [o, i, b, c, p])
-    link_zscale(s)
-    if mem_level != 'hi':
-        s.set_mem_level(mem_level)
+    s = statemaker(im, pos, rad, **statemaker_kwargs)
     RLOG.info('State Created.')
-
-    opt.do_levmarq(s, ['ilm-scale'], max_iter=1, run_length=6, max_mem=max_mem)
     states.save(s, desc=desc+'initial')
-    optimize_from_initial(s, max_mem=max_mem, invert=invert, desc=desc,
-            rz_order=rz_order)
+    optimize_from_initial(s, desc=desc, **kwargs)
+    return s
 
 
 def optimize_from_initial(s, max_mem=1e9, invert=True, desc='', rz_order=3,
@@ -363,24 +335,6 @@ def optimize_from_initial(s, max_mem=1e9, invert=True, desc='', rz_order=3,
     if not d['converged']:
         RLOG.warn('Optimization did not converge; consider re-running')
     return s
-
-
-def _calc_ilm_order(imshape):
-    """
-    Calculates an ilm order based on the shape of an image. Bleeding-edge...
-    """
-    # FIXME this needs to be general, with loads from the config file
-    # Right now I'm calculating as if imshape is the unpadded shape but
-    # perhaps it should be the padded shape?
-    zorder = int(imshape[0] / 6.25) + 1  # might be overkill for big z images
-    l_npts = int(imshape[1] / 42.5)+1
-    npts = ()
-    for a in xrange(l_npts):
-        if a < 5:
-            npts += (int(imshape[2] * [59, 39, 29, 19, 14][a]/512.) + 1,)
-        else:
-            npts += (int(imshape[2] * 11/512.) + 1,)
-    return npts, zorder
 
 
 def translate_featuring(state_name=None, im_name=None, use_full_path=False,
@@ -436,10 +390,7 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
         do_polish : Bool, optional
             Set to False to only optimize the particles and add-subtract.
             Default is True, which then runs a polish afterwards.
-        mem_level : String, optional
-            Set to one of 'hi', 'med-hi', 'med', 'med-lo', 'lo' to control
-            the memory overhead of the state at the expense of accuracy.
-            Default is 'hi'.
+
     Returns
     -------
         s : :class:`peri.states.ImageState`
@@ -543,10 +494,7 @@ def get_particles_featuring(feature_rad, state_name=None, im_name=None,
         do_polish : Bool, optional
             Set to False to only optimize the particles and add-subtract.
             Default is True, which then runs a polish afterwards.
-        mem_level : String, optional
-            Set to one of 'hi', 'med-hi', 'med', 'med-lo', 'lo' to control
-            the memory overhead of the state at the expense of accuracy.
-            Default is 'hi'.
+
     Returns
     -------
         s : :class:`peri.states.ImageState`
@@ -630,12 +578,10 @@ def _pick_state_im_name(state_name, im_name, use_full_path=False):
 
 
 def _translate_particles(s, max_mem=1e9, desc='', min_rad='calc',
-        max_rad='calc', invert=True, rz_order=0, do_polish=True,
-        mem_level='hi'):
+        max_rad='calc', invert=True, rz_order=0, do_polish=True):
     """
     Workhorse for translating particles. See get_particles_featuring for docs.
     """
-    s.set_mem_level(mem_level)  # overkill because always sets mem, but w/e
     RLOG.info('Translate Particles:')
     opt.burn(s, mode='do-particles', n_loop=4, fractol=0.1, desc=desc+
             'translate-particles', max_mem=max_mem, include_rad=False,
