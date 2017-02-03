@@ -782,10 +782,8 @@ class PlatonicSpheresCollection(PlatonicParticlesCollection):
 # Coverslip half plane class
 #=============================================================================
 class Slab(Component):
-    category = 'obj'
-
     def __init__(self, zpos=0, angles=(0,0), param_prefix='slab', shape=None,
-            float_precision=np.float64):
+            float_precision=np.float64, category='obj'):
         """
         A half plane corresponding to a cover-slip.
 
@@ -809,6 +807,7 @@ class Slab(Component):
             for precomputed arrays. Default is np.float64; make it 16 or 32
             to save memory.
         """
+        self.category = category
         self.lbl_zpos = param_prefix+'-zpos'
         self.lbl_theta = param_prefix+'-theta'
         self.lbl_phi = param_prefix+'-phi'
