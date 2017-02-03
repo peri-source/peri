@@ -2686,6 +2686,9 @@ def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True,
         dobreak = (derr/new_err < fractol) or (derr < errtol)
         if dobreak:
             break
+
+    if dowarn and (not dobreak):
+        CLOG.warn('finish() did not converge; consider re-running')
     return {'converged':dobreak, 'loop_values':np.array(values)}
 
 def fit_comp(new_comp, old_comp, **kwargs):
