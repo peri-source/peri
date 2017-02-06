@@ -72,8 +72,12 @@ class BarnesInterpolation1D(object):
         """weighting function for Barnes"""
         sigma = sigma or self.filter_size
 
-        o = np.exp(-rsq / (2*sigma**2))
-        o = o * (not self.clip or (self.clip and (rsq < self.clipsize**2)))
+        if not self.clip:
+            o = np.exp(-rsq / (2*sigma**2))
+        else:
+            o = np.zeros(rsq.shape, dtype='float')
+            m = (rsq < self.clipsize**2)
+            o[m] = np.exp(-rsq[m] / (2*sigma**2))
         return o
 
     def __call__(self, rvecs):
@@ -142,7 +146,7 @@ class BarnesInterpolationND(BarnesInterpolation1D):
         """
         super(BarnesInterpolationND, self).__init__(*args, **kwargs)
 
-    def _outer(self, a, b):
+    def _distance_matrix(self, a, b):
         """Pairwise distance between each point in `a` and each point in `b`"""
         sq = lambda x: (x*x)
         matrix = np.sum(map(lambda a,b: sq(a[:,None] - b[None,:]),

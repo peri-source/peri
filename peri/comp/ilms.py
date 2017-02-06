@@ -687,7 +687,7 @@ class BarnesStreakLegPoly2P1D(Component, util.CompatibilityPatch):
 
 class BarnesXYLegPolyZ(BarnesStreakLegPoly2P1D):
     def __init__(self, npts=(40,20), zorder=7, op='*', barnes_dist=1.75,
-            barnes_clip_size=3, local_updates=False, category='ilm', shape=None,
+            barnes_clip_size=3, local_updates=True, category='ilm', shape=None,
             float_precision=np.float64):
         """
         A Barnes interpolant. This one is of the form
