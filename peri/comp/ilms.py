@@ -362,12 +362,12 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 # a complex hidden variable representation of the ILM
 # something like (p(x,y)+m(x,y))*q(z) where m is determined by local models
 #=============================================================================
-class BarnesStreakLegPoly2P1D(Component):
+class BarnesStreakLegPoly2P1D(Component, util.CompatibilityPatch):
     category = 'ilm'
 
     def __init__(self, npts=(40,20), zorder=7, op='*', barnes_dist=1.75,
             barnes_clip_size=3, local_updates=True, category='ilm', shape=None,
-            float_precision=np.float64):
+            float_precision=np.float64, donorm=True):
         """
         A Barnes interpolant. This one is of the form
 
@@ -403,6 +403,10 @@ class BarnesStreakLegPoly2P1D(Component):
             One of numpy.float16, numpy.float32, numpy.float64; precision
             for precomputed arrays. Default is np.float64; make it 16 or 32
             to save memory.
+        donorm : Bool
+            Whether or not to normalize the Barnes interpolation. Ostensibly
+            for speed but really for a compatibility patch. Default is True,
+            i.e. normalize the Barnes interpolant.
         """
         self.shape = shape
         self.local_updates = local_updates
@@ -416,6 +420,7 @@ class BarnesStreakLegPoly2P1D(Component):
             raise ValueError('float_precision must be one of np.float64, ' +
                     'np.float32, np.float16')
         self.float_precision = float_precision
+        self.donorm = donorm
 
         c = self.category
         # set up the various parameter mappings and out local cache of how to
@@ -482,7 +487,8 @@ class BarnesStreakLegPoly2P1D(Component):
 
         b = BarnesInterpolation1D(
             b_in, coeffs, filter_size=fdst, damp=0.9, iterations=3,
-            clip=self.local_updates, clipsize=self.barnes_clip_size
+            clip=self.local_updates, clipsize=self.barnes_clip_size,
+            donorm=self.donorm
         )
         return b(y)
 
@@ -674,7 +680,7 @@ class BarnesStreakLegPoly2P1D(Component):
 
     def __setstate__(self, idict):
         self.__dict__.update(idict)
-        self.patch({'float_precision': np.float64})
+        self.patch({'float_precision': np.float64, 'donorm':False})
         if self.shape:
             self.initialize()
 

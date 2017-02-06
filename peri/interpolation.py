@@ -2,7 +2,7 @@ import numpy as np
 
 class BarnesInterpolation1D(object):
     def __init__(self, x, d, filter_size=None, iterations=4, clip=False,
-            clipsize=3, damp=0.95, oldcall=True):
+            clipsize=3, damp=0.95, donorm=True):
         """
         A class for 1-d barnes interpolation. Give data points d at locations x.
 
@@ -37,10 +37,10 @@ class BarnesInterpolation1D(object):
             the damping parameter used in accelerating convergence. Default
             is 0.95
 
-        oldcall : bool, optional
-            If True, uses an old, incorrect method to evaluate the interpolant
-            rather than the correct version. Default is True (compatibility).
-            If you're using this, set it to False.
+        donorm : bool, optional
+            If False, uses an old, incorrect method to evaluate the interpolant
+            rather than the correct version. Default is True. If you're using
+            this, set it to True.
 
         References
         ----------
@@ -52,6 +52,7 @@ class BarnesInterpolation1D(object):
         self.damp = damp
         self.clip = clip
         self.iterations = iterations
+        self.donorm = donorm
 
         if filter_size is None:
             self.filter_size = self._default_filter_size()
@@ -79,10 +80,10 @@ class BarnesInterpolation1D(object):
         """
         Get the values interpolated at positions rvecs
         """
-        if self.oldcall:
-            return self._oldcall(rvecs)
-        else:
+        if self.donorm:
             return self._newcall(rvecs)
+        else:
+            return self._oldcall(rvecs)
 
     def _eval_firstorder(self, rvecs, data, sigma):
         """The first-order Barnes approximation"""
