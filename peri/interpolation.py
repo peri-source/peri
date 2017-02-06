@@ -92,6 +92,7 @@ class BarnesInterpolation1D(object):
         return weights.dot(data) / weights.sum(axis=1)  # weighted sum
 
     def _newcall(self, rvecs):
+        """Correct, normalized version of Barnes"""
         #1. Initial guess for output:
         sigma = 1*self.filter_size
         out = self._eval_firstorder(rvecs, self.d, sigma)
@@ -105,6 +106,7 @@ class BarnesInterpolation1D(object):
         return out
 
     def _oldcall(self, rvecs):
+        """Barnes w/o normalizing the weights"""
         g = self.filter_size
 
 
@@ -121,7 +123,6 @@ class BarnesInterpolation1D(object):
         return out
 
 class BarnesInterpolationND(BarnesInterpolation1D):
-    """Barnes interpolant in N dimensions"""
     def __init__(self, *args, **kwargs):
         """
         A class for barnes interpolation in N dimensions.

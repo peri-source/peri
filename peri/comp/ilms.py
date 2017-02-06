@@ -403,10 +403,11 @@ class BarnesStreakLegPoly2P1D(Component, util.CompatibilityPatch):
             One of numpy.float16, numpy.float32, numpy.float64; precision
             for precomputed arrays. Default is np.float64; make it 16 or 32
             to save memory.
+
         donorm : Bool
-            Whether or not to normalize the Barnes interpolation. Ostensibly
-            for speed but really for a compatibility patch. Default is True,
-            i.e. normalize the Barnes interpolant.
+            Whether or not to normalize the Barnes interpolation
+            (compatibility patch). Use True, i.e. normalize the Barnes
+            interpolant. Old version is False. Default is True.
         """
         self.shape = shape
         self.local_updates = local_updates
