@@ -2,7 +2,7 @@ import numpy as np
 
 class BarnesInterpolation1D(object):
     def __init__(self, x, d, filter_size=None, iterations=4, clip=False,
-            clipsize=3, damp=0.95):
+            clipsize=3, damp=0.95, oldcall=True):
         """
         A class for 1-d barnes interpolation. Give data points d at locations x.
 
@@ -36,6 +36,11 @@ class BarnesInterpolation1D(object):
         damp : float, optional
             the damping parameter used in accelerating convergence. Default
             is 0.95
+
+        oldcall : bool, optional
+            If True, uses an old, incorrect method to evaluate the interpolant
+            rather than the correct version. Default is True (compatibility).
+            If you're using this, set it to False.
 
         References
         ----------
@@ -74,7 +79,33 @@ class BarnesInterpolation1D(object):
         """
         Get the values interpolated at positions rvecs
         """
+        if self.oldcall:
+            return self._oldcall(rvecs)
+        else:
+            return self._newcall(rvecs)
+
+    def _eval_firstorder(self, rvecs, data, sigma):
+        """The first-order Barnes approximation"""
+        dist = self._distance_matrix(rvecs, self.x)  # distance between points
+        weights = self._weight(dist, sigma=sigma)  # Gaussian weights
+        return weights.dot(data) / weights.sum(axis=1)  # weighted sum
+
+    def _newcall(self, rvecs):
+        #1. Initial guess for output:
+        sigma = 1*self.filter_size
+        out = self._eval_firstorder(rvecs, self.d, sigma)
+        #2. There are differences between 0th order at the points and
+        #   the passed data, so we iterate to remove:
+        ondata = self._eval_firstorder(self.x, self.d, sigma)
+        for i in xrange(self.iterations):
+            out += self._eval_firstorder(rvecs, self.d-ondata, sigma)
+            ondata += self._eval_firstorder(self.x, self.d-ondata, sigma)
+            sigma *= self.damp
+        return out
+
+    def _oldcall(self, rvecs):
         g = self.filter_size
+
 
         dist0 = self._distance_matrix(self.x, self.x)
         dist1 = self._distance_matrix(rvecs, self.x)
@@ -124,7 +155,7 @@ class ChebyshevInterpolation1D(object):
     def __init__(self, func, args=(), window=(0.,1.), degree=3, evalpts=4):
         """
         A 1D Chebyshev approximation / interpolation for an ND function, approximating
-        (N-1)D in in the last dimension. 
+        (N-1)D in in the last dimension.
 
         Parameters
         ----------
@@ -149,7 +180,7 @@ class ChebyshevInterpolation1D(object):
         self.func = func
         self.window = window
         self.set_order(evalpts, degree)
-        
+
     def _x2c(self, x):
         """ Convert windowdow coordinates to cheb coordinates [-1,1] """
         return (2*x-self.window[1]-self.window[0])/(self.window[1]-self.window[0])
@@ -157,42 +188,42 @@ class ChebyshevInterpolation1D(object):
     def _c2x(self, c):
         """ Convert cheb coordinates to windowdow coordinates """
         return 0.5*(self.window[0]+self.window[1]+c*(self.window[1]-self.window[0]))
-    
+
     def _construct_coefficients(self):
         """
         Calculate the coefficients based on the func, degree, and interpolating points.
         _coeffs is a [order, N,M,....] array
 
-        Notes 
+        Notes
         -----
         Moved the -c0 to the coefficients defintion
         app -= 0.5 * self._coeffs[0] -- moving this to the coefficients
         """
         coeffs = [0]*self.degree
-        
+
         N = float(self.evalpts)
-        
+
         lvals = np.arange(self.evalpts).astype('float')
         xpts = self._c2x(np.cos(np.pi*(lvals + 0.5)/N))
         fpts = np.rollaxis(self.func(xpts, *self.args), -1)
-        
+
         for a in xrange(self.degree):
             inner = [
                 fpts[b] * np.cos(np.pi*a*(lvals[b]+0.5)/N)
                 for b in xrange(self.evalpts)
-            ] 
+            ]
             coeffs[a] = 2.0/N * np.sum(inner, axis=0)
-            
+
         coeffs[0] *= 0.5
         self._coeffs = np.array(coeffs)
 
     def set_order(self, evalpts, degree):
         if evalpts < degree:
             raise ValueError("Number of Chebyshev points must be > degree")
-        
+
         self.evalpts = evalpts
         self.degree = degree
-        
+
         self._construct_coefficients()
 
     @property
