@@ -58,17 +58,17 @@ class BarnesInterpolation1D(object):
     def _default_filter_size(self):
         return (self.x[1:] - self.x[:-1]).mean()/2
 
-    def _weight(self, rsq, size=None):
-        """weighting function for Barnes"""
-        size = size or self.filter_size
-
-        o = np.exp(-rsq / (2*size**2))
-        o = o * (not self.clip or (self.clip and (rsq < self.clipsize**2)))
-        return o
-
-    def _outer(self, a, b):
+    def _distance_matrix(self, a, b):
         """Pairwise distance between each point in `a` and each point in `b`"""
         return (a[:,None] - b[None,:])**2
+
+    def _weight(self, rsq, sigma=None):
+        """weighting function for Barnes"""
+        sigma = sigma or self.filter_size
+
+        o = np.exp(-rsq / (2*sigma**2))
+        o = o * (not self.clip or (self.clip and (rsq < self.clipsize**2)))
+        return o
 
     def __call__(self, rvecs):
         """
@@ -76,8 +76,8 @@ class BarnesInterpolation1D(object):
         """
         g = self.filter_size
 
-        dist0 = self._outer(self.x, self.x)
-        dist1 = self._outer(rvecs, self.x)
+        dist0 = self._distance_matrix(self.x, self.x)
+        dist1 = self._distance_matrix(rvecs, self.x)
 
         tmp = self._weight(dist0, g).dot(self.d)
         out = self._weight(dist1, g).dot(self.d)
