@@ -96,7 +96,7 @@ opt.do_levmarq(st, st.params)
 im_ilm.tile = util.Tile([10,100,100], [90, 200, 200])
 
 # We then create a coverslip object:
-slab = objs.Slab(zpos=40.0)
+slab = objs.Slab(zpos=40.0, category='obj')
 # We also need our illumination to have a z-dependence now. Since we already
 # spent time updating the ilm parameters, we update the corresponding values
 # of the new ilm to the older ones:
@@ -143,7 +143,7 @@ opt.do_levmarq(st, st.get('bkg').params + ['ilm-z-{}'.format(i) for i in
 # Looking at this with the OrthoManipulator it already looks good, but we do
 # a full optimization to ensure that we're at the best fit.
 opt.do_levmarq(st, st.params)
-# (this will take some time; an hour or so on my machine)
+# (this will take some time; half an hour or so on my machine)
 
 # Finally, plotting the average along different directions looks good:
 
