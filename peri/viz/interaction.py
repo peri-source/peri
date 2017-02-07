@@ -582,7 +582,9 @@ class OrthoPrefeature(OrthoViewer):
         wid = self.viewrad
         for p in poses:
             #1. get tile
-            t = Tile(p-2*wid, p+2*wid, mins=0, maxs=self.image.shape)
+            l = np.clip(p-2*wid, 0, self.image.shape)
+            r = np.clip(p+2*wid, 0, self.image.shape)
+            t = Tile(l, r, mins=0, maxs=self.image.shape)
             #2. update:
             c = t.coords(form='broadcast')
             if add:
