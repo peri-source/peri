@@ -339,20 +339,17 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
         rs = np.array(region_size)
         particle_groups = separate_particles_into_groups(s, region_size=
                 rs.tolist(), **kwargs)
-        #The actual max_mem is np.max(map(f, p_groups) where
-        # f = lambda g: get_slicered_difference(s, get_tile_from_multiple_
-        #   particle_change(s, g).slicer, s.image_mask[" " " " .slicer] == 1)
-        #   .nbytes * g.size * 4
-        #However this is _way_ too slow. A better approximation is
-        # d = s.residuals
-        # max_mem = np.max(map(lambda g: d[get_tile_from_multiple_particle_change(
-                # s, g).slicer].nbytes * g.size * 4, particle_groups))
-        # return max_mem
-        ##But this is still too slow (like 1 min vs 250 ms). So instead --
-        num_particles = np.max(map(np.size, particle_groups))
-        psf_shape = s.get('psf').get_padding_size(s.ishape).shape
-        mem_per_part = 32 * np.prod(rs + (psf_shape + np.median(s.obj_get_radii())))
-        return num_particles * mem_per_part
+        # The actual mem usage is the max of the memory usage of all the
+        # particle groups. However this is too slow. So instead we use the
+        # max of the memory of the biggest 5 particle groups:
+        numpart = [np.size(g) for g in particle_groups]
+        biggroups = [particle_groups[i] for i in np.argsort(numpart)[-5:]]
+        def get_tile_jsize(group):
+            nms = s.param_particle(group)
+            tile = s.get_update_io_tiles(nms, s.get_values(nms))[2]
+            return tile.shape.prod() * len(nms)
+        mems = [8*get_tile_jsize(g) for g in biggroups]  # 8 for bytes/float64
+        return np.max(mems)
 
     im_shape = s.oshape.shape
     if calc_mem_usage(region_size) > max_mem:
