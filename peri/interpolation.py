@@ -2,7 +2,7 @@ import numpy as np
 
 class BarnesInterpolation1D(object):
     def __init__(self, x, d, filter_size=None, iterations=4, clip=False,
-            clipsize=3, damp=0.95, donorm=True):
+            clipsize=3, damp=0.95, blocksize=None, donorm=True):
         """
         A class for 1-d barnes interpolation. Give data points d at locations x.
 
@@ -37,6 +37,14 @@ class BarnesInterpolation1D(object):
             the damping parameter used in accelerating convergence. Default
             is 0.95
 
+        blocksize : Int or None, optional
+            Memory-based performance feature. For very large ``x`` or ``d``
+            calculating the distance matrix between each point can require
+            excessive memory overhead. To avoid this, set ``blocksize`` to
+            a moderate int, causing the Barnes to compute the distance
+            matrix in blocks. Does not change the final results. Default is
+            None, which uses all the data all at once, using lots of mem.
+
         donorm : bool, optional
             If False, uses an old, incorrect method to evaluate the interpolant
             rather than the correct version. Default is True. If you're using
@@ -53,6 +61,7 @@ class BarnesInterpolation1D(object):
         self.clip = clip
         self.iterations = iterations
         self.donorm = donorm
+        self.blocksize = blocksize
 
         if filter_size is None:
             self.filter_size = self._default_filter_size()
@@ -91,9 +100,20 @@ class BarnesInterpolation1D(object):
 
     def _eval_firstorder(self, rvecs, data, sigma):
         """The first-order Barnes approximation"""
-        dist = self._distance_matrix(rvecs, self.x)  # distance between points
-        weights = self._weight(dist, sigma=sigma)  # Gaussian weights
-        return weights.dot(data) / weights.sum(axis=1)  # weighted sum
+        if not self.blocksize:
+            dist = self._distance_matrix(rvecs, self.x)  # distance between points
+            weights = self._weight(dist, sigma=sigma)  # Gaussian weights
+            return weights.dot(data) / weights.sum(axis=1)  # weighted sum
+        else:
+            # Now rather than calculating the distance matrix all at once,
+            # we do it in chunks over rvecs
+            ans = np.zeros(rvecs.shape[0], dtype='float')
+            bs = self.blocksize
+            for a in xrange(0, rvecs.shape[0], bs):
+                dist = self._distance_matrix(rvecs[a:a+bs], self.x)
+                weights = self._weight(dist, sigma=sigma)
+                ans[a:a+bs] += weights.dot(data) / weights.sum(axis=1)
+            return ans
 
     def _newcall(self, rvecs):
         """Correct, normalized version of Barnes"""
@@ -149,8 +169,12 @@ class BarnesInterpolationND(BarnesInterpolation1D):
     def _distance_matrix(self, a, b):
         """Pairwise distance between each point in `a` and each point in `b`"""
         sq = lambda x: (x*x)
-        matrix = np.sum(map(lambda a,b: sq(a[:,None] - b[None,:]),
-                a.T, b.T), axis=0)
+        # matrix = np.sum(map(lambda a,b: sq(a[:,None] - b[None,:]), a.T,
+        #   b.T), axis=0)
+        # A faster version than above:
+        matrix = sq(a[:,0][:,None] - b[:,0][None,:])
+        for x, y in zip(a.T[1:], b.T[1:]):
+            matrix += sq(x[:, None] - y[None,:])
         return matrix
 
     def _default_filter_size(self):
