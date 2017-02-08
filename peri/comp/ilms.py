@@ -362,21 +362,14 @@ class ChebyshevPoly2P1D(Polynomial2P1D):
 # a complex hidden variable representation of the ILM
 # something like (p(x,y)+m(x,y))*q(z) where m is determined by local models
 #=============================================================================
-class BarnesStreakLegPoly2P1D(Component, util.CompatibilityPatch):
+class BarnesPoly(Component, util.CompatibilityPatch):
     category = 'ilm'
 
     def __init__(self, npts=(40,20), zorder=7, op='*', barnes_dist=1.75,
             barnes_clip_size=3, local_updates=True, category='ilm', shape=None,
             float_precision=np.float64, donorm=True):
         """
-        A Barnes interpolant. This one is of the form
-
-        .. math::
-            I = \\left[1 + \\left(\\sum b_k(x) (o) L_k(y)\\right)\\right]  (1 + z q(z)) + c
-
-        where b_k are independent barnes interpolants and L_k are legendre
-        polynomials. q is a polynomial strictly in z. Additionally, the
-        operation (o) is settable.
+        Superclass for ilms of the form Barnes * poly
 
         Parameters
         ----------
@@ -403,11 +396,6 @@ class BarnesStreakLegPoly2P1D(Component, util.CompatibilityPatch):
             One of numpy.float16, numpy.float32, numpy.float64; precision
             for precomputed arrays. Default is np.float64; make it 16 or 32
             to save memory.
-
-        donorm : Bool
-            Whether or not to normalize the Barnes interpolation
-            (compatibility patch). Use True, i.e. normalize the Barnes
-            interpolant. Old version is False. Default is True.
         """
         self.shape = shape
         self.local_updates = local_updates
@@ -421,21 +409,14 @@ class BarnesStreakLegPoly2P1D(Component, util.CompatibilityPatch):
             raise ValueError('float_precision must be one of np.float64, ' +
                     'np.float32, np.float16')
         self.float_precision = float_precision
-        self.donorm = donorm
 
         c = self.category
         # set up the various parameter mappings and out local cache of how to
         # distinguish them quickly from one another
         params, values = [c+'-scale', c+'-off'], [1.0, 0.0]
-        self.barnes_params = []
-        for i, npt in enumerate(npts):
-            tparams = [c+'-b%i-%i' % (i, j) for j in xrange(npt)]
-            tvalues = [0.0]*len(tparams)
-
-            params.extend(tparams)
-            values.extend(tvalues)
-
-            self.barnes_params.append(tparams)
+        self.barnes_params, p, v = self._setup_barnes_params()
+        params.extend(p)
+        values.extend(v)
 
         # tack on the z-poly parameters on the end
         self.poly_params = {c+'-z-%i' % i:i+1 for i in xrange(zorder)}
@@ -453,6 +434,29 @@ class BarnesStreakLegPoly2P1D(Component, util.CompatibilityPatch):
         if self.shape:
             self.initialize()
 
+    def _setup_barnes_params(self):
+        """Returns a possibly-nested list barnes_params, and a flat list of
+        the params and values for each of the barnes params"""
+        raise NotImplementedError('Implement in subclass')
+
+    def _setup_rvecs(self):
+        raise NotImplementedError('Implement in subclass')
+
+    def _barnes(self, y):
+        raise NotImplementedError('Implement in subclass')
+
+    def _barnes_val(self):
+        raise NotImplementedError('Implement in subclass')
+
+    def _barnes_full(self):
+        raise NotImplementedError('Implement in subclass')
+
+    def get_update_tile(self, params, values):
+        raise NotImplementedError('Implement in subclass')
+
+    def randomize_parameters(self, params, values):
+        raise NotImplementedError('Implement in subclass')
+
     def param_barnes_scales(self):
         return [self.category+'-scale', self.category+'-off']
 
@@ -464,44 +468,9 @@ class BarnesStreakLegPoly2P1D(Component, util.CompatibilityPatch):
     def param_barnes_poly(self):
         return self.poly_params.keys()
 
-    def _setup_rvecs(self):
-        o = self.shape.shape
-        self.r = [np.linspace(-1, 1, i) for i in o]
-        self.r[0] = self.r[0][:,None,None]
-        self.r[1] = self.r[1][None,:,None]
-        self.r[2] = self.r[2][None,None,:]
-
-        self.b_out = np.squeeze(self.r[2])
-        self.b_in = [
-            np.linspace(self.b_out.min(), self.b_out.max(), q)
-            for q in self.npts
-        ]
-
     def _barnes_poly(self, n=0):
         weights = np.diag(np.ones(n+1))[n]
         return legval(np.squeeze(self.r[1]), weights)[:,None]
-
-    def _barnes(self, y, n=0):
-        b_in = self.b_in[n]
-        fdst = (b_in[1] - b_in[0])*1.0/self.barnes_dist
-        coeffs = self.get_values(self.barnes_params[n])
-
-        b = BarnesInterpolation1D(
-            b_in, coeffs, filter_size=fdst, damp=0.9, iterations=3,
-            clip=self.local_updates, clipsize=self.barnes_clip_size,
-            donorm=self.donorm
-        )
-        return b(y)
-
-    def _barnes_val(self, n=0):
-        return self._barnes(self.b_out, n=n)[None,:]
-
-    def _barnes_full(self):
-        barnes = np.array([
-            self._barnes_val(i)*self._barnes_poly(i)
-            for i in xrange(len(self.npts))
-        ])
-        return barnes.sum(axis=0)[None,:,:]
 
     def _term(self, index):
         weights = np.diag(np.ones(index+1))[index]
@@ -571,6 +540,132 @@ class BarnesStreakLegPoly2P1D(Component, util.CompatibilityPatch):
 
     def get(self):
         return self.field[self.tile.slicer]
+
+    def nopickle(self):
+        return super(BarnesStreakLegPoly2P1D, self).nopickle() + [
+            'poly', 'b_in', 'b_out', 'r', 'field',
+            '_last_term', '_last_index'
+        ]
+
+    def __str__(self):
+        return "{} [{} {}]".format(
+            self.__class__.__name__, self.npts, self.zorder
+        )
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __getstate__(self):
+        odict = self.__dict__.copy()
+        util.cdd(odict, self.nopickle())
+        return odict
+
+    def __setstate__(self, idict):
+        self.__dict__.update(idict)
+        self.patch({'float_precision': np.float64})
+        if self.shape:
+            self.initialize()
+
+class BarnesStreakLegPoly2P1D(BarnesPoly):
+    category = 'ilm'
+
+    def __init__(self, npts=(40,20), zorder=7, op='*', barnes_dist=1.75,
+            barnes_clip_size=3, local_updates=True, category='ilm', shape=None,
+            float_precision=np.float64, donorm=True):
+        """
+        A Barnes interpolant. This one is of the form
+
+        .. math::
+            I = \\left[1 + \\left(\\sum b_k(x) (o) L_k(y)\\right)\\right]  (1 + z q(z)) + c
+
+        where b_k are independent barnes interpolants and L_k are legendre
+        polynomials. q is a polynomial strictly in z. Additionally, the
+        operation (o) is settable.
+
+        Parameters
+        ----------
+        shape : iterable
+            size of the field in pixels, needs to be padded shape
+
+        npts : tuple of ints, optional
+            Number of control points used for the Barnes interpolant b_k
+            in the x-y sum. Default is (40,20)
+
+        zorder : integer
+            Number of orders for the z-polynomial.
+
+        op : string
+            The operation to perform between Barnes and LegPoly, '*' or '+'.
+
+        barnes_dist : float
+            Fractional distance to use for the barnes interpolator
+
+        local_updates : boolean
+            Whether to perform local updates on the ILM
+
+        float_precision : numpy float datatype
+            One of numpy.float16, numpy.float32, numpy.float64; precision
+            for precomputed arrays. Default is np.float64; make it 16 or 32
+            to save memory.
+
+        donorm : Bool
+            Whether or not to normalize the Barnes interpolation
+            (compatibility patch). Use True, i.e. normalize the Barnes
+            interpolant. Old version is False. Default is True.
+        """
+        self.donorm = donorm
+        super(BarnesStreakLegPoly2P1D, self).__init__(npts=npts, zorder=zorder,
+            op=op, barnes_dist=barnes_dist, barnes_clip_size=barnes_clip_size,
+            local_updates=local_updates, category=category, shape=shape,
+            float_precision=float_precision)
+
+    def _setup_barnes_params(self):
+        barnes_params = []
+        barnes_values = []
+        params = []
+        for i, npt in enumerate(npts):
+            tparams = [c+'-b%i-%i' % (i, j) for j in xrange(npt)]
+            tvalues = [0.0]*len(tparams)
+            params.extend(tparams)
+            values.extend(tvalues)
+            barnes_params.append(tparams)
+        return barnes_params, params, values
+
+
+    def _setup_rvecs(self):
+        o = self.shape.shape
+        self.r = [np.linspace(-1, 1, i) for i in o]
+        self.r[0] = self.r[0][:,None,None]
+        self.r[1] = self.r[1][None,:,None]
+        self.r[2] = self.r[2][None,None,:]
+
+        self.b_out = np.squeeze(self.r[2])
+        self.b_in = [
+            np.linspace(self.b_out.min(), self.b_out.max(), q)
+            for q in self.npts
+        ]
+
+    def _barnes(self, y, n=0):
+        b_in = self.b_in[n]
+        fdst = (b_in[1] - b_in[0])*1.0/self.barnes_dist
+        coeffs = self.get_values(self.barnes_params[n])
+
+        b = BarnesInterpolation1D(
+            b_in, coeffs, filter_size=fdst, damp=0.9, iterations=3,
+            clip=self.local_updates, clipsize=self.barnes_clip_size,
+            donorm=self.donorm
+        )
+        return b(y)
+
+    def _barnes_val(self, n=0):
+        return self._barnes(self.b_out, n=n)[None,:]
+
+    def _barnes_full(self):
+        barnes = np.array([
+            self._barnes_val(i)*self._barnes_poly(i)
+            for i in xrange(len(self.npts))
+        ])
+        return barnes.sum(axis=0)[None,:,:]
 
     def get_update_tile(self, params, values):
         if not self.local_updates:
@@ -660,34 +755,15 @@ class BarnesStreakLegPoly2P1D(Component, util.CompatibilityPatch):
             param = self.category+'-scale'
             self.trigger_update(param, self.get_values(param))
 
-    def nopickle(self):
-        return super(BarnesStreakLegPoly2P1D, self).nopickle() + [
-            'poly', 'b_in', 'b_out', 'r', 'field',
-            '_last_term', '_last_index'
-        ]
-
-    def __str__(self):
-        return "{} [{} {}]".format(
-            self.__class__.__name__, self.npts, self.zorder
-        )
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __getstate__(self):
-        odict = self.__dict__.copy()
-        util.cdd(odict, self.nopickle())
-        return odict
-
     def __setstate__(self, idict):
         self.__dict__.update(idict)
         self.patch({'float_precision': np.float64, 'donorm':False})
         if self.shape:
             self.initialize()
 
-class BarnesXYLegPolyZ(BarnesStreakLegPoly2P1D):
+class BarnesXYLegPolyZ(BarnesPoly):
     def __init__(self, npts=(40,20), zorder=7, op='*', barnes_dist=1.75,
-            barnes_clip_size=3, local_updates=True, category='ilm', shape=None,
+            barnes_clip_size=3, category='ilm', shape=None,
             float_precision=np.float64):
         """
         A Barnes interpolant. This one is of the form
@@ -696,7 +772,9 @@ class BarnesXYLegPolyZ(BarnesStreakLegPoly2P1D):
             I = \\left[1 + B(x,y) \\right]  (1 + z q(z)) + c
 
         where B is a Barnes interpolants and q is a polynomial strictly in z.
-        Additionally.... operation multiply or x for poly?
+        Additionally.... operation multiply or x for poly?.
+        Always uses local updates, since evaluating a 2D barnes for an entire
+        image can be slow.
 
         Parameters
         ----------
@@ -724,47 +802,20 @@ class BarnesXYLegPolyZ(BarnesStreakLegPoly2P1D):
             for precomputed arrays. Default is np.float64; make it 16 or 32
             to save memory.
         """
-        self.shape = shape
-        self.local_updates = local_updates
-        self.barnes_clip_size = barnes_clip_size
-        self.barnes_dist = barnes_dist  # FIXME what?????
-        self.category = category
-        self.zorder = zorder
-        self.npts = npts
-        self.op = op
-        if float_precision not in (np.float64, np.float32, np.float16):
-            raise ValueError('float_precision must be one of np.float64, ' +
-                    'np.float32, np.float16')
-        self.float_precision = float_precision
+        super(BarnesXYLegPolyZ, self).__init__(npts=npts, zorder=zorder,
+            op=op, barnes_dist=barnes_dist, barnes_clip_size=barnes_clip_size,
+            local_updates=True, category=category, shape=shape,
+            float_precision=float_precision)
 
-        c = self.category
-        # set up the various parameter mappings and out local cache of how to
-        # distinguish them quickly from one another
-        params, values = [c+'-scale', c+'-off'], [1.0, 0.0]
-        self.barnes_params = []
-        ###~~~~~~~~~~~~~~~~only bit changed from barnes init~~~~~~~~~~~~~~~~###
+    def _setup_barnes_params(self):
+        barnes_params = []
+        barnes_values = []
         for i in xrange(npts[0]):
             for j in xrange(npts[1]):
-                self.barnes_params.append(c+'-b-%i-%i' % (i, j))
-                values.append(0.0)
-        params.extend(self.barnes_params)
-        ###~~~~~~~~~~~~~~~~end  bit changed from barnes init~~~~~~~~~~~~~~~~###
+                barnes_params.append(c+'-b-%i-%i' % (i, j))
+                barnes_values.append(0.0)
+        return barnes_params, barnes_params, barnes_values
 
-        # tack on the z-poly parameters on the end
-        self.poly_params = {c+'-z-%i' % i:i+1 for i in xrange(zorder)}
-        params.extend(self.poly_params.keys())
-        values.extend([0.0]*len(self.poly_params))
-
-        super(BarnesStreakLegPoly2P1D, self).__init__(
-            params=params, values=values, category=category
-        )
-
-        # this next variable is to allow for randomize_parameters before the
-        # object has a shape by leaving a breadcrumb for normalization
-        self._norm_stat = None
-
-        if self.shape:
-            self.initialize()
 
     def _barnes(self, pos):
         """Creates a barnes interpolant & calculates its values"""
@@ -777,7 +828,8 @@ class BarnesXYLegPolyZ(BarnesStreakLegPoly2P1D):
 
         b = BarnesInterpolationND(
             b_in, coeffs, filter_size=self.filtsize, damp=0.9, iterations=3,
-            clip=self.local_updates, clipsize=self.barnes_clip_size
+            clip=self.local_updates, clipsize=self.barnes_clip_size,
+            blocksize=100  # FIXME magic blocksize
         )
         return b(pos)  # (N,) shape
 
