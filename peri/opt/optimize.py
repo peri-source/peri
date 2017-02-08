@@ -31,9 +31,8 @@ To add:
     put stuff back on the card again....
 
 To fix:
-1.  AgumentedState relies on the particles having radii, and some like
-    LMParticles need the particles to have radii if include_rad is True (the
-    default).
+1.  AugmentedState relies on the particles having radii. Prob OK but make
+    sure things play nice with objects w/o radii.
 2.  Right now, when marquardt_damping=False (the default, which works nicely),
     the correct damping parameter scales with the image size. For each element
     of J is O(1), so JTJ[i,j]~1^2 * N ~ N where N is the number of residuals
@@ -1799,7 +1798,8 @@ class LMParticles(LMEngine):
         self._MINDIST= 1e-3
 
         #is_rad, is_pos masks:
-        rad_nms = self.state.param_radii() if include_rad else []
+        rad_nms = (self.state.param_radii() if (include_rad and hasattr(s,
+                    'param_radii')) else [])
         self._is_rad = np.array(map(lambda x: x in rad_nms, self.param_names))
         pos_nms = self.state.param_positions()
         self._is_pos = []
