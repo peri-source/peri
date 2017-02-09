@@ -1798,8 +1798,8 @@ class LMParticles(LMEngine):
         self._MINDIST= 1e-3
 
         #is_rad, is_pos masks:
-        rad_nms = (self.state.param_radii() if (include_rad and hasattr(s,
-                    'param_radii')) else [])
+        rad_nms = (self.state.param_radii() if (include_rad and hasattr(
+                    self.state, 'param_radii')) else [])
         self._is_rad = np.array(map(lambda x: x in rad_nms, self.param_names))
         pos_nms = self.state.param_positions()
         self._is_pos = []
