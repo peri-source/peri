@@ -255,8 +255,8 @@ class PlatonicParticlesCollection(Component):
         #   case we just draw from scratch.
         global_update, particles = self._update_type(params)
 
-        # if we are updating the zscale, everything must change, so just start
-        # fresh will be faster instead of add subtract
+        # if we are doing a global update, everything must change, so
+        # starting fresh will be faster instead of add subtract
         if global_update:
             self.set_values(params, values)
             self.initialize()
@@ -755,6 +755,17 @@ class PlatonicSpheresCollection(PlatonicParticlesCollection):
         pos, rad = self.pos[n], self.rad[n]
         pos = self._trans(pos)
         return Tile(pos - zsc*rad, pos + zsc*rad).pad(self.support_pad)
+
+    def update(self, params, values):
+        """Calls an update, but clips radii to be > 0"""
+        # radparams = self.param_radii()
+        params = listify(params)
+        values = listify(values)
+        for i, p in enumerate(params):
+            # if (p in radparams) & (values[i] < 0):
+            if (p[-2:] == '-a') and (values[i] < 0):
+                values[i] = 0.0
+        super(PlatonicSpheresCollection, self).update(params, values)
 
     def __str__(self):
         return "{} N={}, zscale={}".format(self.__class__.__name__, self.N,
