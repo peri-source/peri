@@ -542,7 +542,7 @@ class BarnesPoly(Component, util.CompatibilityPatch):
         return self.field[self.tile.slicer]
 
     def nopickle(self):
-        return super(BarnesStreakLegPoly2P1D, self).nopickle() + [
+        return super(BarnesPoly, self).nopickle() + [
             'poly', 'b_in', 'b_out', 'r', 'field',
             '_last_term', '_last_index'
         ]
