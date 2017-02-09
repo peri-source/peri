@@ -296,6 +296,7 @@ class OrthoManipulator(object):
 
             print "Adding particle at", p, r
             self.state.obj_add_particle(p, r)
+        self.state.set_tile(self.state.oshape)
         self.set_field()
         self.draw()
 
@@ -307,6 +308,7 @@ class OrthoManipulator(object):
             print "Removing particle near", p
             ind = self.state.obj_closest_particle(p)
             self.state.obj_remove_particle(ind)
+        self.state.set_tile(self.state.oshape)
         self.set_field()
         self.draw()
 
