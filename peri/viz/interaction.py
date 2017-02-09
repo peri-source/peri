@@ -322,6 +322,7 @@ class OrthoManipulator(object):
             new_err = self.state.error
             print '{}->{}'.format(old_err, new_err)
 
+        self.state.set_tile(self.state.oshape)
         self.set_field()
         self.draw()
 
