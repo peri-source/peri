@@ -2515,7 +2515,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-4,
         glbl_nms = ['ilm-scale', 'offset']  #bkg?
     else:
         remove_params = None if mode == 'polish' else set(
-                s.get('psf').params + ['zscale'])
+                s.get('psf').params + ['zscale'])  # FIXME explicit params
         glbl_nms = name_globals(s, remove_params=remove_params)
 
     all_lp_stats = []
@@ -2523,7 +2523,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-4,
     all_line_stats = []
     all_loop_values = []
 
-    _delta_vals = []  #storing the directions we've moved along for line min
+    _delta_vals = []  # storing the directions we've moved along for line min
     #2. Optimize
     CLOG.info('Start of loop %d:\t%f' % (0, s.error))
     for a in xrange(n_loop):
@@ -2644,7 +2644,7 @@ def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True,
             each loop, before the line minimization.
     """
     values = [np.copy(s.state[s.params])]
-    remove_params = s.get('psf').params if separate_psf else None
+    remove_params = s.get('psf').params if separate_psf else None  # FIXME explicit params
     globals = name_globals(s, remove_params=remove_params)
     #FIXME this could be done much better, since much of the globals such
     #as the ilm are local. Could be done with sparse matrices and/or taking
