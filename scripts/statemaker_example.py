@@ -66,7 +66,14 @@ def _calc_ilm_order(imshape):
     Parameters
     ----------
         imshape : 3-element list-like
-            The shape of the images.
+            The shape of the image.
+
+    Returns
+    -------
+        npts : tuple
+            The number of points to use for the ilm.
+        zorder : int
+            The order of the z-polynomial.
     """
     zorder = int(imshape[0] / 6.25) + 1
     l_npts = int(imshape[1] / 42.5)+1
