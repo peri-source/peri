@@ -797,7 +797,6 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
         out of every ``7*10^11`` is mis-identified randomly. In practice the
         noise is not Gaussian so there are still some regions mis-
         identified as improperly featured.
-
     rad : Float or 'calc', optional
         The initial radius for added particles; added particles radii are
         not fit until the end of add_subtract. Default is ``'calc'``, which
@@ -814,28 +813,23 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
         contains more than half as many particles, throws a warning. If more
         than this many particles are added, they are optimized in blocks of
         ``max_allowed_remove``. Default is 20.
-
     im_change_frac : Float, between 0 and 1.
         If adding or removing a particle decreases the error less than
         ``im_change_frac *`` the change in the image, the particle is deleted.
         Default is 0.2.
-
     min_derr : Float
         The minimum change in the state's error to keep a particle in the
         image. Default is ``'3sig'`` which uses ``3*st.sigma``.
-
     do_opt : Bool, optional
         Set to False to avoid optimizing particle positions after adding
         them. Default is True
     minmass : Float, optional
         The minimum mass for a particle to be identified as a feature, as
         used by trackpy. Defaults to a decent guess.
-
     use_tp : Bool, optional
         Set to True to use trackpy to find missing particles inside the
         image. Not recommended since trackpy deliberately cuts out
         particles at the edge of the image. Default is False.
-
     max_allowed_remove : Int, optional
         The maximum number of particles to remove. If the misfeatured tile
         contains more than this many particles, raises an error. If it
@@ -854,15 +848,17 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
     Notes
     -----
     Algorithm Description
-    1.  Identify mis-featured regions by how much the local residuals
-        deviate from the global residuals, as measured by the standard
-        deviation of both.
-    2.  Loop over each of those regions, and:
-        2a. Remove every particle in the current region.
-        2b. Try to add particles in the current region until no more
-             can be added while adequately decreasing the error.
-        2c. Terminate if at least region_depth regions have been
-            checked without successfully adding a particle.
+
+    1. Identify mis-featured regions by how much the local residuals
+       deviate from the global residuals, as measured by the standard
+       deviation of both.
+    2. Loop over each of those regions, and:
+
+       a. Remove every particle in the current region.
+       b. Try to add particles in the current region until no more
+          can be added while adequately decreasing the error.
+       c. Terminate if at least region_depth regions have been
+          checked without successfully adding a particle.
 
     Because this algorithm is more judicious about chooosing regions to
     check, and more aggressive about removing particles in those regions,
