@@ -162,7 +162,7 @@ imperfections. We can create this object with this snippet:
 .. code-block:: python
 
     from peri.comp import ilms
-    illumination = ilms.BarnesStreakLegPoly2P1D(npts=(40, 25, 20, 10, 5), zorder=7)
+    illumination = ilms.BarnesStreakLegPoly2P1D(npts=(16, 10, 8, 4), zorder=8)
 
 Mathematically, we can describe the illumination as some sort of continuous
 field defined over the image. These field-like descriptions are stored in the
