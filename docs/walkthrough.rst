@@ -67,7 +67,7 @@ Create a mathematical model of the image formation process.
 -----------------------------------------------------------
 
 The method PERI needs a mathematical model to reconstruct the experimental
-image. At the grossest level, the model just needs to create a model image.
+image. At the grossest level, the model needs to create a model image.
 This model also needs to have parameters (e.g. the positions of the particles
 or the properties of the microscope) which are adjustable. PERI then fits
 those parameters to find the best-possible model of the experimental image.
@@ -321,10 +321,11 @@ state well enough, you can either re-run the code above again, or run:
 
 For a typical image, ``peri`` needs to fit thousands of parameters in a complex
 landscape, which can take a lot of time. Be patient. Or better yet, leave your
-computer and come back after lunch or tomorrow. If you want to delve into more
-details of the optimization methods, you can read about them in the
-documentation's :doc:`Optimization </optimization>` section, including how
-``peri`` can automatically add missing particles and remove bad ones.
+computer and come back after lunch or tomorrow. If the convenience functions
+don't work well for you or you want to delve into more details of the
+optimization methods, you can read about them in the documentation's
+:doc:`Optimization </optimization>` section, including how ``peri`` can
+automatically add missing particles and remove bad ones.
 
 If the fit is not good, improve the mathematical model.
 -------------------------------------------------------
@@ -382,7 +383,7 @@ from a Gaussian, then your model isn't complete or your fit isn't good.
     The distribution of residuals in real and Fourier space. They should be
     perfect Gaussians. While the distribution of real-space residuals is an
     amazingly perfect Gaussian, there are some deviations in Fourier space at
-    large :math:`x/\sigma`. Looking at the 
+    large :math:`x/\sigma`. Looking at the
     :class:`~peri.viz.interaction.OrthoManipulator`, these arise from a
     combination of scanning noise on our detector (some lines at
     :math:`q_x=0, q_z=0`) and from incompleteness in our model (a faint ring at
@@ -428,11 +429,12 @@ your microscope is a point scanner and not a line scanning confocal. Just type:
     new_psf = exactpsf.FixedSSChebPinholePSF()
     st.set('psf', new_psf)
 
-Likewise, say you used the wrong model. Type
+Likewise, say you used the wrong model. (Perhaps your particles are dyed and
+not the fluid.) Type
 
 .. code-block:: python
 
-    new_model = models.ConfocalImageModel()  # or whatever model you should use
+    new_model = models.ConfocalDyedParticlesModel()  # or whatever model is best
     st.set_model(new_model)
 
 Again, you'll need to re-optimize your state. You might be able to speed the
@@ -441,11 +443,23 @@ second optimization up by optimizing certain parts first; see the
 
 Sometimes, however, the component or model you need isn't included in the
 ``peri`` package. For instance, you could be imaging rods on a 4Pi microscope
-or with a STEM, changing your objects, point-spread function and image
-formation model to things that aren't currently included in the peri package.
+or with STEM, changing your objects, point-spread function and image formation
+model to things that aren't currently included in the ``peri`` package.
 If this is the case, you'll need to develop ``peri`` to include a new model or
 component! See the developer's section of the documentation to get started.
 
+The quality of the data analysis that ``peri`` returns is directly related to
+the quality of the generative model that you use. If your model is not a good
+description of the data, then the parameters extracted from the model won't be
+accurate. Thus it's very important to ensure that your model accurately
+describes your experimental images. To ensure that the model is accurate, we've
+found that it's best to construct the model in a systematic way. For instance,
+for our confocal images we started by taking a blank image with the laser off,
+as a way to measure our background intensity. Next we measure and fit an image
+of just fluorescent dye, to describe our illumination correctly. Then we add
+a slab, then particles. We've provided a stripped-down version of this as a
+demo in scripts/test_genmodel.py. You should follow a similar protocol for your
+image formation model.
 
 If the fit is good, use the extracted information from the fit.
 ---------------------------------------------------------------
