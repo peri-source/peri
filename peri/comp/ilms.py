@@ -423,7 +423,7 @@ class BarnesPoly(Component, util.CompatibilityPatch):
         params.extend(self.poly_params.keys())
         values.extend([0.0]*len(self.poly_params))
 
-        super(BarnesStreakLegPoly2P1D, self).__init__(
+        super(BarnesPoly, self).__init__(
             params=params, values=values, category=category
         )
 
@@ -621,10 +621,10 @@ class BarnesStreakLegPoly2P1D(BarnesPoly):
 
     def _setup_barnes_params(self):
         barnes_params = []
-        barnes_values = []
+        values = []
         params = []
-        for i, npt in enumerate(npts):
-            tparams = [c+'-b%i-%i' % (i, j) for j in xrange(npt)]
+        for i, npt in enumerate(self.npts):
+            tparams = [self.category+'-b%i-%i' % (i, j) for j in xrange(npt)]
             tvalues = [0.0]*len(tparams)
             params.extend(tparams)
             values.extend(tvalues)
@@ -812,7 +812,7 @@ class BarnesXYLegPolyZ(BarnesPoly):
         barnes_values = []
         for i in xrange(npts[0]):
             for j in xrange(npts[1]):
-                barnes_params.append(c+'-b-%i-%i' % (i, j))
+                barnes_params.append(self.category+'-b-%i-%i' % (i, j))
                 barnes_values.append(0.0)
         return barnes_params, barnes_params, barnes_values
 
