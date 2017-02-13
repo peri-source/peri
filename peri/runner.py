@@ -1,24 +1,15 @@
 """
 Basically I'm trying to cover 4 options, one of each:
-    (Previously featured state,     No previously featured state)
-    (using previous positions,      no previous positions)
-    -----------------------------------------------------
+    (Previously featured state?,     Use previous positions?)
+    ---------------------------------------------------------
     (no, no)    = get_initial_featuring
     (yes, no)   = get_particle_featuring
     (yes, yes)  = translate_featuring
-    (no, yes)   = stupid, not doing. Or should I???
+    (no, yes)   = feature_from_pos_rad
 
 These do:
     (use globals to start,          start from nothing)
     (use positions to start,        start from trackpy)
-
-Comments:
-If you start from featured globals it seems that slab etc is off enough where
-particles get added in regions they shouldn't be (e.g. below the slab).
-So maybe you do a polish or a burn before an addsubtract?
-
-FIXME link zscale -- right now all states are made with a linked zscale.
-Option?
 """
 import os
 import Tkinter as tk
@@ -640,7 +631,7 @@ def _translate_particles(s, max_mem=1e9, desc='', min_rad='calc',
 
 def link_zscale(st):
     """Links the state ``st`` psf zscale with the global zscale"""
-    # Should be made more generic to other parameters and categories
+    # FIXME should be made more generic to other parameters and categories
     psf = st.get('psf')
     psf.param_dict['zscale'] = psf.param_dict['psf-zscale']
     psf.params[psf.params.index('psf-zscale')] = 'zscale'
