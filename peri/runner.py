@@ -641,7 +641,7 @@ def link_zscale(st):
     st.reset()
 
 
-def finish_state(st, desc='finish-state'):
+def finish_state(st, desc='finish-state', invert=True):
     """
     Final optimization for the best-possible state.
 
@@ -656,6 +656,9 @@ def finish_state(st, desc='finish-state'):
         desc : String, optional
             Description to intermittently save the state as, as passed to
             state.save. Default is `'finish-state'`.
+        invert : Bool
+            Whether to invert the image for featuring, as passed to
+            addsubtract.add_subtract. Default is True.
 
     See Also
     --------
@@ -665,7 +668,7 @@ def finish_state(st, desc='finish-state'):
     for minmass in [None, 0]:
         for _ in xrange(3):
             npart, poses = addsub.add_subtract_locally(st, region_depth=7,
-                    minmass=minmass)
+                    minmass=minmass, invert=invert)
             if npart == 0:
                 break
     opt.finish(st, n_loop=1, separate_psf=True, desc=desc, dowarn=False)
