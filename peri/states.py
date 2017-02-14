@@ -66,6 +66,11 @@ nout : Int, optional
     things (e.g. residuals + error) at the same time in a nice, contiguous
     way. Default is 1
 
+out : ndarray or None, optional
+    If set, the return array for the output. Performance feature. Does not
+    check for shape internally; will just raise an error. Default is None,
+    i.e. initialize the output internally.
+
 **kwargs :
     Arguments to `func`
 """
@@ -303,7 +308,8 @@ class State(comp.ParameterGroup):
             self.update(p1, vals1)
         return (f11 - f10 - f01 + f00) / (dl**2)
 
-    def _grad(self, funct, params=None, dl=2e-5, rts=False, nout=1, **kwargs):
+    def _grad(self, funct, params=None, dl=2e-5, rts=False, nout=1, out=None,
+            **kwargs):
         """
         Gradient of `func` wrt a set of parameters params. (see _graddoc)
         """
@@ -317,7 +323,9 @@ class State(comp.ParameterGroup):
         calc_shape = (
                 lambda ar: (len(ps),) + (ar.shape if isinstance(
                 ar, np.ndarray) else (1,)))
-        if nout == 1:
+        if out is not None:
+            grad = out  # reference
+        elif nout == 1:
             shape = calc_shape(f0)
             grad = np.zeros(shape)  # must be preallocated for mem reasons
         else:
