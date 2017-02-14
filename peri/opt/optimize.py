@@ -2218,31 +2218,29 @@ class LMAugmentedState(LMGlobals):
         self._last_vals = self.param_vals.copy()
 
     def calc_J(self):
-        #FIXME this will still cause a mem spike because of the copy in the
-        #np.append(J_st, J_aug)
-        #0.
-        del self.J
-
-        #1. J for the state:
+        #0. Setup
         s = self.aug_state.state
         sa = self.aug_state
-        params = sa.param_names
-        je, self._inds = get_rand_Japprox(s, params, num_inds=self.num_pix,
-                include_cost=True, **self.opt_kwargs)
-        if len(params) > 0:
-            J_st = je[0]
-            #the _direction_ of the exact gradient of the model, rescaled later
-            graderr = je[1].tolist()
+        if self.J is None:
+            self.J = np.zeros([sa.param_vals.size, self.num_pix])
         else:
-            J_st = np.array([])
-            graderr = []
+            self.J *= 0
+        # the _direction_ of the exact gradient of the model, rescaled later
+        graderr = np.zeros([sa.param_vals.size])
+
+        #1. J for the state:
+        kw = {k:v for k, v in zip(self.opt_kwargs.keys() + ['out'],
+                self.opt_kwargs.values() + [[self.J, graderr]])}
+        params = sa.param_names
+        _, self._inds = get_rand_Japprox(s, params, num_inds=self.num_pix,
+                include_cost=True, **kw)  # storing via out kwarg
 
         #2. J for the augmented portion:
         old_aug_vals = sa.param_vals[sa.rscale_mask].copy()
         dl = 1e-6
         i0 = s.residuals.ravel()[self._inds].copy()
-        J_aug = np.zeros([old_aug_vals.size, i0.size])
         er0 = s.error
+        ind0 = len(params)
         for a in xrange(old_aug_vals.size):
             dx = np.zeros(old_aug_vals.size)
             dx[a] = dl
@@ -2250,18 +2248,12 @@ class LMAugmentedState(LMGlobals):
             i1 = s.residuals.ravel()[self._inds].copy()
             #J = grad(residuals)
             der = (i1-i0)/dl
-            J_aug[a] = der.copy()
-            graderr.append((s.error - er0)/dl)
+            self.J[ind0+a] = der.copy()
+            graderr[ind0+a] = (s.error - er0)/dl
         #resetting to prev. params:
         sa.update_rscl_x_params(old_aug_vals)
 
-        if J_st.size == 0:
-            self.J = np.array(J_aug)
-        elif old_aug_vals.size == 0:
-            self.J = J_st
-        else:
-            self.J = np.append(J_st, np.array(J_aug), axis=0)
-        #Rescaling the grad of cost to the size we expect from the inds:
+        # Rescaling the grad of cost to the size we expect from the inds:
         rescale = float(self.J.shape[1])/self.state.residuals.size
         self._graderr = np.array(graderr) * rescale
 
