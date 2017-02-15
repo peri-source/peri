@@ -303,7 +303,7 @@ def separate_particles_into_groups(s, region_size=40, bounds=None,
         shift = np.random.choice([True, False])
     if doshift:
         shift = rs / 2
-        n_tranlate += 1
+        n_translate += 1
     else:
         shift = 0
     deltas = np.meshgrid(*[np.arange(i) for i in n_translate])
