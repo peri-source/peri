@@ -62,6 +62,7 @@ def state_to_ordereddict(st, include_iminfo=True):
     Parameters
     ----------
         st : :class:``peri.states.State``
+            The state to represent.
         include_iminfo : Bool, optional
             If set, includes two additional keys, ``'image.filename'`` and
             ``'image.tile'`` with corresponding info about the image.
@@ -78,6 +79,36 @@ def state_to_ordereddict(st, include_iminfo=True):
         od.update({ 'image.filename':st.image.filename,
                     'image.tile':str(st.image.tile)})
     return od
+
+def save_as_dict(st, save_name, include_iminfo=True, align_text=True):
+    """Saves a state as a json dict file, in a human-readable order.
+
+    Parameters
+    ---------
+        st : :class:``peri.states.State``
+            The state to save.
+        save_name : string
+            Complete filename to save as.
+        include_iminfo : Bool, optional
+            If set, includes two additional keys, ``'image.filename'`` and
+            ``'image.tile'`` with corresponding info about the image.
+            Default is True.
+        align_text : Bool, optional
+            Changes json separators to include a newline and tab, to make
+            the saved dict easier to read by humans. Default is True.
+
+    See Also
+    --------
+    state_to_ordereddict
+    batch_saveasdict
+    """
+    if align_text:
+        separators=(',\n', ':\t')
+    else:
+        separators=(', ', ': ')
+    with open(save_name, 'wb') as f:
+        json.dump(state_to_ordereddict(st, include_iminfo=include_iminfo),
+                f, separators=separators)
 
 def batch_saveasdict(load_dir, load_names, save_dir, align_text=True,
         include_iminfo=True):
@@ -102,10 +133,6 @@ def batch_saveasdict(load_dir, load_names, save_dir, align_text=True,
             Default is True.
     """
     os.chdir(load_dir)
-    if align_text:
-        separators=(',\n', ':\t')
-    else:
-        separators=(', ', ': ')
     for nm in load_names:
         save_name = os.path.join(save_dir, nm + '.json')
         try:
@@ -114,9 +141,8 @@ def batch_saveasdict(load_dir, load_names, save_dir, align_text=True,
             print 'Missing {}'.format(nm)
             continue
         print 'Saving {}'.format(nm)
-        with open(save_name, 'wb') as f:
-            json.dump(state_to_ordereddict(st, include_iminfo=include_iminfo),
-                    f, separators=separators)
+        save_as_dict(st, save_name, include_iminfo=include_iminfo, align_text=
+                align_text)
 
 def parse_json(filename, inbox=True, inboxrad=False, fullinbox=False):
     """
