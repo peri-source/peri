@@ -253,7 +253,8 @@ def find_particles_in_tile(state, tile):
     bools = tile.contains(state.obj_get_positions())
     return np.arange(bools.size)[bools]
 
-def separate_particles_into_groups(s, region_size=40, bounds=None):
+def separate_particles_into_groups(s, region_size=40, bounds=None,
+        doshift=False):
     """
     Separates particles into convenient groups for optimization.
 
@@ -277,6 +278,10 @@ def separate_particles_into_groups(s, region_size=40, bounds=None):
         Default (None -> ([0,0,0], s.oshape.shape)) is a box of the entire
         image size, i.e. the default places every particle in the image
         somewhere in the groups.
+    doshift : {True, False, `'rand'`}, optional
+        Whether or not to shift the tile boxes by half a region size, to
+        prevent the same particles to be chosen every time. If `'rand'`,
+        randomly chooses either True or False. Default is False
 
     Returns
     -------
@@ -294,10 +299,17 @@ def separate_particles_into_groups(s, region_size=40, bounds=None):
     n_translate = np.ceil(bounding_tile.shape.astype('float')/rs).astype('int')
     particle_groups = []
     tile = Tile(left=bounding_tile.l, right=bounding_tile.l + rs)
+    if doshift == 'rand':
+        shift = np.random.choice([True, False])
+    if doshift:
+        shift = rs / 2
+        n_tranlate += 1
+    else:
+        shift = 0
     deltas = np.meshgrid(*[np.arange(i) for i in n_translate])
 
     groups = map(lambda *args: find_particles_in_tile(s, tile.translate(
-            np.array(args) * rs)), *[d.ravel() for d in deltas])
+            np.array(args) * rs + shift)), *[d.ravel() for d in deltas])
 
     for i in xrange(len(groups)-1, -1, -1):
         if groups[i].size == 0:
@@ -1799,11 +1811,11 @@ class LMParticles(LMEngine):
 
         #is_rad, is_pos masks:
         rad_nms = (self.state.param_radii() if (include_rad and hasattr(
-                    self.state, 'param_radii')) else [])
+                    self.state, 'param_radii')) else [])  # FIXME explicit rad
         self._is_rad = np.array(map(lambda x: x in rad_nms, self.param_names))
         pos_nms = self.state.param_positions()
         self._is_pos = []
-        for a in xrange(3):
+        for a in xrange(3):  # FIXME explicit 3D
             self._is_pos.append(np.array(map(lambda x: (x in pos_nms) &
                     (x[-1] == 'zyx'[a]), self.param_names)))
         super(LMParticles, self).__init__(**kwargs)
@@ -1840,7 +1852,7 @@ class LMParticles(LMEngine):
         values[self._is_rad] = np.clip(values[self._is_rad], self._MINRAD,
                 self._MAXRAD)
         pd = self.state.pad
-        for a in xrange(3):
+        for a in xrange(3):  # FIXME explicit 3D
             values[self._is_pos[a]] = np.clip(values[self._is_pos[a]],
                     self._MINDIST - pd[a], self.state.ishape.shape[a] +
                     pd[a] - self._MINDIST)
@@ -1974,7 +1986,7 @@ class LMParticleGroupCollection(object):
                     region_size=self.region_size, max_mem=self.max_mem)
         self.stats = []
         self.particle_groups = separate_particles_into_groups(self.state,
-                self.region_size)
+                self.region_size, doshift='rand')
         if new_damping is not None:
             self._kwargs.update({'damping':new_damping})
         if self.save_J:
