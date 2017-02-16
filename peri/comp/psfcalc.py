@@ -1017,7 +1017,7 @@ def calculate_polychrome_fluorescence_psf(x, y, z, k0=1., sigk=0.1, npts=3,
 #######~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#######
 
 def calc_monochrome_brightfield_pointdipole(rho, z, normalize=False,
-        alpha=1.0, n2n1=0.95, zint=100.):
+        alpha=1.0, n2n1=0.95, zint=100., npts=20):
     """
     Calculates a brightfield psf, for monochromatic illumination.
 
@@ -1055,7 +1055,7 @@ def calc_monochrome_brightfield_pointdipole(rho, z, normalize=False,
     if rho.shape != z.shape:
         raise ValueError('rho.shape != z.shape')
 
-    kw = {'alpha':alpha, 'zint':zint, 'n2n1':n2n1}
+    kw = {'alpha':alpha, 'zint':zint, 'n2n1':n2n1, 'npts':npts}
     I1a = get_K(rho, z, K=1, get_hdet=True, **kw)
     I2a = get_K(rho, z, K=2, get_hdet=True, **kw)
     #The new version, assuming that the wavefront is coherent on the
