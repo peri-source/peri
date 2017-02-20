@@ -59,7 +59,6 @@ of the three-dimensional tiffstack. Clicking on one of these will recenter the
 views on the region you clicked.
 
 .. figure:: ./_static/OV-small-im.png
-   :scale: 50%
    :alt: ``OrthoViewer(im.get_image())``
 
 
@@ -124,7 +123,6 @@ the extracted particle positions:
     OrthoPrefeature(im.get_image(), particle_positions, viewrad=3.0)
 
 .. figure:: ./_static/OrthoPrefeature.png
-   :scale: 50%
    :alt: ``OrthoPrefeature(im.get_image(), particle_positions, viewrad=3.0)``
 
    Click around to look at particles! If you like, you can add or remove
@@ -349,7 +347,6 @@ complete or your fit isn't the best. For my state, we see that the fit is
 pretty good, as you can see below.
 
 .. figure:: ./_static/OM-finish-st.png
-   :scale: 100%
    :alt: ``OrthoManipulator(st)``
    :align: center
 
@@ -376,7 +373,6 @@ the variance of the residuals. If you see significant deviation of the data
 from a Gaussian, then your model isn't complete or your fit isn't good.
 
 .. figure:: ./_static/unexplained-noise.png
-    :scale: 100%
     :alt: ``plots.examine_unexplained_noise(st)``
     :align: center
 

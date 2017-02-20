@@ -47,8 +47,11 @@ In addition, you'll want 64-bit versions of the following packages
 
 Running ``pip install peri`` should install ``peri`` and its dependencies
 automatically. Sometimes I have trouble with dependencies on Windows machines.
-In these cases, I like to download the dependencies in 64-bit from Christopher
-Gohlke's helpful website `here <http://www.lfd.uci.edu/~gohlke/pythonlibs/>`_.
+To get around this, try downloading the `Anaconda
+<https://www.continuum.io/downloads>`_ Python distribution,
+which includes nearly all of the ``peri`` dependencies. Alternatively, you can
+download the dependencies in 64-bit from Christopher Gohlke's helpful website
+`here <http://www.lfd.uci.edu/~gohlke/pythonlibs/>`_.
 
 
 Source code
@@ -60,10 +63,10 @@ Source code
     use, install at your own risk.
 
 Alternatively, you may install the development version from source. Currently,
-the repository is hosted on `GitHub <https://github.com/mattbierbaum/peri>`_.
+the repository is hosted on `GitHub <https://github.com/peri-source/peri>`_.
 To download and install from source you can clone and install::
 
-    git clone https://github.com/mattbierbaum/peri.git
+    git clone https://github.com/peri-source/peri.git
     cd peri/
     python setup.py install
 
@@ -90,7 +93,7 @@ Bugs and issues
 Bugs and issues are currently reported through GitHub `issues
 <https://github.com/mattbierbaum/peri/issues>`_. In order to help us as much as
 possible to resolve the issue, please enable the highest verbosity in the
-``peri`` logging system (:ref:`ref-options-reference`) and upload your logs along with a
+``peri`` logging system (:class:`~peri.logger`) and upload your logs along with a
 link to the image and run script / command line to the issue tracker.
 
 Contributing
