@@ -818,7 +818,6 @@ class Slab(Component):
             for precomputed arrays. Default is np.float64; make it 16 or 32
             to save memory.
         """
-        self.category = category
         self.lbl_zpos = param_prefix+'-zpos'
         self.lbl_theta = param_prefix+'-theta'
         self.lbl_phi = param_prefix+'-phi'
@@ -830,7 +829,8 @@ class Slab(Component):
 
         params = [self.lbl_zpos, self.lbl_theta, self.lbl_phi]
         values = [float(i) for i in [zpos, angles[0], angles[1]]]
-        super(Slab, self).__init__(params, values, ordered=False)
+        super(Slab, self).__init__(params, values, ordered=False,
+                category=category)
 
         if shape:
             inner = shape.copy()  #same default as Platonic Sphere Collection
