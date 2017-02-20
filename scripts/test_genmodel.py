@@ -152,7 +152,7 @@ opt.do_levmarq(st, st.get('bkg').params + ['ilm-z-{}'.format(i) for i in
                 xrange(ilm_z.zorder)], max_iter=2)
 # Looking at this with the OrthoManipulator it already looks good, but we do
 # a full optimization to ensure that we're at the best fit.
-opt.do_levmarq(st, st.params)
+opt.do_levmarq(st, st.params, exptol=1e-5, errtol=1e-3)
 # (this will take some time; half an hour or so on my machine)
 
 # Finally, plotting the average along different directions looks good:
