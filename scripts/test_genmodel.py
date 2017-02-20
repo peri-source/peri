@@ -1,7 +1,3 @@
-# FIXMEs
-#1. This needs smaller images
-#2. Included in the package somehow
-
 
 # In this script, we use several demo images to check the quality of our
 # generative model. We'll start with the simplest possible image -- a blank
@@ -21,7 +17,7 @@ from peri.viz.interaction import *  # OrthoViewer & OrthoManipulator
 
 # We start with featuring just a background image
 # This image was taken with no sample, i.e. we're just measuring dark current
-im_bkg = util.RawImage(r'F:\BAMF Featuring measurements\Confocal Measurement tests\12-16-15_Background_test\Exported Tiffstacks\lights_off_01\0.tif')  # FIXME
+im_bkg = util.RawImage('./bkg_test.tif')  # located in the scripts folder
 
 # First we try with just a constant background
 bkg_const = ilms.LegendrePoly3D(order=(1,1,1))
@@ -44,7 +40,7 @@ def plot_averaged_residuals(st):
         plt.title('{}-averaged'.format(['$xy$', '$xz$', '$yz$'][i]),
                 fontsize='large')
 
-# plot_averaged_residuals(st)
+plot_averaged_residuals(st)
 
 # From this we see that, while the background doesn't change much along z, it
 # increases smoothly along y (the in-plane direction perpendicular to our line
@@ -60,7 +56,7 @@ opt.do_levmarq(st, st.params)
 # Looking at the plot of the residuals again shows a significant improvement
 # in the residuals:
 
-# plot_averaged_residuals(st)
+plot_averaged_residuals(st)
 
 # Next, let's check the illumination field. For this, we load a different
 # image, one that I've taken of just dyed fluid. This image also has a
@@ -68,7 +64,8 @@ opt.do_levmarq(st, st.params)
 # setting the tile to be a specific region of z in the image. Moreover,
 # since I know that our confocal has some scan issues at the edges of the
 # image, I'll also crop out the image edges with the tile:
-im_ilm = util.RawImage(r'F:\BAMF Featuring measurements\Confocal Measurement tests\11-13-15_BlankSlab\Exported Tiffstacks\zscale015_a\0.tif', tile=util.Tile([68,100,100], [69,200, 200]))  # FIXME
+im_ilm = util.RawImage('./ilm_test.tif', tile=util.Tile([48,0,0], [49,100,100]))
+# also located in the scripts folder
 
 # Looking at the image, the illlumination is very stripey, due to the line-scan
 # nature of our confocal. To account for this, we use a stripe-based ilm:
@@ -88,20 +85,33 @@ opt.do_levmarq(st, st.params)
 
 # Plotting the residuals shows that they're good, aside from scan noise
 # inherent to the line CCD camera:
-# plot_averaged_residuals(st)
+
+plot_averaged_residuals(st)
 
 
 # Next, we include the coverslip slide. To do this we first re-set the tile on
 # our raw image to the full image:
-im_ilm.tile = util.Tile([10,100,100], [90, 200, 200])
+im_ilm.set_tile(util.Tile([0,0,0], [60, 100, 100]))
 
 # We then create a coverslip object:
-slab = objs.Slab(zpos=40.0, category='obj')
+slab = objs.Slab(zpos=35.0, category='obj')
 # We also need our illumination to have a z-dependence now. Since we already
 # spent time updating the ilm parameters, we update the corresponding values
 # of the new ilm to the older ones:
 ilm_z = ilms.BarnesStreakLegPoly2P1D(npts=(50, 30, 20, 13, 7, 7, 7), zorder=7)
 ilm_z.set_values(ilm.params, ilm.values)
+# Keep in mind that setting the parameters only works for this certain
+# ilm classes. The BarnesStreakLegPoly2P1D (1) has the same named Barnes
+# parameters regardless of the z-order, and (2) these determine the ilm field
+# in the xy-plane in the same way when the number of points is the same and
+# the image shape is the same. In contrast, if we had fit the in-plane
+# illumination with a lower set of npts, just setting the parameters wouldn't
+# work. [This is because the BarnesStreakLegPoly2P1D barnes parameters are
+# labeled according to their distance from the leftmost edge of the image. So
+# ilm-b0-49 would be on the rightmost side of the image if npts=(50,...), but
+# it would be in the middle of the image if npts=(100,...).] We could get
+# around this case by re-fitting the ilm when we start to fit the state below
+
 
 # We need to add a background. In principle, we could be use the same bkg
 # that worked for our blank image. However, in practice this doesn't work so
@@ -147,4 +157,7 @@ opt.do_levmarq(st, st.params)
 
 # Finally, plotting the average along different directions looks good:
 
-# plot_averaged_residuals(st)
+plot_averaged_residuals(st)
+
+# With the OrthoManipulator, we can also see that our fit looks good:
+OrthoManipulator(st)
