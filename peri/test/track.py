@@ -3,8 +3,13 @@ import sys
 import pickle
 import json
 import numpy as np
-import trackpy as tp
-from pandas import DataFrame
+try:
+    import peri.trackpy as tp
+    from pandas import DataFrame
+except ImportError:
+    from peri.logger import log
+    log.warn('Unable to import trackpy and/or pandas. Some features may be missing.')
+
 
 from peri.test import analyze  #bad form b/c it's in the same folder?
 
