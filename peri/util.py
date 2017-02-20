@@ -658,6 +658,10 @@ class Image(object):
             q[k] -= v
         return np.real(np.fft.ifftn(q))
 
+    def set_tile(self, tile):
+        """Sets the current tile of the image to a `peri.util.Tile`"""
+        self.tile = tile
+
     def set_filter(self, slices, values):
         """
         Sets Fourier-space filters for the image. The image is filtered by
