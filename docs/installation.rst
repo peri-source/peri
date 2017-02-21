@@ -91,7 +91,7 @@ Bugs and issues
 ---------------
 
 Bugs and issues are currently reported through GitHub `issues
-<https://github.com/mattbierbaum/peri/issues>`_. In order to help us as much as
+<https://github.com/peri-source/peri/issues>`_. In order to help us as much as
 possible to resolve the issue, please enable the highest verbosity in the
 ``peri`` logging system (:class:`~peri.logger`) and upload your logs along with a
 link to the image and run script / command line to the issue tracker.
@@ -99,5 +99,7 @@ link to the image and run script / command line to the issue tracker.
 Contributing
 ------------
 
+.. todo::
 
+    Create a contributing doc which describes how to become a developer
 
