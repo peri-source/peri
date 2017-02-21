@@ -9,13 +9,13 @@ description will proceed in three stages:
 
 1. **Polynomial fitting** -- talk about the State, its properties, and model
    updates
-2. **Image of Gaussian discs** -- simple ImageState, its properties
+2. **Image of Gaussian discs** -- simple ImageState, its properties, basic components
 3. **Optimized Image of Gaussian discs** -- optimization of stage two,
-   demonstrating the local update framework
+   demonstrating the local update framework and advanced components
 
 
-States
-=======
+States (Example: PolyFitState)
+==============================
 
 In this section (with PolyFitState example), we will have noisy data which we
 wish to fit with a polynomial. While a relatively simple problem, we will
@@ -40,8 +40,8 @@ leaving you to implement only a few methods in order to have a functioning
     :noindex:
 
 
-Example: PolyFitState
----------------------------
+State class
+-----------
 
 To demonstrate this ``State`` class, let's implement a polynomial fit class
 which fits a one dimensional curve to an arbitrary degree polynomial.  In the
@@ -98,6 +98,7 @@ We can then make an instance of this ``PolyFitState`` and begin to fit fake
     C, N = 8, 1000
 
     # generate data
+    np.random.seed(159)
     c = 2*np.random.rand(C) - 1
     x = np.linspace(0.0, 2.0, N)
     y = np.polyval(c, x) + sigma*np.random.randn(N)
@@ -115,7 +116,17 @@ the sensitivity matrix :math:`J^T J`:
 .. code-block:: python
 
     import matplotlib.pyplot as pl
-    pl.imshow(s.JTJ())
+    pl.imshow(s.JTJ(), cmap='bone')
+    pl.xticks(np.arange(len(s.params)), s.params)
+    pl.yticks(np.arange(len(s.params)), s.params)
+    pl.title(r"$J^T J$ for PolyFitState")
+
+.. figure:: ./_static/arch_polyfit_jtj.png
+   :alt: ``pl.imshow(s.JTJ(), cmap='bone')``
+   :align: center
+   :scale: 40
+
+   Showing the relatively boring structure of :math:`J^T J` for the PolyFitState.
 
 or we can calculate the `Cramer-Rao bound
 <https://en.wikipedia.org/wiki/Cram%C3%A9r%E2%80%93Rao_bound>`_ for the fit
@@ -137,12 +148,11 @@ Optimization
     import matplotlib.pyplot as pl
     from peri.mc import sample
 
-    # burn a number of samples, then collect the samples around the true value
-    h = sample.sample_state(s, s.params, N=1000, doprint=True, procedure='uniform')
-    h = sample.sample_state(s, s.params, N=30, doprint=True, procedure='uniform')
+    # burn a number of samples if hadn't optimized yet
+    #h = sample.sample_state(s, s.params, N=1000, doprint=True, procedure='uniform')
 
-    pl.plot(s.data, 'o')
-    pl.plot(s.model, '-')
+    # then collect the samples around the true value
+    h = sample.sample_state(s, s.params, N=30, doprint=True, procedure='uniform')
 
     # distribution of fit parameter values
     h.get_histogram()
@@ -156,11 +166,26 @@ squares optimization with `Levenberg-Marquardt
     import peri.opt.optimize as opt
     opt.do_levmarq(s, s.params[1:])
 
-    pl.plot(s.data, 'o')
-    pl.plot(s.model, '-')
+    fig = pl.figure()
+    pl.plot(s._xpts, s.data, 'o', label='Data')
+    pl.plot(s._xpts, s.model, '-', label='Model')
+    pl.xlabel(r"$x$")
+    pl.ylabel(r"$y$")
+    pl.legend(loc='best')
+    pl.title("Best fit model")
 
-Image states
-=============
+.. figure:: ./_static/arch_polyfit_fit.png
+   :alt: ``opt.do_levmarq(s, s.params[1:]); pl.plot(s.data); pl.plot(s.model)``
+   :align: center
+   :scale: 40
+
+   Comparison of data and model fit for PolyFitState with data seeded from
+   an 8th order polynomial with noise.
+
+All the code listed above can be downloaded :download:`here <./_static/arch_polyfit.py>`.
+
+Image states (Example: GaussianDiscModel)
+=========================================
 
 Since a common usage pattern of PERI is to optimize models of experimental
 microscope images, we implemented a very flexible ``ImageState`` which
@@ -204,50 +229,204 @@ the overall model. This philosophy can be expressed simply as:
 * **Component** (:class:`~peri.comp.comp.Component`) -- Small subsections of the model e.g. :math:`P`, :math:`S`, :math:`B`
 * **Tile** (:class:`~peri.util.Tile`) -- Regions of the image over which parts of the model are calculated.
 
-ParameterGroups and Components
-------------------------------
+Model
+-----
 
-First, we split the model into small parts which break up the monolithic model
-into managable pieces. We call these objects ``Components``
-(:class:`~peri.comp.comp.Component`). In their most basic form, a ``Component``
-is a :class:`~peri.comp.comp.ParameterGroup` which also knows about tiling.
+We will start our description from the top down, first describing the
+``Model``, or equation, that produces our model image. To create a new model,
+we simply subclass the :class:`~peri.models.Model` class and overwrite the
+``__init__`` function. This function holds the actual equations which are
+called to calculate the model image. For our example here, let's simply
+translate the equation above:
+
+.. code-block:: python
+
+    import peri.models
+    
+    class GaussianDiscModel(peri.models.Model):
+        def __init__(self):
+            # gives human readable labels to equation variables
+            varmap = {'P': 'psf', 'D': 'disc', 'C': 'off'}
+            
+            # gives the full model equation of applying the psf P to an image
+            # of discs D and adding an offset because the peak-to-peak of 
+            # real images is often hard to discern
+            modelstr = {'full' : 'P(D) + C'}
+
+            # calls the super-class' init
+            super(GaussianDiscModel, self).__init__(
+                modelstr=modelstr, varmap=varmap, registry=None
+            )
+
+As mentioned in the comments for the code segment, we first have a ``varmap``
+(variable map) that essentially acts to give human labels to the variables in
+the model equation. We define a psf :math:`P`, disc image :math:`D`, and
+constant offset :math:`C`. The ``modelstr`` defines the actual equation (which
+will be ``eval``'d) in terms of the variables defined above. In this equation,
+the ``Component`` given by each label (psf, disc, off) will have their
+``get()`` function called and inserted into the string. More on this later.
+
+We are done with this section of the example. In the next example we will talk
+about necessary optimizations to include to make this ``Model`` perform better.
+
+
+Components
+----------
+
+The items that we listed in the model (psf, disc, off) must be a subclass of
+:class:`~peri.comp.comp.Component` or
+:class:`~peri.comp.comp.ComponentCollection`.  These objects are essentially a
+group of parameters and values (names and numbers), knowledge of how to compute
+something, and a method to update itself. They can be significantly more
+complicated depending on various optimizations, but we will here demonstrate
+the most basic form of a ``Component`` (we will get complicated in the next
+example).
 
 ParameterGroup
 ^^^^^^^^^^^^^^
 
-A :class:`~peri.comp.comp.ParameterGroup` is a container that provides a common
+At the lowest level, a ``Component`` is a ``ParameterGroup``, a storage
+container for values and names associated with those values.  A
+:class:`~peri.comp.comp.ParameterGroup` is a container that provides a common
 interface to any object which computes "something" based on a set of
 ``parameters`` (string names) and ``values`` (the values associated with those
-names). In the most basic form, a ``ParameterGroup`` must care about the following
-structure:
+names). In the most basic form, a ``ParameterGroup`` must care about the
+following structure:
 
 .. autoclass:: peri.comp.comp.ParameterGroup
     :members: get_values, set_values, update
     :noindex:
 
+
+In order to implement a ``Component``, you should be familiar with the methods
+listed above.
+
 Component
 ^^^^^^^^^
 
-A subclass of the ``ParameterGroup`` is a ``Component`` which specifically
-computes part of the ``Model`` computed by ``ImageState``. Therefore, in
-addition to the methods required by ``ParameterGroup``, it must also implement
-functions pertaining to *tiling*, how the ``ImageState`` deals with local and
-semi-local updates for best performance.
+A subclass of the ``ParameterGroup`` is a ``Component`` which is a group of
+values which are used to compute part of the model image. Therefore, its
+``update()`` function must actually update the necessary parts of the
+computation for that component. Additionally, the ``Components`` must know
+something about the dimensions of the image over which they are expected to
+function as well as the current area of interest. It must also provide
+information about which parts of the image it finds important (but won't deal
+with this until the next section). Therefore, in the :class:`~peri.comp.comp.Component`
+class we need to know about:
 
 .. autoclass:: peri.comp.comp.Component
     :members: initialize, get_update_tile, get_padding_size, set_tile, set_shape, get
     :noindex:
 
-ComponentCollections and Models
--------------------------------
+Let's sink our teeth in and create 2 of the components that will work in our
+``GaussianDiscModel`` (one already available in the ``peri`` package). We will
+first create something to use as the psf, then a component to use as the disc
+element of the image. The offset component is already implemented in
+:class:`~peri.comp.comp.GlobalScalar`.
 
-.. autoclass:: peri.comp.comp.ComponentCollection
-    :members: get
-    :noindex:
+GaussianPSF
+"""""""""""
 
-.. autoclass:: peri.models.Model
-    :members: evaluate
-    :noindex:
+.. code-block:: python
 
-Example: Gaussian-blurred discs
--------------------------------
+    class GaussianPSF(peri.comp.comp.Component):
+        def __init__(self, sigmas=(1.0, 1.0)):
+            # setup the parameters and values which will be passed to super
+            super(GaussianPSF, self).__init__(
+                params=['psf-sx', 'psf-sy'], values=sigmas, category='psf'
+            )
+    
+        def get(self):
+            """
+            Since we wish to use the GaussianPSF in the model by calling P(D), the
+            get function will simply return this object and we will override
+            __call__ so that we can use P(...).
+            """
+            return self
+    
+        def __call__(self, field):
+            """
+            Accept a field, apply the point-spread-function, and return
+            the resulting image of a blurred field
+            """
+            # in order to avoid translations from the psf, we must create
+            # real-space vectors that are zero in the corner and go positive
+            # in one direction and negative on the other side of the image
+            tile = peri.util.Tile(field.shape)
+            rx, ry = tile.kvectors(norm=1.0/tile.shape)
+    
+            # get the sigmas from ourselves
+            sx, sy = self.values
+    
+            # calculate the real-space psf from the r-vectors and sigmas
+            # normalize based on the calculated values, no the usual normalization
+            psf = np.exp(-((rx/sx)**2 + (ry/sy)**2)/2)
+            psf = psf / psf.sum()
+    
+            # perform the convolution with ffts and return the result
+            out = fft.fftn(fft.ifftn(field)*fft.ifftn(psf))
+            return np.real(out)
+    
+        def get_padding_size(self, tile):
+            # claim that the necessary padding size for the convolution is
+            # the size of the padding of the image itself for now
+            return peri.util.Tile(self.inner.l)
+    
+        def get_update_tile(self, params, values):
+            # if we update the psf params, we must update the entire image
+            return self.shape
+
+PlatonicDiscs
+"""""""""""""
+
+.. code-block:: python
+
+    class PlatonicDiscs(peri.comp.comp.Component):
+        def __init__(self, positions, radii):
+            comp = ['x', 'y', 'a']
+            params, values = [], []
+    
+            # apply using naming scheme to the parameters associated with the
+            # individual discs in the object pos and rad
+            for i, (pos, rad) in enumerate(zip(positions, radii)):
+                params.extend(['disc-{}-{}'.format(i, c) for c in comp])
+                values.extend([pos[0], pos[1], rad])
+    
+            # use our super-class structure to keep track of these parameters
+            self.N = len(positions)
+            super(PlatonicDiscs, self).__init__(
+                params=params, values=values, category='disc',
+            )
+    
+        def draw_disc(self, rvec, i):
+            # get the position and radii parameters cooresponding to this particle
+            pparams = ['disc-{}-{}'.format(i, c) for c in ['x', 'y']]
+            rparams = 'disc-{}-a'.format(i)
+    
+            # get the actual values of these parameters
+            pos = np.array(self.get_values(pparams))
+            rad = self.get_values(rparams)
+    
+            # draw the disc using the provided rvecs and now pos and rad
+            dist = np.sqrt(((rvec - pos)**2).sum(axis=-1))
+            return 1.0/(1.0 + np.exp(5.0*(dist-rad)))
+    
+        def get(self):
+            # get the coordinates of all pixels in the image. however, make sure
+            # that zero starts in the interior of the image where the padding stops
+            rvec = self.shape.translate(-self.inner.l).coords(form='vector')
+    
+            # add up the images of many particles to get the platonic image
+            self.image = np.array([
+                self.draw_disc(rvec, i) for i in xrange(self.N)
+            ]).sum(axis=0)
+    
+            # return the image in the current tile
+            return self.image[self.tile.slicer]
+    
+        def get_update_tile(self, params, values):
+            # for now, if we update a parameter update the entire image
+            return self.shape
+
+All the code listed above can be downloaded :download:`here <./_static/arch_gdiscs.py>`.
+
