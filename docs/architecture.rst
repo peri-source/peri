@@ -2,29 +2,43 @@
 Package architecture
 ********************
 
-This document is a description of the overall package architecture elucidated
-via a simple example of polynomial fitting. In this example, we will have noisy
-data which we wish to fit with a polynomial. While a relatively simple problem,
-we will implement it in the PERI framework including how to get the best
-performance using various aspects of the package.
+Here we describe the various abstractions used to allow great flexibility in
+the ``peri`` package while also allowing for a generalized framework for
+optimization image updates (frequently through local updates and caching). The
+description will proceed in three stages:
+
+1. **Polynomial fitting** -- talk about the State, its properties, and model
+   updates
+2. **Image of Gaussian discs** -- simple ImageState, its properties
+3. **Optimized Image of Gaussian discs** -- optimization of stage two,
+   demonstrating the local update framework
+
 
 States
 =======
 
+In this section (with PolyFitState example), we will have noisy data which we
+wish to fit with a polynomial. While a relatively simple problem, we will
+implement it in the PERI framework including how to get the best performance
+using various aspects of the package.
+
 Overview
 --------
 
-The basic structure needed to fit a model to data is the ``State`` object. This
-structure holds the data and model and provides a common interface that allows
-the ``peri`` package to optimize a set of parameters to match the two. All of
-the common operations are implemented, leaving you to implement only a few
-methods in order to have a functioning ``State``. In order to implement a
-``State``, you must know about the following functions:
+The basic structure needed to fit a model to data is the
+:class:`~peri.states.State` object. This structure holds the data and model and
+provides a common interface that allows the ``peri`` package to optimize a set
+of parameters to match the two. All of the common operations are implemented
+(including but not limited to Jacobians, Hessians, log-likelihood, priors),
+leaving you to implement only a few methods in order to have a functioning
+:class:`~peri.states.State`. In order to implement a
+:class:`~peri.states.State`, you must know about the following functions:
 
 .. autoclass:: peri.states.State
     :members: data, model, update
     :undoc-members:
     :noindex:
+
 
 Example: PolyFitState
 ---------------------------
