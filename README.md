@@ -22,3 +22,7 @@ Testing is done through nose, and can be performed with:
 
     nosetests
 
+Documentation
+-------------
+
+Currently, the documentation is hosted at https://peri-source.github.io/peri-docs/
