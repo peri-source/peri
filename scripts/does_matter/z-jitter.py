@@ -4,7 +4,7 @@ import scipy as sp
 import scipy.ndimage as nd
 
 import common
-from cbamf.test import init
+from peri.test import init
 
 def zjitter(jitter=0.0, radius=5):
     """

@@ -5,10 +5,10 @@ import numpy as np
 import matplotlib.pyplot as pl
 from mpl_toolkits.axes_grid1 import ImageGrid
 
-from cbamf import const, runner
-from cbamf.test import init
-from cbamf.viz.util import COLORS
-from cbamf.viz.plots import lbl
+from peri import const, runner
+from peri.test import init
+from peri.viz.base import COLORS
+from peri.viz.plots import lbl
 
 def pad(image, size, val=0):
     return np.pad(image, size, mode='constant', constant_values=val)
@@ -155,7 +155,7 @@ def dist(a):
 
 def errs(val, pos):
     v,p = val, pos
-    return np.sqrt(((v[...,:3] - p[:,:,None,:])**2).sum(axis=-1)).mean(axis=(1,2))
+    return np.sqrt(((v[...,:3] - p[:,:,None,:3])**2).sum(axis=-1)).mean(axis=(1,2))
 
 def snr_labels(i):
     pass

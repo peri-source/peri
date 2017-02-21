@@ -1,7 +1,7 @@
 import numpy as np
 import pylab as pl
 
-from cbamf.test import init
+from peri.test import init
 
 crbs = []
 rads = np.arange(1, 10, 1./5)

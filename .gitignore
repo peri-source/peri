@@ -1,5 +1,13 @@
+.cache/
+.eggs/
 build
 dist
+venv
+peri.egg-info
+docs/_build
+docs/twistd.pid
+MANIFEST
+
 *.o
 *.pyc
 *~

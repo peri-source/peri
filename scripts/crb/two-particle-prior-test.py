@@ -1,8 +1,8 @@
 import numpy as np
 import pylab as pl
 
-from cbamf import runner
-from cbamf.test import init
+from peri import runner
+from peri.test import init
 
 samples = 30
 sweeps = 100
