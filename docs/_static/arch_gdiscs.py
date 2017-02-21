@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import peri.util
 import peri.models
 import peri.states
@@ -5,6 +7,7 @@ import peri.comp.comp
 
 from peri.fft import fft, fftkwargs, fftnorm
 from peri.comp.comp import GlobalScalar
+from peri.opt import optimize as opt
 
 import numpy as np
 import matplotlib.pyplot as pl
@@ -118,8 +121,7 @@ class PlatonicDiscs(peri.comp.comp.Component):
         # for now, if we update a parameter update the entire image
         return self.shape
 
-if True:
-    #def initialize():
+def initialize():
     N = 32
 
     # create a NullImage, which means that the model image will be used for data
@@ -137,18 +139,43 @@ if True:
 
     # join them with the model into a state
     s = peri.states.ImageState(img, [d, p, c], mdl=GaussianDiscModel(), pad=10)
-    #return s
+    return s
 
-def show_derivative(s, param):
+def show_derivative(s, param, ax=None):
+    # if there is no axis supplied, create a new one
+    ax = ax or pl.figure().gca()
+
+    # calculate the derivative of the model
     deriv = s.gradmodel(params=[param], flat=False)[0]
-    scale = max(np.abs([deriv.min(), deriv.max()]))
 
-    pl.imshow(deriv, vmin=-scale, vmax=scale, cmap='RdBu_r')
-    pl.title("Derivative wrt {}".format(param))
+    # plot it in a sane manner using matplotlib
+    scale = max(np.abs([deriv.min(), deriv.max()]))
+    ax.imshow(deriv, vmin=-scale, vmax=scale, cmap='RdBu_r')
+    ax.set_title(param)
+    ax.set_xticks([])
+    ax.set_yticks([])
 
 def show_jtj(s):
+    # plot the JTJ with properly labeled axes
     p = s.params
     pl.imshow(np.log10(np.abs(s.JTJ())), cmap='bone')
     pl.xticks(np.arange(len(p)), p, rotation='vertical')
     pl.yticks(np.arange(len(p)), p, rotation='horizontal')
+    pl.title(r'$J^T J$')
 
+def rattle_and_fit(s):
+    # grab the original values
+    values = np.array(s.values).copy()
+
+    # update the model with random parameters then optimize back
+    s.update(s.params, values + np.random.randn(len(values)))
+    opt.do_levmarq(s, s.params, run_length=12)
+
+    # calculate the crb for all parameters
+    crb = s.crb()
+
+    # print a table comparing inferred values
+    print(' {:^6s} += {:^5s} | {:^8s}'.format('Fit', 'CRB', 'Actual'))
+    print('-'*27)
+    for v0, c, v1 in zip(s.values, crb, values):
+        print('{:7.3f} += {:4.3f} | {:7.3f}'.format(v0, c, v1))

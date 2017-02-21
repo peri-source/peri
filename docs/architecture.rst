@@ -329,6 +329,12 @@ GaussianPSF
 
 .. code-block:: python
 
+    import peri.util
+    import peri.comp.comp
+    from peri.fft import fft, fftkwargs, fftnorm
+
+    import numpy as np
+
     class GaussianPSF(peri.comp.comp.Component):
         def __init__(self, sigmas=(1.0, 1.0)):
             # setup the parameters and values which will be passed to super
@@ -365,7 +371,7 @@ GaussianPSF
     
             # perform the convolution with ffts and return the result
             out = fft.fftn(fft.ifftn(field)*fft.ifftn(psf))
-            return np.real(out)
+            return fftnorm(np.real(out))
     
         def get_padding_size(self, tile):
             # claim that the necessary padding size for the convolution is
@@ -380,6 +386,10 @@ PlatonicDiscs
 """""""""""""
 
 .. code-block:: python
+
+    import peri.util
+    import peri.comp.comp
+    import numpy as np
 
     class PlatonicDiscs(peri.comp.comp.Component):
         def __init__(self, positions, radii):
@@ -428,5 +438,147 @@ PlatonicDiscs
             # for now, if we update a parameter update the entire image
             return self.shape
 
-All the code listed above can be downloaded :download:`here <./_static/arch_gdiscs.py>`.
 
+ImageState, fitting, and properties
+-----------------------------------
+
+Now that we have implemented an ``GaussianDiscModel`` along with various
+compatible components, let's create a valid ``ImageState`` and explore its
+properties and perform a fit to fake data. First, we can create a state
+by using the ``Model`` and ``Components`` that we just created:
+
+.. code-block:: python
+
+    def initialize():
+        N = 32
+    
+        # create a NullImage, which means that the model image will be used for data
+        img = peri.util.NullImage(shape=(N,N))
+    
+        # setup the initial conditions for the parameters of our model
+        pos = [[10., 10.], [15., 18.], [8.0, 24.0]]
+        rad = [5.0, 3.5, 2.2]
+        sig = [2.0, 1.5]
+    
+        # make each of the components separately
+        d = PlatonicDiscs(positions=pos, radii=rad)
+        p = GaussianPSF(sigmas=sig)
+        c = GlobalScalar(name='off', value=0.0)
+    
+        # join them with the model into a state
+        s = peri.states.ImageState(img, [d, p, c], mdl=GaussianDiscModel(), pad=10)
+        return s
+    
+Once we have created the state ``s``, let's look at some of its properties.
+Many of them are the same as the properties available in the ``PolyFitState``
+example since they inherit from :class:`~peri.states.State`. For example,
+we can look at derivatives of the model w.r.t. different parameters using
+the following convenience function:
+
+.. figure:: ./_static/arch_gdiscs_model.png
+   :alt: pl.imshow(s.model, cmap='bone')
+   :align: center
+   :scale: 70
+
+   The model image create from our ImageState
+
+Plotting the derivatives wrt model parameters can be performed with
+
+.. code-block:: python
+
+    def show_derivative(s, param, ax=None):
+        # if there is no axis supplied, create a new one
+        ax = ax or pl.figure().gca()
+    
+        # calculate the derivative of the model
+        deriv = s.gradmodel(params=[param], flat=False)[0]
+    
+        # plot it in a sane manner using matplotlib
+        scale = max(np.abs([deriv.min(), deriv.max()]))
+        ax.imshow(deriv, vmin=-scale, vmax=scale, cmap='RdBu_r')
+        ax.set_title(param)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+Yielding the following images
+
+.. figure:: ./_static/arch_gdiscs_gradmodel.png
+   :alt: ``show_derivative(s, ...)
+   :align: center
+   :scale: 70
+
+   Gradients of the state with respect to various parameters in the model
+
+
+Similarly, the :math:`J^T J` can be plotted using the following convenience
+function
+
+.. code-block:: python
+
+    def show_jtj(s):
+        # plot the JTJ with properly labeled axes
+        p = s.params
+        pl.imshow(np.log10(np.abs(s.JTJ())), cmap='bone')
+        pl.xticks(np.arange(len(p)), p, rotation='vertical')
+        pl.yticks(np.arange(len(p)), p, rotation='horizontal')
+        pl.title(r'$J^T J$')
+
+Yields the approximate hessian
+
+.. figure:: ./_static/arch_gdiscs_jtj.png
+   :alt: ``show_derivative(s, ...)
+   :align: center
+   :scale: 70
+
+   :math:`J^T J` for the GaussianDiscModel with the components we created
+   earlier in this section. You can see the strong coupling between neighboring
+   particles as well as the coupling between global values (psf and off) and
+   local ones (disc)
+
+
+Finally, let's make sure that our model is able to accurately reproduce the
+data (which happens to be generated from the model but has noise added to it).
+To do this, we will rattle the values of the model then perform a fit and
+compare the fit and errors to the true values.
+
+
+.. code-block:: python
+
+    def rattle_and_fit(s):
+        # grab the original values
+        values = np.array(s.values).copy()
+    
+        # update the model with random parameters then optimize back
+        s.update(s.params, values + np.random.randn(len(values)))
+        opt.do_levmarq(s, s.params, run_length=12)
+    
+        # calculate the crb for all parameters
+        crb = s.crb()
+    
+        # print a table comparing inferred values
+        print(' {:^6s} += {:^5s} | {:^8s}'.format('Fit', 'CRB', 'Actual'))
+        print('-'*27)
+        for v0, c, v1 in zip(s.values, crb, values):
+            print('{:7.3f} += {:4.3f} | {:7.3f}'.format(v0, c, v1))
+
+Running this function yields a table::
+
+      Fit   +=  CRB  |  Actual 
+    ---------------------------
+      9.964 += 0.026 |  10.000
+     10.003 += 0.026 |  10.000
+      5.023 += 0.019 |   5.000
+     15.092 += 0.042 |  15.000
+     17.910 += 0.038 |  18.000
+      3.480 += 0.025 |   3.500
+      7.995 += 0.056 |   8.000
+     23.937 += 0.047 |  24.000
+      2.198 += 0.024 |   2.200
+      1.983 += 0.032 |   2.000
+      1.515 += 0.034 |   1.500
+      0.001 += 0.002 |   0.000
+
+All the code listed above can be downloaded :download:`here <./_static/arch_gdiscs.py>`.
+  
+.. Optimizing ImageState (Example: GaussianDiscModelOpt)
+.. =====================================================
