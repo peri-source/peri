@@ -100,6 +100,15 @@ if hasfftw:
     @atexit.register
     def goodbye():
         save_wisdom(conf.get_wisdom())
+
+    # need to provide a function which conditionally normalizes the result of
+    # an ifft because fftw does not norm while numpy does
+    def fftnorm(arr):
+        return arr * arr.size
+
 else:
     fftkwargs = {}
     fft = np.fft
+
+    def fftnorm(arr):
+        return arr
