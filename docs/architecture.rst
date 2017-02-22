@@ -7,11 +7,15 @@ the ``peri`` package while also allowing for a generalized framework for
 optimization image updates (frequently through local updates and caching). The
 description will proceed in three stages:
 
-1. **Polynomial fitting** -- talk about the State, its properties, and model
-   updates
-2. **Image of Gaussian discs** -- simple ImageState, its properties, basic components
-3. **Optimized Image of Gaussian discs** -- optimization of stage two,
-   demonstrating the local update framework and advanced components
+1. **The State** -- We talk about the ``State`` class, its properties, and
+   model updates, through an example of fitting a polynomial.
+2. **The ImageState** -- We talk about the ``ImageState`` class, its
+   properties, and model updates, through an example of an image of Gaussian
+   discs.
+3. **Optimization and Advanced Components** -- We talk about optimization of
+   stage two, demonstrating the local update framework and other advanced
+   components, through the optimization and model fitting of the image of
+   Gaussian discs.
 
 
 States (Example: PolyFitState)
@@ -19,7 +23,7 @@ States (Example: PolyFitState)
 
 In this section (with PolyFitState example), we will have noisy data which we
 wish to fit with a polynomial. While a relatively simple problem, we will
-implement it in the PERI framework including how to get the best performance
+implement it in the PERI framework, including how to get the best performance
 using various aspects of the package.
 
 Overview
@@ -32,7 +36,7 @@ of parameters to match the two. All of the common operations are implemented
 (including but not limited to Jacobians, Hessians, log-likelihood, priors),
 leaving you to implement only a few methods in order to have a functioning
 :class:`~peri.states.State`. In order to implement a
-:class:`~peri.states.State`, you must know about the following functions:
+:class:`~peri.states.State`, you must know about the following class methods:
 
 .. autoclass:: peri.states.State
     :members: data, model, update
@@ -60,8 +64,8 @@ sure that the model is calculated.
             self._data = y
             self._xpts = x
     
-            params = ['c-%i' %i for i in xrange(order)]
-            values = coeffs if coeffs is not None else [0.0]*order
+            params = ['c-%i' %i for i in xrange(order)]  # names for the coefficients
+            values = coeffs if coeffs is not None else [0.0]*order  # and their values
     
             super(PolyFitState, self).__init__(
                 params=params, values=values, ordered=False
@@ -136,12 +140,12 @@ parameters:
 
     s.crb()
 
+Optimization
+^^^^^^^^^^^^
+
 From here, we can optimize the parameters of the state along with the estimated
 noise level. First, we will do so using Monte Carlo sampling, particularly with
 a multidimensional slice sampler.
-
-Optimization
-^^^^^^^^^^^^
 
 .. code-block:: python
 
@@ -210,20 +214,21 @@ point-spread-function (PSF). In particular, the model we will be creating is:
 where :math:`P` is the point spread function and :math:`S` is the shape
 function which defines the *Platonic* solid, and :math:`B` is a spatially
 varying background which may represent any number of confounding factors
-in image formation:
+in image formation. We'll start with a simple model of two-dimensional circular
+discs, infludenced by microscope optics through an anisotropic Gaussian point-
+spread function, and imaged on a detector with non-uniform background:
 
 .. math::
 
-    P(\bvec{x}) &= \frac{1}{\sqrt{2\pi \sigma^2}} e^{ - \| \bvec{x}\|^2 / 2\sigma^2 } \\
+    P(\bvec{x}) &= \frac{1}{\sqrt{4\pi^2 \sigma_x^2 \sigma_y^2}} e^{ -x^2/2\sigma_x^2 - y^2/2\sigma_y^2} \\    
     S(\bvec{x}; \{\bvec{p}_, a_i\}) &= \sum_{i=0}^{N_{\rm{particles}}}  \frac{1}{1 + e^{\alpha (\|\bvec{x} - \bvec{p}_i\| - a_i)}} \\
     B(\bvec{x}) &= \sum_{i=0}^{C_x} \sum_{j=0}^{C_y} c_{ij} L_i(x) L_j(y)
 
-That is, we have a simple image model of circular discs influenced by
-microscope optics with a non-uniform background. Since each of this functional
-form seem distinct, we separate our model into small objects which we call
-``components``. These ``components`` calculate part of the model (:math:`P`,
-:math:`S`, ...) over a certain region, or ``Tile``, then get combined back into
-the overall model. This philosophy can be expressed simply as:
+Since each of this functional form seem distinct, we separate our model into
+small objects which we call ``components``. These ``components`` calculate part
+of the model (:math:`P`, :math:`S`, ...) over a certain region, or ``Tile``,
+then get combined back into the overall model. This philosophy can be expressed
+simply as:
 
 * **Model** (:class:`~peri.models.Model`) -- The entire equation (and derivatives) describing the image formation :math:`\mathcal{M}`
 * **Component** (:class:`~peri.comp.comp.Component`) -- Small subsections of the model e.g. :math:`P`, :math:`S`, :math:`B`
@@ -233,7 +238,7 @@ Model
 -----
 
 We will start our description from the top down, first describing the
-``Model``, or equation, that produces our model image. To create a new model,
+``Model``, or the equation that produces our model image. To create a new model,
 we simply subclass the :class:`~peri.models.Model` class and overwrite the
 ``__init__`` function. This function holds the actual equations which are
 called to calculate the model image. For our example here, let's simply
@@ -365,7 +370,7 @@ GaussianPSF
             sx, sy = self.values
     
             # calculate the real-space psf from the r-vectors and sigmas
-            # normalize based on the calculated values, no the usual normalization
+            # normalize based on the calculated values, not the usual normalization
             psf = np.exp(-((rx/sx)**2 + (ry/sy)**2)/2)
             psf = psf / psf.sum()
     
@@ -482,7 +487,8 @@ the following convenience function:
 
    The model image create from our ImageState
 
-Plotting the derivatives wrt model parameters can be performed with
+Plotting the derivatives with respect to model parameters can be performed with
+``s.gradmodel``:
 
 .. code-block:: python
 
@@ -500,7 +506,7 @@ Plotting the derivatives wrt model parameters can be performed with
         ax.set_xticks([])
         ax.set_yticks([])
 
-Yielding the following images
+This code yields the following images
 
 .. figure:: ./_static/arch_gdiscs_gradmodel.png
    :alt: ``show_derivative(s, ...)
@@ -510,7 +516,7 @@ Yielding the following images
    Gradients of the state with respect to various parameters in the model
 
 
-Similarly, the :math:`J^T J` can be plotted using the following convenience
+Similarly, the :math:`J^T J` can be plotted using the ``s.JTJ`` convenience
 function
 
 .. code-block:: python
