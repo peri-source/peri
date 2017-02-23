@@ -4,7 +4,7 @@ import pickle
 import json
 import numpy as np
 try:
-    import peri.trackpy as tp
+    from peri import trackpy as tp
     from pandas import DataFrame
 except ImportError:
     from peri.logger import log
