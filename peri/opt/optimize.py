@@ -300,7 +300,7 @@ def separate_particles_into_groups(s, region_size=40, bounds=None,
     particle_groups = []
     tile = Tile(left=bounding_tile.l, right=bounding_tile.l + rs)
     if doshift == 'rand':
-        shift = np.random.choice([True, False])
+        doshift = np.random.choice([True, False])
     if doshift:
         shift = rs / 2
         n_translate += 1
@@ -309,13 +309,25 @@ def separate_particles_into_groups(s, region_size=40, bounds=None,
     deltas = np.meshgrid(*[np.arange(i) for i in n_translate])
 
     groups = map(lambda *args: find_particles_in_tile(s, tile.translate(
-            np.array(args) * rs + shift)), *[d.ravel() for d in deltas])
+            np.array(args) * rs - shift)), *[d.ravel() for d in deltas])
 
     for i in xrange(len(groups)-1, -1, -1):
         if groups[i].size == 0:
             groups.pop(i)
-
+    assert _check_groups(s, groups)
     return groups
+
+def _check_groups(s, groups):
+    """Ensures that all particles are included in exactly 1 group"""
+    ans = []
+    for g in groups:
+        ans.extend(g)
+    if np.unique(ans).size != np.size(ans):
+        return False
+    elif np.unique(ans).size != np.size(s.obj_get_radii()):
+        return False
+    else:
+        return (np.arange(s.obj_get_radii().size) == np.sort(ans)).all()
 
 def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
     """
