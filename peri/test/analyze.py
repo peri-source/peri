@@ -14,6 +14,7 @@ from peri import states
 from peri.priors import overlap
 from peri.util import Tile
 from peri.comp.objs import PlatonicSpheresCollection
+from peri.logger import log
 
 def sorted_files(globber, num_sort=True, num_indices=None, return_num=False):
     """
@@ -138,9 +139,9 @@ def batch_saveasdict(load_dir, load_names, save_dir, align_text=True,
         try:
             st = states.load(nm+'.pkl')
         except IOError:
-            print 'Missing {}'.format(nm)
+            log.error('Missing {}'.format(nm))
             continue
-        print 'Saving {}'.format(nm)
+        log.error('Saving {}'.format(nm))
         save_as_dict(st, save_name, include_iminfo=include_iminfo, align_text=
                 align_text)
 

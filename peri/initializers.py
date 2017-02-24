@@ -5,6 +5,9 @@ from PIL import Image
 import numpy as np
 import scipy.ndimage as nd
 
+from peri.logger import log
+log = log.getChild("initializers")
+
 #=======================================================================
 # Image loading functions
 #=======================================================================
@@ -150,7 +153,7 @@ def remove_overlaps(pos, rad, zscale=1, doprint=False):
             rad[i] -= np.abs(d)*rad[i]/(rad[i]+rad[j]) + 1e-10
             rad[j] -= np.abs(d)*rad[j]/(rad[i]+rad[j]) + 1e-10
             if doprint:
-                print diff, rad[i], rad[j]
+                log.info('{} {} {}'.format(diff, rad[i], rad[j]))
 
 def remove_overlaps_naive(pos, rad, zscale=1, doprint=False):
     N = rad.shape[0]
@@ -166,7 +169,7 @@ def remove_overlaps_naive(pos, rad, zscale=1, doprint=False):
                 rad[i] -= np.abs(diff)*rad[i]/(rad[i]+rad[j]) + 1e-10
                 rad[j] -= np.abs(diff)*rad[j]/(rad[i]+rad[j]) + 1e-10
                 if doprint:
-                    print diff, rad[i], rad[j]
+                    log.info('{} {} {}'.format(diff, rad[i], rad[j]))
 
 def otsu_threshold(data, bins=255):
     """

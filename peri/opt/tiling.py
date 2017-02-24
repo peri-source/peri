@@ -3,6 +3,7 @@ from scipy.cluster import vq
 from scipy.optimize import fmin_tnc, fmin_cobyla
 
 from peri import util
+from peri.logger import log
 
 # two ideas:
 # 1) hierarchical -- add a tile for each large object and find if the smaller
@@ -60,13 +61,13 @@ def cost_uniform_tiling(params, s, ptiles):
     for p in ptiles:
         itile = closest_uniform_tile(s, x0, region, p)
         cost += tile_overlap(p, itile)
-    print x0, region, np.prod(region), cost
+    log.debug('{} {} {}'.format(x0, region, np.prod(region), cost))
     return cost
 
 def cost_volume_constraint(x, imsize, max_pix):
     D = len(x) / 2
     x0, region = x[:D], x[D:]
-    print np.hstack([[max_pix - np.prod(region)], imsize - region, region])
+    log.debug('{}'.format(np.hstack([[max_pix - np.prod(region)], imsize - region, region])))
     return -np.prod(np.hstack([[max_pix - np.prod(region)], imsize - region]))
 
 def best_tiling_uniform(s, params, max_mem=1e9, decimation=1.0):
@@ -93,7 +94,7 @@ def best_tiling_uniform(s, params, max_mem=1e9, decimation=1.0):
     bounds_s[-1] = [10, max_pix]
 
     bounds = bounds_x + bounds_s
-    print bounds
+    log.debug('{}'.format(bounds))
 
     return fmin_tnc(
         cost_uniform_tiling, x0, args=(s, tiles), bounds=bounds,

@@ -382,7 +382,7 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
             through a Tk window.
         use_full_path : Bool, optional
             Set to True to use the full path of the state instead of
-            partial path names (e.g. C:\Users\Me\Desktop\state.pkl vs
+            partial path names (e.g. /full/path/name/state.pkl vs
             state.pkl). Default is False
 
     Other Parameters
@@ -475,7 +475,7 @@ def get_particles_featuring(feature_rad, state_name=None, im_name=None,
             through a Tk window.
         use_full_path : Bool, optional
             Set to True to use the full path of the state instead of
-            partial path names (e.g. C:\Users\Me\Desktop\state.pkl vs
+            partial path names (e.g. /full/path/name/state.pkl vs
             state.pkl). Default is False
         actual_rad : Float or None, optional
             The initial guess for the particle radii. Default is the median

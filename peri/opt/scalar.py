@@ -1,6 +1,8 @@
 import time
 import numpy as np
 
+from peri.logger import log
+
 #=============================================================================
 # Optimization methods like gradient descent
 #=============================================================================
@@ -39,7 +41,7 @@ def modify(state, blocks, vec):
 
 
 def residual(vec, state, blocks, relax_particles=True):
-    print time.time(), 'res', state.loglikelihood()
+    log.info('res {}'.format(state.loglikelihood()))
     modify(state, blocks, vec)
 
     for i in xrange(3):
@@ -76,9 +78,9 @@ def leastsq(state, blocks, dojac=True):
 def gd(state, N=1, ratio=1e-1):
     state.set_current_particle()
     for i in xrange(N):
-        print state.loglikelihood()
+        log.info('{}'.format(state.loglikelihood()))
         grad = state.gradloglikelihood()
         n = state.state + 1.0/np.abs(grad).max() * ratio * grad
         state.set_state(n)
-        print state.loglikelihood()
+        log.info('{}'.format(state.loglikelihood()))
 

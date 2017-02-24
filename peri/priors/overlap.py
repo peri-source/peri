@@ -2,6 +2,8 @@ import itertools
 import numpy as np
 import scipy as sp
 
+from peri.logger import log
+
 class HardSphereOverlapNaive(object):
     def __init__(self, pos, rad, zscale=1, prior_type='absolute'):
         self.N = rad.shape[0]
@@ -208,7 +210,7 @@ class HardSphereOverlapCell(object):
 def test():
     N = 128
     for i in xrange(50):
-        print i
+        log.info('{}'.format(i))
         x = np.random.rand(N, 3)
         r = 0.05*np.random.rand(N)
 
@@ -225,6 +227,6 @@ def test():
             b.update(l, pp, rp)
 
             if not (a.logpriors == b.logpriors).all():
-                print l, pp, rp
-                print (a.logpriors - b.logpriors).sum()
+                log.info('{} {} {}'.format(l, pp, rp))
+                log.info('{}'.format((a.logpriors - b.logpriors).sum()))
                 raise IOError

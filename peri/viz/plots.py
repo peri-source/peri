@@ -11,6 +11,7 @@ from matplotlib.patches import Circle, Rectangle
 
 from peri.test import analyze
 from peri import util
+from peri.logger import log
 
 import numpy as np
 import time
@@ -231,7 +232,7 @@ def scan(im, cycles=1, sleep=0.3, vmin=0, vmax=1, cmap='bone'):
     time.sleep(3)
     for c in xrange(cycles):
         for i, sl in enumerate(im):
-            print i
+            log.info('{}'.format(i))
             pl.clf()
             pl.imshow(sl, cmap=cmap, interpolation='nearest',
                     origin='lower', vmin=vmin, vmax=vmax)
@@ -244,7 +245,7 @@ def scan_together(im, p, delay=2, vmin=0, vmax=1, cmap='bone'):
     time.sleep(3)
     z,y,x = p.T
     for i in xrange(len(im)):
-        print i
+        log.info('{}'.format(i))
         sl = im[i]
         pl.clf()
         pl.imshow(sl, cmap=cmap, interpolation='nearest', origin='lower',
@@ -623,7 +624,7 @@ def diag_crb_particles(state):
     crbrad = []
 
     for i in np.arange(state.N)[state.state[state.b_typ]==1.]:
-        print i
+        log.info('{}'.format(i))
         bl = state.blocks_particle(i)
         for b in bl[:-1]:
             crbpos.append(np.sqrt(1.0/state.fisher_information(blocks=[b])))
@@ -680,7 +681,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     drad = rad0 - rad1[link]
 
     drift = dpos.mean(axis=0)
-    print 'drift', drift
+    log.info('drift {}'.format(drift))
 
     dpos -= drift
 
@@ -958,7 +959,7 @@ def twoslice(field, center=None, size=6.0, cmap='bone_r', vmin=0, vmax=1,
 
     if orientation.startswith('v'):
         # rect = l,b,w,h
-        print x, y, z, w, h, x/h
+        log.info('{} {} {} {} {} {}'.format(x, y, z, w, h, x/h))
         r = x/h
         q = y/h
         f = 1 / (1 + 3*off)
