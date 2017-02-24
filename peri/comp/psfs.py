@@ -1,6 +1,6 @@
 import os
 import atexit
-import cPickle as pickle
+import pickle
 import numpy as np
 from multiprocessing import cpu_count
 from numpy.polynomial.legendre import legval

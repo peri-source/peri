@@ -24,9 +24,9 @@ critical errors. The order is debug, info, warn, error, fatal
 
     log.set_level('info')
 """
-import StringIO
 import logging
 import logging.handlers
+from io import StringIO
 from contextlib import contextmanager
 
 from peri import conf

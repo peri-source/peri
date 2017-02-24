@@ -3,7 +3,7 @@ import re
 import copy
 import json
 import numpy as np
-import cPickle as pickle
+import pickle
 
 from functools import partial
 from contextlib import contextmanager
