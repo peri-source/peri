@@ -139,6 +139,9 @@ def getdim(a):
         return None
     return len(a)
 
+def gettype(dtype):
+    return np.array([0.0], dtype=dtype).dtype.type
+
 class CompatibilityPatch(object):
     def patch(self, var):
         names, default_values = var.keys(), var.values()
@@ -254,7 +257,11 @@ class Tile(CompatibilityPatch):
                 else:
                     l = aN(left, **nkw)
                     s = aN(size, **nkw)
-                    left, right = l - s/2, l + (s+1)/2
+
+                    if gettype(self.dtype) in ['i', 'u']:
+                        left, right = l - s//2, l + (s+1)//2
+                    else:
+                        left, right = l - s/2.0, l + s/2.0
 
         left = aN(left, **nkw)
         right = aN(right, **nkw)
@@ -451,7 +458,7 @@ class Tile(CompatibilityPatch):
             v = list(np.fft.fftshift(t) for t in v)
 
         if real:
-            v[-1] = v[-1][:(self.shape[-1]+1)/2]
+            v[-1] = v[-1][:(self.shape[-1]+1)//2]
 
         return self._format_vector(v, form=form)
 
@@ -951,7 +958,7 @@ class ProgressBar(object):
             self._numsize = 3 + self._decimals + 1
 
             # end caps size calculation
-            self._cap_len = len(self._bar_caps)/2
+            self._cap_len = len(self._bar_caps)//2
             self._capl = self._bar_caps[:self._cap_len]
             self._capr = self._bar_caps[self._cap_len:]
 

@@ -194,7 +194,7 @@ def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, axis='x'
     d = np.array([0.0, 0.0, 0.0])
     d[comp[axis]] = t
 
-    pos = np.array([imsize/2 - d, imsize/2 + d]).reshape(-1,3)
+    pos = np.array([imsize/2.0 - d, imsize/2.0 + d]).reshape(-1,3)
     rad = np.array([radius, radius])
 
     return create_state(util.NullImage(shape=imsize), pos, rad, **kwargs)

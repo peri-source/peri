@@ -173,7 +173,7 @@ def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20):
     #2. num_pix for a given redundancy
     px_red = min_redundant*nparams
     #3. And # desired for decimation
-    px_dec = s.residuals.size/decimate
+    px_dec = s.residuals.size//decimate
 
     if px_red > px_mem:
         raise RuntimeError('Insufficient max_mem for desired redundancy.')
@@ -302,7 +302,7 @@ def separate_particles_into_groups(s, region_size=40, bounds=None,
     if doshift == 'rand':
         shift = np.random.choice([True, False])
     if doshift:
-        shift = rs / 2
+        shift = rs // 2
         n_translate += 1
     else:
         shift = 0

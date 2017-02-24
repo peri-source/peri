@@ -448,16 +448,16 @@ class ExactPSF(psfs.PSF):
                 continue
 
             zslice = int(np.clip(z, *self.zrange) - self.zrange[0])
-            middle = field.shape[0]/2
+            middle = field.shape[0]//2
 
             subpsf = self._kpad(self.slices[zslice], fs, norm=True)
             subfield = np.roll(field, middle - i, axis=0)
-            subfield = subfield[middle-fs[0]/2:middle+fs[0]/2+1]
+            subfield = subfield[middle-fs[0]//2:middle+fs[0]//2+1]
 
             kshape = subfield.shape
             kfield = fft.rfftn(subfield, **fftkwargs)
 
-            outfield[i] = np.real(fft.irfftn(kfield * subpsf, s=kshape, **fftkwargs))[self.support[0]/2]
+            outfield[i] = np.real(fft.irfftn(kfield * subpsf, s=kshape, **fftkwargs))[self.support[0]//2]
 
         return outfield
 
@@ -636,7 +636,7 @@ class ExactLineScanConfocalPSF(ExactPSF):
 
         d = {}
         for k,v in mapper.iteritems():
-            if self.param_dict.has_key(k):
+            if k in self.param_dict:
                 d[v] = self.param_dict[k]
 
         d.update({
@@ -795,7 +795,7 @@ class ExactPinholeConfocalPSF(ExactPSF):
 
         d = {}
         for k,v in mapper.iteritems():
-            if self.param_dict.has_key(k):
+            if k in self.param_dict:
                 d[v] = self.param_dict[k]
 
         d.update({

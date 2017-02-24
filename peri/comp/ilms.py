@@ -111,7 +111,7 @@ class Polynomial3D(Component):
         params = util.listify(params)
         values = util.listify(values)
 
-        if len(params) < len(self.params)/2:
+        if len(params) < len(self.params)//2:
             for p,v1 in zip(params, values):
                 v0 = self.get_values(p)
                 tm = self.param_term[p]
@@ -295,7 +295,7 @@ class Polynomial2P1D(Polynomial3D):
         params = util.listify(params)
         values = util.listify(values)
 
-        if len(params) < len(self.params)/2:
+        if len(params) < len(self.params)//2:
             for p,v1 in zip(params, values):
                 if p in self.xy_param:
                     order = self.xy_param[p]
@@ -524,7 +524,7 @@ class BarnesPoly(Component, util.CompatibilityPatch):
         params = util.listify(params)
         values = util.listify(values)
 
-        if len(params) < len(self.params)/2:
+        if len(params) < len(self.params)//2:
             for p,v1 in zip(params, values):
                 if p in self.poly_params:
                     tm = self._term(self.poly_params[p])

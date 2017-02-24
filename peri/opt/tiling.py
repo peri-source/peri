@@ -12,8 +12,8 @@ from peri.logger import log
 # 2) decide on uniform tiling and just find the best shape with neighborlists
 
 def mem2pix(s, max_mem=1e9, max_decimation=1.0):
-    nbytes = s.residuals.nbytes / s.residuals.size
-    return max_mem / nbytes / max_decimation / 4
+    nbytes = s.residuals.nbytes // s.residuals.size
+    return max_mem // nbytes // max_decimation // 4
 
 def parameter_tiles(s, params):
     return [s.get_update_io_tiles(p, s.get_values(p)+1e-5)[1] for p in params]
@@ -50,7 +50,7 @@ def closest_uniform_tile(s, shift, size, other):
     return region.translate(region.shape * vec)
 
 def cost_uniform_tiling(params, s, ptiles):
-    D = len(params) / 2
+    D = len(params) // 2
 
     #x0, region = params[:D], params[D:] # FIXME
 
@@ -65,7 +65,7 @@ def cost_uniform_tiling(params, s, ptiles):
     return cost
 
 def cost_volume_constraint(x, imsize, max_pix):
-    D = len(x) / 2
+    D = len(x) // 2
     x0, region = x[:D], x[D:]
     log.debug('{}'.format(np.hstack([[max_pix - np.prod(region)], imsize - region, region])))
     return -np.prod(np.hstack([[max_pix - np.prod(region)], imsize - region]))

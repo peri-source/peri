@@ -868,7 +868,7 @@ class Slab(Component):
     def _draw_slab(self):
         # for the position at zpos, and the center in the x-y plane
         pos = np.array([
-            self.param_dict[self.lbl_zpos], self.shape.shape[1]/2, self.shape.shape[2]/2
+            self.param_dict[self.lbl_zpos], self.shape.shape[1]//2, self.shape.shape[2]//2
         ])
         pos = pos + self.inner.l
 

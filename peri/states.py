@@ -653,7 +653,7 @@ class ImageState(State, comp.ComponentCollection):
         # now remove the part of the tile that is outside the image and pad the
         # interior part with that overhang. reflect the necessary padding back
         # into the image itself for the outer slice which we will call outer
-        outer = otile.pad((ptile.shape+1)/2)
+        outer = otile.pad((ptile.shape+1)//2)
         inner, outer = outer.reflect_overhang(self.oshape)
         iotile = inner.translate(-outer.l)
 
