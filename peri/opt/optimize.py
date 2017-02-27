@@ -1814,12 +1814,12 @@ class LMParticles(LMEngine):
         #is_rad, is_pos masks:
         rad_nms = (self.state.param_radii() if (include_rad and hasattr(
                     self.state, 'param_radii')) else [])  # FIXME explicit rad
-        self._is_rad = np.array(map(lambda x: x in rad_nms, self.param_names))
+        self._is_rad = np.array([p in rad_nms for p in self.param_names])
         pos_nms = self.state.param_positions()
         self._is_pos = []
         for a in range(3):  # FIXME explicit 3D
-            self._is_pos.append(np.array(map(lambda x: (x in pos_nms) &
-                    (x[-1] == 'zyx'[a]), self.param_names)))
+            self._is_pos.append(np.array([(x in pos_nms) & (x[-1] == 'zyx'[a])
+                    for x in self.param_names]))
         super(LMParticles, self).__init__(**kwargs)
 
     def _get_diftile(self):
