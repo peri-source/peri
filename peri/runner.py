@@ -16,8 +16,12 @@ standard_library.install_aliases()
 from builtins import range
 
 import os
-import tkinter as tk
-import tkinter.filedialog as tkfd
+try:
+    import tkinter as tk
+    import tkinter.filedialog as tkfd
+except ImportError:
+    import Tkinter as tk
+    import tkFileDialog as tkfd
 import numpy as np
 import peri
 from peri import initializers, util, models, states, logger
