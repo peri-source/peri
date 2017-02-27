@@ -203,7 +203,7 @@ class PlatonicParticlesCollection(Component):
 
     def param_positions(self):
         """ Return params of all positions """
-        return self.param_particle_pos(range(self.N))
+        return self.param_particle_pos(list(range(self.N)))
 
     def param_particle_pos(self, ind):
         """ Get position of one or more particles """

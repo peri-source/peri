@@ -132,7 +132,7 @@ def name_globals(s, remove_params=None):
             remove_params removed.
     """
     all_params = s.params
-    for p in s.param_particle(range(s.obj_get_positions().shape[0])):
+    for p in s.param_particle(np.arange(s.obj_get_positions().shape[0])):
         all_params.remove(p)
     if remove_params is not None:
         for p in set(remove_params):
