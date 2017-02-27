@@ -141,8 +141,8 @@ def getdim(a):
         return None
     return len(a)
 
-def gettype(dtype):
-    return np.array([0.0], dtype=dtype).dtype.type
+def isint(dtype):
+    return np.array([0.0], dtype=dtype).dtype.name[0] in ['i', 'u']
 
 class CompatibilityPatch(object):
     def patch(self, var):
@@ -164,7 +164,7 @@ class Tile(CompatibilityPatch):
         ----------
         left : number or array-like
             Left side of the tile
-            
+
         right : (optional) number or array-like
             If provided along with left, gives the right side of the tile
 
@@ -176,7 +176,7 @@ class Tile(CompatibilityPatch):
 
         size : (optional) number or array-like
             If provided along with left gives the size of the tile
-            
+
         centered : boolean
             * If true:   ``[left] - [size]/2 -> [left] + [size]/2``
             * If false:  ``[left] -> [left] + [size]``
@@ -260,10 +260,12 @@ class Tile(CompatibilityPatch):
                     l = aN(left, **nkw)
                     s = aN(size, **nkw)
 
-                    if gettype(self.dtype) in ['i', 'u']:
-                        left, right = l - s//2, l + (s+1)//2
+                    if isint(self.dtype):
+                        left = l - s//2
+                        right = left + s
                     else:
                         left, right = l - s/2.0, l + s/2.0
+                assert np.all((right - left) == size)
 
         left = aN(left, **nkw)
         right = aN(right, **nkw)
@@ -500,7 +502,7 @@ class Tile(CompatibilityPatch):
     def intersection(tiles, *args):
         """
         Intersection of tiles, returned as a tile
-        
+
         >>> Tile.intersection(Tile([0, 1], [5, 4]), Tile([1, 0], [4, 5]))
         Tile [1, 1] -> [4, 4] ([3, 3])
         """
@@ -805,7 +807,7 @@ class RawImage(Image, CompatibilityPatch):
     def set_scale(self, exposure):
         """
         Set the exposure parameter for this image, which determines the
-        values which get mapped to (0,1) in the output image. 
+        values which get mapped to (0,1) in the output image.
 
         See also
         --------
@@ -836,7 +838,7 @@ class RawImage(Image, CompatibilityPatch):
         """
         When given a raw image and the scaled version of the same image, it
         extracts the ``exposure`` parameters associated with those images.
-        This is useful when 
+        This is useful when
 
         Parameters
         ----------
