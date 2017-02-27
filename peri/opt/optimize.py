@@ -2099,7 +2099,7 @@ class AugmentedState(object):
     """
     def __init__(self, state, param_names, rz_order=3):
         rad_nms = state.param_radii()
-        has_rad = map(lambda x: x in param_names, rad_nms)
+        has_rad = list(map(lambda x: x in param_names, rad_nms))
         if np.any(has_rad):
             raise ValueError('param_names must not contain any radii.')
 
