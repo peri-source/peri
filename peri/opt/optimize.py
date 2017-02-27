@@ -171,7 +171,7 @@ def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20):
             The number of pixels at which to calcualte J.
     """
     #1. Max for a given max_mem:
-    px_mem = int(max_mem / 8 / nparams) #1 float = 8 bytes
+    px_mem = int(max_mem // 8 // nparams) #1 float = 8 bytes
     #2. num_pix for a given redundancy
     px_red = min_redundant*nparams
     #3. And # desired for decimation
