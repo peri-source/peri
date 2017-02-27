@@ -1,3 +1,5 @@
+from builtins import range
+
 import matplotlib as mpl
 import matplotlib.pylab as pl
 
@@ -230,7 +232,7 @@ def scan(im, cycles=1, sleep=0.3, vmin=0, vmax=1, cmap='bone'):
     pl.figure(1)
     pl.show()
     time.sleep(3)
-    for c in xrange(cycles):
+    for c in range(cycles):
         for i, sl in enumerate(im):
             log.info('{}'.format(i))
             pl.clf()
@@ -244,7 +246,7 @@ def scan_together(im, p, delay=2, vmin=0, vmax=1, cmap='bone'):
     pl.show()
     time.sleep(3)
     z,y,x = p.T
-    for i in xrange(len(im)):
+    for i in range(len(im)):
         log.info('{}'.format(i))
         sl = im[i]
         pl.clf()
@@ -264,7 +266,7 @@ def sample_compare(N, samples, truestate, burn=0):
     mu = h.mean(axis=0)
     std = h.std(axis=0)
     pl.figure(figsize=(20,4))
-    pl.errorbar(xrange(len(mu)), (mu-strue), yerr=5*std/np.sqrt(h.shape[0]),
+    pl.errorbar(range(len(mu)), (mu-strue), yerr=5*std/np.sqrt(h.shape[0]),
             fmt='.', lw=0.15, alpha=0.5)
     pl.vlines([0,3*N-0.5, 4*N-0.5], -1, 1, linestyle='dashed', lw=4, alpha=0.5)
     pl.hlines(0, 0, len(mu), linestyle='dashed', lw=5, alpha=0.5)
@@ -542,7 +544,7 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
     dt = data_cmap(center_data(data, data_vmin, data_vmax))
     rs = res_cmap(center_data(residuals, res_vmin, res_vmax))
 
-    for a in xrange(4):
+    for a in range(4):
         im[:,:,a][upper_mask] = rs[:,:,a][upper_mask]
         im[:,:,a][center_mask] = gm[:,:,a][center_mask]
         im[:,:,a][lower_mask] = dt[:,:,a][lower_mask]

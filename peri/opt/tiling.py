@@ -1,3 +1,5 @@
+from builtins import zip
+
 import numpy as np
 from scipy.cluster import vq
 from scipy.optimize import fmin_tnc, fmin_cobyla

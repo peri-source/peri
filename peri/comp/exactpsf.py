@@ -1,3 +1,6 @@
+from builtins import range
+from future.utils import iteritems
+
 import warnings
 import numpy as np
 import scipy.ndimage as nd
@@ -191,7 +194,7 @@ class ExactPSF(psfs.PSF):
             # params.pop(ind)
             # values = np.delete(values, ind)
 
-        for i in xrange(len(params)):
+        for i in range(len(params)):
             if params[i] is 'zscale' and self.global_zscale:
                 continue
             params[i] = 'psf-' + params[i]
@@ -330,7 +333,7 @@ class ExactPSF(psfs.PSF):
     def measure_size_drift(self, z, size=31, zoffset=0.):
         """ Returns the 'size' of the psf in each direction a particular z (px) """
         drift = 0.0
-        for i in xrange(self.measurement_iterations):
+        for i in range(self.measurement_iterations):
             psf, vec = self.psf_slice(z, size=size, zoffset=zoffset+drift)
             psf = psf / psf.sum()
 
@@ -367,7 +370,7 @@ class ExactPSF(psfs.PSF):
         self.characterize_psf()
 
         self.slices = []
-        for i in xrange(self.zrange[0], self.zrange[1]+1):
+        for i in range(self.zrange[0], self.zrange[1]+1):
             zdrift = self.drift(i)
             psf, vec = self.psf_slice(i, size=self.support, zoffset=zdrift)
             self.slices.append(psf)
@@ -635,7 +638,7 @@ class ExactLineScanConfocalPSF(ExactPSF):
         bads = [self.zscale, 'psf-zslab']
 
         d = {}
-        for k,v in mapper.iteritems():
+        for k,v in iteritems(mapper):
             if k in self.param_dict:
                 d[v] = self.param_dict[k]
 
@@ -794,7 +797,7 @@ class ExactPinholeConfocalPSF(ExactPSF):
         bads = [self.zscale, 'psf-zslab']
 
         d = {}
-        for k,v in mapper.iteritems():
+        for k,v in iteritems(mapper):
             if k in self.param_dict:
                 d[v] = self.param_dict[k]
 

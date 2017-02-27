@@ -1,3 +1,5 @@
+from builtins import range
+
 import os
 import sys
 import json
@@ -69,7 +71,7 @@ def watch(func, file_pattern, postfix='run'):
             filename = next_file()
 
     log.info('Launching listener processes')
-    for i in xrange(proc):
+    for i in range(proc):
         log.info('{}'.format(i))
         Process(target=_watch, args=(func, file_pattern, postfix, i)).start()
     log.info('.')
@@ -114,7 +116,7 @@ def launch_watchers(script, hosts, nprocs=1):
 
     try:
         while True:
-            for i,k in procs.iteritems():
+            for i in procs.keys():
                 procs[i].join(timeout=1.0)
     except (KeyboardInterrupt, SystemExit):
         signal_handler()
@@ -155,7 +157,7 @@ def listen(func):
             func(json.loads(job.body))
 
     log.info('Launching listener processes')
-    for i in xrange(proc):
+    for i in range(proc):
         log.info('{}'.format(i))
         Process(target=_listen, args=(func,i)).start()
 
@@ -216,7 +218,7 @@ def launch_all(script, hosts, jobs, bean_port=DEFAULT_BEANSTALKD, docopy=True):
         proc = host.get('proc', 1)
         env = host.get('env', {})
 
-        var = ' '.join(['{}={}:${}'.format(k, v, k) for k,v in env.iteritems()])
+        var = ' '.join(['{}={}:${}'.format(k, v, k) for k,v in env.items()])
         env = 'export {}; cd {};'.format(var, fldr)
 
         fwd = '-R{}:localhost:{}'.format(bean_port, bean_port)
@@ -262,7 +264,7 @@ def launch_all(script, hosts, jobs, bean_port=DEFAULT_BEANSTALKD, docopy=True):
 
     try:
         while True:
-            for i,k in procs.iteritems():
+            for i in procs.keys():
                 procs[i].join(timeout=1.0)
     except (KeyboardInterrupt, SystemExit):
         signal_handler()

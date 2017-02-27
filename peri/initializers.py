@@ -1,3 +1,5 @@
+from builtins import range
+
 import glob
 import itertools
 from PIL import Image
@@ -139,7 +141,7 @@ def trackpy_featuring(im, size=10):
 def remove_overlaps(pos, rad, zscale=1, doprint=False):
     N = rad.shape[0]
     z = np.array([zscale, 1, 1])
-    for i in xrange(N):
+    for i in range(N):
         o = np.arange(i+1, N)
         d = np.sqrt( ((z*(pos[i] - pos[o]))**2).sum(axis=-1) )
         r = rad[i] + rad[o]
@@ -158,8 +160,8 @@ def remove_overlaps(pos, rad, zscale=1, doprint=False):
 def remove_overlaps_naive(pos, rad, zscale=1, doprint=False):
     N = rad.shape[0]
     z = np.array([zscale, 1, 1])
-    for i in xrange(N):
-        for j in xrange(N):
+    for i in range(N):
+        for j in range(N):
             if i == j:
                 continue
             d = np.sqrt(( (z*(pos[i] - pos[j]))**2 ).sum())
@@ -204,8 +206,8 @@ def otsu_threshold(data, bins=255):
     h0, x0 = np.histogram(data.ravel(), bins=bins)
     h = h0.astype('float') / h0.sum()  #normalize
     x = 0.5*(x0[1:] + x0[:-1])  #bin center
-    wk = np.array([h[:i+1].sum() for i in xrange(h.size)])  #omega_k
-    mk = np.array([sum(x[:i+1]*h[:i+1]) for i in xrange(h.size)])  #mu_k
+    wk = np.array([h[:i+1].sum() for i in range(h.size)])  #omega_k
+    mk = np.array([sum(x[:i+1]*h[:i+1]) for i in range(h.size)])  #mu_k
     mt = mk[-1]  #mu_T
     sb = (mt*wk - mk)**2 / (wk*(1-wk) + 1e-15)  #sigma_b
     ind = sb.argmax()
@@ -224,11 +226,11 @@ def harris_feature(im, region_size=5, to_return='harris', scale=0.05):
     """
     ndim = im.ndim
     #1. Gradient of image
-    grads = [nd.sobel(im, axis=i) for i in xrange(ndim)]
+    grads = [nd.sobel(im, axis=i) for i in range(ndim)]
     #2. Corner response matrix
     matrix = np.zeros((ndim, ndim) + im.shape)
-    for a in xrange(ndim):
-        for b in xrange(ndim):
+    for a in range(ndim):
+        for b in range(ndim):
             matrix[a,b] = nd.filters.gaussian_filter(grads[a]*grads[b],
                     region_size)
     if to_return == 'matrix':
@@ -289,7 +291,7 @@ def identify_slab(im, sigma=5., region_size=10, masscut=1e4, asdict=False):
     slabs = (trc > trc_cut) & (dnrm < det_cut)
     labeled, nslabs = nd.label(slabs)
     #masscuts:
-    masses = [(labeled == i).sum() for i in xrange(1, nslabs+1)]
+    masses = [(labeled == i).sum() for i in range(1, nslabs+1)]
     good = np.array([m > masscut for m in masses])
     inds = np.nonzero(good)[0] + 1  #+1 b/c the lowest label is the bkg
     #Slabs are identifiied, now getting the coords:
@@ -300,7 +302,7 @@ def identify_slab(im, sigma=5., region_size=10, masscut=1e4, asdict=False):
     y = np.arange(im.shape[1]).reshape(1,-1,1).astype('float')
     x = np.arange(im.shape[2]).reshape(1,1,-1).astype('float')
     #We also need to identify the direction of the normal:
-    gim = [nd.sobel(fim, axis=i) for i in xrange(fim.ndim)]
+    gim = [nd.sobel(fim, axis=i) for i in range(fim.ndim)]
     for i, p in zip(range(1, nslabs+1), poses):
         wts = trc * (labeled == i)
         wts /= wts.sum()

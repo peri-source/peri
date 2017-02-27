@@ -1,10 +1,15 @@
+from builtins import range, str
+
 import numpy as np
 from scipy.special import erf
 
 try:
     from scipy.weave import inline
 except ImportError as e:
-    from weave import inline
+    try:
+        from weave import inline
+    except ImportError as e:
+        pass
 
 from peri.special import functions
 from peri.comp import Component
@@ -412,7 +417,7 @@ def exact_volume_sphere(rvec, pos, radius, zscale=1.0, volume_error=1e-5,
 
     dr = inner(rvec, pos, rprime, zscale=zscale)
     t = function(dr, rprime, *args)
-    for i in xrange(MAX_VOLUME_ITERATIONS):
+    for i in range(MAX_VOLUME_ITERATIONS):
         vol_curr = np.abs(t.sum())
         if np.abs(vol_goal - vol_curr)/vol_goal < volume_error:
             break
@@ -637,7 +642,7 @@ class PlatonicSpheresCollection(PlatonicParticlesCollection):
 
     def param_radii(self):
         """ Return params of all radii """
-        return [self._i2p(i, 'a') for i in xrange(self.N)]
+        return [self._i2p(i, 'a') for i in range(self.N)]
 
     def param_particle(self, ind):
         """ Get position and radius of one or more particles """

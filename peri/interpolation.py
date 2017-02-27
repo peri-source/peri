@@ -1,3 +1,5 @@
+from builtins import range, object
+
 import numpy as np
 
 class BarnesInterpolation1D(object):
@@ -109,7 +111,7 @@ class BarnesInterpolation1D(object):
             # we do it in chunks over rvecs
             ans = np.zeros(rvecs.shape[0], dtype='float')
             bs = self.blocksize
-            for a in xrange(0, rvecs.shape[0], bs):
+            for a in range(0, rvecs.shape[0], bs):
                 dist = self._distance_matrix(rvecs[a:a+bs], self.x)
                 weights = self._weight(dist, sigma=sigma)
                 ans[a:a+bs] += weights.dot(data) / weights.sum(axis=1)
@@ -123,7 +125,7 @@ class BarnesInterpolation1D(object):
         #2. There are differences between 0th order at the points and
         #   the passed data, so we iterate to remove:
         ondata = self._eval_firstorder(self.x, self.d, sigma)
-        for i in xrange(self.iterations):
+        for i in range(self.iterations):
             out += self._eval_firstorder(rvecs, self.d-ondata, sigma)
             ondata += self._eval_firstorder(self.x, self.d-ondata, sigma)
             sigma *= self.damp
@@ -140,7 +142,7 @@ class BarnesInterpolation1D(object):
         tmp = self._weight(dist0, g).dot(self.d)
         out = self._weight(dist1, g).dot(self.d)
 
-        for i in xrange(self.iterations):
+        for i in range(self.iterations):
             out = out + self._weight(dist1, g).dot(self.d - tmp)
             tmp = tmp + self._weight(dist0, g).dot(self.d - tmp)
             g *= self.damp
@@ -237,10 +239,10 @@ class ChebyshevInterpolation1D(object):
         xpts = self._c2x(np.cos(np.pi*(lvals + 0.5)/N))
         fpts = np.rollaxis(self.func(xpts, *self.args), -1)
 
-        for a in xrange(self.degree):
+        for a in range(self.degree):
             inner = [
                 fpts[b] * np.cos(np.pi*a*(lvals[b]+0.5)/N)
-                for b in xrange(self.evalpts)
+                for b in range(self.evalpts)
             ]
             coeffs[a] = 2.0/N * np.sum(inner, axis=0)
 

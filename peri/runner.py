@@ -11,9 +11,13 @@ These do:
     (use globals to start,          start from nothing)
     (use positions to start,        start from trackpy)
 """
+from future import standard_library
+standard_library.install_aliases()
+from builtins import range
+
 import os
-import Tkinter as tk
-import tkFileDialog as tkfd
+import tkinter as tk
+import tkinter.filedialog as tkfd
 import numpy as np
 import peri
 from peri import initializers, util, models, states, logger
@@ -666,7 +670,7 @@ def finish_state(st, desc='finish-state', invert=True):
         `peri.opt.optimize.finish`
     """
     for minmass in [None, 0]:
-        for _ in xrange(3):
+        for _ in range(3):
             npart, poses = addsub.add_subtract_locally(st, region_depth=7,
                     minmass=minmass, invert=invert)
             if npart == 0:

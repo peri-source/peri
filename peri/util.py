@@ -1,4 +1,6 @@
 from __future__ import print_function
+from future.utils import iteritems
+from builtins import range, str, object
 
 import os
 import sys
@@ -144,7 +146,7 @@ def gettype(dtype):
 
 class CompatibilityPatch(object):
     def patch(self, var):
-        names, default_values = var.keys(), var.values()
+        names, default_values = list(var.keys()), list(var.values())
         for n, v in zip(names, default_values):
             self.__dict__.update({n: self.__dict__.get(n, v)})
 
@@ -285,9 +287,9 @@ class Tile(CompatibilityPatch):
 
     def _build_caches(self):
         self._coord_slicers = []
-        for i in xrange(self.dim):
+        for i in range(self.dim):
             self._coord_slicers.append(
-                tuple(None if j != i else np.s_[:] for j in xrange(self.dim))
+                tuple(None if j != i else np.s_[:] for j in range(self.dim))
             )
 
     @property
@@ -432,7 +434,7 @@ class Tile(CompatibilityPatch):
             norm = np.array(self.shape)
         norm = aN(norm, self.dim, dtype='float')
 
-        v = list(np.arange(self.l[i], self.r[i]) / norm[i] for i in xrange(self.dim))
+        v = list(np.arange(self.l[i], self.r[i]) / norm[i] for i in range(self.dim))
         return self._format_vector(v, form=form)
 
     def kvectors(self, norm=False, form='broadcast', real=False, shift=False):
@@ -452,7 +454,7 @@ class Tile(CompatibilityPatch):
             norm = np.array(self.shape)
         norm = aN(norm, self.dim, dtype='float')
 
-        v = list(np.fft.fftfreq(self.shape[i])/norm[i] for i in xrange(self.dim))
+        v = list(np.fft.fftfreq(self.shape[i])/norm[i] for i in range(self.dim))
 
         if shift:
             v = list(np.fft.fftshift(t) for t in v)
@@ -1058,7 +1060,7 @@ def memoize(cache_max_size=1e9):
             # provide a method to the object to clear the cache too
             if not hasattr(self, '_memoize_caches'):
                 def clear_cache(self):
-                    for k,v in self._memoize_caches.iteritems():
+                    for k,v in iteritems(self._memoize_caches):
                         self._memoize_caches[k] = newcache()
                 self._memoize_caches = {}
                 self._memoize_clear = types.MethodType(clear_cache, self)
@@ -1081,7 +1083,7 @@ def memoize(cache_max_size=1e9):
                     hashed.append(arg.tostring())
                 else:
                     hashed.append(arg)
-            for k,v in kwargs.iteritems():
+            for k,v in iteritems(kwargs):
                 if isinstance(v, np.ndarray):
                     hashed.append(v.tostring())
                 else:
@@ -1132,7 +1134,7 @@ def patch_docs(subclass, superclass):
 
         if func.__doc__ is None:
             func = getattr(subclass, name)
-            func.im_func.__doc__ = getattr(superclass, name).im_func.__doc__
+            func.__func__.__doc__ = getattr(superclass, name).__func__.__doc__
 
 #=============================================================================
 # misc helper functions

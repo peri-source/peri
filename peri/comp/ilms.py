@@ -1,3 +1,6 @@
+from future.utils import iteritems
+from builtins import range
+
 import numpy as np
 from numpy.polynomial.polynomial import polyval3d
 from numpy.polynomial.legendre import legval
@@ -57,7 +60,7 @@ class Polynomial3D(Component):
         # set up the parameter mappings and values
         params, values = [], []
         self.param_term = {}
-        for order in product(*(xrange(o) for o in self.order)):
+        for order in product(*(range(o) for o in self.order)):
             p = c+'-%i-%i-%i' % order
             self.param_term[p] = order
 
@@ -233,14 +236,14 @@ class Polynomial2P1D(Polynomial3D):
         self.xy_param = {}
         self.z_param = {}
 
-        for order in product(*(xrange(o) for o in self.order[1:][::-1])):
+        for order in product(*(range(o) for o in self.order[1:][::-1])):
             p = c+'-xy-%i-%i' % order
             self.xy_param[p] = order
 
             params.append(p)
             values.append(0.0)
 
-        for order in xrange(self.order[0]):
+        for order in range(self.order[0]):
             p = c+'-z-%i' % order
             self.z_param[p] = (order+1,)
 
@@ -419,7 +422,7 @@ class BarnesPoly(Component, util.CompatibilityPatch):
         values.extend(v)
 
         # tack on the z-poly parameters on the end
-        self.poly_params = {c+'-z-%i' % i:i+1 for i in xrange(zorder)}
+        self.poly_params = {c+'-z-%i' % i:i+1 for i in range(zorder)}
         params.extend(self.poly_params.keys())
         values.extend([0.0]*len(self.poly_params))
 
@@ -466,7 +469,7 @@ class BarnesPoly(Component, util.CompatibilityPatch):
         return self.barnes_params[ind]
 
     def param_barnes_poly(self):
-        return self.poly_params.keys()
+        return list(self.poly_params.keys())
 
     def _barnes_poly(self, n=0):
         weights = np.diag(np.ones(n+1))[n]
@@ -492,7 +495,7 @@ class BarnesPoly(Component, util.CompatibilityPatch):
     def calc_poly(self):
         return np.sum([
             self.get_values(p) * self._term(i)
-            for p, i in self.poly_params.iteritems()
+            for p, i in iteritems(self.poly_params)
         ], axis=0)
 
     def initialize(self):
@@ -624,7 +627,7 @@ class BarnesStreakLegPoly2P1D(BarnesPoly):
         values = []
         params = []
         for i, npt in enumerate(self.npts):
-            tparams = [self.category+'-b%i-%i' % (i, j) for j in xrange(npt)]
+            tparams = [self.category+'-b%i-%i' % (i, j) for j in range(npt)]
             tvalues = [0.0]*len(tparams)
             params.extend(tparams)
             values.extend(tvalues)
@@ -663,7 +666,7 @@ class BarnesStreakLegPoly2P1D(BarnesPoly):
     def _barnes_full(self):
         barnes = np.array([
             self._barnes_val(i)*self._barnes_poly(i)
-            for i in xrange(len(self.npts))
+            for i in range(len(self.npts))
         ])
         return barnes.sum(axis=0)[None,:,:]
 
@@ -729,7 +732,7 @@ class BarnesStreakLegPoly2P1D(BarnesPoly):
         self.set_values(self.category+'-scale', 1.0)
         self.set_values(self.category+'-off', 0.0)
 
-        for k, v in self.poly_params.iteritems():
+        for k, v in iteritems(self.poly_params):
             norm = (self.zorder + 1.0)*2
             self.set_values(k, ptp*(np.random.rand() - 0.5) / norm)
 
@@ -810,8 +813,8 @@ class BarnesXYLegPolyZ(BarnesPoly):
     def _setup_barnes_params(self):
         barnes_params = []
         barnes_values = []
-        for i in xrange(npts[0]):
-            for j in xrange(npts[1]):
+        for i in range(npts[0]):
+            for j in range(npts[1]):
                 barnes_params.append(self.category+'-b-%i-%i' % (i, j))
                 barnes_values.append(0.0)
         return barnes_params, barnes_params, barnes_values

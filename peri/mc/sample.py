@@ -1,3 +1,5 @@
+from builtins import str, range
+
 import os
 import sys
 import tempfile
@@ -46,7 +48,7 @@ def scan_noise(image, state, element, size=0.01, N=1000):
     start = state.state[element]
 
     xs, ys = [], []
-    for i in xrange(N):
+    for i in range(N):
         log.info('{}'.format(i))
         test = image + np.random.normal(0, state.sigma, image.shape)
         x,y = sample_ll(test, state, element, size=size, N=300)
@@ -122,7 +124,7 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
         with tempfile.NamedTemporaryFile(suffix='.peri-state.pkl', prefix=prefix) as f:
             save_name = f.name
 
-    for i in xrange(sweeps):
+    for i in range(sweeps):
         if save_period > 0 and i % save_period == 0:
             with open(save_name, 'w') as tfile:
                 pickle.dump([s,h,ll], tfile)
@@ -165,7 +167,7 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
 def do_blocks(s, blocks, sweeps, burn, stepout=0.1, postfix=None, quiet=False):
     h, ll = [], []
 
-    for i in xrange(sweeps):
+    for i in range(sweeps):
         if postfix is not None:
             states.save(s, desc=postfix, extra=[np.array(h),np.array(ll)])
 

@@ -1,3 +1,5 @@
+from builtins import map, zip, range, object
+
 import os
 import sys
 import time
@@ -202,7 +204,7 @@ def vectorize_damping(params, damping=1.0, increase_list=[['psf-', 1e4]]):
     """
     damp_vec = np.ones(len(params)) * damping
     for nm, fctr in increase_list:
-        for a in xrange(damp_vec.size):
+        for a in range(damp_vec.size):
             if nm in params[a]:
                 damp_vec[a] *= fctr
     return damp_vec
@@ -215,7 +217,7 @@ def low_mem_sq(m, step=100000):
     # right now
     # mmt = np.zeros([m.shape[0], m.shape[0]])  #6us
     # mt_tmp = np.zeros([step, m.shape[0]])
-    # for a in xrange(0, m.shape[1], step):
+    # for a in range(0, m.shape[1], step):
         # mx = min(a+step, m.shape[1])
         # mt_tmp[:mx-a,:] = m.T[a:mx]
         # # np.dot(m_tmp, m.T, out=mmt[a:mx])
@@ -224,7 +226,7 @@ def low_mem_sq(m, step=100000):
     # return mmt
     mmt = np.zeros([m.shape[0], m.shape[0]])  #6us
     # m_tmp = np.zeros([step, m.shape[1]])
-    for a in xrange(0, m.shape[0], step):
+    for a in range(0, m.shape[0], step):
         mx = min(a+step, m.shape[1])
         # m_tmp[:] = m[a:mx]
         # np.dot(m_tmp, m.T, out=mmt[a:mx])
@@ -308,10 +310,10 @@ def separate_particles_into_groups(s, region_size=40, bounds=None,
         shift = 0
     deltas = np.meshgrid(*[np.arange(i) for i in n_translate])
 
-    groups = map(lambda *args: find_particles_in_tile(s, tile.translate(
-            np.array(args) * rs + shift)), *[d.ravel() for d in deltas])
+    groups = list(map(lambda *args: find_particles_in_tile(s, tile.translate(
+            np.array(args) * rs + shift)), *[d.ravel() for d in deltas]))
 
-    for i in xrange(len(groups)-1, -1, -1):
+    for i in range(len(groups)-1, -1, -1):
         if groups[i].size == 0:
             groups.pop(i)
 
@@ -733,7 +735,7 @@ class LMEngine(object):
             CLOG.debug('Bad step, increasing damping')
             CLOG.debug('\t\t%f\t%f' % (self.error, er1))
             grad = self.calc_grad()
-            for _try in xrange(self._max_inner_loop):
+            for _try in range(self._max_inner_loop):
                 self.increase_damping()
                 delta_vals = self.find_LM_updates(grad)
                 er1 = self.update_function(self.param_vals + delta_vals)
@@ -802,7 +804,7 @@ class LMEngine(object):
             grad = self.calc_grad()
             CLOG.debug('Bad step, increasing damping')
             CLOG.debug('%f\t%f\t%f' % triplet)
-            for _try in xrange(self._max_inner_loop):
+            for _try in range(self._max_inner_loop):
                 self.increase_damping()
                 delta_vals = self.find_LM_updates(grad)
                 er_new = self.update_function(self.param_vals + delta_vals)
@@ -1215,7 +1217,7 @@ class LMEngine(object):
         """
         vals_to_sub = np.dot(direction, self.J)
         delta_vals = values - vals_to_sub
-        for a in xrange(direction.size):
+        for a in range(direction.size):
             self.J[a] += direction[a] * delta_vals
 
     def check_Broyden_J(self):
@@ -1244,7 +1246,7 @@ class LMEngine(object):
         CLOG.debug('Eigen update.')
         vls, vcs = np.linalg.eigh(self.JTJ)
         res0 = self.calc_residuals()
-        for a in xrange(min([self.num_eig_dirs, vls.size])):
+        for a in range(min([self.num_eig_dirs, vls.size])):
             #1. Finding stiff directions
             stif_dir = vcs[-(a+1)] #already normalized
 
@@ -1378,7 +1380,7 @@ class LMFunction(LMEngine):
         self.J = np.zeros([self.param_vals.size, self.data.size])
         dp = np.zeros_like(self.param_vals)
         f0 = self.model.copy()
-        for a in xrange(self.param_vals.size):
+        for a in range(self.param_vals.size):
             dp *= 0
             dp[a] = self.dl[a]
             f1 = self.func(self.param_vals + dp, *self.func_args, **self.func_kwargs)
@@ -1528,7 +1530,7 @@ class OptState(OptObj):
     def update_function(self, param_vals):
         """Updates with param_vals[i] = distance from self.p0 along self.direction[i]."""
         dp = np.zeros(self.p0.size)
-        for a in xrange(param_vals.size):
+        for a in range(param_vals.size):
             dp += param_vals[a] * self.directions[a]
         self.state.update(self.state.params, self.p0 + dp)
         self.param_vals[:] = param_vals
@@ -1551,7 +1553,7 @@ class OptState(OptObj):
         dl = np.zeros(self.param_vals.size)
         p0 = self.param_vals.copy()
         J = []
-        for a in xrange(self.param_vals.size):
+        for a in range(self.param_vals.size):
             dl *= 0
             dl[a] += self.dl
             self.update_function(p0 + dl)
@@ -1815,7 +1817,7 @@ class LMParticles(LMEngine):
         self._is_rad = np.array(map(lambda x: x in rad_nms, self.param_names))
         pos_nms = self.state.param_positions()
         self._is_pos = []
-        for a in xrange(3):  # FIXME explicit 3D
+        for a in range(3):  # FIXME explicit 3D
             self._is_pos.append(np.array(map(lambda x: (x in pos_nms) &
                     (x[-1] == 'zyx'[a]), self.param_names)))
         super(LMParticles, self).__init__(**kwargs)
@@ -1852,7 +1854,7 @@ class LMParticles(LMEngine):
         values[self._is_rad] = np.clip(values[self._is_rad], self._MINRAD,
                 self._MAXRAD)
         pd = self.state.pad
-        for a in xrange(3):  # FIXME explicit 3D
+        for a in range(3):  # FIXME explicit 3D
             values[self._is_pos[a]] = np.clip(values[self._is_pos[a]],
                     self._MINDIST - pd[a], self.state.ishape.shape[a] +
                     pd[a] - self._MINDIST)
@@ -1994,7 +1996,7 @@ class LMParticleGroupCollection(object):
                 CLOG.warn('Attempting to create many open files. Consider increasing max_mem and/or region_size to avoid crashes.')
             self._tempfiles = []
             self._has_saved_J = []
-            for a in xrange(len(self.particle_groups)):
+            for a in range(len(self.particle_groups)):
                 #TemporaryFile is automatically deleted
                 for _ in ['j','tile']:
                     self._tempfiles.append(tempfile.TemporaryFile(dir=os.getcwd()))
@@ -2022,7 +2024,7 @@ class LMParticleGroupCollection(object):
 
     def _do_run(self, mode='1'):
         """workhorse for the self.do_run_xx methods."""
-        for a in xrange(len(self.particle_groups)):
+        for a in range(len(self.particle_groups)):
             group = self.particle_groups[a]
             lp = LMParticles(self.state, group, **self._kwargs)
             if mode == 'internal':
@@ -2124,7 +2126,7 @@ class AugmentedState(object):
         if any of the particle radii or positions have been changed
         external to the augmented state.
         """
-        inds = range(self.state.obj_get_positions().shape[0])
+        inds = list(range(self.state.obj_get_positions().shape[0]))
         self._rad_nms = self.state.param_particle_rad(inds)
         self._pos_nms = self.state.param_particle_pos(inds)
         self._initial_rad = np.copy(self.state.state[self._rad_nms])
@@ -2241,8 +2243,8 @@ class LMAugmentedState(LMGlobals):
         graderr = np.zeros([sa.param_vals.size])
 
         #1. J for the state:
-        kw = {k:v for k, v in zip(self.opt_kwargs.keys() + ['out'],
-                self.opt_kwargs.values() + [[self.J, graderr]])}
+        kw = {k:v for k, v in zip(list(self.opt_kwargs.keys()) + ['out'],
+                list(self.opt_kwargs.values()) + [[self.J, graderr]])}
         params = sa.param_names
         _, self._inds = get_rand_Japprox(s, params, num_inds=self.num_pix,
                 include_cost=True, **kw)  # storing via out kwarg
@@ -2253,7 +2255,7 @@ class LMAugmentedState(LMGlobals):
         i0 = s.residuals.ravel()[self._inds].copy()
         er0 = s.error
         ind0 = len(params)
-        for a in xrange(old_aug_vals.size):
+        for a in range(old_aug_vals.size):
             dx = np.zeros(old_aug_vals.size)
             dx[a] = dl
             sa.update_rscl_x_params(old_aug_vals + dx)
@@ -2530,7 +2532,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-4,
     _delta_vals = []  # storing the directions we've moved along for line min
     #2. Optimize
     CLOG.info('Start of loop %d:\t%f' % (0, s.error))
-    for a in xrange(n_loop):
+    for a in range(n_loop):
         start_err = s.error
         start_params = np.copy(s.state[s.params])
         #2a. Globals
@@ -2655,9 +2657,9 @@ def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True,
     #nearby globals in a group and using the update tile only as the slicer,
     #rather than the full residuals.
     gs = np.floor(max_mem / s.residuals.nbytes).astype('int')
-    groups = [globals[a:a+gs] for a in xrange(0, len(globals), gs)]
+    groups = [globals[a:a+gs] for a in range(0, len(globals), gs)]
     CLOG.info('Start  ``finish``:\t{}'.format(s.error))
-    for a in xrange(n_loop):
+    for a in range(n_loop):
         start_err = s.error
         #1. Min globals:
         for g in groups:

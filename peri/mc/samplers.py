@@ -2,6 +2,8 @@
 The classes that deal with sampling with respect
 to a model and its parameters
 """
+from builtins import range, object
+
 from copy import deepcopy
 import numpy as np
 
@@ -317,12 +319,12 @@ class HamiltonianMCSampler(Sampler):
         g = -self.gradloglikelihood(state, x)
         E = -self.loglikelihood(state, x)
 
-        for l in xrange(0, self.steps):
+        for l in range(0, self.steps):
             p = np.random.normal(0, 1, size)
             H = p.dot(p)/2 + E
 
             xnew, gnew = x, g
-            for i in xrange(0, self.tau):
+            for i in range(0, self.tau):
                 p = p - self.eps*gnew/2
                 xnew = xnew + self.eps*p
                 gnew = -self.gradloglikelihood(state, xnew)
