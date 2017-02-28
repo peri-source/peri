@@ -578,6 +578,33 @@ pretty good guess for all the particle positions and radii. In that case, run
 Once again, you'll need a statemaker function. You will be able to select the
 image through dialog boxes.
 
+Using a smaller image
+~~~~~~~~~~~~~~~~~~~~~
+
+As you've probably noticed, fitting a complete generative model to a real image
+takes some time. You can avoid wasting time by starting with a small section of
+a microscope image, to get an idea of how complete your model is and how many
+parameters you should include. You can either use a separate small image, or
+you set the :class:`~peri.util.Tile` of the image:
+
+.. code-block:: python
+
+    from peri.util import Tile, RawImage
+    tile = Tile([30, 30, 30])  # pixels 0-29 of the image in z,y,x
+    small_im = RawImage('filename.tif', tile=tile)
+    # ..and create the ImageState again from scratch as before:
+    # st = states.ImageState(small_im, [objects, illumination, background,
+    #        point_spread_function, offset], mdl=model)
+
+If you already had a state, you could then set the new image with
+`s.set_image(im)`. Alternatively, you can set the image tile directly with the
+runner functions:
+
+.. code-block:: python
+
+    tile = Tile([30, 30, 30])
+    runner.get_initial_featuring(statemaker, 5, tile=tile)
+
 Checking your model even more
 -----------------------------
 

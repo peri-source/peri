@@ -385,7 +385,8 @@ Fitting a small image
 
 The larger the image is, the longer it takes to fit. Fitting a small image
 considerably speeds up the fit. You can change the region of the fit by setting
-the :class:`peri.util.Tile` of the image, as described in section BLAH.
+the :class:`peri.util.Tile` of the image, as described in the
+:doc:`Walkthrough </walkthrough>`.
 
 Fitting a small image is useful to get a good estimate of global parameters,
 especially the point-spread function. Since the exact point-spread functions

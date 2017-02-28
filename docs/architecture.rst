@@ -59,6 +59,8 @@ sure that the model is calculated.
 
 .. code-block:: python
 
+    import numpy as np
+
     class PolyFitState(peri.states.State):
         def __init__(self, x, y, order=2, coeffs=None):
             self._data = y
@@ -144,12 +146,12 @@ Optimization
 ^^^^^^^^^^^^
 
 From here, we can optimize the parameters of the state along with the estimated
-noise level. First, we will do so using Monte Carlo sampling, particularly with
-a multidimensional slice sampler.
+noise level. ``peri`` provides several ways to optimize the state's parameters.
+First, we will demonstrate using Monte Carlo sampling, particularly with
+a multidimensional slice sampler, to optimize the state:
 
 .. code-block:: python
 
-    import matplotlib.pyplot as pl
     from peri.mc import sample
 
     # burn a number of samples if hadn't optimized yet
@@ -167,6 +169,7 @@ squares optimization with `Levenberg-Marquardt
 
 .. code-block:: python
 
+    import matplotlib.pyplot as pl
     import peri.opt.optimize as opt
     opt.do_levmarq(s, s.params[1:])
 
@@ -357,8 +360,8 @@ GaussianPSF
     
         def __call__(self, field):
             """
-            Accept a field, apply the point-spread-function, and return
-            the resulting image of a blurred field
+            Accept a field (numpy.ndarray), apply the point-spread-function,
+            and return the resulting image of a blurred field
             """
             # in order to avoid translations from the psf, we must create
             # real-space vectors that are zero in the corner and go positive
