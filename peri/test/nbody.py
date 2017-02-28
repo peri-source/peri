@@ -1,3 +1,5 @@
+from builtins import range, object
+
 from peri import util
 
 import numpy as np
@@ -90,7 +92,7 @@ class BrownianHardSphereSimulation(object):
     
     def boundary_condition(self):
         """ Apply hard reflective boundary conditions to particles """
-        for i in xrange(self.dim):
+        for i in range(self.dim):
             mask = (self.pos[:,i] < self.tile.l[i])
             self.pos[mask,i] = 2*self.tile.l[i]-self.pos[mask,i]
     
@@ -128,7 +130,7 @@ class BrownianHardSphereSimulation(object):
         if mask is None:
             mask = np.ones_like(self.rad).astype('bool')
 
-        for step in xrange(steps):
+        for step in range(steps):
             self.forces = self.force_hardsphere(mask) + self.force_noise()
             self.forces[~mask, :] = 0.
             self.integrate(self.forces)
@@ -136,7 +138,7 @@ class BrownianHardSphereSimulation(object):
 
     def relax(self, steps=1000):
         """ Relax the current configuration using just pair wise forces (no noise) """
-        for step in xrange(steps):
+        for step in range(steps):
             self.forces = self.force_hardsphere()
             self.integrate(self.forces)
             self.boundary_condition()

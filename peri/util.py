@@ -1,4 +1,6 @@
 from __future__ import print_function
+from future.utils import iteritems
+from builtins import range, str, object
 
 import os
 import sys
@@ -139,9 +141,12 @@ def getdim(a):
         return None
     return len(a)
 
+def isint(dtype):
+    return np.array([0.0], dtype=dtype).dtype.name[0] in ['i', 'u']
+
 class CompatibilityPatch(object):
     def patch(self, var):
-        names, default_values = var.keys(), var.values()
+        names, default_values = list(var.keys()), list(var.values())
         for n, v in zip(names, default_values):
             self.__dict__.update({n: self.__dict__.get(n, v)})
 
@@ -159,7 +164,7 @@ class Tile(CompatibilityPatch):
         ----------
         left : number or array-like
             Left side of the tile
-            
+
         right : (optional) number or array-like
             If provided along with left, gives the right side of the tile
 
@@ -171,7 +176,7 @@ class Tile(CompatibilityPatch):
 
         size : (optional) number or array-like
             If provided along with left gives the size of the tile
-            
+
         centered : boolean
             * If true:   ``[left] - [size]/2 -> [left] + [size]/2``
             * If false:  ``[left] -> [left] + [size]``
@@ -254,7 +259,13 @@ class Tile(CompatibilityPatch):
                 else:
                     l = aN(left, **nkw)
                     s = aN(size, **nkw)
-                    left, right = l - s/2, l + (s+1)/2
+
+                    if isint(self.dtype):
+                        left = l - s//2
+                        right = left + s
+                    else:
+                        left, right = l - s/2.0, l + s/2.0
+                assert np.all((right - left) == size)
 
         left = aN(left, **nkw)
         right = aN(right, **nkw)
@@ -278,9 +289,9 @@ class Tile(CompatibilityPatch):
 
     def _build_caches(self):
         self._coord_slicers = []
-        for i in xrange(self.dim):
+        for i in range(self.dim):
             self._coord_slicers.append(
-                tuple(None if j != i else np.s_[:] for j in xrange(self.dim))
+                tuple(None if j != i else np.s_[:] for j in range(self.dim))
             )
 
     @property
@@ -425,7 +436,7 @@ class Tile(CompatibilityPatch):
             norm = np.array(self.shape)
         norm = aN(norm, self.dim, dtype='float')
 
-        v = list(np.arange(self.l[i], self.r[i]) / norm[i] for i in xrange(self.dim))
+        v = list(np.arange(self.l[i], self.r[i]) / norm[i] for i in range(self.dim))
         return self._format_vector(v, form=form)
 
     def kvectors(self, norm=False, form='broadcast', real=False, shift=False):
@@ -445,13 +456,13 @@ class Tile(CompatibilityPatch):
             norm = np.array(self.shape)
         norm = aN(norm, self.dim, dtype='float')
 
-        v = list(np.fft.fftfreq(self.shape[i])/norm[i] for i in xrange(self.dim))
+        v = list(np.fft.fftfreq(self.shape[i])/norm[i] for i in range(self.dim))
 
         if shift:
             v = list(np.fft.fftshift(t) for t in v)
 
         if real:
-            v[-1] = v[-1][:(self.shape[-1]+1)/2]
+            v[-1] = v[-1][:(self.shape[-1]+1)//2]
 
         return self._format_vector(v, form=form)
 
@@ -491,7 +502,7 @@ class Tile(CompatibilityPatch):
     def intersection(tiles, *args):
         """
         Intersection of tiles, returned as a tile
-        
+
         >>> Tile.intersection(Tile([0, 1], [5, 4]), Tile([1, 0], [4, 5]))
         Tile [1, 1] -> [4, 4] ([3, 3])
         """
@@ -796,7 +807,7 @@ class RawImage(Image, CompatibilityPatch):
     def set_scale(self, exposure):
         """
         Set the exposure parameter for this image, which determines the
-        values which get mapped to (0,1) in the output image. 
+        values which get mapped to (0,1) in the output image.
 
         See also
         --------
@@ -827,7 +838,7 @@ class RawImage(Image, CompatibilityPatch):
         """
         When given a raw image and the scaled version of the same image, it
         extracts the ``exposure`` parameters associated with those images.
-        This is useful when 
+        This is useful when
 
         Parameters
         ----------
@@ -951,7 +962,7 @@ class ProgressBar(object):
             self._numsize = 3 + self._decimals + 1
 
             # end caps size calculation
-            self._cap_len = len(self._bar_caps)/2
+            self._cap_len = len(self._bar_caps)//2
             self._capl = self._bar_caps[:self._cap_len]
             self._capr = self._bar_caps[self._cap_len:]
 
@@ -1051,7 +1062,7 @@ def memoize(cache_max_size=1e9):
             # provide a method to the object to clear the cache too
             if not hasattr(self, '_memoize_caches'):
                 def clear_cache(self):
-                    for k,v in self._memoize_caches.iteritems():
+                    for k,v in iteritems(self._memoize_caches):
                         self._memoize_caches[k] = newcache()
                 self._memoize_caches = {}
                 self._memoize_clear = types.MethodType(clear_cache, self)
@@ -1074,7 +1085,7 @@ def memoize(cache_max_size=1e9):
                     hashed.append(arg.tostring())
                 else:
                     hashed.append(arg)
-            for k,v in kwargs.iteritems():
+            for k,v in iteritems(kwargs):
                 if isinstance(v, np.ndarray):
                     hashed.append(v.tostring())
                 else:
@@ -1125,7 +1136,7 @@ def patch_docs(subclass, superclass):
 
         if func.__doc__ is None:
             func = getattr(subclass, name)
-            func.im_func.__doc__ = getattr(superclass, name).im_func.__doc__
+            func.__func__.__doc__ = getattr(superclass, name).__func__.__doc__
 
 #=============================================================================
 # misc helper functions

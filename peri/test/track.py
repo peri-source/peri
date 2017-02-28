@@ -1,3 +1,5 @@
+from builtins import zip, range
+
 import os
 import sys
 import pickle
@@ -193,7 +195,7 @@ def jsons_to_dataframe(filenames, **kwargs):
     --------
         ``peri.test.analyze.parse_json``
     """
-    x, y, z, r, t = [[] for a in xrange(5)]
+    x, y, z, r, t = [[] for a in range(5)]
     frame = 0
     for nm in filenames:
         this_pos, this_rad = analyze.parse_json(nm, **kwargs)

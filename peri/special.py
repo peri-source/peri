@@ -3,7 +3,10 @@ import numpy as np
 try:
     from scipy.weave import inline
 except ImportError as e:
-    from weave import inline
+    try:
+        from weave import inline
+    except ImportError as e:
+        pass
 
 functions = r"""
 double PI = 3.1415926535;

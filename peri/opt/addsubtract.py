@@ -1,3 +1,5 @@
+from builtins import range, zip
+
 import numpy as np
 import scipy.ndimage as nd
 
@@ -122,7 +124,7 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
     message = '-'*30 + 'ADDING' + '-'*30 + '\n  Z\t  Y\t  X\t  R\t|\t ERR0\t\t ERR1'
     with log.noformat():
         CLOG.info(message)
-    for a in xrange(guess.shape[0]):
+    for a in range(guess.shape[0]):
         p0 = guess[a]
         absent_err = st.error
         absent_d = st.residuals.copy()
@@ -526,7 +528,7 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
     added_poses = []
 
     nr = 1  # Check removal on the first loop
-    for _ in xrange(max_iter):
+    for _ in range(max_iter):
         if (nr != 0) or (always_check_remove):
             nr, rposes = remove_bad_particles(st, **kwargs)
         na, aposes = add_missing_particles(st, **kwargs)
@@ -621,7 +623,7 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
     bad = f > max_ok
     labels, n = nd.measurements.label(bad)
     inds = []
-    for i in xrange(1,n+1):
+    for i in range(1,n+1):
         inds.append( np.nonzero(labels == i))
 
     # 4. Parse into tiles
@@ -725,7 +727,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     # 2-4. Feature and add particles to the tile, optimize, run until none added
     n_added = -rinds.size
     added_poses = []
-    for _ in xrange(max_iter):
+    for _ in range(max_iter):
         if invert:
             im = 1 - st.residuals[tile.slicer]
         else:
@@ -745,7 +747,7 @@ def add_subtract_misfeatured_tile(st, tile, rad='calc', max_iter=3,
     for p in added_poses:
         ainds.append(st.obj_closest_particle(p))
     if len(ainds) > max_allowed_remove:
-        for i in xrange(0, len(ainds), max_allowed_remove):
+        for i in range(0, len(ainds), max_allowed_remove):
             opt.do_levmarq_particles(st, np.array(ainds[i:i +
                     max_allowed_remove]), include_rad=True, max_iter=3)
     elif len(ainds) > 0:

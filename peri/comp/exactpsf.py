@@ -1,3 +1,6 @@
+from builtins import range
+from future.utils import iteritems
+
 import warnings
 import numpy as np
 import scipy.ndimage as nd
@@ -191,7 +194,7 @@ class ExactPSF(psfs.PSF):
             # params.pop(ind)
             # values = np.delete(values, ind)
 
-        for i in xrange(len(params)):
+        for i in range(len(params)):
             if params[i] is 'zscale' and self.global_zscale:
                 continue
             params[i] = 'psf-' + params[i]
@@ -330,7 +333,7 @@ class ExactPSF(psfs.PSF):
     def measure_size_drift(self, z, size=31, zoffset=0.):
         """ Returns the 'size' of the psf in each direction a particular z (px) """
         drift = 0.0
-        for i in xrange(self.measurement_iterations):
+        for i in range(self.measurement_iterations):
             psf, vec = self.psf_slice(z, size=size, zoffset=zoffset+drift)
             psf = psf / psf.sum()
 
@@ -367,7 +370,7 @@ class ExactPSF(psfs.PSF):
         self.characterize_psf()
 
         self.slices = []
-        for i in xrange(self.zrange[0], self.zrange[1]+1):
+        for i in range(self.zrange[0], self.zrange[1]+1):
             zdrift = self.drift(i)
             psf, vec = self.psf_slice(i, size=self.support, zoffset=zdrift)
             self.slices.append(psf)
@@ -448,16 +451,16 @@ class ExactPSF(psfs.PSF):
                 continue
 
             zslice = int(np.clip(z, *self.zrange) - self.zrange[0])
-            middle = field.shape[0]/2
+            middle = field.shape[0]//2
 
             subpsf = self._kpad(self.slices[zslice], fs, norm=True)
             subfield = np.roll(field, middle - i, axis=0)
-            subfield = subfield[middle-fs[0]/2:middle+fs[0]/2+1]
+            subfield = subfield[middle-fs[0]//2:middle+fs[0]//2+1]
 
             kshape = subfield.shape
             kfield = fft.rfftn(subfield, **fftkwargs)
 
-            outfield[i] = np.real(fft.irfftn(kfield * subpsf, s=kshape, **fftkwargs))[self.support[0]/2]
+            outfield[i] = np.real(fft.irfftn(kfield * subpsf, s=kshape, **fftkwargs))[self.support[0]//2]
 
         return outfield
 
@@ -635,8 +638,8 @@ class ExactLineScanConfocalPSF(ExactPSF):
         bads = [self.zscale, 'psf-zslab']
 
         d = {}
-        for k,v in mapper.iteritems():
-            if self.param_dict.has_key(k):
+        for k,v in iteritems(mapper):
+            if k in self.param_dict:
                 d[v] = self.param_dict[k]
 
         d.update({
@@ -794,8 +797,8 @@ class ExactPinholeConfocalPSF(ExactPSF):
         bads = [self.zscale, 'psf-zslab']
 
         d = {}
-        for k,v in mapper.iteritems():
-            if self.param_dict.has_key(k):
+        for k,v in iteritems(mapper):
+            if k in self.param_dict:
                 d[v] = self.param_dict[k]
 
         d.update({

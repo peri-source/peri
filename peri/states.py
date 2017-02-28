@@ -1,9 +1,11 @@
+from builtins import range, str, object
+
 import os
 import re
 import copy
 import json
 import numpy as np
-import cPickle as pickle
+import pickle
 
 from functools import partial
 from contextlib import contextmanager
@@ -283,7 +285,7 @@ class State(comp.ParameterGroup):
         if nout == 1:
             return (f1 - f0) / dl
         else:
-            return [(f1[i] - f0[i]) / dl for i in xrange(nout)]
+            return [(f1[i] - f0[i]) / dl for i in range(nout)]
 
     def _hess_two_param(self, funct, p0, p1, dl=2e-5, rts=False, **kwargs):
         """
@@ -329,7 +331,7 @@ class State(comp.ParameterGroup):
             shape = calc_shape(f0)
             grad = np.zeros(shape)  # must be preallocated for mem reasons
         else:
-            shape = [calc_shape(f0[i]) for i in xrange(nout)]
+            shape = [calc_shape(f0[i]) for i in range(nout)]
             grad = [np.zeros(shp) for shp in shape]
 
         for i, p in enumerate(ps):
@@ -339,7 +341,7 @@ class State(comp.ParameterGroup):
             else:
                 stuff = self._grad_one_param(funct, p, dl=dl, rts=rts,
                         nout=nout, **kwargs)
-                for a in xrange(nout): grad[a][i] = stuff[a]
+                for a in range(nout): grad[a][i] = stuff[a]
         return grad  # was np.squeeze(grad)
 
 
@@ -374,7 +376,7 @@ class State(comp.ParameterGroup):
         return np.squeeze(hess)
 
     def _dograddoc(self, f):
-        f.im_func.func_doc += _graddoc
+        f.__func__.__doc__ += _graddoc
 
     def build_funcs(self):
         """
@@ -464,7 +466,7 @@ class PolyFitState(State):
         self._data = y
         self._xpts = x
 
-        params = ['c-%i' %i for i in xrange(order)]
+        params = ['c-%i' %i for i in range(order)]
         values = coeffs if coeffs is not None else [0.0]*order
 
         params.append('sigma')
@@ -653,7 +655,7 @@ class ImageState(State, comp.ComponentCollection):
         # now remove the part of the tile that is outside the image and pad the
         # interior part with that overhang. reflect the necessary padding back
         # into the image itself for the outer slice which we will call outer
-        outer = otile.pad((ptile.shape+1)/2)
+        outer = otile.pad((ptile.shape+1)//2)
         inner, outer = outer.reflect_overhang(self.oshape)
         iotile = inner.translate(-outer.l)
 
@@ -813,7 +815,7 @@ class ImageState(State, comp.ComponentCollection):
         float64, which can be a chunk of mem.
         """
         #A little thing to parse strings for convenience:
-        key = ''.join(map(lambda c: c if c in 'mlh' else '', mem_level))
+        key = ''.join([c if c in 'mlh' else '' for c in mem_level])
         if key not in ['h','mh','m','ml','m', 'l']:
             raise ValueError('mem_level must be one of hi, med-hi, med, med-lo, lo.')
         mem_levels = {  'h':     [np.float64, np.float64],

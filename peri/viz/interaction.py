@@ -1,3 +1,5 @@
+from builtins import range, object
+
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pylab as pl
@@ -6,6 +8,8 @@ from matplotlib.gridspec import GridSpec
 import peri.opt.optimize as opt
 from peri.util import Tile
 
+from peri.logger import log
+log = log.getChild('interaction')
 
 class OrthoManipulator(object):
     def __init__(self, state, size=8, cmap_abs='bone', cmap_diff='RdBu',
@@ -277,7 +281,7 @@ class OrthoManipulator(object):
 
         p = self._pt_xyz(event)
         if p is not None:
-            print "Moving view to %r" % p
+            log.info("Moving view to %r" % p)
             self.slices = p
         self.draw()
 
@@ -294,7 +298,7 @@ class OrthoManipulator(object):
             else:
                 r = r.mean()
 
-            print "Adding particle at", p, r
+            log.info("Adding particle at {} {}".format(p, r))
             self.state.obj_add_particle(p, r)
         self.state.set_tile(self.state.oshape)
         self.set_field()
@@ -305,7 +309,7 @@ class OrthoManipulator(object):
 
         p = self._pt_xyz(event)
         if p is not None:
-            print "Removing particle near", p
+            log.info("Removing particle near {}".format(p))
             ind = self.state.obj_closest_particle(p)
             self.state.obj_remove_particle(ind)
         self.state.set_tile(self.state.oshape)
@@ -317,12 +321,12 @@ class OrthoManipulator(object):
         p = self._pt_xyz(event)
 
         if p is not None:
-            print "Optimizing particle near", p
+            log.info("Optimizing particle near {}".format(p))
             n = self.state.obj_closest_particle(p)
             old_err = self.state.error
             _ = opt.do_levmarq_particles(self.state, np.array([n]), max_iter=2)
             new_err = self.state.error
-            print '{}->{}'.format(old_err, new_err)
+            log.info('{}->{}'.format(old_err, new_err))
 
         self.state.set_tile(self.state.oshape)
         self.set_field()
@@ -360,7 +364,7 @@ class OrthoManipulator(object):
             self.draw()
             return
 
-        print "Switching mode to", self.mode
+        log.info("Switching mode to {}".format(self.mode))
 
         for c in self._calls:
             self.fig.canvas.mpl_disconnect(c)
@@ -599,9 +603,9 @@ class OrthoPrefeature(OrthoViewer):
         """updates self.field"""
         m = np.clip(self.particle_field, 0, 1)
         part_color = np.zeros(self._image.shape)
-        for a in xrange(4): part_color[:,:,:,a] = self.part_col[a]
+        for a in range(4): part_color[:,:,:,a] = self.part_col[a]
         self.field = np.zeros(self._image.shape)
-        for a in xrange(4):
+        for a in range(4):
             self.field[:,:,:,a] = m*part_color[:,:,:,a] + (1-m) * self._image[:,:,:,a]
 
     def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
@@ -686,7 +690,7 @@ class OrthoPrefeature(OrthoViewer):
         elif event.key == 'r':
             self.mode = 'remove'
 
-        print "Switching mode to", self.mode
+        log.info("Switching mode to {}".format(self.mode))
 
         for c in self._calls:
             self.fig.canvas.mpl_disconnect(c)
@@ -700,7 +704,7 @@ class OrthoPrefeature(OrthoViewer):
         if p is not None:
             p = np.array(p)
 
-            print "Adding particle at", p
+            log.info("Adding particle at {}".format(p))
             self.pos = np.append(self.pos, p.reshape((1,-1)), axis=0)
         self.update_particle_field(poses=p.reshape((1,-1)))
         self.update_field()
@@ -711,7 +715,7 @@ class OrthoPrefeature(OrthoViewer):
 
         p = self._pt_xyz(event)
         if p is not None:
-            print "Removing particle near", p
+            log.info("Removing particle near {}".format(p))
             rp = self._remove_closest_particle(p)
         self.update_particle_field(poses=rp.reshape((1,-1)), add=False)
         self.update_field()

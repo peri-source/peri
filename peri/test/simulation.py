@@ -1,3 +1,5 @@
+from builtins import range, object
+
 import numpy as np
 import scipy as sp
 
@@ -88,7 +90,7 @@ class SoftSphereSimulation(object):
     
     def boundary_condition(self):
         """ Apply hard reflective boundary conditions to particles """
-        for i in xrange(self.dim):
+        for i in range(self.dim):
             mask = (self.pos[:,i] < 0)
             self.pos[mask,i] = 2*0-self.pos[mask,i]
             self.vel[mask,i] *= -1
@@ -122,14 +124,14 @@ class SoftSphereSimulation(object):
         steps : int
             number of time steps of size self.dt to perform
         """
-        for step in xrange(steps):
+        for step in range(steps):
             self.forces = self.force_hertzian() + self.force_damp() + self.force_noise()
             self.integrate(self.forces)
             self.boundary_condition()
     
     def relax(self, steps=1000):
         """ Relax the current configuration using just pair wise forces (no noise) """
-        for step in xrange(steps):
+        for step in range(steps):
             self.forces = self.force_hertzian() + self.force_damp()
             self.integrate(self.forces)
             self.boundary_condition()
@@ -143,7 +145,7 @@ class SoftSphereSimulation(object):
         pos, rad = self.pos, self.rad
     
         f = np.zeros_like(pos)
-        for i in xrange(N):
+        for i in range(N):
             rij = pos[i] - pos
             dij = rad[i] + rad
             dist = np.sqrt((rij**2).sum(axis=-1))

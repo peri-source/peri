@@ -1,3 +1,5 @@
+from builtins import range
+
 import warnings
 import numpy as np
 from numpy.lib.scimath import sqrt as csqrt
@@ -530,7 +532,7 @@ def calculate_polychrome_pinhole_psf(x, y, z, normalize=False, kfki=0.889,
     #2. Hdet
     hdet_func = lambda kfki: get_hsym_asym(rho*kfki, z*kfki,
                 zint=kfki*zint, get_hdet=True, **kwargs)[0]
-    inner = [wts[a] * hdet_func(kfkipts[a]) for a in xrange(nkpts)]
+    inner = [wts[a] * hdet_func(kfkipts[a]) for a in range(nkpts)]
     hdet = np.sum(inner, axis=0)
 
     #3. Normalize and return
@@ -671,10 +673,10 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
         x_vals, wts = calc_pts_hg()
 
     #I'm assuming that y,z are already some sort of meshgrid
-    xg, yg, zg = [np.zeros( list(y.shape) + [x_vals.size] ) for a in xrange(3)]
+    xg, yg, zg = [np.zeros( list(y.shape) + [x_vals.size] ) for a in range(3)]
     hilm = np.zeros(xg.shape)
 
-    for a in xrange(x_vals.size):
+    for a in range(x_vals.size):
         xg[...,a] = x_vals[a]
         yg[...,a] = y.copy()
         zg[...,a] = z.copy()
@@ -692,7 +694,7 @@ def calculate_linescan_ilm_psf(y,z, polar_angle=0., nlpts=1,
         hilm += wp*(hsym + np.cos(2*(phi-polar_angle))*hasym)
 
     #Now line hermgauss
-    for a in xrange(x_vals.size):
+    for a in range(x_vals.size):
         hilm[...,a] *= wts[a]
 
     return hilm.sum(axis=-1)*2.
@@ -789,7 +791,7 @@ def calculate_linescan_psf(x, y, z, normalize=False, kfki=0.889, zint=100.,
         hilm /= hilm.sum()
         hdet /= hdet.sum()
 
-    for a in xrange(x.size):
+    for a in range(x.size):
         hdet[a] *= hilm
 
     return hdet if normalize else hdet / hdet.sum()
@@ -899,13 +901,13 @@ def calculate_polychrome_linescan_psf(x, y, z, normalize=False, kfki=0.889,
         hdet_func = lambda kfki: get_hsym_asym(rho3*kfki, z3*kfki,
                 zint=kfki*zint, get_hdet=True, **kwargs)[0]
     #####
-    inner = [wts[a] * hdet_func(kfkipts[a]) for a in xrange(nkpts)]
+    inner = [wts[a] * hdet_func(kfkipts[a]) for a in range(nkpts)]
     hdet = np.sum(inner, axis=0)
 
     if normalize:
         hilm /= hilm.sum()
         hdet /= hdet.sum()
-    for a in xrange(x.size):
+    for a in range(x.size):
         hdet[a] *= hilm
 
     return hdet if normalize else hdet / hdet.sum()

@@ -1,3 +1,5 @@
+from builtins import range, str
+
 import os
 import itertools
 import re
@@ -14,6 +16,7 @@ from peri import states
 from peri.priors import overlap
 from peri.util import Tile
 from peri.comp.objs import PlatonicSpheresCollection
+from peri.logger import log
 
 def sorted_files(globber, num_sort=True, num_indices=None, return_num=False):
     """
@@ -138,9 +141,9 @@ def batch_saveasdict(load_dir, load_names, save_dir, align_text=True,
         try:
             st = states.load(nm+'.pkl')
         except IOError:
-            print 'Missing {}'.format(nm)
+            log.error('Missing {}'.format(nm))
             continue
-        print 'Saving {}'.format(nm)
+        log.error('Saving {}'.format(nm))
         save_as_dict(st, save_name, include_iminfo=include_iminfo, align_text=
                 align_text)
 
@@ -306,7 +309,7 @@ def nearest(p0, p1, cutoff=None):
             The lists of particle indices, p0[ind0] is close to p1[ind1].
     """
     ind0, ind1 = [], []
-    for i in xrange(len(p0)):
+    for i in range(len(p0)):
         dist = np.sqrt(((p0[i] - p1)**2).sum(axis=-1))
 
         if cutoff is None:
@@ -325,7 +328,7 @@ def gofr_normal(pos, rad, zscale):
     z = np.array([zscale, 1, 1])
 
     seps = []
-    for i in xrange(N-1):
+    for i in range(N-1):
         o = np.arange(0, N)
         d = np.sqrt( ((z*(pos[i] - pos[o]))**2).sum(axis=-1) )
         seps.extend(d[d!=0])
@@ -336,7 +339,7 @@ def gofr_surfaces(pos, rad, zscale):
     z = np.array([zscale, 1, 1])
 
     seps = []
-    for i in xrange(N-1):
+    for i in range(N-1):
         o = np.arange(0, N)
         d = np.sqrt( ((z*(pos[i] - pos[o]))**2).sum(axis=-1) )
         r = rad[i] + rad[o]

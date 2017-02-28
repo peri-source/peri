@@ -18,6 +18,7 @@ Variable name             Default value          Description
 ``verbosity``             vvv                    Level of verbosity for logs, the more v's the more verbose
 ========================= ====================== =============================================================
 """
+from future.utils import iteritems
 
 import os
 import json
@@ -54,7 +55,7 @@ def transform(v):
 def read_environment():
     """ Read all environment variables to see if they contain PERI """
     out = {}
-    for k,v in os.environ.iteritems():
+    for k,v in iteritems(os.environ):
         if transform(k) in default_conf:
             out[transform(k)] = v
     return out

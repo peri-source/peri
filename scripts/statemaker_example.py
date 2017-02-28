@@ -78,7 +78,7 @@ def _calc_ilm_order(imshape):
     zorder = int(imshape[0] / 6.25) + 1
     l_npts = int(imshape[1] / 42.5)+1
     npts = ()
-    for a in xrange(l_npts):
+    for a in range(l_npts):
         if a < 5:
             npts += (int(imshape[2] * [59, 39, 29, 19, 14][a]/512.) + 1,)
         else:

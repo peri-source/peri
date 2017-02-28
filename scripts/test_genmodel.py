@@ -33,7 +33,7 @@ opt.do_levmarq(st, st.params)
 # times so I'll make a function:
 def plot_averaged_residuals(st):
     plt.figure(figsize=[15,6])
-    for i in xrange(3):
+    for i in range(3):
         plt.subplot(1,3,1 + i)
         mean_ax = tuple({0,1,2} - {i})  # which 2 directions to average over
         plt.plot(st.residuals.mean(axis=mean_ax))
@@ -149,7 +149,7 @@ st = states.ImageState(im_ilm, [ilm_z, off, psf, bkg, slab])
 # Since we know that our xy-ilm parameters are the same, we'll start by
 # optimizing the background and the ilm-z- params.
 opt.do_levmarq(st, st.get('bkg').params + ['ilm-z-{}'.format(i) for i in
-                xrange(ilm_z.zorder)], max_iter=2)
+                range(ilm_z.zorder)], max_iter=2)
 # Looking at this with the OrthoManipulator it already looks good, but we do
 # a full optimization to ensure that we're at the best fit.
 opt.do_levmarq(st, st.params, exptol=1e-5, errtol=1e-3)

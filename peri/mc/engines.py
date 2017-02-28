@@ -1,3 +1,5 @@
+from builtins import range, object
+
 class SequentialBlockEngine(object):
     def __init__(self, state):
         self.state = state
@@ -46,7 +48,7 @@ class SequentialBlockEngine(object):
             raise AttributeError("Engine does not have samplers, add samplers to continue")
 
         ll, s = self.loglike, self.state
-        for i in xrange(nsteps):
+        for i in range(nsteps):
             for sampler in self.samplers:
                 if ll is not None and ll < -1e50:
                     pass

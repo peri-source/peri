@@ -1,3 +1,5 @@
+from builtins import range
+
 import matplotlib as mpl
 import matplotlib.pylab as pl
 
@@ -11,6 +13,7 @@ from matplotlib.patches import Circle, Rectangle
 
 from peri.test import analyze
 from peri import util
+from peri.logger import log
 
 import numpy as np
 import time
@@ -41,10 +44,10 @@ def summary_plot(state, samples, zlayer=None, xlayer=None, truestate=None):
     t = s.get_model_image()
 
     if zlayer is None:
-        zlayer = t.shape[0]/2
+        zlayer = t.shape[0]//2
 
     if xlayer is None:
-        xlayer = t.shape[2]/2
+        xlayer = t.shape[2]//2
 
     mu = samples.mean(axis=0)
     std = samples.std(axis=0)
@@ -120,11 +123,11 @@ def pretty_summary(state, samples, zlayer=None, xlayer=None, vertical=False):
     s = state
     h = np.array(samples)
 
-    slicez = zlayer or s.image.shape[0]/2
-    slicex = xlayer or s.image.shape[2]/2
+    slicez = zlayer or s.image.shape[0]//2
+    slicex = xlayer or s.image.shape[2]//2
     slicer1 = np.s_[slicez,s.pad:-s.pad,s.pad:-s.pad]
     slicer2 = np.s_[s.pad:-s.pad,s.pad:-s.pad,slicex]
-    center = (slicez, s.image.shape[1]/2, slicex)
+    center = (slicez, s.image.shape[1]//2, slicex)
 
     if vertical:
         fig = pl.figure(figsize=(12,24))
@@ -229,9 +232,9 @@ def scan(im, cycles=1, sleep=0.3, vmin=0, vmax=1, cmap='bone'):
     pl.figure(1)
     pl.show()
     time.sleep(3)
-    for c in xrange(cycles):
+    for c in range(cycles):
         for i, sl in enumerate(im):
-            print i
+            log.info('{}'.format(i))
             pl.clf()
             pl.imshow(sl, cmap=cmap, interpolation='nearest',
                     origin='lower', vmin=vmin, vmax=vmax)
@@ -243,8 +246,8 @@ def scan_together(im, p, delay=2, vmin=0, vmax=1, cmap='bone'):
     pl.show()
     time.sleep(3)
     z,y,x = p.T
-    for i in xrange(len(im)):
-        print i
+    for i in range(len(im)):
+        log.info('{}'.format(i))
         sl = im[i]
         pl.clf()
         pl.imshow(sl, cmap=cmap, interpolation='nearest', origin='lower',
@@ -263,7 +266,7 @@ def sample_compare(N, samples, truestate, burn=0):
     mu = h.mean(axis=0)
     std = h.std(axis=0)
     pl.figure(figsize=(20,4))
-    pl.errorbar(xrange(len(mu)), (mu-strue), yerr=5*std/np.sqrt(h.shape[0]),
+    pl.errorbar(range(len(mu)), (mu-strue), yerr=5*std/np.sqrt(h.shape[0]),
             fmt='.', lw=0.15, alpha=0.5)
     pl.vlines([0,3*N-0.5, 4*N-0.5], -1, 1, linestyle='dashed', lw=4, alpha=0.5)
     pl.hlines(0, 0, len(mu), linestyle='dashed', lw=5, alpha=0.5)
@@ -281,10 +284,10 @@ def generative_model(s,x,y,z,r, factor=1.1):
     pl.close('all')
 
     slicez = int(round(z.mean()))
-    slicex = s.image.shape[2]/2
+    slicex = s.image.shape[2]//2
     slicer1 = np.s_[slicez,s.pad:-s.pad,s.pad:-s.pad]
     slicer2 = np.s_[s.pad:-s.pad,s.pad:-s.pad,slicex]
-    center = (slicez, s.image.shape[1]/2, slicex)
+    center = (slicez, s.image.shape[1]//2, slicex)
 
     fig = pl.figure(figsize=(factor*13,factor*10))
 
@@ -322,14 +325,14 @@ def generative_model(s,x,y,z,r, factor=1.1):
     ax_psf2 = fig.add_subplot(gs2[5])
 
     c = int(z.mean()), int(y.mean())+s.pad, int(x.mean())+s.pad
-    if s.image.shape[0] > 2*s.image.shape[1]/3:
+    if s.image.shape[0] > 2*s.image.shape[1]//3:
         w = s.image.shape[2] - 2*s.pad
-        h = 2*w/3
+        h = 2*w//3
     else:
         h = s.image.shape[0] - 2*s.pad
-        w = 3*h/2
+        w = 3*h//2
 
-    w,h = w/2, h/2
+    w,h = w//2, h//2
     xyslice = np.s_[slicez, c[1]-h:c[1]+h, c[2]-w:c[2]+w]
     yzslice = np.s_[c[0]-h:c[0]+h, c[1]-w:c[1]+w, slicex]
 
@@ -541,7 +544,7 @@ def compare_data_model_residuals(s, tile, data_vmin='calc', data_vmax='calc',
     dt = data_cmap(center_data(data, data_vmin, data_vmax))
     rs = res_cmap(center_data(residuals, res_vmin, res_vmax))
 
-    for a in xrange(4):
+    for a in range(4):
         im[:,:,a][upper_mask] = rs[:,:,a][upper_mask]
         im[:,:,a][center_mask] = gm[:,:,a][center_mask]
         im[:,:,a][lower_mask] = dt[:,:,a][lower_mask]
@@ -623,7 +626,7 @@ def diag_crb_particles(state):
     crbrad = []
 
     for i in np.arange(state.N)[state.state[state.b_typ]==1.]:
-        print i
+        log.info('{}'.format(i))
         bl = state.blocks_particle(i)
         for b in bl[:-1]:
             crbpos.append(np.sqrt(1.0/state.fisher_information(blocks=[b])))
@@ -651,11 +654,11 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     h0 = np.array(samples0)
     h1 = np.array(samples1)
 
-    slicez = zlayer or s0.image.shape[0]/2
-    slicex = xlayer or s0.image.shape[2]/2
+    slicez = zlayer or s0.image.shape[0]//2
+    slicex = xlayer or s0.image.shape[2]//2
     slicer1 = np.s_[slicez,s0.pad:-s0.pad,s0.pad:-s0.pad]
     slicer2 = np.s_[s0.pad:-s0.pad,s0.pad:-s0.pad,slicex]
-    center = (slicez, s0.image.shape[1]/2, slicex)
+    center = (slicez, s0.image.shape[1]//2, slicex)
 
     mu0 = h0.mean(axis=0)
     mu1 = h1.mean(axis=0)
@@ -680,7 +683,7 @@ def crb_compare(state0, samples0, state1, samples1, crb0=None, crb1=None,
     drad = rad0 - rad1[link]
 
     drift = dpos.mean(axis=0)
-    print 'drift', drift
+    log.info('drift {}'.format(drift))
 
     dpos -= drift
 
@@ -935,7 +938,7 @@ def twoslice(field, center=None, size=6.0, cmap='bone_r', vmin=0, vmax=1,
     """
     Plot two parts of the ortho view, the two sections given by ``orientation``.
     """
-    center = center or [i/2 for i in field.shape]
+    center = center or [i//2 for i in field.shape]
     slices = []
     for i,c in enumerate(center):
         blank = [np.s_[:]]*len(center)
@@ -958,7 +961,7 @@ def twoslice(field, center=None, size=6.0, cmap='bone_r', vmin=0, vmax=1,
 
     if orientation.startswith('v'):
         # rect = l,b,w,h
-        print x, y, z, w, h, x/h
+        log.info('{} {} {} {} {} {}'.format(x, y, z, w, h, x/h))
         r = x/h
         q = y/h
         f = 1 / (1 + 3*off)
@@ -988,8 +991,8 @@ def twoslice_overlay(s, zlayer=None, xlayer=None, size=6.0,
     trim = (np.s_[pad:-pad],)*3
     field = s.image[trim]
 
-    slicez = zlayer or field.shape[0]/2
-    slicex = xlayer or field.shape[2]/2
+    slicez = zlayer or field.shape[0]//2
+    slicex = xlayer or field.shape[2]//2
     slicer1 = np.s_[slicez,:,:]
     slicer2 = np.s_[:,:,slicex]
 

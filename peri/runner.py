@@ -11,9 +11,17 @@ These do:
     (use globals to start,          start from nothing)
     (use positions to start,        start from trackpy)
 """
+from future import standard_library
+standard_library.install_aliases()
+from builtins import range
+
 import os
-import Tkinter as tk
-import tkFileDialog as tkfd
+try:
+    import tkinter as tk
+    import tkinter.filedialog as tkfd
+except ImportError:
+    import Tkinter as tk
+    import tkFileDialog as tkfd
 import numpy as np
 import peri
 from peri import initializers, util, models, states, logger
@@ -382,7 +390,7 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
             through a Tk window.
         use_full_path : Bool, optional
             Set to True to use the full path of the state instead of
-            partial path names (e.g. C:\Users\Me\Desktop\state.pkl vs
+            partial path names (e.g. /full/path/name/state.pkl vs
             state.pkl). Default is False
 
     Other Parameters
@@ -475,7 +483,7 @@ def get_particles_featuring(feature_rad, state_name=None, im_name=None,
             through a Tk window.
         use_full_path : Bool, optional
             Set to True to use the full path of the state instead of
-            partial path names (e.g. C:\Users\Me\Desktop\state.pkl vs
+            partial path names (e.g. /full/path/name/state.pkl vs
             state.pkl). Default is False
         actual_rad : Float or None, optional
             The initial guess for the particle radii. Default is the median
@@ -666,7 +674,7 @@ def finish_state(st, desc='finish-state', invert=True):
         `peri.opt.optimize.finish`
     """
     for minmass in [None, 0]:
-        for _ in xrange(3):
+        for _ in range(3):
             npart, poses = addsub.add_subtract_locally(st, region_depth=7,
                     minmass=minmass, invert=invert)
             if npart == 0:

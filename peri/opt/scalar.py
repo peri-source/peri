@@ -1,5 +1,9 @@
+from builtins import range, zip
+
 import time
 import numpy as np
+
+from peri.logger import log
 
 #=============================================================================
 # Optimization methods like gradient descent
@@ -25,7 +29,7 @@ def optimize_particle(state, index, method='gn', doradius=True):
     step = np.linalg.solve(h, g)
 
     h = np.zeros_like(g)
-    for i in xrange(len(g)):
+    for i in range(len(g)):
         state.update(blocks[i], state.state[blocks[i]] - step[i])
     return g,h
 
@@ -39,10 +43,10 @@ def modify(state, blocks, vec):
 
 
 def residual(vec, state, blocks, relax_particles=True):
-    print time.time(), 'res', state.loglikelihood()
+    log.info('res {}'.format(state.loglikelihood()))
     modify(state, blocks, vec)
 
-    for i in xrange(3):
+    for i in range(3):
         #sample_particles(state, quiet=True)
         optimize_particles(state)
 
@@ -75,10 +79,10 @@ def leastsq(state, blocks, dojac=True):
 
 def gd(state, N=1, ratio=1e-1):
     state.set_current_particle()
-    for i in xrange(N):
-        print state.loglikelihood()
+    for i in range(N):
+        log.info('{}'.format(state.loglikelihood()))
         grad = state.gradloglikelihood()
         n = state.state + 1.0/np.abs(grad).max() * ratio * grad
         state.set_state(n)
-        print state.loglikelihood()
+        log.info('{}'.format(state.loglikelihood()))
 

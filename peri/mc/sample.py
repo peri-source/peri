@@ -1,3 +1,5 @@
+from builtins import str, range
+
 import os
 import sys
 import tempfile
@@ -7,6 +9,9 @@ import numpy as np
 
 from peri import states, util
 from peri.mc import samplers, engines, observers
+
+from peri.logger import log
+log = log.getChild("mc.sample")
 
 #=============================================================================
 # Sampling methods that run through blocks and sample
@@ -43,8 +48,8 @@ def scan_noise(image, state, element, size=0.01, N=1000):
     start = state.state[element]
 
     xs, ys = [], []
-    for i in xrange(N):
-        print i
+    for i in range(N):
+        log.info('{}'.format(i))
         test = image + np.random.normal(0, state.sigma, image.shape)
         x,y = sample_ll(test, state, element, size=size, N=300)
         state.update(element, start)
@@ -55,10 +60,10 @@ def scan_noise(image, state, element, size=0.01, N=1000):
 
 def sample_particles(state, stepout=1, start=0, quiet=False):
     if not quiet:
-        print '{:-^39}'.format(' POS / RAD ')
+        log.info('{:-^39}'.format(' POS / RAD '))
     for particle in state.active_particles():
         if not quiet:
-            print particle
+            log.info('{}'.format(particle))
         sys.stdout.flush()
 
         blocks = state.blocks_particle(particle)
@@ -68,11 +73,11 @@ def sample_particles(state, stepout=1, start=0, quiet=False):
 
 def sample_particle_pos(state, stepout=1, start=0, quiet=False):
     if not quiet:
-        print '{:-^39}'.format(' POS ')
+        log.info('{:-^39}'.format(' POS '))
 
     for particle in state.active_particles():
         if not quiet:
-            print particle
+            log.info('{}'.format(particle))
         sys.stdout.flush()
 
         blocks = state.blocks_particle(particle)[:-1]
@@ -82,11 +87,11 @@ def sample_particle_pos(state, stepout=1, start=0, quiet=False):
 
 def sample_particle_rad(state, stepout=1, start=0, quiet=False):
     if not quiet:
-        print '{:-^39}'.format(' RAD ')
+        log.info('{:-^39}'.format(' RAD '))
 
     for particle in state.active_particles():
         if not quiet:
-            print particle
+            log.info('{}'.format(particle))
 
         sys.stdout.flush()
 
@@ -97,7 +102,7 @@ def sample_particle_rad(state, stepout=1, start=0, quiet=False):
 
 def sample_block(state, blockname, explode=True, stepout=0.1, quiet=False):
     if not quiet:
-        print '{:-^39}'.format(' '+blockname.upper()+' ')
+        log.info('{:-^39}'.format(' '+blockname.upper()+' '))
 
     blocks = [state.create_block(blockname)]
 
@@ -119,7 +124,7 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
         with tempfile.NamedTemporaryFile(suffix='.peri-state.pkl', prefix=prefix) as f:
             save_name = f.name
 
-    for i in xrange(sweeps):
+    for i in range(sweeps):
         if save_period > 0 and i % save_period == 0:
             with open(save_name, 'w') as tfile:
                 pickle.dump([s,h,ll], tfile)
@@ -128,7 +133,7 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
             states.save(s, desc=postfix, extra=[np.array(h),np.array(ll)])
 
         if not quiet:
-            print '{:=^79}'.format(' Sweep '+str(i)+' ')
+            log.info('{:=^79}'.format(' Sweep '+str(i)+' '))
 
         #sample_particles(s, stepout=stepout)
         if pos:
@@ -162,12 +167,12 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
 def do_blocks(s, blocks, sweeps, burn, stepout=0.1, postfix=None, quiet=False):
     h, ll = [], []
 
-    for i in xrange(sweeps):
+    for i in range(sweeps):
         if postfix is not None:
             states.save(s, desc=postfix, extra=[np.array(h),np.array(ll)])
 
         if not quiet:
-            print '{:=^79}'.format(' Sweep '+str(i)+' ')
+            log.info('{:=^79}'.format(' Sweep '+str(i)+' '))
 
         sample_state(s, blocks, stepout=stepout, N=1, doprint=~quiet)
 

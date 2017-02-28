@@ -1,6 +1,8 @@
+from builtins import range
+
 import os
 import atexit
-import cPickle as pickle
+import pickle
 import numpy as np
 from multiprocessing import cpu_count
 from numpy.polynomial.legendre import legval
@@ -43,7 +45,7 @@ class PSF(Component):
 
         # fix off-by-one issues when going odd to even tile sizes
         o = d % 2
-        d /= 2
+        d = d // 2
 
         pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
         self.rpsf = np.pad(self.min_rpsf, pad, mode='constant', constant_values=0)
@@ -276,7 +278,7 @@ class PSF4D(PSF):
         out = np.zeros_like(cov2d)
         z = self._zpos(self.tile)
 
-        for i in xrange(len(z)):
+        for i in range(len(z)):
             size = self.get_padding_size(tile=None, z=z[i]).shape
             m = (z >= z[i]-size[0]) & (z <= z[i]+size[0])
             g = self.rpsf_z(z[m], z[i])
@@ -309,7 +311,7 @@ class Gaussian4D(PSF4D):
         params, values = [], []
         for i, o in enumerate(order):
             d = ['z', 'y', 'x']
-            tparams = ['psf-%s-%i' % (d[i], j) for j in xrange(o)]
+            tparams = ['psf-%s-%i' % (d[i], j) for j in range(o)]
             tvalues = [sigmas[i]] + [0]*(o-1)
 
             params.extend(tparams)
@@ -408,7 +410,7 @@ class GaussianMomentExpansion(PSF4D):
         params, values = [], []
         for i, o in enumerate(order):
             d = ['z', 'y', 'x']
-            tparams = ['psf-%s-%i' % (d[i], j) for j in xrange(o)]
+            tparams = ['psf-%s-%i' % (d[i], j) for j in range(o)]
             tvalues = [sigmas[i]] + [0]*(o-1)
 
             params.extend(tparams)
@@ -421,7 +423,7 @@ class GaussianMomentExpansion(PSF4D):
 
             for j, d in enumerate(['z', 'y', 'x']):
                 tparams = [
-                    'psf-%s-%s-%i' % (t[i], d, k) for k in xrange(o)
+                    'psf-%s-%s-%i' % (t[i], d, k) for k in range(o)
                 ]
                 tvalues = [0]*(o)
 
@@ -566,7 +568,7 @@ class FromArray(PSF):
 
         outfield = np.zeros_like(infield, dtype='float')
 
-        for i in xrange(field.shape[0]):
+        for i in range(field.shape[0]):
             z = int(self.tile.l[0] + i)
             kpsf = self._pad(self.array[z])
             outfield[i] = np.real(fft.ifftn(infield * kpsf, **fftkwargs))[i]

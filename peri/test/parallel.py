@@ -1,3 +1,5 @@
+from builtins import range
+
 import os
 import sys
 import json
@@ -68,11 +70,11 @@ def watch(func, file_pattern, postfix='run'):
             func(filename)
             filename = next_file()
 
-    print 'Launching listener processes',
-    for i in xrange(proc):
-        print i,
+    log.info('Launching listener processes')
+    for i in range(proc):
+        log.info('{}'.format(i))
         Process(target=_watch, args=(func, file_pattern, postfix, i)).start()
-    print '.'
+    log.info('.')
 
 def launch_watchers(script, hosts, nprocs=1):
     """
@@ -100,21 +102,21 @@ def launch_watchers(script, hosts, nprocs=1):
 
     procs = {}
 
-    print 'Starting job process for'
+    log.info('Starting job process for')
     for i, host in enumerate(hosts):
-        print '...', host
+        log.info('... {}'.format(host))
         procs[i] = Process(target=launch, args=(script, host))
         procs[i].start()
 
     def signal_handler():
-        print "Sending signal to flush, waiting 60 sec until forced shutdown..."
+        log.info("Sending signal to flush, waiting 60 sec until forced shutdown...")
         for p in procs.values():
             p.join(timeout=60)
         sys.exit(1)
 
     try:
         while True:
-            for i,k in procs.iteritems():
+            for i in procs.keys():
                 procs[i].join(timeout=1.0)
     except (KeyboardInterrupt, SystemExit):
         signal_handler()
@@ -154,9 +156,9 @@ def listen(func):
             job = bsd.reserve()
             func(json.loads(job.body))
 
-    print 'Launching listener processes',
-    for i in xrange(proc):
-        print i,
+    log.info('Launching listener processes')
+    for i in range(proc):
+        log.info('{}'.format(i))
         Process(target=_listen, args=(func,i)).start()
 
 def launch_all(script, hosts, jobs, bean_port=DEFAULT_BEANSTALKD, docopy=True):
@@ -216,7 +218,7 @@ def launch_all(script, hosts, jobs, bean_port=DEFAULT_BEANSTALKD, docopy=True):
         proc = host.get('proc', 1)
         env = host.get('env', {})
 
-        var = ' '.join(['{}={}:${}'.format(k, v, k) for k,v in env.iteritems()])
+        var = ' '.join(['{}={}:${}'.format(k, v, k) for k,v in env.items()])
         env = 'export {}; cd {};'.format(var, fldr)
 
         fwd = '-R{}:localhost:{}'.format(bean_port, bean_port)
@@ -233,14 +235,14 @@ def launch_all(script, hosts, jobs, bean_port=DEFAULT_BEANSTALKD, docopy=True):
     procs = {}
 
     # start up the beanstalk process first
-    print 'Starting up beanstalkd ...'
+    log.info('Starting up beanstalkd ...')
     procs[-1] = Process(target=beanstalk, args=(bean_port,))
     procs[-1].start()
     time.sleep(1)
 
-    print 'Starting job process for ...'
+    log.info('Starting job process for ...')
     for i, host in enumerate(hosts):
-        print '...', host
+        log.info('... {}'.format(host))
         o = len(hosts)
         tmpscript = script if not docopy else copy_script(script, host)
         procs[i] = Process(target=launch, args=(tmpscript, host, bean_port, i))
@@ -249,20 +251,20 @@ def launch_all(script, hosts, jobs, bean_port=DEFAULT_BEANSTALKD, docopy=True):
     time.sleep(10)
 
     def signal_handler():
-        print "Sending signal to flush, waiting 60 sec until forced shutdown..."
+        log.info("Sending signal to flush, waiting 60 sec until forced shutdown...")
         for p in procs.values():
             p.join(timeout=60)
         sys.exit(1)
 
-    print 'Sending jobs ...'
+    log.info('Sending jobs ...')
     bsd = bean.Connection(host=LOCALHOST, port=bean_port, connect_timeout=10)
     for job in jobs:
-        print '...', job
+        log.info('... {}'.format(job))
         bsd.put(json.dumps(job))
 
     try:
         while True:
-            for i,k in procs.iteritems():
+            for i in procs.keys():
                 procs[i].join(timeout=1.0)
     except (KeyboardInterrupt, SystemExit):
         signal_handler()

@@ -24,9 +24,14 @@ critical errors. The order is debug, info, warn, error, fatal
 
     log.set_level('info')
 """
-import StringIO
+from future import standard_library
+standard_library.install_aliases()
+from future.utils import iteritems
+from builtins import object
+
 import logging
 import logging.handlers
+from io import StringIO
 from contextlib import contextmanager
 
 from peri import conf
@@ -61,7 +66,7 @@ class Logger(object):
 
     def get_handlers(self, names=None):
         if names is None:
-            names = self.handlers.keys()
+            names = list(self.handlers.keys())
         names = listify(names)
         return [self.get_handler(name) for name in names]
 
@@ -127,7 +132,7 @@ class Logger(object):
         except Exception as e:
             raise
         finally:
-            for k,v in formats.iteritems():
+            for k,v in iteritems(formats):
                 k.formatter = v
 
     def set_verbosity(self, verbosity='vvv', handlers=None):

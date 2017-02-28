@@ -1,3 +1,5 @@
+from future.utils import iteritems
+
 import numpy as np
 import scipy as sp
 
@@ -73,7 +75,7 @@ def create_state(image, pos, rad, slab=None, sigma=0.05, conf=conf_simple):
 
     # setup the components based on the configuration
     components = []
-    for k,v in conf.get('comps', {}).iteritems():
+    for k,v in iteritems(conf.get('comps', {})):
         args = conf.get('args').get(k, {})
         comp = model.registry[k][v](**args)
         components.append(comp)
@@ -194,7 +196,7 @@ def create_two_particle_state(imsize, radius=5.0, delta=1.0, seed=None, axis='x'
     d = np.array([0.0, 0.0, 0.0])
     d[comp[axis]] = t
 
-    pos = np.array([imsize/2 - d, imsize/2 + d]).reshape(-1,3)
+    pos = np.array([imsize/2.0 - d, imsize/2.0 + d]).reshape(-1,3)
     rad = np.array([radius, radius])
 
     return create_state(util.NullImage(shape=imsize), pos, rad, **kwargs)
