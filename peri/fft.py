@@ -70,7 +70,7 @@ def save_wisdom(wisdomfile):
     if wisdomfile:
         pickle.dump(
             pyfftw.export_wisdom(), open(wisdomfile, 'wb'),
-            protocol=-1
+            protocol=2
         )
 
 if hasfftw:

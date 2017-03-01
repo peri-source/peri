@@ -127,7 +127,7 @@ def do_samples(s, sweeps, burn, stepout=0.1, save_period=-1,
     for i in range(sweeps):
         if save_period > 0 and i % save_period == 0:
             with open(save_name, 'w') as tfile:
-                pickle.dump([s,h,ll], tfile)
+                pickle.dump([s,h,ll], tfile, protocol=2)
 
         if postfix is not None:
             states.save(s, desc=postfix, extra=[np.array(h),np.array(ll)])

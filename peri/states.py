@@ -889,7 +889,7 @@ def save(state, filename=None, desc='', extra=None):
 
         os.rename(filename, ff)
 
-    pickle.dump(save, open(filename, 'wb'))
+    pickle.dump(save, open(filename, 'wb'), protocol=2)
 
 def load(filename):
     """

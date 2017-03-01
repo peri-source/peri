@@ -2025,7 +2025,7 @@ class LMParticleGroupCollection(object):
     def _dump_j_diftile(self, group_index, j, tile):
         j_file, tile_file = self._get_tmpfiles(group_index)
         np.save(j_file, j)
-        pickle.dump(tile, tile_file)
+        pickle.dump(tile, tile_file, protocol=2)
 
     def _load_j_diftile(self, group_index):
         j_file, tile_file = self._get_tmpfiles(group_index)
