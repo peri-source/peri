@@ -65,24 +65,24 @@ sure that the model is calculated.
         def __init__(self, x, y, order=2, coeffs=None):
             self._data = y
             self._xpts = x
-    
+
             params = ['c-%i' %i for i in xrange(order)]  # names for the coefficients
             values = coeffs if coeffs is not None else [0.0]*order  # and their values
-    
+
             super(PolyFitState, self).__init__(
                 params=params, values=values, ordered=False
             )
-    
+
             self.update(self.params, self.values)
 
         def update(self, params, values):
             super(PolyFitState, self).update(params, values)
             self._model = np.polyval(self.values, self._xpts)
-    
+
         @property
         def data(self):
             return self._data
-    
+
         @property
         def model(self):
             return self._model
@@ -223,7 +223,7 @@ spread function, and imaged on a detector with non-uniform background:
 
 .. math::
 
-    P(\bvec{x}) &= \frac{1}{\sqrt{4\pi^2 \sigma_x^2 \sigma_y^2}} e^{ -x^2/2\sigma_x^2 - y^2/2\sigma_y^2} \\    
+    P(\bvec{x}) &= \frac{1}{\sqrt{4\pi^2 \sigma_x^2 \sigma_y^2}} e^{ -x^2/2\sigma_x^2 - y^2/2\sigma_y^2} \\
     S(\bvec{x}; \{\bvec{p}_, a_i\}) &= \sum_{i=0}^{N_{\rm{particles}}}  \frac{1}{1 + e^{\alpha (\|\bvec{x} - \bvec{p}_i\| - a_i)}} \\
     B(\bvec{x}) &= \sum_{i=0}^{C_x} \sum_{j=0}^{C_y} c_{ij} L_i(x) L_j(y)
 
@@ -250,14 +250,14 @@ translate the equation above:
 .. code-block:: python
 
     import peri.models
-    
+
     class GaussianDiscModel(peri.models.Model):
         def __init__(self):
             # gives human readable labels to equation variables
             varmap = {'P': 'psf', 'D': 'disc', 'C': 'off'}
-            
+
             # gives the full model equation of applying the psf P to an image
-            # of discs D and adding an offset because the peak-to-peak of 
+            # of discs D and adding an offset because the peak-to-peak of
             # real images is often hard to discern
             modelstr = {'full' : 'P(D) + C'}
 
@@ -326,6 +326,17 @@ class we need to know about:
     :members: initialize, get_update_tile, get_padding_size, set_tile, set_shape, get
     :noindex:
 
+The flow-chart below illustrates the hierarchy of class inheritance in
+``peri``.
+
+.. figure:: ./_static/inheritance_flowchart.svg
+   :alt: Inheritance flowchart
+   :align: center
+   :scale: 40
+
+   Inheritance flowchart for the ``peri`` package. Arrows indicate inheritance.
+
+
 Let's sink our teeth in and create 2 of the components that will work in our
 ``GaussianDiscModel`` (one already available in the ``peri`` package). We will
 first create something to use as the psf, then a component to use as the disc
@@ -349,7 +360,7 @@ GaussianPSF
             super(GaussianPSF, self).__init__(
                 params=['psf-sx', 'psf-sy'], values=sigmas, category='psf'
             )
-    
+
         def get(self):
             """
             Since we wish to use the GaussianPSF in the model by calling P(D), the
@@ -357,7 +368,7 @@ GaussianPSF
             __call__ so that we can use P(...).
             """
             return self
-    
+
         def __call__(self, field):
             """
             Accept a field (numpy.ndarray), apply the point-spread-function,
@@ -368,24 +379,24 @@ GaussianPSF
             # in one direction and negative on the other side of the image
             tile = peri.util.Tile(field.shape)
             rx, ry = tile.kvectors(norm=1.0/tile.shape)
-    
+
             # get the sigmas from ourselves
             sx, sy = self.values
-    
+
             # calculate the real-space psf from the r-vectors and sigmas
             # normalize based on the calculated values, not the usual normalization
             psf = np.exp(-((rx/sx)**2 + (ry/sy)**2)/2)
             psf = psf / psf.sum()
-    
+
             # perform the convolution with ffts and return the result
             out = fft.fftn(fft.ifftn(field)*fft.ifftn(psf))
             return fftnorm(np.real(out))
-    
+
         def get_padding_size(self, tile):
             # claim that the necessary padding size for the convolution is
             # the size of the padding of the image itself for now
             return peri.util.Tile(self.inner.l)
-    
+
         def get_update_tile(self, params, values):
             # if we update the psf params, we must update the entire image
             return self.shape
@@ -403,45 +414,45 @@ PlatonicDiscs
         def __init__(self, positions, radii):
             comp = ['x', 'y', 'a']
             params, values = [], []
-    
+
             # apply using naming scheme to the parameters associated with the
             # individual discs in the object pos and rad
             for i, (pos, rad) in enumerate(zip(positions, radii)):
                 params.extend(['disc-{}-{}'.format(i, c) for c in comp])
                 values.extend([pos[0], pos[1], rad])
-    
+
             # use our super-class structure to keep track of these parameters
             self.N = len(positions)
             super(PlatonicDiscs, self).__init__(
                 params=params, values=values, category='disc',
             )
-    
+
         def draw_disc(self, rvec, i):
             # get the position and radii parameters cooresponding to this particle
             pparams = ['disc-{}-{}'.format(i, c) for c in ['x', 'y']]
             rparams = 'disc-{}-a'.format(i)
-    
+
             # get the actual values of these parameters
             pos = np.array(self.get_values(pparams))
             rad = self.get_values(rparams)
-    
+
             # draw the disc using the provided rvecs and now pos and rad
             dist = np.sqrt(((rvec - pos)**2).sum(axis=-1))
             return 1.0/(1.0 + np.exp(5.0*(dist-rad)))
-    
+
         def get(self):
             # get the coordinates of all pixels in the image. however, make sure
             # that zero starts in the interior of the image where the padding stops
             rvec = self.shape.translate(-self.inner.l).coords(form='vector')
-    
+
             # add up the images of many particles to get the platonic image
             self.image = np.array([
                 self.draw_disc(rvec, i) for i in xrange(self.N)
             ]).sum(axis=0)
-    
+
             # return the image in the current tile
             return self.image[self.tile.slicer]
-    
+
         def get_update_tile(self, params, values):
             # for now, if we update a parameter update the entire image
             return self.shape
@@ -459,24 +470,24 @@ by using the ``Model`` and ``Components`` that we just created:
 
     def initialize():
         N = 32
-    
+
         # create a NullImage, which means that the model image will be used for data
         img = peri.util.NullImage(shape=(N,N))
-    
+
         # setup the initial conditions for the parameters of our model
         pos = [[10., 10.], [15., 18.], [8.0, 24.0]]
         rad = [5.0, 3.5, 2.2]
         sig = [2.0, 1.5]
-    
+
         # make each of the components separately
         d = PlatonicDiscs(positions=pos, radii=rad)
         p = GaussianPSF(sigmas=sig)
         c = GlobalScalar(name='off', value=0.0)
-    
+
         # join them with the model into a state
         s = peri.states.ImageState(img, [d, p, c], mdl=GaussianDiscModel(), pad=10)
         return s
-    
+
 Once we have created the state ``s``, let's look at some of its properties.
 Many of them are the same as the properties available in the ``PolyFitState``
 example since they inherit from :class:`~peri.states.State`. For example,
@@ -498,10 +509,10 @@ Plotting the derivatives with respect to model parameters can be performed with
     def show_derivative(s, param, ax=None):
         # if there is no axis supplied, create a new one
         ax = ax or pl.figure().gca()
-    
+
         # calculate the derivative of the model
         deriv = s.gradmodel(params=[param], flat=False)[0]
-    
+
         # plot it in a sane manner using matplotlib
         scale = max(np.abs([deriv.min(), deriv.max()]))
         ax.imshow(deriv, vmin=-scale, vmax=scale, cmap='RdBu_r')
@@ -556,14 +567,14 @@ compare the fit and errors to the true values.
     def rattle_and_fit(s):
         # grab the original values
         values = np.array(s.values).copy()
-    
+
         # update the model with random parameters then optimize back
         s.update(s.params, values + np.random.randn(len(values)))
         opt.do_levmarq(s, s.params, run_length=12)
-    
+
         # calculate the crb for all parameters
         crb = s.crb()
-    
+
         # print a table comparing inferred values
         print(' {:^6s} += {:^5s} | {:^8s}'.format('Fit', 'CRB', 'Actual'))
         print('-'*27)
@@ -572,7 +583,7 @@ compare the fit and errors to the true values.
 
 Running this function yields a table::
 
-      Fit   +=  CRB  |  Actual 
+      Fit   +=  CRB  |  Actual
     ---------------------------
       9.964 += 0.026 |  10.000
      10.003 += 0.026 |  10.000
@@ -588,6 +599,6 @@ Running this function yields a table::
       0.001 += 0.002 |   0.000
 
 All the code listed above can be downloaded :download:`here <./_static/arch_gdiscs.py>`.
-  
+
 .. Optimizing ImageState (Example: GaussianDiscModelOpt)
 .. =====================================================
