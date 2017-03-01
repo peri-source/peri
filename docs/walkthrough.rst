@@ -480,8 +480,8 @@ for our confocal images we started by taking a blank image with the laser off,
 as a way to measure our background intensity. Next we measure and fit an image
 of just fluorescent dye, to describe our illumination correctly. Then we add
 a slab, then particles. We've provided a stripped-down version of this as a
-demo in scripts/test_genmodel.py. You should follow a similar protocol for your
-image formation model.
+demo in :download:`scripts/test_genmodel.py <../scripts/test_genmodel.py>`.
+You should follow a similar protocol for your image formation model.
 
 If the fit is good, use the extracted information from the fit.
 ---------------------------------------------------------------
@@ -579,9 +579,9 @@ having a previously featured state. However, you'll need to write and supply a
 statemaker function that makes a complete ``ImageState``. The statemaker
 function needs to provide a model that can accurately describe your microscope
 image formation. See the ``runner`` documentation or the example statemaker
-in scripts/statemaker_example.py for details. To feature an image of dark
-spherical particles with a radius of roughly 5 pixels on a bright background,
-type:
+in :download:`scripts/statemaker_example.py  <../scripts/statemaker_example.py>`.
+for details. To feature an image of dark spherical particles with a radius of
+roughly 5 pixels on a bright background, type:
 
 .. code-block:: python
 
