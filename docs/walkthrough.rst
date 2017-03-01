@@ -385,6 +385,32 @@ from a Gaussian, then your model isn't complete or your fit isn't good.
     :math:`q_x=0, q_z=0`) and from incompleteness in our model (a faint ring at
     moderate :math:`q` values).
 
+The figure below shows an example of a poorly-fit state. The left panel shows a
+slice of the residuals from state analyzed above, Since this state is optimized
+with a near-complete generative model, the residuals in real space (top) look
+like perfect Gaussian white noise. In Fourier space (bottom), there is some
+slight structure -- probably a result of an incomplete description of our
+microscope's actual point-spread function. The center and right panels show the
+same image fit with an incorrect PSF (an anisotropic Gaussian) and an
+incomplete ILM (constant illumination and background). For these states,
+structure is clearly visible in the residuals in both real- and Fourier- space.
+If your fitted state looks like either of these, then your model is incomplete.
+
+.. figure:: ./_static/incomplete-model-fits.png
+    :alt: ``Fits from an incomplete model.``
+    :align: center
+
+    An image fit with a complete model (left) and two incomplete models -- one
+    with an insufficiently complex point-spread function (center) and one with
+    an insufficiently complex illumination (right). The states fit with an
+    incorrect model show clear structure in the residuals. The residuals for
+    the incomplete PSF state show clear rings around particles. The residuals
+    for the incomplete ILM state show a slight variation across the image, and
+    also show rings around the particles, as the particles are fit to biased
+    radii to partially compensate for the incomplete ILM. The line of bright
+    pixels at :math:`q_y=0` and large :math:`q_x` visible in all the Fourier
+    space images are from scan noise in our confocal's line CCD.
+
 What should you do if the fit is bad? First, I would try more optimizations of
 the state. If you optimize the state and the error changes, then you weren't at
 the best-fit. Keep optimizing until the error stops changing and check again.
