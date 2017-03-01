@@ -281,7 +281,7 @@ class OrthoManipulator(object):
 
         p = self._pt_xyz(event)
         if p is not None:
-            log.info("Moving view to %r" % p)
+            log.info("Moving view to [{:.5}, {:.5}, {:.5}]".format(*p))
             self.slices = p
         self.draw()
 
@@ -298,7 +298,8 @@ class OrthoManipulator(object):
             else:
                 r = r.mean()
 
-            log.info("Adding particle at {} {}".format(p, r))
+            log.info("Adding particle at [{:.5}, {:.5}, {:.5}], {:.4}".format(
+                    *(p.tolist() + [r])))
             self.state.obj_add_particle(p, r)
         self.state.set_tile(self.state.oshape)
         self.set_field()
@@ -309,7 +310,7 @@ class OrthoManipulator(object):
 
         p = self._pt_xyz(event)
         if p is not None:
-            log.info("Removing particle near {}".format(p))
+            log.info("Removing particle near [{:.5}, {:.5}, {:.5}]".format(*p))
             ind = self.state.obj_closest_particle(p)
             self.state.obj_remove_particle(ind)
         self.state.set_tile(self.state.oshape)
@@ -321,7 +322,7 @@ class OrthoManipulator(object):
         p = self._pt_xyz(event)
 
         if p is not None:
-            log.info("Optimizing particle near {}".format(p))
+            log.info("Optimizing particle near [{:.5}, {:.5}, {:.5}]".format(*p))
             n = self.state.obj_closest_particle(p)
             old_err = self.state.error
             _ = opt.do_levmarq_particles(self.state, np.array([n]), max_iter=2)
