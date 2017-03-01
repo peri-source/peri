@@ -96,7 +96,7 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
     ----------
         im : numpy.ndarray
             The image to identify particles in.
-        radius : Float, optional
+        radius : Float > 0, optional
             Featuring radius of the particles. Default is 2.5
         noise_size : Float, optional
             Size of Gaussian kernel for smoothing out noise. Default is 1.
@@ -112,6 +112,8 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
         pos, mass : numpy.ndarray
             Particle positions and masses
     """
+    if radius <= 0:
+        raise ValueError('`radius` must be > 0')
     #1. Remove noise
     filtered = nd.gaussian_filter(im, noise_size, mode='mirror')
     #2. Remove long-wavelength background:
