@@ -1,11 +1,52 @@
+#FIXME when finish this, update s.gradmodel_e to s.gradmodel_error
+# Another way to do this is simply to copy all the code and start deleting things...
+# ...wait til you have an organizational structure
 import numpy as np
 
 # The Engine should be flexible enough where it doesn't care whether residuals
 # is data-model or model-data, since the OptObj just provides residuals.
 
+
+# FIXME the OptObj needs to know how to calculate the gradient of the error
+# For a state this means (1) the exact gradient of the error after
+# updating and (2) a calculated gradient JTr when the the exact grad is wrong
+# Also, don't initialize a J array until it is asked for (in the init set
+# J=None, then in the update_J if it's not set allocate)
+
+# Things needed for the OptObj:
+# 1. raise error if J has nans
+        # if np.any(np.isnan(self.JTJ)):
+            # raise FloatingPointError('J, JTJ have nans.')
+# 2. Calculate the gradient of the cost and the residuals, with low memory
+#       a. Means that you need a _graderr to be exact for the OptState
+# 3. Does the optobj know about JTJ too? certainly not a damped JTJ though.
+# 4. If it has a J, it needs to know how to do partial updates of J.
+#    - for instance, it needs to know how to do an eigen update of J
+#    and a Broyden update of J. And then it needs to know how to intelligently
+#    update them (i.e. only Broyden update when we take a good step, not when
+#    we try out to infinity on accident)
+# 5. Which means it needs to know how to do a rank-1 update
+#
 class OptObj(object):
     def __init__(self, *args, **kwargs):
-        """Empty class for structure"""
+        """
+        Superclass for optimizing an object, especially for minimizing the
+        sum of the squares of a residuals vector.
+        This object knows everything that might be needed about the fit
+        landscape, including:
+        * The residuals vector
+        * The current cost (`error`), not necessarily the sum of the squares
+          of the residuals vector (e.g. decimated residuals but accurate cost
+          or priors) FIXME rename error -> cost?
+        * The gradient of the residuals vector, and a way to update it when
+          desired
+        * The gradient of the cost, and a way to update it with function
+          updates.
+        * The current parameter values
+        * How to update the object to a new set of parameter values
+        It knows nothing about methods to compute steps for those objects,
+        however.
+        """
         pass
 
     def update_J(self):
@@ -16,6 +57,10 @@ class OptObj(object):
 
     def update(self, values):
         """Updates the function to `values`"""
+        pass
+
+    def gradcost(self):
+        """Returns the gradient of the cost"""
         pass
 
     @property
@@ -74,6 +119,9 @@ class OptFunction(OptObj):
             r1 = self.residuals.copy()
             self.J[:, i] = (r1-r0)/dl
 
+    def gradcost(self):
+        return np.dot(self.J.T, self.residuals)  # should be a lowmem dot but w/e
+
     @property
     def error(self):
         r = self.residuals.copy()
@@ -105,7 +153,6 @@ class OptFunction(OptObj):
 # 2. acceleration options?
 # 3. Broyden option, default as true
 # 4. Internal run.
-# 5. Gradient of cost vs gradient of error -- _graderr directly from state
 
 # Things that maybe should be a generic module / exterior callable / passed
 # model-like object.
@@ -122,6 +169,9 @@ class OptFunction(OptObj):
 # 1. Guess updates when stuck / failed step?
 # 2. A better way to update the damping significantly when needed.
 
+
+# Possible features to remove:
+# 1. Subblock runs
 
 def _low_mem_mtm(m, step='calc'):
     """np.dot(m.T, m) with low mem usage, by doing it in small steps
@@ -164,15 +214,22 @@ def _low_mem_mmt(m, step='calc'):
 
 
 
-class LMEngine(object):
+class LMOptimizer(object):
     def __init__(self, optobj):
         """
         Parameters
         ----------
         optobj : OptObj instance
             The OptObj to optimize.
+        Notes
+        -----
+        This engine knows _nothing_ about the current state of the object --
+        e.g. the current cost, current residuals, gradient of the error, etc
+        -- all of this is known only by the optobject.
+        The optimizer only knows how to take steps given that information.
         """
         self.optobj = optobj
+        self._rcond = 1e-13  # rcond for leastsq step, after damping
         pass
 
     def optimize(self):
@@ -181,6 +238,7 @@ class LMEngine(object):
 
             # Most generic algorithm is:
             # 1. Update J, JTJ
+            self.optobj.update_J()....???
             # 2. Calculate & take a step -- distinction might be blurred
             #       a. Calculate N steps
             #               i.  The damping will be updated during this process
@@ -196,22 +254,52 @@ class LMEngine(object):
             # 4. Repeat til termination
             raise NotImplementedError
 
-    def update_J():
-        # 1. Actually update J:
-        self.optobj.update_J()
-        # 2. Calculate JTJ with low mem overhead:
-        self.JTJ = _low_mem_mtm(self.optobj.J)
-        if np.any(np.isnan(self.JTJ)):
-            raise FloatingPointError('J, JTJ have nans.')
-        # 3. Update some flags:
-        # self._exp_err = self.error - self.find_expected_error(delta_params='perfect')
-        self._freshjtj = True  # basically only needed for the whole self._graderr vs calc_grad() bit....
-        # -- so delete it! Include graderr in optobj?
+    # def update_J():
+        # # 1. Actually update J:
+        # self.optobj.update_J()
+        # # 2. Calculate JTJ with low mem overhead:
+        # self.JTJ = _low_mem_mtm(self.optobj.J)
+        # # self._exp_err = self.error - self.find_expected_error(delta_params='perfect')
+        # pass  # expected error should be useful.... might need to be done here? Or only when desired?
+
+    def calc_simple_LM_step(self, dampedJTJ, grad):
+        return np.linalg.leastsq(damped_JTJ, -0.5*grad, rcond=self._rcond)[0]
 
     def check_terminate():
         """Return a bool of whether or not something terminated"""
         raise NotImplementedError
 
+    def calc_accel_correction(self, damped_JTJ, initialstep):
+        """
+        Geodesic acceleration correction to the LM step.
+
+        Parameters
+        ----------
+            damped_JTJ : numpy.ndarray
+                The damped JTJ used to calculate the initial step.
+            initialstep : numpy.ndarray
+                The initial LM step.
+
+        Returns
+        -------
+            corr : numpy.ndarray
+                The correction to the original LM step.
+        """
+        #Get the derivative:
+        obj = self.optobj
+        p0 = obj.paramvals  # FIXME this is probably wrong
+        _ = obj.update(p0)
+        rm0 = obj.residuals.copy()
+        _ = obj.update(p0)
+        rm1 = obj.residuals.copy()
+        _ = obj.update(p0)
+        rm2 = obj.residuals.copy()
+        der2 = (rm2 + rm1 - 2*rm0)
+
+        correction = np.linalg.lstsq(damped_JTJ, np.dot(self.J, der2),
+                                    rcond=self.min_eigval)[0]
+        correction *= -0.5
+        return correction
 
 
 
