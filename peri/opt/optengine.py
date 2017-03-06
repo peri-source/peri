@@ -15,8 +15,6 @@ import numpy as np
 
 # Things needed for the OptObj:
 # 1. raise error if J has nans
-        # if np.any(np.isnan(self.JTJ)):
-            # raise FloatingPointError('J, JTJ have nans.')
 # 2. Calculate the gradient of the cost and the residuals, with low memory
 #       a. Means that you need a _graderr to be exact for the OptState
 # 3. Does the optobj know about JTJ too? certainly not a damped JTJ though.
@@ -26,7 +24,11 @@ import numpy as np
 #    update them (i.e. only Broyden update when we take a good step, not when
 #    we try out to infinity on accident)
 # 5. Which means it needs to know how to do a rank-1 update
-#
+# 6. Consistent notation for J -- J[i,j] = ith residual, j param
+
+
+# The 
+
 class OptObj(object):
     def __init__(self, *args, **kwargs):
         """
@@ -41,7 +43,7 @@ class OptObj(object):
         * The gradient of the residuals vector, and a way to update it when
           desired
         * The gradient of the cost, and a way to update it with function
-          updates.
+          updates / when desired.
         * The current parameter values
         * How to update the object to a new set of parameter values
         It knows nothing about methods to compute steps for those objects,
@@ -69,11 +71,6 @@ class OptObj(object):
         pass
 
     @property
-    def J(self):
-        """returns J. Don't make it a copy"""
-        pass
-
-    @property
     def residuals(self):
         """Returns the residuals = model-data"""
         pass
@@ -83,6 +80,13 @@ class OptObj(object):
         """Returns the current value of the parameters"""
         pass
 
+#List:
+# 1. Check
+# 2. Check (no decimation)
+# 3. Check
+# 4. Not to be implemented; for optimizer.
+# 5. Check
+# 6. Check
 class OptFunction(OptObj):
     def __init__(self, func, data, paramvals, dl=1e-7):
         """
@@ -105,19 +109,76 @@ class OptFunction(OptObj):
         self.data = data
         self._model = np.zeros_like(data)
         self._paramvals = np.array(paramvals).reshape(-1)
-        self.J = np.zeros([data.size, self.params.size], dtype='float')
+        self.J = None # we don't create J until we need to
         self.dl = dl
 
+    def _initialize_J(self):
+        self.J = np.zeros([self.data.size, self.paramvals.size], dtype='float')
+
     def update_J(self):
+        if self.J is None:
+            self._initialize_J()
         r0 = self.residuals.copy()
-        p0 = self._paramvals
+        p0 = self._paramvals.copy()
         dp = np.zeros_like(p0)
         for i in range(p0.size):
             dp *= 0
-            dp[i] = dl
-            self.update_function(p0+dp)
+            dp[i] = self.dl
+            self.update(p0+dp)
             r1 = self.residuals.copy()
-            self.J[:, i] = (r1-r0)/dl
+            self.J[:, i] = (r1-r0) / self.dl
+        if np.isnan(self.J.sum()):
+            raise RuntimeError('J has nans')
+        self._calcjtj()
+        #And we put params back:
+        self.update(p0)
+
+    def low_rank_J_update(self, direction, values=None):
+        """Does a series of rank-1 updates on self.J.
+
+        direction : numpy.ndarray
+            [n, m] shaped array of the (n) directions, each with m elements
+            corresponding to the parameter update direction
+            (m = self.paramvals.size)
+        values : numpy.ndarray or None, optional
+            If not None, the corresponding values of J along each of the n
+            directions -- i.e a [n, M] element array with each of the n
+            elements corresponding to the M-element tangent vector in data
+            space [n=# of grad directions, M=self.residuals.size]. If None,
+            computed automatically
+
+        Does this by doing J += np.outer(direction, new_values - old_values)
+        without using lots of memory
+        """
+        hasvals = values is not None
+        if hasvals:
+            if np.shape(direction) != np.shape(values):
+                raise ValueError('direction, value must be same shape')
+        else:
+            r0 = self.residuals.copy()
+            p0 = self.paramvals.copy()
+        if self.J is None:
+            self._initialize_J()
+        for a, d in enumerate(direction):
+            vals_to_sub = np.dot(direction, self.J)
+            if hasvals:
+                vals = values[a]
+            else:
+                dp = d * self.dl
+                self.update(p0+dp)
+                r1 = self.residuals.copy()
+                vals = (r1-r0) / self.dl
+            delta_vals = vals - vals_to_sub
+            for b in range(dp.size):
+                self.J[:,b] += direction[b] * delta_vals
+        if np.isnan(self.J.sum()):
+            raise RuntimeError('J has nans')
+        self._calcjtj()
+
+    def _calcjtj(self):
+        self.JTJ = _low_mem_mtm(self.J)
+        if np.isnan(self.JTJ.sum()):
+            raise RuntimeError('JTJ has nans')
 
     def gradcost(self):
         return np.dot(self.J.T, self.residuals)  # should be a lowmem dot but w/e
@@ -128,8 +189,8 @@ class OptFunction(OptObj):
         return np.dot(r,r)
 
     def update(self, values):
-        self.values[:]
-        self._model = self.func(self.data, *self.values)
+        self._paramvals[:] = values
+        self._model = self.func(self._paramvals)
 
     @property
     def residuals(self):
@@ -145,7 +206,6 @@ class OptFunction(OptObj):
 #   a. Terminate when stuck.
 #   b. Returned termination flags (e.g. completed, stuck, maxiter)
 # 3. User-supplied damping that scales with problem size
-# 4. Consistent notation for J -- J[i,j] = ith residual, j param
 # 5. Only 1 run mode.
 
 # Old things that need to be kept for the engine
@@ -179,7 +239,7 @@ def _low_mem_mtm(m, step='calc'):
     if not m.flags.c_contiguous:
         raise ValueError('m must be C ordered for this to work with less mem.')
     if step == 'calc':
-        step = np.ceil(1e-2 * self.J.shape[0]).astype('int')
+        step = np.ceil(1e-2 * m.shape[0]).astype('int')
     # -- can make this even faster with pre-allocating arrays, but not worth it
     # right now
     # mt_tmp = np.zeros([step, m.shape[0]])
@@ -205,17 +265,16 @@ def _low_mem_mmt(m, step='calc'):
     if not m.flags.c_contiguous:
         raise ValueError('m must be C ordered for this to work with less mem.')
     if step == 'calc':
-        step = np.ceil(1e-2 * self.J.shape[1]).astype('int')
+        step = np.ceil(1e-2 * m.shape[1]).astype('int')
     mmt = np.zeros([m.shape[0], m.shape[0]])  #6us
     for a in range(0, m.shape[0], step):
         mx = min(a+step, m.shape[1])
         mmt[:, a:mx] = np.dot(m, m[a:mx].T)
     return mmt
 
-
-
+#Needs:
 class LMOptimizer(object):
-    def __init__(self, optobj):
+    def __init__(self, optobj, damp=1.0, dampdown=3., dampup=8., nsteps=(1,2)):
         """
         Parameters
         ----------
@@ -230,6 +289,12 @@ class LMOptimizer(object):
         """
         self.optobj = optobj
         self._rcond = 1e-13  # rcond for leastsq step, after damping
+
+        self.damp = damp
+        self.dampdown = dampdown
+        self.dampup = dampup
+        self.nsteps = nsteps
+        self.dampmode = lambda JTJ, damp: np.eye(JTJ.shape[0]) * damp
         pass
 
     def optimize(self):
@@ -238,9 +303,11 @@ class LMOptimizer(object):
 
             # Most generic algorithm is:
             # 1. Update J, JTJ
-            self.optobj.update_J()....???
+            self.optobj.update_J()
             # 2. Calculate & take a step -- distinction might be blurred
             #       a. Calculate N steps
+            damps = [self.damp * self.dampdown**i for i in range(self.nsteps)]
+            steps = [self.calc_simple_LM_step(sef.damp_JTJ(d)) for d in damps]
             #               i.  The damping will be updated during this process
             #               ii. Might involve acceleration etc steps
             #       b. Pick the best step that is also good
@@ -261,6 +328,12 @@ class LMOptimizer(object):
         # self.JTJ = _low_mem_mtm(self.optobj.J)
         # # self._exp_err = self.error - self.find_expected_error(delta_params='perfect')
         # pass  # expected error should be useful.... might need to be done here? Or only when desired?
+
+    def damp_JTJ(self, damp):
+        # One possible different option is to pass a self.dampmode as a function
+        # which takes JTJ, damping and returns a damped JTJ
+        # -- right now defined explicitly in the init
+        return self.dampmode(self.optobj.JTJ, damp)
 
     def calc_simple_LM_step(self, dampedJTJ, grad):
         return np.linalg.leastsq(damped_JTJ, -0.5*grad, rcond=self._rcond)[0]
@@ -303,7 +376,11 @@ class LMOptimizer(object):
 
 
 
-
+if __name__ == '__main__':
+    # Test an OptObj:
+    from peri.opt import opttest
+    f = opttest.simple_sphere
+    o = OptFunction(f, f(np.array([2.0, 1.0])), np.zeros(2), dl=1e-7)
 
 
 
