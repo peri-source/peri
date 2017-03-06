@@ -1,26 +1,39 @@
-from distutils.core import setup
-#from setuptools import setup
+#from distutils.core import setup
+from setuptools import setup
 
-desc = open('./README.md').read()
-reqs = open('./requirements.txt').readlines()
+try:
+    desc = open('README.md').read()
+except (IOError, FileNotFoundError) as e:
+    desc = ''
 
 setup(name='peri',
       url='http://github.com/peri-source/peri/',
       license='MIT License',
       author='Matt Bierbaum, Brian Leahy',
-      version='0.1.1',
+      version='0.1.2',
 
       packages=[
           'peri', 'peri.mc', 'peri.comp', 'peri.viz',
           'peri.priors', 'peri.test', 'peri.opt', 'peri.gui'
       ],
-      package_data={'peri': ['gui/*.ui']},
       scripts=['bin/peri'],
-      install_requires=reqs,
+      install_requires=[
+          "future>=0.15.0",
+          "numpy>=1.8.1",
+          "scipy>=0.14.0",
+          "matplotlib>=1.0.0",
+          "pyfftw>=0.9.1",
+          "pillow>=1.1.7"
+      ],
+      package_data={
+          'peri': ['../README.md', 'gui/*.ui']
+      },
 
       platforms='any',
       classifiers = [
-          'Programming Language :: Python',
+          'Programming Language :: Python :: 2.6',
+          'Programming Language :: Python :: 2.7',
+          'Programming Language :: Python :: 3',
           'Development Status :: 2 - Pre-Alpha',
           'Natural Language :: English',
           'Intended Audience :: Developers',
