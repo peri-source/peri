@@ -372,7 +372,7 @@ def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
         def get_tile_jsize(group):
             nms = s.param_particle(group)
             tile = s.get_update_io_tiles(nms, s.get_values(nms))[2]
-            return tile.shape.prod() * len(nms)
+            return tile.shape.prod().astype('int64') * len(nms)
         mems = [8*get_tile_jsize(g) for g in biggroups]  # 8 for bytes/float64
         return np.max(mems)
 
