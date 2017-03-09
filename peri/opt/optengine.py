@@ -2,6 +2,48 @@
 # Another way to do this is simply to copy all the code and start deleting things...
 # ...wait til you have an organizational structure
 import numpy as np
+from peri.logger import log
+CLOG = log.getChild('optengine')
+
+def _low_mem_mtm(m, step='calc'):
+    """
+    np.dot(m.T, m) with low mem usage for m non-C-ordered, by using small steps
+
+    Parameters
+    ----------
+    m : numpy.ndarray
+        The matrix whose transpose to dot
+    step : Int or `'calc'`, optional
+        The size of the chunks to do the dot product in. Defualt is 1%
+        additional mem overhead.
+
+    Returns
+    -------
+    mtm : numpy.ndarray
+        Array equal to np.dot(m.T, m)
+    """
+    if not m.flags.c_contiguous:
+        raise ValueError('m must be C ordered for this to work with less mem.')
+    if step == 'calc':
+        step = np.ceil(1e-2 * m.shape[0]).astype('int')
+    # -- can make this even faster with pre-allocating arrays, but not worth it
+    # right now
+    # mt_tmp = np.zeros([step, m.shape[0]])
+    # for a in range(0, m.shape[1], step):
+        # mx = min(a+step, m.shape[1])
+        # mt_tmp[:mx-a,:] = m.T[a:mx]
+        # # np.dot(m_tmp, m.T, out=mmt[a:mx])
+        # # np.dot(m, m[a:mx].T, out=mmt[:, a:mx])
+        # np.dot(m[:,a:mx], mt_tmp[:mx], out=mmt)
+    mtm = np.zeros([m.shape[1], m.shape[1]])  #6us
+    # m_tmp = np.zeros([step, m.shape[1]])
+    for a in range(0, m.shape[1], step):
+        mx = min(a+step, m.shape[0])
+        # m_tmp[:] = m[a:mx]
+        # np.dot(m_tmp, m.T, out=mmt[a:mx])
+        # mmt[:, a:mx] = np.dot(m, m[a:mx].T)
+        mtm[a:mx,:] = np.dot(m[:,a:mx].T, m)
+    return mtm
 
 # The Engine should be flexible enough where it doesn't care whether residuals
 # is data-model or model-data, since the OptObj just provides residuals.
@@ -26,8 +68,6 @@ import numpy as np
 # 5. Which means it needs to know how to do a rank-1 update
 # 6. Consistent notation for J -- J[i,j] = ith residual, j param
 
-
-# The 
 
 class OptObj(object):
     def __init__(self, *args, **kwargs):
@@ -79,6 +119,109 @@ class OptObj(object):
     def paramvals(self):
         """Returns the current value of the parameters"""
         pass
+
+    def low_rank_J_update(self, direction, values=None):
+        """Does a series of rank-1 updates on self.J.
+
+        direction : numpy.ndarray
+            [n, m] shaped array of the (n) directions, each with m elements
+            corresponding to the parameter update direction. Must be normalized
+            (m = self.paramvals.size)
+        values : numpy.ndarray or None, optional
+            If not None, the corresponding values of J along each of the n
+            directions -- i.e a [n, M] element array with each of the n
+            elements corresponding to the M-element tangent vector in data
+            space [n=# of grad directions, M=self.residuals.size]. If None,
+            computed automatically
+
+        Does this by doing J += np.outer(direction, new_values - old_values)
+        without using lots of memory
+        """
+        hasvals = values is not None
+        if hasvals:
+            if np.shape(direction) != np.shape(values):
+                raise ValueError('direction, value must be same shape')
+        else:
+            r0 = self.residuals.copy()
+            p0 = self.paramvals.copy()
+        if self.J is None:
+            self._initialize_J()
+        for a, d in enumerate(direction):
+            if not np.isclose(np.dot(d,d), 1.0, atol=1e-10):
+                raise ValueError('direction is not normalized')
+            vals_to_sub = np.dot(d, self.J)
+            if hasvals:
+                vals = values[a]
+            else:
+                dp = d * self.dl
+                self.update(p0+dp)
+                r1 = self.residuals.copy()
+                vals = (r1-r0) / self.dl
+            delta_vals = vals - vals_to_sub
+            for b in range(vals.size):
+                self.J[:,b] += d[b] * delta_vals
+        if np.isnan(self.J.sum()):
+            raise RuntimeError('J has nans')
+        self._calcjtj()
+
+    def _calcjtj(self):
+        self.JTJ = _low_mem_mtm(self.J)
+        if np.isnan(self.JTJ.sum()):
+            raise RuntimeError('JTJ has nans')
+
+    def find_expected_error(self, delta_params='perfect'):
+        """
+        Returns the error expected after an update if the model were linear.
+
+        Parameters
+        ----------
+        delta_params : {numpy.ndarray or 'perfect'}, optional
+            The relative change in parameters. If `'perfect'`, uses the
+            best parameters for a perfect linear fit.
+
+        Returns
+        -------
+        numpy.float64
+            The expected error after the update with `'delta_params'`
+        """
+        grad = self.gradcost()
+        if delta_params == 'perfect':
+            delta_params = np.linalg.lstsq(self.JTJ, -0.5*grad, rcond=1e-13)[0]
+        #If the model were linear, then the cost would be quadratic,
+        #with Hessian 2*`self.JTJ` and gradient `grad`
+        expected_error = (self.error + np.dot(grad, delta_params) +
+                np.dot(np.dot(self.JTJ, delta_params), delta_params))
+        return expected_error
+
+
+    def calc_model_cosine(self):
+        """
+        Calculates the cosine of the residuals with the model, based on the
+        expected error of the model.
+
+        Returns
+        -------
+        abs_cos : numpy.float64
+            The absolute value of the model cosine.
+
+        Notes
+        -----
+        The model cosine is defined in terms of the geometric view of
+        curve-fitting, as a model manifold embedded in a high-dimensional
+        space. The model cosine is the cosine of the residuals vector
+        with its projection on the tangent space: :math:`cos(phi) = |P^T r|/|r|`
+        where :math:`P^T` is the projection operator onto the model manifold
+        and :math:`r` the residuals.
+
+        Rather than doing the SVD, we get this from the expected error of
+        the model if it were linear. We use that expected error and the
+        current error to calculate a model sine, and use that to get a model
+        cosine
+        """
+        expected_error = self.find_expected_error(delta_params='perfect')
+        model_sine_2 = expected_error / self.error  #error = distance^2
+        abs_cos = np.sqrt(1 - model_sine_2)
+        return abs_cos
 
 #List:
 # 1. Check
@@ -133,55 +276,8 @@ class OptFunction(OptObj):
         #And we put params back:
         self.update(p0)
 
-    def low_rank_J_update(self, direction, values=None):
-        """Does a series of rank-1 updates on self.J.
-
-        direction : numpy.ndarray
-            [n, m] shaped array of the (n) directions, each with m elements
-            corresponding to the parameter update direction
-            (m = self.paramvals.size)
-        values : numpy.ndarray or None, optional
-            If not None, the corresponding values of J along each of the n
-            directions -- i.e a [n, M] element array with each of the n
-            elements corresponding to the M-element tangent vector in data
-            space [n=# of grad directions, M=self.residuals.size]. If None,
-            computed automatically
-
-        Does this by doing J += np.outer(direction, new_values - old_values)
-        without using lots of memory
-        """
-        hasvals = values is not None
-        if hasvals:
-            if np.shape(direction) != np.shape(values):
-                raise ValueError('direction, value must be same shape')
-        else:
-            r0 = self.residuals.copy()
-            p0 = self.paramvals.copy()
-        if self.J is None:
-            self._initialize_J()
-        for a, d in enumerate(direction):
-            vals_to_sub = np.dot(direction, self.J)
-            if hasvals:
-                vals = values[a]
-            else:
-                dp = d * self.dl
-                self.update(p0+dp)
-                r1 = self.residuals.copy()
-                vals = (r1-r0) / self.dl
-            delta_vals = vals - vals_to_sub
-            for b in range(dp.size):
-                self.J[:,b] += direction[b] * delta_vals
-        if np.isnan(self.J.sum()):
-            raise RuntimeError('J has nans')
-        self._calcjtj()
-
-    def _calcjtj(self):
-        self.JTJ = _low_mem_mtm(self.J)
-        if np.isnan(self.JTJ.sum()):
-            raise RuntimeError('JTJ has nans')
-
     def gradcost(self):
-        return np.dot(self.J.T, self.residuals)  # should be a lowmem dot but w/e
+        return 2*np.dot(self.residuals, self.J)
 
     @property
     def error(self):
@@ -191,6 +287,7 @@ class OptFunction(OptObj):
     def update(self, values):
         self._paramvals[:] = values
         self._model = self.func(self._paramvals)
+        return self.error
 
     @property
     def residuals(self):
@@ -206,13 +303,16 @@ class OptFunction(OptObj):
 #   a. Terminate when stuck.
 #   b. Returned termination flags (e.g. completed, stuck, maxiter)
 # 3. User-supplied damping that scales with problem size
+#   a. Levenberg and marquardt modes
+#   b. vectorial modes
+#   c. scaled modes
 # 5. Only 1 run mode.
 
 # Old things that need to be kept for the engine
 # 1. Low-memory-overhead dots for JTJ and J*residuals
-# 2. acceleration options?
+# 2. acceleration options -- done
 # 3. Broyden option, default as true
-# 4. Internal run.
+# 4. Internal run -- partially done but not implemented
 
 # Things that maybe should be a generic module / exterior callable / passed
 # model-like object.
@@ -233,48 +333,11 @@ class OptFunction(OptObj):
 # Possible features to remove:
 # 1. Subblock runs
 
-def _low_mem_mtm(m, step='calc'):
-    """np.dot(m.T, m) with low mem usage, by doing it in small steps
-    Default step size is 1% additional mem overhead."""
-    if not m.flags.c_contiguous:
-        raise ValueError('m must be C ordered for this to work with less mem.')
-    if step == 'calc':
-        step = np.ceil(1e-2 * m.shape[0]).astype('int')
-    # -- can make this even faster with pre-allocating arrays, but not worth it
-    # right now
-    # mt_tmp = np.zeros([step, m.shape[0]])
-    # for a in range(0, m.shape[1], step):
-        # mx = min(a+step, m.shape[1])
-        # mt_tmp[:mx-a,:] = m.T[a:mx]
-        # # np.dot(m_tmp, m.T, out=mmt[a:mx])
-        # # np.dot(m, m[a:mx].T, out=mmt[:, a:mx])
-        # np.dot(m[:,a:mx], mt_tmp[:mx], out=mmt)
-    mmt = np.zeros([m.shape[1], m.shape[1]])  #6us
-    # m_tmp = np.zeros([step, m.shape[1]])
-    for a in range(0, m.shape[1], step):
-        mx = min(a+step, m.shape[0])
-        # m_tmp[:] = m[a:mx]
-        # np.dot(m_tmp, m.T, out=mmt[a:mx])
-        # mmt[:, a:mx] = np.dot(m, m[a:mx].T)
-        mmt[a:mx,:] = np.dot(m[:,a:mx].T, m)
-    return mmt
-
-def _low_mem_mmt(m, step='calc'):
-    """np.dot(m, m.T) with low mem usage, by doing it in small steps
-    Default step size is 1% more mem overhead"""
-    if not m.flags.c_contiguous:
-        raise ValueError('m must be C ordered for this to work with less mem.')
-    if step == 'calc':
-        step = np.ceil(1e-2 * m.shape[1]).astype('int')
-    mmt = np.zeros([m.shape[0], m.shape[0]])  #6us
-    for a in range(0, m.shape[0], step):
-        mx = min(a+step, m.shape[1])
-        mmt[:, a:mx] = np.dot(m, m[a:mx].T)
-    return mmt
-
 #Needs:
 class LMOptimizer(object):
-    def __init__(self, optobj, damp=1.0, dampdown=3., dampup=8., nsteps=(1,2)):
+    def __init__(self, optobj, damp=1.0, dampdown=8., dampup=3., nsteps=(1,2),
+            accel=True, dobroyden=True, exptol=1e-7, costol=1e-5, errtol=1e-7,
+            fractol=1e-7, paramtol=1e-7, maxiter=2):
         """
         Parameters
         ----------
@@ -288,46 +351,96 @@ class LMOptimizer(object):
         The optimizer only knows how to take steps given that information.
         """
         self.optobj = optobj
+        self.lastvals = self.optobj.paramvals.copy()
         self._rcond = 1e-13  # rcond for leastsq step, after damping
 
         self.damp = damp
         self.dampdown = dampdown
         self.dampup = dampup
         self.nsteps = nsteps
-        self.dampmode = lambda JTJ, damp: np.eye(JTJ.shape[0]) * damp
-        pass
+        self.dampmode = lambda JTJ, damp: JTJ + np.eye(JTJ.shape[0]) * damp
+        self.accel = accel
+        self.dobroyden = dobroyden
+
+        # Termination dict:
+        self.maxiter = maxiter
+        self.term_dict = {'errtol':errtol, 'fractol':fractol,
+                'paramtol':paramtol, 'exptol':exptol, 'costol':costol}
 
     def optimize(self):
         """Runs the optimization"""
-        while not self.check_terminate():
-
+        for _ in range(self.maxiter):
+            CLOG.debug('Start loop {}: \t{}'.format(_, self.optobj.error))
             # Most generic algorithm is:
             # 1. Update J, JTJ
             self.optobj.update_J()
             # 2. Calculate & take a step -- distinction might be blurred
-            #       a. Calculate N steps
-            damps = [self.damp * self.dampdown**i for i in range(self.nsteps)]
-            steps = [self.calc_simple_LM_step(sef.damp_JTJ(d)) for d in damps]
-            #               i.  The damping will be updated during this process
-            #               ii. Might involve acceleration etc steps
-            #       b. Pick the best step that is also good
-            #               i.  If good, take that step
-            #               ii. If not good, increase damping somehow til step
-            #                   is good
+            flag = self.take_initial_step()
+            if flag == 'stuck':
+                return flag
             # 3. If desired, take more steps
+            flag = self.take_additional_steps()
             #       - could be run with J
             #       - could be run with J with quick updates when stuck
             #           (quick = eig, directional)
             # 4. Repeat til termination
-            raise NotImplementedError
+            if np.any(list(self.check_completion().values())):
+                return 'completed'
+        else: # for-break-else, with the terminate
+            # something about didn't converge maybe
+            return 'unconverged'
 
-    # def update_J():
-        # # 1. Actually update J:
-        # self.optobj.update_J()
-        # # 2. Calculate JTJ with low mem overhead:
-        # self.JTJ = _low_mem_mtm(self.optobj.J)
-        # # self._exp_err = self.error - self.find_expected_error(delta_params='perfect')
-        # pass  # expected error should be useful.... might need to be done here? Or only when desired?
+    def take_initial_step(self):
+        """Takes a step after a fresh J and updates the damping"""
+        # 2. Calculate & take a step -- distinction might be blurred
+        #       a. Calculate N steps
+        #               i.  The damping will be updated during this process
+        #               ii. Might involve acceleration etc steps
+        #       b. Pick the best step that is also good
+        #               i.  If good, take that step
+        #               ii. If not good, increase damping somehow til step
+        #                   is good
+        obj = self.optobj
+        lasterror = obj.error * 1.0
+        lastvals = obj.paramvals.copy()
+        lastresiduals = obj.residuals.copy()
+        damps = [self.damp / (self.dampdown**i) for i in range(*self.nsteps)]
+        steps = [self.calc_step(self.damp_JTJ(d)) for d in damps]
+        errs = [obj.update(lastvals + step) for step in steps]
+        best = np.nanargmin(errs)
+        if errs[best] < lasterror:  # if we found a good step, take it
+            self.damp = damps[best]
+            self.lasterror = lasterror
+            self.lastvals[:] = lastvals.copy()
+            # possibly 1 wasted func eval below FIXME:
+            er = obj.update(lastvals + steps[best])
+            test = np.abs(1-(er+1e-16)/(errs[best]+1e-16)) < 1e-10
+            msg = 'Inexact updates'
+            assert test, msg
+        else:
+            # Increase damping until good step
+            for _ in range(15):
+                self.damp *= self.dampup
+                step = self.calc_step(self.damp_JTJ(self.damp))
+                err = obj.update(lastvals + step)
+                if err < self.lasterror:
+                    break
+            else:  # for-break-else, failed to increase damping
+                # update function to previous value, terminate?
+                obj.update(lastvals)
+                CLOG.warn('Stuck!')
+                return 'stuck'
+        # If we're still here, we've taken a good step, so broyden update:
+        CLOG.debug('Initial step: \t{}'.format(obj.error))
+        if self.dobroyden:
+            self.broyden_update_J(  obj.paramvals - lastvals,
+                                    obj.residuals - lastresiduals)
+        return 'run'
+
+    def take_additional_steps(self):
+        """Takes additional steps"""
+        # Right now just run with J, but could be a more complicated procedure.
+        return self.run_with_J()
 
     def damp_JTJ(self, damp):
         # One possible different option is to pass a self.dampmode as a function
@@ -335,20 +448,118 @@ class LMOptimizer(object):
         # -- right now defined explicitly in the init
         return self.dampmode(self.optobj.JTJ, damp)
 
+    # Various internal run modes:
+    def run_with_J(self, maxrun=6):
+        """Takes up to `maxrun` steps without updating J or the damping"""
+        obj = self.optobj
+        for _ in range(maxrun):
+            lasterror = 1.0 * obj.error
+            lastvals = obj.paramvals.copy()
+            lastresiduals = obj.residuals.copy()
+            step = self.calc_step(self.damp_JTJ(self.damp))
+            err = obj.update(lastvals + step)
+            if err < lasterror:
+                self.lasterror = lasterror
+                self.lastvals[:] = lastvals.copy()
+                if self.dobroyden:
+                    self.broyden_update_J(obj.paramvals - lastvals,
+                                        obj.residuals - lastresiduals)
+            else:
+                # Put params back, quit:
+                obj.update(lastvals)
+                return 'stuck'
+            CLOG.debug('Run w/ J step: \t{}'.format(obj.error))
+        return 'unconverged'
+
+    # def another_run(self, numdir=1):
+        # flag = run_with_J()
+        # if flag == 'unconverged':
+            # self.eig_update_J(numdir=numdir)
+            # self.badstep_updat_J(badstep, badresiduals)
+            # -- need to get the badresiduals w/o a function update though
+
+
+
+
+    def eig_update_J(self, numdir=1):
+        """Update J along the `numdir` stiffest eigendirections"""
+        CLOG.debug('Eigendirection update.')
+        obj = self.optobj
+        vl, vc = np.linalg.eigh(obj.JTJ)
+        obj.low_rank_J_update(vc[:, -numdir:].T)
+
+    def broyden_update_J(self, direction, dr):
+        """Update J along `direction` for change in residuals `dr` (both 1D)"""
+        CLOG.debug('Broyden update.')
+        raise RuntimeError("I think this is broken")
+        nrm = np.sqrt(np.dot(direction, direction))
+        d0 = direction / nrm
+        vals = dr / nrm
+        self.optobj.low_rank_J_update(d0.reshape(1,-1), vals.reshape(1,-1))
+
+    def badstep_update_J(self, badstep, bad_dr):
+        """
+        After a bad step, update J along the 2 directions we know are bad.
+
+        Parameters
+        ----------
+        badstep : n-element numpy.ndarray
+            The attempted step direction that failed, same dimension as the
+            optobj's paramvals vector.
+        bad_dr : d-element numpy.ndarray
+            The change in the resiudals after the attempted step, same
+            dimension as the optobj's residuals vector. Used to find the
+            apparent step direction.
+        """
+        CLOG.debug('Bad step update.')
+        apparent = np.dot(bad_dr, self.optobj.J)  # apparent step
+        self.optobj.low_rank_J_update([stp / np.sqrt(np.dot(stp,stp)) for stp
+                in [badstep, apparent]])
+
+    def calc_step(self, dampedJTJ):
+        grad = self.optobj.gradcost()
+        # could be augmented to include acceleration etc:
+        # corr = self.calc_accel_correction(dampedJTJ, initialstep)
+        simple = self.calc_simple_LM_step(dampedJTJ, grad)
+        if self.accel:
+            return simple + self.calc_accel_correction(dampedJTJ, simple)
+        else:
+            return simple
+
     def calc_simple_LM_step(self, dampedJTJ, grad):
-        return np.linalg.leastsq(damped_JTJ, -0.5*grad, rcond=self._rcond)[0]
+        return np.linalg.lstsq(dampedJTJ, -0.5*grad, rcond=self._rcond)[0]
 
-    def check_terminate():
-        """Return a bool of whether or not something terminated"""
-        raise NotImplementedError
+    def check_completion(self):
+        """Return a bool of whether or not optimization has converged"""
+        d = self.get_convergence_stats()
+        keys = [
+                ['derr',     'errtol'],
+                ['fracerr',  'fractol'],
+                ['dvals',    'paramtol'],
+                ['modelcos', 'costol'],
+                ['exp_derr', 'exptol'],
+                ]
+        return {k2:d[k1] < self.term_dict[k2] for k1, k2 in keys}
 
-    def calc_accel_correction(self, damped_JTJ, initialstep):
+    def get_convergence_stats(self):
+        """Returns a dict of termination info"""
+        obj = self.optobj
+        d = {
+            'derr' : self.lasterror - obj.error,
+            'fracerr' : (self.lasterror - obj.error),
+            'dvals' : np.abs(self.lastvals - obj.paramvals).max(),
+            'modelcos':obj.calc_model_cosine(),
+            'exp_derr':obj.error - obj.find_expected_error(),
+            }
+        return d
+
+    def calc_accel_correction(self, dampedJTJ, initialstep):
         """
         Geodesic acceleration correction to the LM step.
 
         Parameters
         ----------
-            damped_JTJ : numpy.ndarray
+            dampedJTJ : numpy.ndarray
                 The damped JTJ used to calculate the initial step.
             initialstep : numpy.ndarray
                 The initial LM step.
@@ -360,17 +571,17 @@ class LMOptimizer(object):
         """
         #Get the derivative:
         obj = self.optobj
-        p0 = obj.paramvals  # FIXME this is probably wrong
+        p0 = obj.paramvals.copy()  # FIXME this is probably wrong
         _ = obj.update(p0)
         rm0 = obj.residuals.copy()
-        _ = obj.update(p0)
+        _ = obj.update(p0 + initialstep)
         rm1 = obj.residuals.copy()
-        _ = obj.update(p0)
+        _ = obj.update(p0 - initialstep)
         rm2 = obj.residuals.copy()
         der2 = (rm2 + rm1 - 2*rm0)
 
-        correction = np.linalg.lstsq(damped_JTJ, np.dot(self.J, der2),
-                                    rcond=self.min_eigval)[0]
+        correction = np.linalg.lstsq(dampedJTJ, np.dot(der2, obj.J),
+                                    rcond=self._rcond)[0]
         correction *= -0.5
         return correction
 
@@ -378,17 +589,22 @@ class LMOptimizer(object):
 
 if __name__ == '__main__':
     # Test an OptObj:
+    log.set_level('debug')
     from peri.opt import opttest
-    f = opttest.simple_sphere
-    o = OptFunction(f, f(np.array([2.0, 1.0])), np.zeros(2), dl=1e-7)
-
-
-
-
-
-
-
-
+    # f = opttest.simple_sphere
+    # o = OptFunction(f, f(np.array([2.0, 1.0])), np.zeros(2), dl=1e-7)
+    # l = LMOptimizer(o, maxiter=1)
+    # l.optimize()
+    r = opttest.rosenbrock
+    # o1 = OptFunction(r, r(np.array([1.0, 0.0])), np.zeros(2), dl=1e-7)
+    # l1 = LMOptimizer(o1, maxiter=5, accel=False)
+    o2 = OptFunction(r, r(np.array([1.0, 0.0])), np.zeros(2), dl=1e-7)
+    l2 = LMOptimizer(o2, maxiter=15, accel=True)
+    print l2.optimize()
+    old = o2.JTJ.copy()
+    o2.update_J()
+    new = o2.JTJ.copy()
+    print old - new
 
 
 
