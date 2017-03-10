@@ -237,9 +237,38 @@ def booth(xy):
     r2 = y + 2*x
     return np.array([r1, r2])
 
-# def increase_model_dimension(func):
-    # """
-    # Something that takes a [d,N] dimensional model and transforms to a
-    # [xD, xN] where x is an int..? coupling would be nice...
-    # """
-    # pass
+def increase_model_dimension(func, n=1000):
+    """
+    Extends a function to higher dimensions without changing its cost
+    topography or its minimal embedding dimension.
+
+    Parameters
+    ----------
+    func : callable
+        The function to embed in a higher dimension.
+    n : int, optional
+        The dimension to embed into. Default is 1000
+
+    Returns
+    -------
+    f : callable
+        A lambda function that is called with the same syntax as ``func``,
+        only instead of returning a d-dimensional vector returns an N-d one.
+
+    Notes
+    -----
+    This works by transforming the returned vector of the function to a
+    set of coefficients in a Legendre polynomial evaluated at `n` points
+    on (-1,1). Since Leg polys are orthogonal on (-1,1) with weight w(x)=1,
+    this does not change the topography of the cost, only the scale.
+    Rescaling the function by 1/n will keep the cost exactly the same.
+
+    Right now this is down with legendre polynomials, which are only
+    orthogonal as n-> infinity. This works as long as
+    \sum_k P_i(xk) P_j(xk) = \delta_ij
+    so another way to do this could be with points chosen according to
+    Gauss quadrature
+    """
+    t = np.linspace(-1,1,n)
+    f = lambda p: np.polynomial.legendre.legval(t, func(p))
+    return f
