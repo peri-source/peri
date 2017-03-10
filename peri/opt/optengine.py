@@ -2,6 +2,7 @@
 # Another way to do this is simply to copy all the code and start deleting things...
 # ...wait til you have an organizational structure
 import numpy as np
+import time
 from peri.logger import log
 CLOG = log.getChild('optengine')
 
@@ -103,12 +104,12 @@ class OptObj(object):
 
     def gradcost(self):
         """Returns the gradient of the cost"""
-        pass
+        return 2*np.dot(self.residuals, self.J)
 
     @property
     def error(self):
-        """Returns the error"""
-        pass
+        r = self.residuals.copy()
+        return np.dot(r,r)
 
     @property
     def residuals(self):
@@ -139,7 +140,7 @@ class OptObj(object):
         """
         hasvals = values is not None
         if hasvals:
-            if np.shape(direction) != np.shape(values):
+            if np.shape(direction)[0] != np.shape(values)[0]:
                 raise ValueError('direction, value must be same shape')
         else:
             r0 = self.residuals.copy()
@@ -149,7 +150,7 @@ class OptObj(object):
         for a, d in enumerate(direction):
             if not np.isclose(np.dot(d,d), 1.0, atol=1e-10):
                 raise ValueError('direction is not normalized')
-            vals_to_sub = np.dot(d, self.J)
+            vals_to_sub = np.dot(self.J, d)
             if hasvals:
                 vals = values[a]
             else:
@@ -158,7 +159,7 @@ class OptObj(object):
                 r1 = self.residuals.copy()
                 vals = (r1-r0) / self.dl
             delta_vals = vals - vals_to_sub
-            for b in range(vals.size):
+            for b in range(d.size):
                 self.J[:,b] += d[b] * delta_vals
         if np.isnan(self.J.sum()):
             raise RuntimeError('J has nans')
@@ -192,7 +193,6 @@ class OptObj(object):
         expected_error = (self.error + np.dot(grad, delta_params) +
                 np.dot(np.dot(self.JTJ, delta_params), delta_params))
         return expected_error
-
 
     def calc_model_cosine(self):
         """
@@ -276,14 +276,6 @@ class OptFunction(OptObj):
         #And we put params back:
         self.update(p0)
 
-    def gradcost(self):
-        return 2*np.dot(self.residuals, self.J)
-
-    @property
-    def error(self):
-        r = self.residuals.copy()
-        return np.dot(r,r)
-
     def update(self, values):
         self._paramvals[:] = values
         self._model = self.func(self._paramvals)
@@ -296,6 +288,77 @@ class OptFunction(OptObj):
     @property
     def paramvals(self):
         return self._paramvals.copy()
+
+def get_residuals_update_tile(st, params, vals=None):
+    """
+    Finds the update tile of a state in the residuals (unpadded) image.
+
+    Parameters
+    ----------
+    st : :class:`peri.states.State`
+        The state
+    params : list of valid parameter names
+        The parameter names to find the update tile for.
+    values : list of valid param values or None, optional
+        The update values of the parameters. If None, uses their
+        current values.
+
+    Returns
+    -------
+    :class:`peri.util.Tile`
+        The tile corresponding to padded_tile in the unpadded image.
+    """
+    if vals is None:
+        vals = st.get_values(params)
+    itile = st.get_update_io_tiles(params, vals)[1]
+    inner_tile = st.ishape.intersection([st.ishape, itile])
+    return inner_tile.translate(-st.pad)
+
+# Only works for image state because the residuals update tile only works
+# for image states -- get_update_io_tile is only for ImageState
+class OptImageState(OptObj):
+    def __init__(self, state, params, dl=3e-6):
+        """OptObj for a peri.states.ImageState"""
+        self.state = state
+        self.params = params
+        self.dl = dl
+        self.tile = get_residuals_update_tile(state, params)
+        self.inds = slice(None)
+        self.J = None
+
+    def _initialize_J(self):
+        self.J = np.zeros([self.residuals.size, len(self.params)])
+
+    def update_J(self):
+        # FIXME s :
+        # (1) would be nice if you could pre-allocate J in state.gradmodel
+        # self._initialize_J() -- not yet because the gradmodel is backwards
+        # (2) would be nice if gradmodel took both slicer and inds, slicer
+        #     first then inds.
+        # (3) gradmodel J order needs to be swapped
+        start = time.time()
+        self.J = np.transpose(self.state.gradmodel(params=self.params,
+                rts=True, dl=self.dl, slicer=self.tile.slicer)).copy()
+        CLOG.debug('Calcualted J:\t{} s'.format(time.time() - start))
+        self._calcjtj()
+
+    @property
+    def residuals(self):
+        # FIXME residuals = model - data
+        return -self.state.residuals[self.tile.slicer].ravel()[self.inds]
+
+    @property
+    def error(self):
+        return self.state.error
+
+    @property
+    def paramvals(self):
+        return np.copy(self.state.get_values(self.params))
+
+    def update(self, values):
+        self.state.update(self.params, values)
+        return self.error
+
 
 # Things needed for the engine:
 # 1. 1 class, only relies on OptObj
@@ -408,10 +471,11 @@ class LMOptimizer(object):
         steps = [self.calc_step(self.damp_JTJ(d)) for d in damps]
         errs = [obj.update(lastvals + step) for step in steps]
         best = np.nanargmin(errs)
+        CLOG.debug('Initial Step:')
+        CLOG.debug('{}'.format([lasterror]+ errs))
         if errs[best] < lasterror:  # if we found a good step, take it
+            CLOG.debug('Good step')
             self.damp = damps[best]
-            self.lasterror = lasterror
-            self.lastvals[:] = lastvals.copy()
             # possibly 1 wasted func eval below FIXME:
             er = obj.update(lastvals + steps[best])
             test = np.abs(1-(er+1e-16)/(errs[best]+1e-16)) < 1e-10
@@ -419,11 +483,13 @@ class LMOptimizer(object):
             assert test, msg
         else:
             # Increase damping until good step
+            CLOG.debug('Bad step, increasing damping')
             for _ in range(15):
                 self.damp *= self.dampup
                 step = self.calc_step(self.damp_JTJ(self.damp))
                 err = obj.update(lastvals + step)
-                if err < self.lasterror:
+                if err < lasterror:
+                    CLOG.debug('Increased damping {}x, {}'.format(_, err))
                     break
             else:  # for-break-else, failed to increase damping
                 # update function to previous value, terminate?
@@ -432,6 +498,8 @@ class LMOptimizer(object):
                 return 'stuck'
         # If we're still here, we've taken a good step, so broyden update:
         CLOG.debug('Initial step: \t{}'.format(obj.error))
+        self.lasterror = lasterror
+        self.lastvals[:] = lastvals.copy()
         if self.dobroyden:
             self.broyden_update_J(  obj.paramvals - lastvals,
                                     obj.residuals - lastresiduals)
@@ -491,7 +559,6 @@ class LMOptimizer(object):
     def broyden_update_J(self, direction, dr):
         """Update J along `direction` for change in residuals `dr` (both 1D)"""
         CLOG.debug('Broyden update.')
-        raise RuntimeError("I think this is broken")
         nrm = np.sqrt(np.dot(direction, direction))
         d0 = direction / nrm
         vals = dr / nrm
@@ -591,20 +658,20 @@ if __name__ == '__main__':
     # Test an OptObj:
     log.set_level('debug')
     from peri.opt import opttest
-    # f = opttest.simple_sphere
-    # o = OptFunction(f, f(np.array([2.0, 1.0])), np.zeros(2), dl=1e-7)
-    # l = LMOptimizer(o, maxiter=1)
-    # l.optimize()
-    r = opttest.rosenbrock
+    f = opttest.increase_model_dimension(opttest.rosenbrock)
+    o = OptFunction(f, f(np.array([1.0, 1.0])), np.zeros(2), dl=1e-7)
+    l = LMOptimizer(o, maxiter=1)
+    l.optimize()
+    # r = opttest.rosenbrock
     # o1 = OptFunction(r, r(np.array([1.0, 0.0])), np.zeros(2), dl=1e-7)
     # l1 = LMOptimizer(o1, maxiter=5, accel=False)
-    o2 = OptFunction(r, r(np.array([1.0, 0.0])), np.zeros(2), dl=1e-7)
-    l2 = LMOptimizer(o2, maxiter=15, accel=True)
-    print l2.optimize()
-    old = o2.JTJ.copy()
-    o2.update_J()
-    new = o2.JTJ.copy()
-    print old - new
+    # o2 = OptFunction(r, r(np.array([1.0, 0.0])), np.zeros(2), dl=1e-7)
+    # l2 = LMOptimizer(o2, maxiter=15, accel=True, dobroyden=False)
+    # print l2.optimize()
+    # old = o2.JTJ.copy()
+    # o2.update_J()
+    # new = o2.JTJ.copy()
+    # print old - new
 
 
 
