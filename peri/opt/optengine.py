@@ -188,8 +188,8 @@ class OptObj(object):
         grad = self.gradcost()
         if delta_params == 'perfect':
             delta_params = np.linalg.lstsq(self.JTJ, -0.5*grad, rcond=1e-13)[0]
-        #If the model were linear, then the cost would be quadratic,
-        #with Hessian 2*`self.JTJ` and gradient `grad`
+        # If the model were linear, then the cost would be quadratic,
+        # with Hessian 2*`self.JTJ` and gradient `grad`
         expected_error = (self.error + np.dot(grad, delta_params) +
                 np.dot(np.dot(self.JTJ, delta_params), delta_params))
         return expected_error
@@ -314,16 +314,39 @@ def get_residuals_update_tile(st, params, vals=None):
     inner_tile = st.ishape.intersection([st.ishape, itile])
     return inner_tile.translate(-st.pad)
 
+def decimate_state(state, nparams, decimate=1, min_redundant=20, max_mem=1e9):
+    """
+    Given a state, returns set of indices """
+    pass # FIXME
+
 # Only works for image state because the residuals update tile only works
 # for image states -- get_update_io_tile is only for ImageState
 class OptImageState(OptObj):
-    def __init__(self, state, params, dl=3e-6):
-        """OptObj for a peri.states.ImageState"""
+    def __init__(self, state, params, dl=3e-6, inds=None):
+        """
+        OptObj for a peri.states.ImageState
+
+        Parameters
+	----------
+	state : `peri.states.ImageState`
+	    The state to optimize
+	params : list
+	    The parameters of the state to optimize
+	dl : Float, optional
+	    Step size for finite-difference approximation of model
+	    derivates. Default is 3e-6
+	inds : numpy.ndarray, slice, or None, optional
+	    Indices of the (raveled) residuals to use for calculating
+	    steps. Used to save memory. Default is None
+	"""
         self.state = state
         self.params = params
         self.dl = dl
         self.tile = get_residuals_update_tile(state, params)
-        self.inds = slice(None)
+        if inds is None:
+	    self.inds = slice(None)
+	else:
+	    self.inds = inds
         self.J = None
 
     def _initialize_J(self):
@@ -336,9 +359,11 @@ class OptImageState(OptObj):
         # (2) would be nice if gradmodel took both slicer and inds, slicer
         #     first then inds.
         # (3) gradmodel J order needs to be swapped
-        start = time.time()
-        self.J = np.transpose(self.state.gradmodel(params=self.params,
-                rts=True, dl=self.dl, slicer=self.tile.slicer)).copy()
+        if self.J is None:
+	    self._initialize_J()
+	start = time.time()
+        self.J[:] = np.transpose(self.state.gradmodel(params=self.params,
+                rts=True, dl=self.dl, slicer=self.tile.slicer, inds=self.inds))
         CLOG.debug('Calcualted J:\t{} s'.format(time.time() - start))
         self._calcjtj()
 
@@ -545,9 +570,6 @@ class LMOptimizer(object):
             # self.eig_update_J(numdir=numdir)
             # self.badstep_updat_J(badstep, badresiduals)
             # -- need to get the badresiduals w/o a function update though
-
-
-
 
     def eig_update_J(self, numdir=1):
         """Update J along the `numdir` stiffest eigendirections"""
