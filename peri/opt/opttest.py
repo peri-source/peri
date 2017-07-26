@@ -240,7 +240,7 @@ def booth(xy):
 def increase_model_dimension(func, n=1000):
     """
     Extends a function to higher dimensions without changing its cost
-    topography or its minimal embedding dimension.
+    topography or its minimal embedding dimension (i.e. # of parameters).
 
     Parameters
     ----------

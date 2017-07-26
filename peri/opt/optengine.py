@@ -662,21 +662,14 @@ if __name__ == '__main__':
     o = OptFunction(f, f(np.array([1.0, 1.0])), np.zeros(2), dl=1e-7)
     l = LMOptimizer(o, maxiter=1)
     l.optimize()
-    # r = opttest.rosenbrock
-    # o1 = OptFunction(r, r(np.array([1.0, 0.0])), np.zeros(2), dl=1e-7)
-    # l1 = LMOptimizer(o1, maxiter=5, accel=False)
-    # o2 = OptFunction(r, r(np.array([1.0, 0.0])), np.zeros(2), dl=1e-7)
-    # l2 = LMOptimizer(o2, maxiter=15, accel=True, dobroyden=False)
-    # print l2.optimize()
-    # old = o2.JTJ.copy()
-    # o2.update_J()
-    # new = o2.JTJ.copy()
-    # print old - new
 
+    # also works for image state, w/o decimation...
 
-
-
-
-
-
+    # so: Make it work for decimation, make opt procedures.
+    # TODO: 
+    # Decimation for optstate -- should be just inds=inds and calculating them
+    # GroupedOptimizer
+    # - Decimate by paramters
+    # - Line / quadratic / etc minimization
+    # - Probably works via a generator which gets called each time in a loop?
 
