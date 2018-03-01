@@ -6,7 +6,7 @@ import peri.opt.optimize as opt
 import peri.opt.addsubtract as addsub
 
 im = util.NullImage(shape=(32,)*3)
-pos, rad = nbody.create_configuration(3, im.tile)
+pos, rad, tile = nbody.create_configuration(3, im.tile)
 
 P = ComponentCollection([
     objs.PlatonicSpheresCollection(pos, rad),
@@ -20,3 +20,4 @@ C = GlobalScalar('offset', 0.0)
 I.randomize_parameters()
 
 s = states.ImageState(im, [B, I, H, P, C], pad=16, model_as_data=True)
+
