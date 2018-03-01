@@ -2123,7 +2123,7 @@ class AugmentedState(object):
         #Controling which params are globals, which are r(xyz) parameters
         globals_mask = np.zeros(self.n_st_params + rz_order, dtype='bool')
         globals_mask[:self.n_st_params] = True
-        rscale_mask = -globals_mask
+        rscale_mask = ~globals_mask
         self.globals_mask = globals_mask
         self.rscale_mask = rscale_mask
 

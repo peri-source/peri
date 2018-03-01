@@ -881,7 +881,7 @@ class Slab(Component):
                 pos.dot(self.normal()))
         m1 = p < -4.
         m0 = p > 4.
-        mp = -(m1 | m0)
+        mp = ~(m1 | m0)
         self.image[m1] = 1.
         self.image[mp] = 1.0/(1.0 + np.exp(7*p[mp]))  #FIXME why is this not an erf???
         self.image[m0] = 0.
