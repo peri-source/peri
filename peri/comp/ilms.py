@@ -813,8 +813,8 @@ class BarnesXYLegPolyZ(BarnesPoly):
     def _setup_barnes_params(self):
         barnes_params = []
         barnes_values = []
-        for i in range(npts[0]):
-            for j in range(npts[1]):
+        for i in range(self.npts[0]):
+            for j in range(self.npts[1]):
                 barnes_params.append(self.category+'-b-%i-%i' % (i, j))
                 barnes_values.append(0.0)
         return barnes_params, barnes_params, barnes_values
