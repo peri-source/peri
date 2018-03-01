@@ -416,7 +416,7 @@ class ExactPSF(psfs.PSF):
 
         # fix off-by-one issues when going odd to even tile sizes
         o = d % 2
-        d /= 2
+        d = np.floor_divide(d, 2)
 
         if not zpad:
             o[0] = 0

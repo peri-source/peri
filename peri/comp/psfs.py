@@ -548,7 +548,7 @@ class FromArray(PSF):
 
         # fix off-by-one issues when going odd to even tile sizes
         o = d % 2
-        d /= 2
+        d = np.floor_divide(d, 2)
 
         pad = tuple((d[i],d[i]+o[i]) for i in [0,1,2])
         rpsf = np.pad(field, pad, mode='constant', constant_values=0)
