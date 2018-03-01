@@ -236,14 +236,14 @@ def low_mem_sq(m, step=100000):
 #=============================================================================#
 #               ~~~~~  Particle Optimization stuff  ~~~~~
 #=============================================================================#
-def find_particles_in_tile(state, tile):
+def find_particles_in_tile(positions, tile):
     """
     Finds the particles in a tile, as numpy.ndarray of ints.
 
     Parameters
     ----------
-        state : :class:`peri.states.ImageState`
-            The state to locate particles in.
+        positions : `numpy.ndarray`
+            [N,3] array of the particle positions to check in the tile
         tile : :class:`peri.util.Tile` instance
             Tile of the region inside which to check for particles.
 
@@ -252,7 +252,7 @@ def find_particles_in_tile(state, tile):
         numpy.ndarray, int
             The indices of the particles in the tile.
     """
-    bools = tile.contains(state.obj_get_positions())
+    bools = tile.contains(positions)
     return np.arange(bools.size)[bools]
 
 def separate_particles_into_groups(s, region_size=40, bounds=None,
@@ -309,9 +309,11 @@ def separate_particles_into_groups(s, region_size=40, bounds=None,
     else:
         shift = 0
     deltas = np.meshgrid(*[np.arange(i) for i in n_translate])
+    positions = s.obj_get_positions()
 
-    groups = list(map(lambda *args: find_particles_in_tile(s, tile.translate(
-            np.array(args) * rs - shift)), *[d.ravel() for d in deltas]))
+    groups = list(map(lambda *args: find_particles_in_tile(positions,
+            tile.translate( np.array(args) * rs - shift)), *[d.ravel()
+            for d in deltas]))
 
     for i in range(len(groups)-1, -1, -1):
         if groups[i].size == 0:
