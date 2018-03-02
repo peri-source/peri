@@ -202,7 +202,8 @@ def get_initial_featuring(statemaker, feature_rad, actual_rad=None,
     rad = np.ones(pos.shape[0], dtype='float') * actual_rad
     s = statemaker(im, pos, rad, **statemaker_kwargs)
     RLOG.info('State Created.')
-    states.save(s, desc=desc+'initial')
+    if desc is not None:
+        states.save(s, desc=desc+'initial')
     optimize_from_initial(s, invert=invert, desc=desc, **kwargs)
     return s
 
@@ -301,7 +302,8 @@ def feature_from_pos_rad(statemaker, pos, rad, im_name=None, tile=None,
     im = util.RawImage(im_name, tile=tile)
     s = statemaker(im, pos, rad, **statemaker_kwargs)
     RLOG.info('State Created.')
-    states.save(s, desc=desc+'initial')
+    if desc is not None:
+        states.save(s, desc=desc+'initial')
     optimize_from_initial(s, desc=desc, **kwargs)
     return s
 
@@ -344,9 +346,14 @@ def optimize_from_initial(s, max_mem=1e9, invert=True, desc='', rz_order=3,
             modified in-place.
     """
     RLOG.info('Initial burn:')
-    opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc + 'initial-burn',
+    if desc is not None:
+        desc_burn = desc + 'initial-burn'
+        desc_polish = desc + 'addsub-polish'
+    else:
+        desc_burn, desc_polish = [None] * 2
+    opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc_burn,
             max_mem=max_mem, include_rad=False, dowarn=False)
-    opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc + 'initial-burn',
+    opt.burn(s, mode='burn', n_loop=3, fractol=0.1, desc=desc_burn,
             max_mem=max_mem, include_rad=True, dowarn=False)
 
     RLOG.info('Start add-subtract')
@@ -357,11 +364,12 @@ def optimize_from_initial(s, max_mem=1e9, invert=True, desc='', rz_order=3,
         max_rad = 1.5 * np.median(rad)
     addsub.add_subtract(s, tries=30, min_rad=min_rad, max_rad=max_rad,
             invert=invert)
-    states.save(s, desc=desc+'initial-addsub')
+    if desc is not None:
+        states.save(s, desc=desc + 'initial-addsub')
 
     RLOG.info('Final polish:')
-    d = opt.burn(s, mode='polish', n_loop=8, fractol=3e-4, desc=desc +
-            'addsub-polish', max_mem=max_mem, rz_order=rz_order, dowarn=False)
+    d = opt.burn(s, mode='polish', n_loop=8, fractol=3e-4, desc=desc_polish,
+            max_mem=max_mem, rz_order=rz_order, dowarn=False)
     if not d['converged']:
         RLOG.warn('Optimization did not converge; consider re-running')
     return s
@@ -612,27 +620,31 @@ def _translate_particles(s, max_mem=1e9, desc='', min_rad='calc',
     """
     Workhorse for translating particles. See get_particles_featuring for docs.
     """
+    if desc is not None:
+        desc_trans = desc + 'translate-particles'
+        desc_burn = desc + 'addsub_burn'
+        desc_polish = desc + 'addsub_polish'
+    else:
+        desc_trans, desc_burn, desc_polish = [None]*3
     RLOG.info('Translate Particles:')
-    opt.burn(s, mode='do-particles', n_loop=4, fractol=0.1, desc=desc+
-            'translate-particles', max_mem=max_mem, include_rad=False,
-            dowarn=False)
-    opt.burn(s, mode='do-particles', n_loop=4, fractol=0.05, desc=desc+
-            'translate-particles', max_mem=max_mem, include_rad=True,
-            dowarn=False)
+    opt.burn(s, mode='do-particles', n_loop=4, fractol=0.1, desc=desc_trans,
+            max_mem=max_mem, include_rad=False, dowarn=False)
+    opt.burn(s, mode='do-particles', n_loop=4, fractol=0.05, desc=desc_trans,
+            max_mem=max_mem, include_rad=True, dowarn=False)
 
     RLOG.info('Start add-subtract')
     addsub.add_subtract(s, tries=30, min_rad=min_rad, max_rad=max_rad,
         invert=invert)
-    states.save(s, desc=desc+'translate-addsub')
+    if desc is not None:
+        states.save(s, desc=desc + 'translate-addsub')
 
     if do_polish:
         RLOG.info('Final Burn:')
-        opt.burn(s, mode='burn', n_loop=3, fractol=3e-4, desc=desc +
-                'addsub-burn', max_mem=max_mem, rz_order=rz_order,dowarn=False)
+        opt.burn(s, mode='burn', n_loop=3, fractol=3e-4, desc=desc_burn,
+                max_mem=max_mem, rz_order=rz_order,dowarn=False)
         RLOG.info('Final Polish:')
-        d = opt.burn(s, mode='polish', n_loop=4, fractol=3e-4, desc=desc +
-                'addsub-polish', max_mem=max_mem, rz_order=rz_order,
-                dowarn=False)
+        d = opt.burn(s, mode='polish', n_loop=4, fractol=3e-4, desc=desc_polish,
+                max_mem=max_mem, rz_order=rz_order, dowarn=False)
         if not d['converged']:
             RLOG.warn('Optimization did not converge; consider re-running')
 

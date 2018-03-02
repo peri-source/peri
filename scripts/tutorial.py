@@ -4,7 +4,7 @@ Rather than load in images, it creates a fake image automatically and
 fits that image.
 
 To ensure reproducibility in the image and fit, we set a seed for
-numpy's random number generator as well.  
+numpy's random number generator as well.
 """
 # All imports that are used in the tutorial
 import numpy as np
@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
     # Optimization
     print_info('Start Optimization')
-    runner.optimize_from_initial(st)
-    runner.finish_state(st)
+    runner.optimize_from_initial(st, desc=None)
+    runner.finish_state(st, desc=None)
     # ~~ up to improve the mathematical model ~~
 
