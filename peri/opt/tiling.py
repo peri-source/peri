@@ -213,12 +213,6 @@ def separate_particles_into_groups(s, region_size=40, bounds=None):
 
     groups = []
     positions = s.obj_get_positions()
-    if bounds is None:
-        # FIXME this (deliberately) masks a problem where optimization
-        # places particles outside the image. However, it ensures that
-        # all particles are in at least one group when `bounds is None`,
-        # which is the use case within opt
-        positions = np.clip(positions, imtile.l, imtile.r)
     for v in translations:
         tmptile = region.copy().translate(region.shape * v - s.pad)
         groups.append(find_particles_in_tile(positions, tmptile))

@@ -293,8 +293,8 @@ def separate_particles_into_groups(s, region_size=40, bounds=None,
         number of particles, so the elements don't necessarily correspond
         to a given image region.
     """
-    bounding_tile = (s.oshape.translate(-s.pad) if bounds is None else
-            Tile(bounds[0], bounds[1]))
+    imtile = s.oshape.translate(-s.pad)
+    bounding_tile = (imtile if bounds is None else Tile(bounds[0], bounds[1]))
     rs = (np.ones(bounding_tile.dim, dtype='int')*region_size if
             np.size(region_size) == 1 else np.array(region_size))
 
@@ -310,7 +310,13 @@ def separate_particles_into_groups(s, region_size=40, bounds=None,
         shift = 0
     deltas = np.meshgrid(*[np.arange(i) for i in n_translate])
     positions = s.obj_get_positions()
-
+    if bounds is None:
+        # FIXME this (deliberately) masks a problem where optimization
+        # places particles outside the image. However, it ensures that
+        # all particles are in at least one group when `bounds is None`,
+        # which is the use case within opt. The 1e-3 is to ensure that
+        # they are inside the box and not on the edge.
+        positions = np.clip(positions, imtile.l+1e-3, imtile.r-1e-3)
     groups = list(map(lambda *args: find_particles_in_tile(positions,
             tile.translate( np.array(args) * rs - shift)), *[d.ravel()
             for d in deltas]))
