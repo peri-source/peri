@@ -2535,7 +2535,9 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-4,
     use_accel = (mode == 'burn')
     rz_order = int(rz_order)
     if do_line_min == 'default':
-        do_line_min = (mode == 'polish')
+        # do_line_min = (mode == 'polish')
+        # temporary fix until we solve the particles-leaving-image issue:
+        do_line_min = False
 
     if mode == 'do-particles':
         glbl_nms = ['ilm-scale', 'offset']  #bkg?
