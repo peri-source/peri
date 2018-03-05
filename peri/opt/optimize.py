@@ -2672,14 +2672,15 @@ def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True,
             each loop, before the line minimization.
     """
     values = [np.copy(s.state[s.params])]
-    remove_params = s.get('psf').params if separate_psf else None  # FIXME explicit params
-    globals = name_globals(s, remove_params=remove_params)
+    remove_params = s.get('psf').params if separate_psf else None
+    # FIXME explicit params
+    global_params = name_globals(s, remove_params=remove_params)
     #FIXME this could be done much better, since much of the globals such
     #as the ilm are local. Could be done with sparse matrices and/or taking
     #nearby globals in a group and using the update tile only as the slicer,
     #rather than the full residuals.
     gs = np.floor(max_mem / s.residuals.nbytes).astype('int')
-    groups = [globals[a:a+gs] for a in range(0, len(globals), gs)]
+    groups = [global_params[a:a+gs] for a in range(0, len(global_params), gs)]
     CLOG.info('Start  ``finish``:\t{}'.format(s.error))
     for a in range(n_loop):
         start_err = s.error
@@ -2700,11 +2701,11 @@ def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True,
             states.save(s, desc=desc)
         #3. Append vals, line min:
         values.append(np.copy(s.state[s.params]))
-        dv = (np.array(values[1:]) - np.array(values[0]))[-3:]
-        do_levmarq_n_directions(s, dv, damping=1e-2, max_iter=2, errtol=3e-4)
-        CLOG.info('Line min., loop {}:\t{}'.format(a, s.error))
-        if desc is not None:
-            states.save(s, desc=desc)
+        # dv = (np.array(values[1:]) - np.array(values[0]))[-3:]
+        # do_levmarq_n_directions(s, dv, damping=1e-2, max_iter=2, errtol=3e-4)
+        # CLOG.info('Line min., loop {}:\t{}'.format(a, s.error))
+        # if desc is not None:
+            # states.save(s, desc=desc)
         #4. terminate?
         new_err = s.error
         derr = start_err - new_err
