@@ -142,5 +142,11 @@ rcparams = {
 try:
     import matplotlib.pylab as pl
     pl.rcParams.update(rcparams)
+
+    rckeymap = {'keymap.quit': '', 'keymap.quit_all': ''}
+    try:
+        pl.rcParams.update(rckeymap)
+    except Exception as e:
+        pass
 except ImportError as e:
     pass
