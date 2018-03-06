@@ -36,7 +36,7 @@ def guess_invert(st):
     return invert
 
 
-def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
+def feature_guess(st, rad, invert='guess', minmass=None, use_tp=False,
                   trim_edge=False, **kwargs):
     """
     Makes a guess at particle positions using heuristic centroid methods.
@@ -47,8 +47,10 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
         The state to check adding particles to.
     rad : Float
         The feature size for featuring.
-    invert : Bool, optional
-        Whether to invert the image. Default is ``True``, i.e. dark particles
+    invert : {'guess', True, False}, optional
+        Whether to invert the image; set to True for there are dark
+        particles on a bright background, False for bright particles.
+        The default is to guess from the state's current particles.
     minmass : Float or None, optional
         The minimum mass/masscut of a particle. Default is ``None`` =
         calculated internally.
@@ -69,6 +71,8 @@ def feature_guess(st, rad, invert=True, minmass=None, use_tp=False,
         The number of added particles.
     """
     # FIXME does not use the **kwargs, but needs b/c called with wrong kwargs
+    if invert == 'guess':
+        invert = guess_invert(st)
     if invert:
         im = 1 - st.residuals
     else:
@@ -669,7 +673,7 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
 
 
 def add_subtract_misfeatured_tile(
-        st, tile, rad='calc', max_iter=3, invert=True, max_allowed_remove=20,
+        st, tile, rad='calc', max_iter=3, invert='guess', max_allowed_remove=20,
         **kwargs):
     """
     Automatically adds and subtracts missing & extra particles in a region
@@ -688,9 +692,10 @@ def add_subtract_misfeatured_tile(
     max_iter : Int, optional
         The maximum number of loops for attempted adds at one tile location.
         Default is 3.
-    invert : Bool, optional
-        Whether to invert the image for feature_guess. Default is True, i.e.
-        dark particles on bright background.
+    invert : {'guess', True, False}, optional
+        Whether to invert the image for feature_guess -- True for dark
+        particles on a bright background, False for bright particles. The
+        default is to guess from the state's current particles.
     max_allowed_remove : Int, optional
         The maximum number of particles to remove. If the misfeatured tile
         contains more than this many particles, raises an error. If it
@@ -748,6 +753,8 @@ def add_subtract_misfeatured_tile(
     """
     if rad == 'calc':
         rad = np.median(st.obj_get_radii())
+    if invert == 'guess':
+        invert = guess_invert(st)
     # 1. Remove all possibly bad particles within the tile.
     initial_error = np.copy(st.error)
     rinds = np.nonzero(tile.contains(st.obj_get_positions()))[0]
