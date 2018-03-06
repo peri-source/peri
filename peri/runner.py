@@ -260,9 +260,10 @@ def feature_from_pos_rad(statemaker, pos, rad, im_name=None, tile=None,
             Particles with a fitted radius larger than this are identified
             as fake and removed. Default is 1.5 * actual_rad, however you
             may find better results if you make this more stringent.
-        invert : Bool
+        invert : {'guess', True, False}
             Whether to invert the image for featuring, as passed to
-            addsubtract.add_subtract. Default is True.
+            addsubtract.add_subtract. Default is to guess from the
+            current state's particle positions.
         rz_order : int, optional
             If nonzero, the order of an additional augmented rscl(z)
             parameter for optimization. Default is 0; i.e. no rscl(z)
@@ -308,7 +309,7 @@ def feature_from_pos_rad(statemaker, pos, rad, im_name=None, tile=None,
     return s
 
 
-def optimize_from_initial(s, max_mem=1e9, invert=True, desc='', rz_order=3,
+def optimize_from_initial(s, max_mem=1e9, invert='guess', desc='', rz_order=3,
         min_rad=None, max_rad=None):
     """
     Optimizes a state from an initial set of positions and radii, without
@@ -320,9 +321,10 @@ def optimize_from_initial(s, max_mem=1e9, invert=True, desc='', rz_order=3,
             The state to optimize. It is modified internally and returned.
         max_mem : Numeric, optional
             The maximum memory for the optimizer to use. Default is 1e9 (bytes)
-        invert : Bool, optional
-            True if the image is dark particles on a bright background,
-            False otherwise. Used for add-subtract. Default is True.
+        invert : Bool or `'guess'`, optional
+            Set to True if the image is dark particles on a bright
+            background, False otherwise. Used for add-subtract. The
+            default is to guess from the state's current particles.
         desc : String, optional
             An additional description to infix for periodic saving along the
             way. Default is the null string ``''``.
@@ -418,9 +420,10 @@ def translate_featuring(state_name=None, im_name=None, use_full_path=False,
             Particles with a fitted radius larger than this are identified
             as fake and removed. Default is 1.5 * actual_rad, however you
             may find better results if you make this more stringent.
-        invert : Bool
+        invert : {True, False, 'guess'}
             Whether to invert the image for featuring, as passed to
-            addsubtract.add_subtract. Default is True.
+            addsubtract.add_subtract. Default is to guess from the
+            state's current particles.
         rz_order : int, optional
             If nonzero, the order of an additional augmented rscl(z)
             parameter for optimization. Default is 0; i.e. no rscl(z)
@@ -498,7 +501,9 @@ def get_particles_featuring(feature_rad, state_name=None, im_name=None,
             of the previous state.
         invert : Bool
             Whether to invert the image for featuring, as passed to
-            addsubtract.add_subtract. Default is True.
+            addsubtract.add_subtract and locate_spheres. Set to False
+            if the image is bright particles on a dark background.
+            Default is True (dark particles on bright background).
         featuring_params : Dict, optional
             kwargs-like dict of any additional keyword arguments to pass to
             ``get_initial_featuring``, such as ``'use_tp'`` or ``'minmass'``.
@@ -522,9 +527,6 @@ def get_particles_featuring(feature_rad, state_name=None, im_name=None,
             Particles with a fitted radius larger than this are identified
             as fake and removed. Default is 1.5 * actual_rad, however you
             may find better results if you make this more stringent.
-        invert : Bool
-            Whether to invert the image for featuring, as passed to
-            addsubtract.add_subtract. Default is True.
         rz_order : int, optional
             If nonzero, the order of an additional augmented rscl(z)
             parameter for optimization. Default is 0; i.e. no rscl(z)
@@ -616,7 +618,7 @@ def _pick_state_im_name(state_name, im_name, use_full_path=False):
 
 
 def _translate_particles(s, max_mem=1e9, desc='', min_rad='calc',
-        max_rad='calc', invert=True, rz_order=0, do_polish=True):
+        max_rad='calc', invert='guess', rz_order=0, do_polish=True):
     """
     Workhorse for translating particles. See get_particles_featuring for docs.
     """
@@ -661,7 +663,7 @@ def link_zscale(st):
     st.reset()
 
 
-def finish_state(st, desc='finish-state', invert=True):
+def finish_state(st, desc='finish-state', invert='guess'):
     """
     Final optimization for the best-possible state.
 
@@ -676,9 +678,10 @@ def finish_state(st, desc='finish-state', invert=True):
         desc : String, optional
             Description to intermittently save the state as, as passed to
             state.save. Default is `'finish-state'`.
-        invert : Bool
+        invert : {'guess', True, False}
             Whether to invert the image for featuring, as passed to
-            addsubtract.add_subtract. Default is True.
+            addsubtract.add_subtract. Default is to guess from the
+            state's current particles.
 
     See Also
     --------
@@ -696,3 +699,4 @@ def finish_state(st, desc='finish-state', invert=True):
     d = opt.finish(st, desc=desc, n_loop=4, dowarn=False)
     if not d['converged']:
         RLOG.warn('Optimization did not converge; consider re-running')
+
