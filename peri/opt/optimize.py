@@ -2540,10 +2540,20 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-4,
         do_line_min = False
 
     if mode == 'do-particles':
-        glbl_nms = ['ilm-scale', 'offset']  #bkg?
+        # FIXME explicit params
+        # We pick some parameters for an overall illumination scale:
+        glbl_nms = ['ilm-scale', 'ilm-xy-0-0', 'bkg-xy-0-0', 'offset']
+        # And now, since we have explicit parameters, we check that they
+        # are actually in the state:
+        glbl_nms = [nm for nm in glbl_nms if nm in s.params]
     else:
-        remove_params = None if mode == 'polish' else set(
-                s.get('psf').params + ['zscale'])  # FIXME explicit params
+        if mode == 'polish':
+            remove_params = None
+        else:
+            # FIXME explicit params
+            remove_params = s.get('psf').params
+            if ('zscale' not in remove_params) and ('zscale' in s.params):
+                remove_params.append('zscale')
         glbl_nms = name_globals(s, remove_params=remove_params)
 
     all_lp_stats = []
