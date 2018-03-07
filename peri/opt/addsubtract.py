@@ -584,7 +584,7 @@ def add_subtract(st, max_iter=7, max_npart='calc', max_mem=2e8,
                     'psf').params), max_iter=1, run_length=4, num_eig_dirs=3,
                     max_mem=max_mem, eig_update_frequency=2, rz_order=0,
                     use_accel=True)
-            CLOG.info('Add_subtract optimization:\t%f' % st.error)
+            CLOG.info('After optimization:\t{:.6}'.format(st.error))
 
     # Optimize the added particles' radii:
     for p in added_poses0:
