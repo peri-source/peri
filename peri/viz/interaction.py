@@ -12,6 +12,10 @@ from peri.logger import log
 log = log.getChild('interaction')
 
 
+# FIXME this is wrong.
+# This needs to take a _figure_ as an input argument. Otherwise there
+# is no way you can connect multiple GridAxes on a single figure, like
+# you need for OrthoManipulator
 class OrthoGridAxes(object):
     def __init__(self, field, vmin=None, vmax=None, cmap='bone', scale=10,
                  dohist=False, linewidth=1, linecolor='y', linestyle='dashed',
@@ -595,10 +599,11 @@ class OrthoPrefeature(OrthoViewer):
             self.viewrad = viewrad
         self.mode = 'view'
         super(OrthoPrefeature, self).__init__(image, cmap=cmap, **kwargs)
-        if self.vmin is None:
-            self.vmin = image.min()
-        if self.vmax is None:
-            self.vmax = image.max()
+        # Then we need the vmin, vmax, cmap for drawing the image alone
+        # here... FIXME this is ugly
+        self.vmin = self.grid_axes.vmin
+        self.vmax = self.grid_axes.vmax
+        self.cmap = self.grid_axes.cmap
 
         if type(self.cmap) == str:
             self._cmap = mpl.cm.get_cmap(self.cmap)
@@ -645,78 +650,22 @@ class OrthoPrefeature(OrthoViewer):
         for a in range(4): part_color[:,:,:,a] = self.part_col[a]
         self.field = np.zeros(self._image.shape)
         for a in range(4):
-            self.field[:,:,:,a] = m*part_color[:,:,:,a] + (1-m) * self._image[:,:,:,a]
-
-    def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
-        im, vmin, vmax, cmap = self.field, self.vmin, self.vmax, self.cmap
-
-        if self.fourier:
-            im = np.abs(im)
-
-        slices = self.slices
-        int_slice = np.clip(np.round(slices), 0,
-                            np.array(im.shape[:3])-1).astype('int')
-
-        # if vmin is None:
-            # vmin = im.min()
-        # if vmax is None:
-            # vmax = im.max()
-
-        # if self.cmap == 'RdBu_r':
-            # val = np.max(np.abs([vmin, vmax]))
-            # vmin = -val
-            # vmax = val
-
-        self.g['xy'].cla()
-        self.g['yz'].cla()
-        self.g['xz'].cla()
-        self.g['in'].cla()
-
-        self.g['xy'].imshow(im[int_slice[0],:,:], cmap=cmap)
-        self.g['xy'].hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
-        self.g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(self.g['xy'])
-
-        self.g['yz'].imshow(im[:,int_slice[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
-        self.g['yz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
-        self.g['yz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(self.g['yz'])
-
-        self.g['xz'].imshow(np.rollaxis(im[:,:,int_slice[2]], 1), cmap=cmap)
-        self.g['xz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
-        self.g['xz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(self.g['xz'])
-
-        if self.dohist:
-            tt = np.real(self.field).ravel()
-            c, s = tt.mean(), 5*tt.std()
-            y,x = np.histogram(tt, bins=np.linspace(c-s, c+s, 700), normed=True)
-            x = (x[1:] + x[:-1])/2
-
-            self.g['in'].plot(x, y, 'k-', lw=1)
-            self.g['in'].fill_between(x, y, 1e-10, alpha=0.5)
-            self.g['in'].set_yscale('log', nonposy='clip')
-
-            self.g['in'].set_xlim(c-s, c+s)
-            self.g['in'].set_ylim(1e-3*y.max(), 1.4*y.max())
-
-        self._format_ax(self.g['in'])
-
-        pl.draw()
+            self.field[:,:,:,a] = (m*part_color[:,:,:,a] +
+                                  (1-m) * self._image[:,:,:,a])
 
     def register_events(self):
         self._calls = []
-        self._calls.append(self.fig.canvas.mpl_connect('key_press_event',
-                self.key_press_event))
+        self._calls.append(self.grid_axes.fig.canvas.mpl_connect(
+            'key_press_event', self.key_press_event))
 
         if self.mode == 'view':
-            self._calls.append(self.fig.canvas.mpl_connect(
+            self._calls.append(self.grid_axes.fig.canvas.mpl_connect(
                     'button_press_event', self.mouse_press_view))
         elif self.mode == 'add':
-            self._calls.append(self.fig.canvas.mpl_connect(
+            self._calls.append(self.grid_axes.fig.canvas.mpl_connect(
                     'button_press_event', self.mouse_press_add))
         elif self.mode == 'remove':
-            self._calls.append(self.fig.canvas.mpl_connect(
+            self._calls.append(self.grid_axes.fig.canvas.mpl_connect(
                     'button_press_event', self.mouse_press_remove))
 
     def key_press_event(self, event):
@@ -732,7 +681,7 @@ class OrthoPrefeature(OrthoViewer):
         log.info("Switching mode to {}".format(self.mode))
 
         for c in self._calls:
-            self.fig.canvas.mpl_disconnect(c)
+            self.grid_axes.fig.canvas.mpl_disconnect(c)
 
         self.register_events()
 
@@ -742,7 +691,6 @@ class OrthoPrefeature(OrthoViewer):
         p = self._pt_xyz(event)
         if p is not None:
             p = np.array(p)
-
             log.info("Adding particle at {}".format(p))
             self.pos = np.append(self.pos, p.reshape((1,-1)), axis=0)
         self.update_particle_field(poses=p.reshape((1,-1)))
@@ -770,29 +718,4 @@ class OrthoPrefeature(OrthoViewer):
         #2. delete
         self.pos = np.delete(self.pos, ind, axis=0)
         return rp
-
-    def _pt_xyz(self, event):
-        x0 = event.xdata
-        y0 = event.ydata
-
-        f = False
-        if event.inaxes == self.g['xy']:
-            x = x0
-            y = y0
-            z = self.slices[0]
-            f = True
-        if event.inaxes == self.g['yz']:
-            x = x0
-            y = self.slices[1]
-            z = y0
-            f = True
-        if event.inaxes == self.g['xz']:
-            x = self.slices[2]
-            y = y0
-            z = x0
-            f = True
-
-        if f:
-            return np.array((z,y,x))
-        return None
 
