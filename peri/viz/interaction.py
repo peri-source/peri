@@ -72,8 +72,8 @@ class OrthoGridAxes(object):
         int_center = np.round(np.clip(center_point, 0, np.array(
             self.field.shape))).astype('int')
 
-        for ax in self.grid_axes.values():
-            ax.cla()
+        for k in ['xy', 'xz', 'yz']:
+            self.grid_axes[k].cla()
         imshow_kwargs = {'vmin':self.vmin, 'vmax':self.vmax, 'cmap':self.cmap}
         line_kwargs = {'colors':self.linecolor, 'linestyles':self.linestyle,
                        'lw':self.linewidth}
@@ -796,7 +796,3 @@ class OrthoPrefeature(OrthoViewer):
             return np.array((z,y,x))
         return None
 
-# FIXME delete this
-if __name__ == '__main__':
-    im = np.random.randn(10,10,10)
-    OrthoViewer(im)
