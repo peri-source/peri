@@ -11,6 +11,123 @@ from peri.util import Tile
 from peri.logger import log
 log = log.getChild('interaction')
 
+
+class OrthoGridAxes(object):
+    def __init__(self, field, vmin=None, vmax=None, cmap='bone', scale=10,
+                 dohist=False, linewidth=1, linecolor='y', linestyle='dashed',
+                 tooltips=None):
+        """
+        A set of 3 axes to show a 3D image orthogonally
+
+        Parameters
+        ----------
+        field : np.ndarray
+            The (real, 3D) array to view.
+        """
+        self.vmin = field.min() if vmin is None else vmin
+        self.vmax = field.max() if vmax is None else vmax
+        self.field = field
+        self.cmap = cmap
+        self.dohist = dohist
+        self.linewidth = linewidth
+        self.linecolor = linecolor
+        self.linestyle = linestyle
+
+        z, y, x = [float(i) for i in self.field.shape]
+        w = x + z
+        h = y + z
+
+        tooltip = mpl.rcParams['toolbar']
+        if not tooltips:
+            mpl.rcParams['toolbar'] = 'None'
+        self.fig = pl.figure(figsize=(scale *w / h, scale))
+        mpl.rcParams['toolbar'] = tooltip
+
+        # add_axes takes a rectange = left, bottom,width, height
+        self.grid_axes = {
+            'xy': self.fig.add_axes((0.0, 1-y/h, x/w,   y/h)),
+            'yz': self.fig.add_axes((0.0, 0.0,   x/w,   1-y/h)),
+            'xz': self.fig.add_axes((x/w, 1-y/h, 1-x/w, y/h)),
+            'in': self.fig.add_axes((x/w, 0.0,   1-x/w, 1-y/h)),
+        }
+
+        # Draw at the center of the initial image:
+        self.draw_ortho(np.array(self.field.shape)/2)
+        if self.dohist:
+            self.update_hist()
+        self._format_ax(self.grid_axes['in'])
+
+    def update_field(self, new_field):
+        """Updates the values in the field to draw"""
+        if new_field.shape != self.field.shape:
+            raise ValueError('new field must be same shape as old')
+        self.field = new_field
+        if self.dohist:
+            self.update_hist()
+
+    def draw_ortho(self, center_point):
+        """Draws the ortho projection of at the current slices"""
+        im, vmin, vmax, cmap = self.field, self.vmin, self.vmax, self.cmap
+
+        int_center = np.round(np.clip(center_point, 0, np.array(
+            self.field.shape))).astype('int')
+
+        for ax in self.grid_axes.values():
+            ax.cla()
+        imshow_kwargs = {'vmin':self.vmin, 'vmax':self.vmax, 'cmap':self.cmap}
+        line_kwargs = {'colors':self.linecolor, 'linestyles':self.linestyle,
+                       'lw':self.linewidth}
+
+        # 1. xy
+        self.grid_axes['xy'].imshow(im[int_center[0],:,:], **imshow_kwargs)
+        self.grid_axes['xy'].hlines(center_point[1], 0, im.shape[2],
+                                    **line_kwargs)
+        self.grid_axes['xy'].vlines(center_point[2], 0, im.shape[1],
+                                    **line_kwargs)
+        self._format_ax(self.grid_axes['xy'])
+
+        # 2. yz
+        self.grid_axes['yz'].imshow(im[:,int_center[1],:], **imshow_kwargs)
+        self.grid_axes['yz'].hlines(center_point[0], 0, im.shape[2],
+                **line_kwargs)
+        self.grid_axes['yz'].vlines(center_point[2], 0, im.shape[0],
+                **line_kwargs)
+        self._format_ax(self.grid_axes['yz'])
+
+        # 3. xz
+        self.grid_axes['xz'].imshow(im[:,:,int_center[2]].T, **imshow_kwargs)
+        self.grid_axes['xz'].hlines(center_point[1], 0, im.shape[0],
+                **line_kwargs)
+        self.grid_axes['xz'].vlines(center_point[0], 0, im.shape[1],
+                **line_kwargs)
+        self._format_ax(self.grid_axes['xz'])
+
+        pl.draw()
+
+    def update_hist(self):
+        """Draws and calculates the histogram of the field"""
+        tt = np.real(self.field).ravel()
+        c, s = tt.mean(), 5*tt.std()
+        y, x = np.histogram(tt, bins=np.linspace(c-s, c+s, 700), normed=True)
+        x = (x[1:] + x[:-1])/2
+
+        ax = self.grid_axes['in']
+        ax.cla()
+
+        ax.plot(x, y, 'k-', lw=1)
+        ax.fill_between(x, y, 1e-10, alpha=0.5)
+        ax.set_yscale('log', nonposy='clip')
+
+        ax.set_xlim(c-s, c+s)
+        ax.set_ylim(1e-3*y.max(), 1.4*y.max())
+
+        self._format_ax(ax)
+        pl.draw()
+
+    def _format_ax(self, ax):
+        ax.set_xticks([])
+        ax.set_yticks([])
+
 class OrthoManipulator(object):
     def __init__(self, state, size=8, cmap_abs='bone', cmap_diff='RdBu',
             incsize=18.0, orientation=None, vrange_img=1.0, vrange_diff=0.1):
@@ -377,140 +494,61 @@ class OrthoManipulator(object):
 #=============================================================================
 class OrthoViewer(object):
     def __init__(self, field, onesided=True, vmin=None, vmax=None, cmap='bone',
-            dohist=False, fourier=False, tooltips=False):
+                 dohist=False, fourier=False, tooltips=False):
         """
         Easy interactive viewing of 3D ndarray with view selection. Navigate in
         3D by clicking on the three panels which are slices through the array
         at a given position.
         """
-        self.vmin = vmin
-        self.vmax = vmax
-        self.field = field
-        self.onesided = onesided
-        self.dohist = dohist
-        self.fourier = fourier
-
         if cmap is not None:
             self.cmap = cmap
         else:
             self.cmap = 'bone' if self.onesided else 'RdBu_r'
-
-        z,y,x = [float(i) for i in self.field.shape]
-        w = float(x + z)
-        h = float(y + z)
-
-        tooltip = mpl.rcParams['toolbar']
-        if not tooltips:
-            mpl.rcParams['toolbar'] = 'None'
-        self.fig = pl.figure(figsize=(10*w/h,10))
-        mpl.rcParams['toolbar'] = tooltip
-
-        self.g = {}
-        # rect = l,b,w,h
-        self.g['xy'] = self.fig.add_axes((0.0, 1-y/h, x/w,   y/h))
-        self.g['yz'] = self.fig.add_axes((0.0, 0.0,   x/w,   1-y/h))
-        self.g['xz'] = self.fig.add_axes((x/w, 1-y/h, 1-x/w, y/h))
-        self.g['in'] = self.fig.add_axes((x/w, 0.0,   1-x/w, 1-y/h))
-
-        self.slices = (np.array(self.field.shape)/2).astype('int')
-
+        self.fourier = fourier
         if self.fourier:
             self.field = np.fft.fftshift(np.fft.fftn(self.field))
+            gafield = np.abs(self.field)
+        else:
+            gafield = field
 
+        self.grid_axes = OrthoGridAxes(
+            gafield, vmin=vmin, vmax=vmax, cmap=self.cmap, dohist=dohist,
+            tooltips=tooltips)
+        self.slices = np.array(field.shape) * 0.5  # initial view
         self.draw()
         self.register_events()
 
-    def _format_ax(self, ax):
-        ax.set_xticks([])
-        ax.set_yticks([])
-
     def draw(self):
-        self.draw_ortho(self.field, self.g, cmap=self.cmap, vmin=self.vmin, vmax=self.vmax)
-
-    def draw_ortho(self, im, g, cmap=None, vmin=0, vmax=1):
-        im, vmin, vmax, cmap = self.field, self.vmin, self.vmax, self.cmap
-
-        if self.fourier:
-            im = np.abs(im)
-
-        slices = self.slices
-        int_slice = np.clip(np.round(slices), 0, np.array(im.shape)-1).astype('int')
-
-        if vmin is None:
-            vmin = im.min()
-        if vmax is None:
-            vmax = im.max()
-
-        if self.cmap == 'RdBu_r':
-            val = np.max(np.abs([vmin, vmax]))
-            vmin = -val
-            vmax = val
-
-        self.g['xy'].cla()
-        self.g['yz'].cla()
-        self.g['xz'].cla()
-        self.g['in'].cla()
-
-        self.g['xy'].imshow(im[int_slice[0],:,:], vmin=vmin, vmax=vmax, cmap=cmap)
-        self.g['xy'].hlines(slices[1], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
-        self.g['xy'].vlines(slices[2], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(self.g['xy'])
-
-        self.g['yz'].imshow(im[:,int_slice[1],:], vmin=vmin, vmax=vmax, cmap=cmap)
-        self.g['yz'].hlines(slices[0], 0, im.shape[2], colors='y', linestyles='dashed', lw=1)
-        self.g['yz'].vlines(slices[2], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(self.g['yz'])
-
-        self.g['xz'].imshow(im[:,:,int_slice[2]].T, vmin=vmin, vmax=vmax, cmap=cmap)
-        self.g['xz'].hlines(slices[1], 0, im.shape[0], colors='y', linestyles='dashed', lw=1)
-        self.g['xz'].vlines(slices[0], 0, im.shape[1], colors='y', linestyles='dashed', lw=1)
-        self._format_ax(self.g['xz'])
-
-        if self.dohist:
-            tt = np.real(self.field).ravel()
-            c, s = tt.mean(), 5*tt.std()
-            y,x = np.histogram(tt, bins=np.linspace(c-s, c+s, 700), normed=True)
-            x = (x[1:] + x[:-1])/2
-
-            self.g['in'].plot(x, y, 'k-', lw=1)
-            self.g['in'].fill_between(x, y, 1e-10, alpha=0.5)
-            self.g['in'].set_yscale('log', nonposy='clip')
-
-            self.g['in'].set_xlim(c-s, c+s)
-            self.g['in'].set_ylim(1e-3*y.max(), 1.4*y.max())
-
-        self._format_ax(self.g['in'])
-
-        pl.draw()
+        self.grid_axes.draw_ortho(self.slices)
 
     def register_events(self):
         self._calls = []
-        self._calls.append(self.fig.canvas.mpl_connect('button_press_event', self.mouse_press_view))
+        self._calls.append(self.grid_axes.fig.canvas.mpl_connect(
+            'button_press_event', self.mouse_press_view))
 
     def _pt_xyz(self, event):
+        """Translates a click to an x, y, z position in the axes"""
         x0 = event.xdata
         y0 = event.ydata
 
         f = False
-        if event.inaxes == self.g['xy']:
+        if event.inaxes == self.grid_axes.grid_axes['xy']:
             x = x0
             y = y0
             z = self.slices[0]
             f = True
-        if event.inaxes == self.g['yz']:
+        if event.inaxes == self.grid_axes.grid_axes['yz']:
             x = x0
             y = self.slices[1]
             z = y0
             f = True
-        if event.inaxes == self.g['xz']:
+        if event.inaxes == self.grid_axes.grid_axes['xz']:
             x = self.slices[2]
             y = y0
             z = x0
             f = True
 
-        if f:
-            return np.array((z,y,x))
-        return None
+        return np.array((z,y,x)) if f else None
 
     def mouse_press_view(self, event):
         self.event = event
@@ -757,3 +795,8 @@ class OrthoPrefeature(OrthoViewer):
         if f:
             return np.array((z,y,x))
         return None
+
+# FIXME delete this
+if __name__ == '__main__':
+    im = np.random.randn(10,10,10)
+    OrthoViewer(im)
