@@ -16,10 +16,12 @@ log = log.getChild('interaction')
 # This needs to take a _figure_ as an input argument. Otherwise there
 # is no way you can connect multiple GridAxes on a single figure, like
 # you need for OrthoManipulator
+# -- this is done. Now implement it in the OrthoViewer etc.
+# Don't forget to re-add the tooltip lines
 class OrthoGridAxes(object):
-    def __init__(self, field, vmin=None, vmax=None, cmap='bone', scale=10,
-                 dohist=False, linewidth=1, linecolor='y', linestyle='dashed',
-                 tooltips=None):
+    def __init__(self, fig, field, fig_bbox=(0, 0, 1, 1), vmin=None, vmax=None,
+                 cmap='bone', scale=10, dohist=False, linewidth=1,
+                 linecolor='y', linestyle='dashed'):
         """
         A set of 3 axes to show a 3D image orthogonally
 
@@ -41,18 +43,28 @@ class OrthoGridAxes(object):
         w = x + z
         h = y + z
 
-        tooltip = mpl.rcParams['toolbar']
-        if not tooltips:
-            mpl.rcParams['toolbar'] = 'None'
-        self.fig = pl.figure(figsize=(scale *w / h, scale))
-        mpl.rcParams['toolbar'] = tooltip
+        # tooltip = mpl.rcParams['toolbar']
+        # if not tooltips:
+        #     mpl.rcParams['toolbar'] = 'None'
+        # self.fig = pl.figure(figsize=(scale *w / h, scale))
+        # mpl.rcParams['toolbar'] = tooltip
+        self.fig = fig
+        # Placing figure axes:
+        self.fig_bbox = fig_bbox
+        left1, bot1, fullwid, fullheight = fig_bbox
+        left2 = left1 + wid * x / w
+        bot2 = bot1 + height * (1 - y / h)
+        widx = fullwid * x / w
+        widz = fullwid - wid1
+        heighty = fullheight * y / w
+        heightz = fullheight - height1
 
         # add_axes takes a rectange = left, bottom,width, height
         self.grid_axes = {
-            'xy': self.fig.add_axes((0.0, 1-y/h, x/w,   y/h)),
-            'yz': self.fig.add_axes((0.0, 0.0,   x/w,   1-y/h)),
-            'xz': self.fig.add_axes((x/w, 1-y/h, 1-x/w, y/h)),
-            'in': self.fig.add_axes((x/w, 0.0,   1-x/w, 1-y/h)),
+            'xy': self.fig.add_axes((left1, bot2, widx, heighty)),
+            'yz': self.fig.add_axes((left1, bot1, widx, heighty))),
+            'xz': self.fig.add_axes((left2, bot2, widz, heightz)),
+            'in': self.fig.add_axes((left2, bot1, widz, heightz)),
         }
 
         # Draw at the center of the initial image:
