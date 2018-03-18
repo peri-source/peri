@@ -404,12 +404,39 @@ class OrthoManipulator(object):
 # A simpler version for a single 3D field viewer
 #=============================================================================
 class OrthoViewer(object):
-    def __init__(self, field, onesided=True, vmin=None, vmax=None, cmap='bone',
-            dohist=False, fourier=False, tooltips=False):
+    def __init__(self, field, onesided=True, vmin=None, vmax=None, cmap=None,
+                 dohist=False, fourier=False, tooltips=False, size=8):
         """
-        Easy interactive viewing of 3D ndarray with view selection. Navigate in
-        3D by clicking on the three panels which are slices through the array
-        at a given position.
+        Easy interactive viewing of 3D ndarray with view selection.
+
+        Navigate in 3D by clicking on the three panels which are slices
+        through the array at a given position.
+
+        Parameters
+        ----------
+        field : np.ndarray
+            The field to view
+        onesided : bool, optional
+            Whether to use the default one-sided or two-sided colormap.
+            Over-ridden by cmap. Default is True
+        vmin, vmax : numeric, optional
+            The min, max colorbar range, as passed to the matplotlib
+            colormap. Default is the (min, max) of the data.
+        cmap : {None, valid matplotlib colormap}, optional
+            Use to directly a specific colormap, e.g. `'bone'`. If None
+            selects `'bone' if onesided else 'RdBu'`. Default is None
+        dohist : bool, optional
+            Set to True to include a histogram of `field` in an
+            additional panel. Default is False
+        fourier : bool, optional
+            Set to True to view the Fourier transform of field. Default
+            is False
+        tooltips : bool, optional
+            Whether to include the tooltips bar on the figure. Default
+            is False
+        size : numeric, optional
+            The rough figure size of the viewer; the actual size is re-
+            scaled based on the field's size. Default is 8
         """
         self.vmin = vmin
         self.vmax = vmax
@@ -428,7 +455,7 @@ class OrthoViewer(object):
         h = float(y + z)
 
         self.fig = make_clean_figure(
-            figsize=(10 * w/h, 10), remove_tooltips=not tooltips,
+            figsize=(size * w/h, size), remove_tooltips=not tooltips,
             remove_keybindings=True)
 
         self.g = {}
