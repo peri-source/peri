@@ -1,3 +1,4 @@
+from cycler import cycler
 COLORS = ['#850113', '#9BDA42', '#2A6DC2', '#E57BAA']
 MARKERS = ['o', '^', 'D', '>']
 
@@ -101,7 +102,8 @@ rcparams = {
     'axes.unicode_minus':False,
     'axes.formatter.limits':[-3,3],
     'axes.unicode_minus':False,
-    'axes.color_cycle': COLORS + ['#FF7F00', '#D0D033','#A65628','#F781BF','#999999'],
+    'axes.prop_cycle' : cycler('color', COLORS +
+        ['#FF7F00', '#D0D033','#A65628','#F781BF','#999999']),
     'xtick.major.size':10,
     'xtick.minor.size':5,
     'xtick.labelsize':'large',
@@ -143,10 +145,5 @@ try:
     import matplotlib.pylab as pl
     pl.rcParams.update(rcparams)
 
-    rckeymap = {'keymap.quit': '', 'keymap.quit_all': ''}
-    try:
-        pl.rcParams.update(rckeymap)
-    except Exception as e:
-        pass
 except ImportError as e:
     pass
