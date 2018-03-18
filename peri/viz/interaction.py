@@ -11,6 +11,32 @@ from peri.util import Tile
 from peri.logger import log
 log = log.getChild('interaction')
 
+def make_clean_figure(figsize, remove_tooltips=False, remove_keybindings=False):
+    """
+    Makes a `matplotlib.pyplot.Figure` without tooltips or keybindings
+
+    Parameters
+    ----------
+    figsize : tuple
+        Figsize as passed to `matplotlib.pyplot.figure`
+    remove_tooltips, remove_keybindings : bool
+        Set to True to remove the tooltips bar or any key bindings,
+        respectively. Default is False
+
+    Returns
+    -------
+    fig : `matplotlib.pyplot.Figure`
+    """
+    tooltip = mpl.rcParams['toolbar']
+    if remove_tooltips:
+        mpl.rcParams['toolbar'] = 'None'
+    fig = pl.figure(figsize=figsize)
+    mpl.rcParams['toolbar'] = tooltip
+    if remove_keybindings:
+        fig.canvas.mpl_disconnect(fig.canvas.manager.key_press_handler_id)
+    return fig
+
+
 class OrthoManipulator(object):
     def __init__(self, state, size=8, cmap_abs='bone', cmap_diff='RdBu',
             incsize=18.0, orientation=None, vrange_img=1.0, vrange_diff=0.1):
@@ -87,10 +113,12 @@ class OrthoManipulator(object):
 
         orientation = orientation or ('horizontal' if w/h < 1.4 else 'vertical')
         if orientation == 'horizontal' or orientation == 'h':
-            self.fig = pl.figure(figsize=(2*size*w/h,size))
+            self.fig = make_clean_figure(figsize=(2*size*w/h, size),
+                    remove_keybindings=True)
             Sx, Sy, xoff, yoff = 0.5, 1.0, 0.5, 0.0
         elif orientation == 'vertical' or orientation == 'v':
-            self.fig = pl.figure(figsize=(size,2*size*h/w))
+            self.fig = make_clean_figure(figsize=(2*size*w/h, size),
+                    remove_keybindings=True)
             Sx, Sy, xoff, yoff = 1.0, 0.5, 0.0, 0.5
         else:
             raise AttributeError("orientation must be one of '(h)orizontal', '(v)ertical'")
@@ -399,11 +427,9 @@ class OrthoViewer(object):
         w = float(x + z)
         h = float(y + z)
 
-        tooltip = mpl.rcParams['toolbar']
-        if not tooltips:
-            mpl.rcParams['toolbar'] = 'None'
-        self.fig = pl.figure(figsize=(10*w/h,10))
-        mpl.rcParams['toolbar'] = tooltip
+        self.fig = make_clean_figure(
+            figsize=(10 * w/h, 10), remove_tooltips=not tooltips,
+            remove_keybindings=True)
 
         self.g = {}
         # rect = l,b,w,h
