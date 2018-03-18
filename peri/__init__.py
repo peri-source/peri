@@ -1,6 +1,3 @@
-# always monkey-patch the matplotlibrc for peri!
-from peri.viz import base
-
 # trackpy loggers interfere with our own. stop that here.
 try:
     import trackpy

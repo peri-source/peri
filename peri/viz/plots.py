@@ -1,3 +1,6 @@
+# monkey-batch the matplotlibrc for peri:
+from peri.viz import base
+
 from builtins import range
 
 import matplotlib as mpl
