@@ -1,6 +1,4 @@
-#FIXME when finish this, update s.gradmodel_e to s.gradmodel_error
-# Another way to do this is simply to copy all the code and start deleting things...
-# ...wait til you have an organizational structure
+#FIXME when this is finished, update s.gradmodel_e to s.gradmodel_error
 import numpy as np
 import time
 from peri.logger import log
@@ -49,25 +47,71 @@ def _low_mem_mtm(m, step='calc'):
 # The Engine should be flexible enough where it doesn't care whether residuals
 # is data-model or model-data, since the OptObj just provides residuals.
 
+# OPTOBJ and daughter classes:
+# TODO:
+"""
+    1. An exact _graderr for the OptState.
+    2. A graderr which uses the exact _graderr when it should and a JT*r
+       when it can't use the exact graderr
+    3. Right now in OptState J is initialized and filled; maybe wait
+       until J is created?
+"""
 
-# FIXME the OptObj needs to know how to calculate the gradient of the error
-# For a state this means (1) the exact gradient of the error after
-# updating and (2) a calculated gradient JTr when the the exact grad is wrong
-# Also, don't initialize a J array until it is asked for (in the init set
-# J=None, then in the update_J if it's not set allocate)
+# ISDONE:
+"""
+    1. raise error if J has nans
+    2. Calculate the gradient of the cost and the residuals, with low memory
+    3. Does the optobj know about JTJ too? certainly not a damped JTJ though.
+    4. Low-rank J updates
+    5. Consistent notation for J -- J[i,j] = ith residual, j param
+"""
 
-# Things needed for the OptObj:
-# 1. raise error if J has nans
-# 2. Calculate the gradient of the cost and the residuals, with low memory
-#       a. Means that you need a _graderr to be exact for the OptState
-# 3. Does the optobj know about JTJ too? certainly not a damped JTJ though.
-# 4. If it has a J, it needs to know how to do partial updates of J.
-#    - for instance, it needs to know how to do an eigen update of J
-#    and a Broyden update of J. And then it needs to know how to intelligently
-#    update them (i.e. only Broyden update when we take a good step, not when
-#    we try out to infinity on accident)
-# 5. Which means it needs to know how to do a rank-1 update
-# 6. Consistent notation for J -- J[i,j] = ith residual, j param
+# OPTENGINE (there should be no daughter classes!!!!)
+# TODO
+"""
+    0. Keep it...
+        a. only relying on OptObj
+        b. agnostic to whether residuals is data-model or model-data
+    1. is-a rather than has-a attr/class relation. It seems like the
+       optimize should "have a" additional step, damper mode, etc
+            - damping
+            - step calculation with acceleration
+            - take-additional-steps mode (e.g. run with J vs sub-
+              block runs vs w/e) -- should I remove subblock runs?
+    2. Tests to ensure that it works nicely
+    3. rts=True option (rts = the kwargs to return-to-start at each
+       point in the J update)
+    4. User-supplied damping that scales with problem size
+        a. Multiple damping modes, such as Levenberg and Marquardt modes
+        b. Vectorial damping rather than scalar.
+        c. scaled modes
+            -- on 2nd thought I'm not sure if this is a great idea. It's
+            already partially implemented as the optimizer has an attr
+            self.dampmode which is a function that damps a JTJ.
+    5. Multiple "take additional step" modes....
+    6. check that the JTJ and J*residuals are low-memory
+    7. Possible new features:
+        a. "Guess updates when stuck / failed step?"
+            - I have no idea what that comment means
+        b. A better way to update the damping significantly when needed.
+"""
+
+# ISDONE
+"""
+    1. If it has a J, it needs to know how to do partial updates of J.
+       - for instance, it needs to know how to do an eigen update of J
+       and a Broyden update of J. And then it needs to know how to
+       intelligently update them (i.e. only Broyden update when we take
+       a good step, not when we try out to infinity on accident)
+    2. Clear termination criterion
+      a. Terminate when stuck.
+      b. Returned termination flags (e.g. completed, stuck, maxiter)
+    3. Only 1 run mode.
+    4. Separate increase/decrease damping factors.
+    5. geodesic acceleration
+    6. Internal run
+    7. Broyden updates
+"""
 
 
 class OptObj(object):
@@ -223,13 +267,7 @@ class OptObj(object):
         abs_cos = np.sqrt(1 - model_sine_2)
         return abs_cos
 
-#List:
-# 1. Check
-# 2. Check (no decimation)
-# 3. Check
-# 4. Not to be implemented; for optimizer.
-# 5. Check
-# 6. Check
+
 class OptFunction(OptObj):
     def __init__(self, func, data, paramvals, dl=1e-7):
         """
@@ -388,43 +426,6 @@ class OptImageState(OptObj):
         return self.error
 
 
-# Things needed for the engine:
-# 1. 1 class, only relies on OptObj
-# 2. Clear termination criterion
-#   a. Terminate when stuck.
-#   b. Returned termination flags (e.g. completed, stuck, maxiter)
-# 3. User-supplied damping that scales with problem size
-#   a. Levenberg and marquardt modes
-#   b. vectorial modes
-#   c. scaled modes
-# 5. Only 1 run mode.
-
-# Old things that need to be kept for the engine
-# 1. Low-memory-overhead dots for JTJ and J*residuals
-# 2. acceleration options -- done
-# 3. Broyden option, default as true
-# 4. Internal run -- partially done but not implemented
-
-# Things that maybe should be a generic module / exterior callable / passed
-# model-like object.
-# 1. vector damping                             |
-# 2. increase/decrease damping factors....      |   DAMPING
-# 3. damping modes....                          |
-# 4. acceleration options?
-# 5. Update-J options (e.g. eig or guessing an update after failure
-
-# Things that should be generic:
-# 1. Should not matter whether or not residuals = model-data or data-model
-
-# Possible new features to add
-# 1. Guess updates when stuck / failed step?
-# 2. A better way to update the damping significantly when needed.
-
-
-# Possible features to remove:
-# 1. Subblock runs
-
-#Needs:
 class LMOptimizer(object):
     def __init__(self, optobj, damp=1.0, dampdown=8., dampup=3., nsteps=(1,2),
             accel=True, dobroyden=True, exptol=1e-7, costol=1e-5, errtol=1e-7,
