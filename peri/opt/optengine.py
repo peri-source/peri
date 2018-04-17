@@ -1,8 +1,9 @@
-#FIXME when this is finished, update s.gradmodel_e to s.gradmodel_error
+# FIXME when this is finished, update s.gradmodel_e to s.gradmodel_error
 import numpy as np
 import time
 from peri.logger import log
 CLOG = log.getChild('optengine')
+
 
 def _low_mem_mtm(m, step='calc'):
     """
@@ -34,14 +35,14 @@ def _low_mem_mtm(m, step='calc'):
         # # np.dot(m_tmp, m.T, out=mmt[a:mx])
         # # np.dot(m, m[a:mx].T, out=mmt[:, a:mx])
         # np.dot(m[:,a:mx], mt_tmp[:mx], out=mmt)
-    mtm = np.zeros([m.shape[1], m.shape[1]])  #6us
+    mtm = np.zeros([m.shape[1], m.shape[1]])  # 6us
     # m_tmp = np.zeros([step, m.shape[1]])
     for a in range(0, m.shape[1], step):
         mx = min(a+step, m.shape[0])
         # m_tmp[:] = m[a:mx]
         # np.dot(m_tmp, m.T, out=mmt[a:mx])
         # mmt[:, a:mx] = np.dot(m, m[a:mx].T)
-        mtm[a:mx,:] = np.dot(m[:,a:mx].T, m)
+        mtm[a:mx, :] = np.dot(m[:, a:mx].T, m)
     return mtm
 
 # The Engine should be flexible enough where it doesn't care whether residuals
@@ -78,7 +79,7 @@ def _low_mem_mtm(m, step='calc'):
             - step calculation with acceleration
             - take-additional-steps mode (e.g. run with J vs sub-
               block runs vs w/e) -- should I remove subblock runs?
-    2. Tests to ensure that it works nicely
+    2. Test it when finished to ensure that it works nicely
     3. rts=True option (rts = the kwargs to return-to-start at each
        point in the J update)
     4. User-supplied damping that scales with problem size
@@ -153,7 +154,7 @@ class OptObj(object):
     @property
     def error(self):
         r = self.residuals.copy()
-        return np.dot(r,r)
+        return np.dot(r, r)
 
     @property
     def residuals(self):
@@ -192,7 +193,7 @@ class OptObj(object):
         if self.J is None:
             self._initialize_J()
         for a, d in enumerate(direction):
-            if not np.isclose(np.dot(d,d), 1.0, atol=1e-10):
+            if not np.isclose(np.dot(d, d), 1.0, atol=1e-10):
                 raise ValueError('direction is not normalized')
             vals_to_sub = np.dot(self.J, d)
             if hasvals:
@@ -204,7 +205,7 @@ class OptObj(object):
                 vals = (r1-r0) / self.dl
             delta_vals = vals - vals_to_sub
             for b in range(d.size):
-                self.J[:,b] += d[b] * delta_vals
+                self.J[:, b] += d[b] * delta_vals
         if np.isnan(self.J.sum()):
             raise RuntimeError('J has nans')
         self._calcjtj()
@@ -235,13 +236,13 @@ class OptObj(object):
         # If the model were linear, then the cost would be quadratic,
         # with Hessian 2*`self.JTJ` and gradient `grad`
         expected_error = (self.error + np.dot(grad, delta_params) +
-                np.dot(np.dot(self.JTJ, delta_params), delta_params))
+                          np.dot(np.dot(self.JTJ, delta_params), delta_params))
         return expected_error
 
     def calc_model_cosine(self):
         """
-        Calculates the cosine of the residuals with the model, based on the
-        expected error of the model.
+        Calculates the cosine of the residuals with the model, based on
+        the expected error of the model.
 
         Returns
         -------
@@ -253,17 +254,18 @@ class OptObj(object):
         The model cosine is defined in terms of the geometric view of
         curve-fitting, as a model manifold embedded in a high-dimensional
         space. The model cosine is the cosine of the residuals vector
-        with its projection on the tangent space: :math:`cos(phi) = |P^T r|/|r|`
-        where :math:`P^T` is the projection operator onto the model manifold
-        and :math:`r` the residuals.
+        with its projection on the tangent space:
+            :math:`cos(phi) = |P^T r|/|r|`
+        where :math:`P^T` is the projection operator onto the model
+        manifold and :math:`r` the residuals.
 
-        Rather than doing the SVD, we get this from the expected error of
-        the model if it were linear. We use that expected error and the
-        current error to calculate a model sine, and use that to get a model
-        cosine
+        Rather than doing the SVD, we get this from the expected error
+        of the model if it were linear. We use that expected error and
+        the current error to calculate a model sine, and use that to
+        get a model cosine
         """
         expected_error = self.find_expected_error(delta_params='perfect')
-        model_sine_2 = expected_error / (self.error + 1e-9)  #error=distance^2
+        model_sine_2 = expected_error / (self.error + 1e-9)  # error=distance^2
         abs_cos = np.sqrt(1 - model_sine_2)
         return abs_cos
 
@@ -290,7 +292,7 @@ class OptFunction(OptObj):
         self.data = data
         self._model = np.zeros_like(data)
         self._paramvals = np.array(paramvals).reshape(-1)
-        self.J = None # we don't create J until we need to
+        self.J = None  # we don't create J until we need to
         self.dl = dl
 
     def _initialize_J(self):
@@ -311,7 +313,7 @@ class OptFunction(OptObj):
         if np.isnan(self.J.sum()):
             raise RuntimeError('J has nans')
         self._calcjtj()
-        #And we put params back:
+        # And we put params back:
         self.update(p0)
 
     def update(self, values):
@@ -357,7 +359,7 @@ def get_residuals_update_tile(st, params, vals=None):
 def decimate_state(state, nparams, decimate=1, min_redundant=20, max_mem=1e9):
     """
     Given a state, returns set of indices """
-    pass # FIXME
+    pass  # FIXME
 
 
 # Only works for image state because the residuals update tile only works
@@ -403,8 +405,9 @@ class OptImageState(OptObj):
         if self.J is None:
             self._initialize_J()
         start = time.time()
-        self.J[:] = np.transpose(self.state.gradmodel(params=self.params,
-                rts=True, dl=self.dl, slicer=self.tile.slicer, inds=self.inds))
+        self.J[:] = np.transpose(self.state.gradmodel(
+            params=self.params, rts=True, dl=self.dl, slicer=self.tile.slicer,
+            inds=self.inds))
         CLOG.debug('Calcualted J:\t{} s'.format(time.time() - start))
         self._calcjtj()
 
@@ -427,9 +430,9 @@ class OptImageState(OptObj):
 
 
 class LMOptimizer(object):
-    def __init__(self, optobj, damp=1.0, dampdown=8., dampup=3., nsteps=(1,2),
-            accel=True, dobroyden=True, exptol=1e-7, costol=1e-5, errtol=1e-7,
-            fractol=1e-7, paramtol=1e-7, maxiter=2):
+    def __init__(self, optobj, damp=1.0, dampdown=8., dampup=3., nsteps=(1, 2),
+                 accel=True, dobroyden=True, exptol=1e-7, costol=1e-5,
+                 errtol=1e-7, fractol=1e-7, paramtol=1e-7, maxiter=2):
         """
         Parameters
         ----------
@@ -456,8 +459,9 @@ class LMOptimizer(object):
 
         # Termination dict:
         self.maxiter = maxiter
-        self.term_dict = {'errtol':errtol, 'fractol':fractol,
-                'paramtol':paramtol, 'exptol':exptol, 'costol':costol}
+        self.term_dict = {'errtol': errtol, 'fractol': fractol,
+                          'paramtol': paramtol, 'exptol': exptol,
+                          'costol': costol}
 
     def optimize(self):
         """Runs the optimization"""
@@ -478,7 +482,7 @@ class LMOptimizer(object):
             # 4. Repeat til termination
             if np.any(list(self.check_completion().values())):
                 return 'completed'
-        else: # for-break-else, with the terminate
+        else:  # for-break-else, with the terminate
             # something about didn't converge maybe
             return 'unconverged'
 
@@ -501,7 +505,7 @@ class LMOptimizer(object):
         errs = [obj.update(lastvals + step) for step in steps]
         best = np.nanargmin(errs)
         CLOG.debug('Initial Step:')
-        CLOG.debug('{}'.format([lasterror]+ errs))
+        CLOG.debug('{}'.format([lasterror] + errs))
         if errs[best] < lasterror:  # if we found a good step, take it
             CLOG.debug('Good step')
             self.damp = damps[best]
@@ -530,8 +534,8 @@ class LMOptimizer(object):
         self.lasterror = lasterror
         self.lastvals[:] = lastvals.copy()
         if self.dobroyden:
-            self.broyden_update_J(  obj.paramvals - lastvals,
-                                    obj.residuals - lastresiduals)
+            self.broyden_update_J(obj.paramvals - lastvals,
+                                  obj.residuals - lastresiduals)
         return 'run'
 
     def take_additional_steps(self):
@@ -540,8 +544,8 @@ class LMOptimizer(object):
         return self.run_with_J()
 
     def damp_JTJ(self, damp):
-        # One possible different option is to pass a self.dampmode as a function
-        # which takes JTJ, damping and returns a damped JTJ
+        # One possible different option is to pass a self.dampmode as a
+        # function which takes JTJ, damping and returns a damped JTJ
         # -- right now defined explicitly in the init
         return self.dampmode(self.optobj.JTJ, damp)
 
@@ -560,7 +564,7 @@ class LMOptimizer(object):
                 self.lastvals[:] = lastvals.copy()
                 if self.dobroyden:
                     self.broyden_update_J(obj.paramvals - lastvals,
-                                        obj.residuals - lastresiduals)
+                                          obj.residuals - lastresiduals)
             else:
                 # Put params back, quit:
                 obj.update(lastvals)
@@ -569,11 +573,11 @@ class LMOptimizer(object):
         return 'unconverged'
 
     # def another_run(self, numdir=1):
-        # flag = run_with_J()
-        # if flag == 'unconverged':
-            # self.eig_update_J(numdir=numdir)
-            # self.badstep_updat_J(badstep, badresiduals)
-            # -- need to get the badresiduals w/o a function update though
+    #     flag = run_with_J()
+    #     if flag == 'unconverged':
+    #         self.eig_update_J(numdir=numdir)
+    #         self.badstep_updat_J(badstep, badresiduals)
+    #         -- need to get the badresiduals w/o a function update though
 
     def eig_update_J(self, numdir=1):
         """Update J along the `numdir` stiffest eigendirections"""
@@ -588,7 +592,7 @@ class LMOptimizer(object):
         nrm = np.sqrt(np.dot(direction, direction))
         d0 = direction / nrm
         vals = dr / nrm
-        self.optobj.low_rank_J_update(d0.reshape(1,-1), vals.reshape(1,-1))
+        self.optobj.low_rank_J_update(d0.reshape(1, -1), vals.reshape(1, -1))
 
     def badstep_update_J(self, badstep, bad_dr):
         """
@@ -606,8 +610,8 @@ class LMOptimizer(object):
         """
         CLOG.debug('Bad step update.')
         apparent = np.dot(bad_dr, self.optobj.J)  # apparent step
-        self.optobj.low_rank_J_update([stp / np.sqrt(np.dot(stp,stp)) for stp
-                in [badstep, apparent]])
+        self.optobj.low_rank_J_update([stp / np.sqrt(np.dot(stp, stp)) for
+                                       stp in [badstep, apparent]])
 
     def calc_step(self, dampedJTJ):
         grad = self.optobj.gradcost()
@@ -632,17 +636,17 @@ class LMOptimizer(object):
                 ['modelcos', 'costol'],
                 ['exp_derr', 'exptol'],
                 ]
-        return {k2:d[k1] < self.term_dict[k2] for k1, k2 in keys}
+        return {k2: d[k1] < self.term_dict[k2] for k1, k2 in keys}
 
     def get_convergence_stats(self):
         """Returns a dict of termination info"""
         obj = self.optobj
         d = {
-            'derr' : self.lasterror - obj.error,
-            'fracerr' : (self.lasterror - obj.error),
-            'dvals' : np.abs(self.lastvals - obj.paramvals).max(),
-            'modelcos':obj.calc_model_cosine(),
-            'exp_derr':obj.error - obj.find_expected_error(),
+            'derr': self.lasterror - obj.error,
+            'fracerr': (self.lasterror - obj.error),
+            'dvals': np.abs(self.lastvals - obj.paramvals).max(),
+            'modelcos': obj.calc_model_cosine(),
+            'exp_derr': obj.error - obj.find_expected_error(),
             }
         return d
 
@@ -662,7 +666,7 @@ class LMOptimizer(object):
             corr : numpy.ndarray
                 The correction to the original LM step.
         """
-        #Get the derivative:
+        # Get the derivative:
         obj = self.optobj
         p0 = obj.paramvals.copy()  # FIXME this is probably wrong
         _ = obj.update(p0)
@@ -674,10 +678,9 @@ class LMOptimizer(object):
         der2 = (rm2 + rm1 - 2*rm0)
 
         correction = np.linalg.lstsq(dampedJTJ, np.dot(der2, obj.J),
-                                    rcond=self._rcond)[0]
+                                     rcond=self._rcond)[0]
         correction *= -0.5
         return correction
-
 
 
 # ~~~ testing stuff; delete me ~~~
