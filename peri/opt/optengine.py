@@ -327,26 +327,26 @@ class OptImageState(OptObj):
         OptObj for a peri.states.ImageState
 
         Parameters
-	----------
-	state : `peri.states.ImageState`
-	    The state to optimize
-	params : list
-	    The parameters of the state to optimize
-	dl : Float, optional
-	    Step size for finite-difference approximation of model
-	    derivates. Default is 3e-6
-	inds : numpy.ndarray, slice, or None, optional
-	    Indices of the (raveled) residuals to use for calculating
-	    steps. Used to save memory. Default is None
-	"""
+        ----------
+        state : `peri.states.ImageState`
+            The state to optimize
+        params : list
+            The parameters of the state to optimize
+        dl : Float, optional
+            Step size for finite-difference approximation of model
+            derivates. Default is 3e-6
+        inds : numpy.ndarray, slice, or None, optional
+            Indices of the (raveled) residuals to use for calculating
+            steps. Used to save memory. Default is None
+        """
         self.state = state
         self.params = params
         self.dl = dl
         self.tile = get_residuals_update_tile(state, params)
         if inds is None:
-	    self.inds = slice(None)
-	else:
-	    self.inds = inds
+            self.inds = slice(None)
+        else:
+            self.inds = inds
         self.J = None
 
     def _initialize_J(self):
@@ -360,8 +360,8 @@ class OptImageState(OptObj):
         #     first then inds.
         # (3) gradmodel J order needs to be swapped
         if self.J is None:
-	    self._initialize_J()
-	start = time.time()
+            self._initialize_J()
+        start = time.time()
         self.J[:] = np.transpose(self.state.gradmodel(params=self.params,
                 rts=True, dl=self.dl, slicer=self.tile.slicer, inds=self.inds))
         CLOG.debug('Calcualted J:\t{} s'.format(time.time() - start))
@@ -688,7 +688,7 @@ if __name__ == '__main__':
     # also works for image state, w/o decimation...
 
     # so: Make it work for decimation, make opt procedures.
-    # TODO: 
+    # TODO:
     # Decimation for optstate -- should be just inds=inds and calculating them
     # GroupedOptimizer
     # - Decimate by paramters
