@@ -54,8 +54,8 @@ def _low_mem_mtm(m, step='calc'):
     1. An exact _graderr for the OptState.
     2. A graderr which uses the exact _graderr when it should and a JT*r
        when it can't use the exact graderr
-    3. Right now in OptState J is initialized and filled; maybe wait
-       until J is created?
+    3. rts=True option (rts = the kwargs to return-to-start at each
+       point in the J update)
 """
 
 # ISDONE:
@@ -65,53 +65,10 @@ def _low_mem_mtm(m, step='calc'):
     3. Does the optobj know about JTJ too? certainly not a damped JTJ though.
     4. Low-rank J updates
     5. Consistent notation for J -- J[i,j] = ith residual, j param
-"""
-
-# OPTENGINE (there should be no daughter classes!!!!)
-# TODO
-"""
-    0. Keep it...
-        a. only relying on OptObj
-        b. agnostic to whether residuals is data-model or model-data
-    1. is-a rather than has-a attr/class relation. It seems like the
-       optimize should "have a" additional step, damper mode, etc
-            - damping
-            - step calculation with acceleration
-            - take-additional-steps mode (e.g. run with J vs sub-
-              block runs vs w/e) -- should I remove subblock runs?
-    2. Test it when finished to ensure that it works nicely
-    3. rts=True option (rts = the kwargs to return-to-start at each
-       point in the J update)
-    4. User-supplied damping that scales with problem size
-        a. Multiple damping modes, such as Levenberg and Marquardt modes
-        b. Vectorial damping rather than scalar.
-        c. scaled modes
-            -- on 2nd thought I'm not sure if this is a great idea. It's
-            already partially implemented as the optimizer has an attr
-            self.dampmode which is a function that damps a JTJ.
-    5. Multiple "take additional step" modes....
-    6. check that the JTJ and J*residuals are low-memory
-    7. Possible new features:
-        a. "Guess updates when stuck / failed step?"
-            - I have no idea what that comment means
-        b. A better way to update the damping significantly when needed.
-"""
-
-# ISDONE
-"""
-    1. If it has a J, it needs to know how to do partial updates of J.
-       - for instance, it needs to know how to do an eigen update of J
-       and a Broyden update of J. And then it needs to know how to
-       intelligently update them (i.e. only Broyden update when we take
-       a good step, not when we try out to infinity on accident)
-    2. Clear termination criterion
-      a. Terminate when stuck.
-      b. Returned termination flags (e.g. completed, stuck, maxiter)
-    3. Only 1 run mode.
-    4. Separate increase/decrease damping factors.
-    5. geodesic acceleration
-    6. Internal run
-    7. Broyden updates
+    6. In OptObj's J is not initialized with the init, but is created
+       once when needed and then re-filled afterwards. So there is only
+       one memory allocate call, and it is not done before it is needed.
+    7. Low-mem JTJ, J*r
 """
 
 
@@ -402,6 +359,7 @@ class OptImageState(OptObj):
         # (2) would be nice if gradmodel took both slicer and inds, slicer
         #     first then inds.
         # (3) gradmodel J order needs to be swapped
+        # (4) rts=True option
         if self.J is None:
             self._initialize_J()
         start = time.time()
@@ -427,6 +385,51 @@ class OptImageState(OptObj):
     def update(self, values):
         self.state.update(self.params, values)
         return self.error
+
+
+# LMOPTIMIZER (there should be no daughter classes!!!!)
+# TODO
+"""
+    0. Keep it...
+        a. only relying on OptObj
+        b. agnostic to whether residuals is data-model or model-data
+    1. is-a rather than has-a attr/class relation. It seems like the
+       optimize should "have a" additional step, damper mode, etc
+            - damping
+            - step calculation with acceleration
+            - take-additional-steps mode (e.g. run with J vs sub-
+              block runs vs w/e) -- should I remove subblock runs?
+    2. Test it when finished to ensure that it works nicely
+    3. User-supplied damping that scales with problem size
+        a. Multiple damping modes, such as Levenberg and Marquardt modes
+        b. Vectorial damping rather than scalar.
+        c. scaled modes
+            -- on 2nd thought I'm not sure if this is a great idea. It's
+            already partially implemented as the optimizer has an attr
+            self.dampmode which is a function that damps a JTJ.
+    4. Multiple "take additional step" modes....
+    5. Possible new features:
+        a. "Guess updates when stuck / failed step?"
+            - I have no idea what that comment means
+        b. A better way to update the damping significantly when needed.
+"""
+
+# ISDONE
+"""
+    1. If it has a J, it needs to know how to do partial updates of J.
+       - for instance, it needs to know how to do an eigen update of J
+       and a Broyden update of J. And then it needs to know how to
+       intelligently update them (i.e. only Broyden update when we take
+       a good step, not when we try out to infinity on accident)
+    2. Clear termination criterion
+      a. Terminate when stuck.
+      b. Returned termination flags (e.g. completed, stuck, maxiter)
+    3. Only 1 run mode.
+    4. Separate increase/decrease damping factors.
+    5. geodesic acceleration
+    6. Internal run
+    7. Broyden updates
+"""
 
 
 class LMOptimizer(object):
