@@ -289,6 +289,7 @@ class OptFunction(OptObj):
     def paramvals(self):
         return self._paramvals.copy()
 
+
 def get_residuals_update_tile(st, params, vals=None):
     """
     Finds the update tile of a state in the residuals (unpadded) image.
@@ -314,10 +315,12 @@ def get_residuals_update_tile(st, params, vals=None):
     inner_tile = st.ishape.intersection([st.ishape, itile])
     return inner_tile.translate(-st.pad)
 
+
 def decimate_state(state, nparams, decimate=1, min_redundant=20, max_mem=1e9):
     """
     Given a state, returns set of indices """
     pass # FIXME
+
 
 # Only works for image state because the residuals update tile only works
 # for image states -- get_update_io_tile is only for ImageState
@@ -676,19 +679,69 @@ class LMOptimizer(object):
 
 
 
-if __name__ == '__main__':
-    # Test an OptObj:
-    log.set_level('debug')
-    # from peri.opt import opttest
-    import sys
-    sys.path.append('./')
-    import opttest
+# ~~~ testing stuff; delete me ~~~
+# from peri.opt import opttest
+import sys
+sys.path.append('./')
+import opttest
+from peri import util, states, models
+from peri.comp import psfs, objs, ilms, GlobalScalar, ComponentCollection
+from peri.test import nbody
+
+# Test an OptObj:
+def test_object():
     f = opttest.increase_model_dimension(opttest.rosenbrock)
     o = OptFunction(f, f(np.array([1.0, 1.0])), np.zeros(2), dl=1e-7)
     l = LMOptimizer(o, maxiter=1)
     l.optimize()
+    return f, o, l
 
+# Test an ImageState:
+def test_simple_state():
+    im = util.RawImage('../../scripts/bkg_test.tif')
+    bkg_const = ilms.LegendrePoly3D(order=(1,1,1))
+    st = states.ImageState(im, [bkg_const], mdl=models.SmoothFieldModel())
+    o = OptImageState(st, st.params)
+    l = LMOptimizer(o, maxiter=3)
+    l.optimize()
+    return st, o, l
+
+def test_complex_state():
+    im = util.NullImage(shape=(32,)*3)
+    pos, rad, tile = nbody.create_configuration(3, im.tile)
+    P = ComponentCollection([
+        objs.PlatonicSpheresCollection(pos, rad),
+        objs.Slab(2)
+    ], category='obj')
+
+    H = psfs.AnisotropicGaussian()
+    I = ilms.BarnesStreakLegPoly2P1D(
+        npts=(25,13,3), zorder=2, local_updates=False)
+    B = ilms.LegendrePoly2P1D(order=(3,1,1), category='bkg', constval=0.01)
+    C = GlobalScalar('offset', 0.0)
+    I.randomize_parameters()
+
+    st = states.ImageState(
+        im, [B, I, H, P, C], pad=16, model_as_data=True, sigma=1e-4)
+
+    true_error = st.error
+    true_values = np.copy(st.get_values(st.params))
+    # randomize:
+    st.update(st.params, true_values + np.random.randn(true_values.size)*1e-1)
+    initial_error = st.error
+    o = OptImageState(st, st.params)
+    l = LMOptimizer(o, maxiter=3, damp=1e3)
+    l.optimize()
+    print("Initial error:\t{}\nCurrent error:\t{}\nTrue error:\t{}".format(
+        initial_error, st.error, true_error))
+    return st, o, l
+
+if __name__ == '__main__':
     # also works for image state, w/o decimation...
+    log.set_level('debug')
+    # f, o, l = test_object()
+    # st, o, l = test_simple_state()
+    st, o, l = test_complex_state()
 
     # so: Make it work for decimation, make opt procedures.
     # TODO:
