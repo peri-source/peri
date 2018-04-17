@@ -54,8 +54,6 @@ def _low_mem_mtm(m, step='calc'):
     1. An exact _graderr for the OptState.
     2. A graderr which uses the exact _graderr when it should and a JT*r
        when it can't use the exact graderr
-    3. rts=True option (rts = the kwargs to return-to-start at each
-       point in the J update)
 """
 
 # ISDONE:
@@ -69,6 +67,8 @@ def _low_mem_mtm(m, step='calc'):
        once when needed and then re-filled afterwards. So there is only
        one memory allocate call, and it is not done before it is needed.
     7. Low-mem JTJ, J*r
+    8. rts=True option (rts = the kwargs to return-to-start at each
+       point in the J update)
 """
 
 
@@ -322,7 +322,7 @@ def decimate_state(state, nparams, decimate=1, min_redundant=20, max_mem=1e9):
 # Only works for image state because the residuals update tile only works
 # for image states -- get_update_io_tile is only for ImageState
 class OptImageState(OptObj):
-    def __init__(self, state, params, dl=3e-6, inds=None):
+    def __init__(self, state, params, dl=3e-6, inds=None, rts=True):
         """
         OptObj for a peri.states.ImageState
 
@@ -338,10 +338,16 @@ class OptImageState(OptObj):
         inds : numpy.ndarray, slice, or None, optional
             Indices of the (raveled) residuals to use for calculating
             steps. Used to save memory. Default is None
+        rts : Bool, optional
+            Whether or not to return the state to its original value
+            before evaluating the derivative of each parameter. Set
+            to True for an accurate J calculation, False for a fast
+            one, as passed to states.gradmodel. Default is True.
         """
         self.state = state
         self.params = params
         self.dl = dl
+        self.rts = rts
         self.tile = get_residuals_update_tile(state, params)
         if inds is None:
             self.inds = slice(None)
@@ -359,13 +365,12 @@ class OptImageState(OptObj):
         # (2) would be nice if gradmodel took both slicer and inds, slicer
         #     first then inds.
         # (3) gradmodel J order needs to be swapped
-        # (4) rts=True option
         if self.J is None:
             self._initialize_J()
         start = time.time()
         self.J[:] = np.transpose(self.state.gradmodel(
-            params=self.params, rts=True, dl=self.dl, slicer=self.tile.slicer,
-            inds=self.inds))
+            params=self.params, rts=self.rts, dl=self.dl,
+            slicer=self.tile.slicer, inds=self.inds))
         CLOG.debug('Calcualted J:\t{} s'.format(time.time() - start))
         self._calcjtj()
 
