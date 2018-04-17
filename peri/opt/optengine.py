@@ -219,7 +219,7 @@ class OptObj(object):
         cosine
         """
         expected_error = self.find_expected_error(delta_params='perfect')
-        model_sine_2 = expected_error / self.error  #error = distance^2
+        model_sine_2 = expected_error / (self.error + 1e-9)  #error=distance^2
         abs_cos = np.sqrt(1 - model_sine_2)
         return abs_cos
 
@@ -680,6 +680,7 @@ if __name__ == '__main__':
     # Test an OptObj:
     log.set_level('debug')
     # from peri.opt import opttest
+    import sys
     sys.path.append('./')
     import opttest
     f = opttest.increase_model_dimension(opttest.rosenbrock)
