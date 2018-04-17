@@ -405,15 +405,8 @@ class OptImageState(OptObj):
             - take-additional-steps mode (e.g. run with J vs sub-
               block runs vs w/e) -- should I remove subblock runs?
     2. Test it when finished to ensure that it works nicely
-    3. User-supplied damping that scales with problem size
-        a. Multiple damping modes, such as Levenberg and Marquardt modes
-        b. Vectorial damping rather than scalar.
-        c. scaled modes
-            -- on 2nd thought I'm not sure if this is a great idea. It's
-            already partially implemented as the optimizer has an attr
-            self.dampmode which is a function that damps a JTJ.
-    4. Multiple "take additional step" modes....
-    5. Possible new features:
+    3. Multiple "take additional step" modes....
+    4. Possible new features:
         a. "Guess updates when stuck / failed step?"
             - I have no idea what that comment means
         b. A better way to update the damping significantly when needed.
@@ -434,18 +427,44 @@ class OptImageState(OptObj):
     5. geodesic acceleration
     6. Internal run
     7. Broyden updates
+    8. Ability to pick multiple damping modes or supply a user-defined
+       mode.
 """
 
+# damping functions:
+def damp_additive(jtj, damp):
+    return jtj + np.eye(jtj.shape[0]) * damp
+
+
+def damp_multiplicative(jtj, damp):
+    return jtj + np.diag(np.diag(jtj)) * damp
+
+
+def damp_cutoff(jtj, damp, minval=1.0):
+    """Damping matrix proportional to diag(jtj), with a minimum value"""
+    return jtj + np.diag(np.clip(np.diag(jtj), minval, np.inf))
+
+
+# one other which are not so simple because it is history dependent:
+# 1. Pick damping matrix to be diagonal, with entries the largest
+#    diagonal entries of JTJ yet encountered. (Minpack)
+# (could also add some experimental ones, but I don't see the point)
+
+DAMPMODES = {'additive': damp_additive,
+             'multiplicative': damp_multiplicative,
+             'cutoff': damp_cutoff}
 
 class LMOptimizer(object):
-    def __init__(self, optobj, damp=1.0, dampdown=8., dampup=3., nsteps=(1, 2),
-                 accel=True, dobroyden=True, exptol=1e-7, costol=1e-5,
-                 errtol=1e-7, fractol=1e-7, paramtol=1e-7, maxiter=2):
+    def __init__(self, optobj, damp=1.0, dampdown=8., dampup=3., dampmode=
+                 'additive', nsteps=(1, 2), accel=True, dobroyden=True,
+                 exptol=1e-7, costol=1e-5, errtol=1e-7, fractol=1e-7,
+                 paramtol=1e-7, maxiter=2):
         """
         Parameters
         ----------
         optobj : OptObj instance
             The OptObj to optimize.
+
         Notes
         -----
         This engine knows _nothing_ about the current state of the object --
@@ -461,7 +480,16 @@ class LMOptimizer(object):
         self.dampdown = dampdown
         self.dampup = dampup
         self.nsteps = nsteps
-        self.dampmode = lambda JTJ, damp: JTJ + np.eye(JTJ.shape[0]) * damp
+        if dampmode in DAMPMODES.keys():
+            self.dampfunc = DAMPMODES[dampmode]
+            self.dampmode = dampmode
+        else:
+            if not hasattr(dampmode, '__call__'):
+                raise ValueError(
+                    "`dampmode` must either be one of {} or callable.".format(
+                    DAMPMODES.keys()))
+            self.dampfunc = dampmode  # could ensure that is is callable
+            self.dampmode = 'custom'
         self.accel = accel
         self.dobroyden = dobroyden
 
@@ -552,10 +580,10 @@ class LMOptimizer(object):
         return self.run_with_J()
 
     def damp_JTJ(self, damp):
-        # One possible different option is to pass a self.dampmode as a
+        # One possible different option is to pass a self.dampfunc as a
         # function which takes JTJ, damping and returns a damped JTJ
         # -- right now defined explicitly in the init
-        return self.dampmode(self.optobj.JTJ, damp)
+        return self.dampfunc(self.optobj.JTJ, damp)
 
     # Various internal run modes:
     def run_with_J(self, maxrun=6):
