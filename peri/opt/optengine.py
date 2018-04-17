@@ -679,7 +679,9 @@ class LMOptimizer(object):
 if __name__ == '__main__':
     # Test an OptObj:
     log.set_level('debug')
-    from peri.opt import opttest
+    # from peri.opt import opttest
+    sys.path.append('./')
+    import opttest
     f = opttest.increase_model_dimension(opttest.rosenbrock)
     o = OptFunction(f, f(np.array([1.0, 1.0])), np.zeros(2), dl=1e-7)
     l = LMOptimizer(o, maxiter=1)
