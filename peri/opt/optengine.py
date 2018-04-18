@@ -11,7 +11,6 @@
         b. May work via a generator which gets called each time in a loop?
         c. Should be agnostic to what the optimizer is -- e.g. it should
            work for a SGD algorithm if you implement one.
-    3. Shorter fucking log lines
 """
 # TODO: updates that depend on states.py
 """
@@ -392,7 +391,7 @@ class OptImageState(OptObj):
         self.J[:] = np.transpose(self.state.gradmodel(
             params=self.params, rts=self.rts, dl=self.dl,
             slicer=self.tile.slicer, inds=self.inds))
-        CLOG.debug('Calculated J:\t{} s'.format(time.time() - start))
+        CLOG.debug('Calculated J:\t{:.1f} s'.format(time.time() - start))
         self._calcjtj()
 
     @property
@@ -525,7 +524,7 @@ class LMOptimizer(object):
     def optimize(self):
         """Runs the optimization"""
         for _ in range(self.maxiter):
-            CLOG.debug('Start loop {}: \t{}'.format(_, self.optobj.error))
+            CLOG.debug('Start loop {}: \t{:.5}'.format(_, self.optobj.error))
             # Most generic algorithm is:
             # 1. Update J, JTJ
             self.optobj.update_J()
@@ -564,7 +563,7 @@ class LMOptimizer(object):
         errs = [obj.update(lastvals + step) for step in steps]
         best = np.nanargmin(errs)
         CLOG.debug('Initial Step:')
-        CLOG.debug('{}'.format([lasterror] + errs))
+        CLOG.debug('\t'.join(['{:.3f}'.format(e) for e in [lasterror] + errs]))
         if errs[best] < lasterror:  # if we found a good step, take it
             CLOG.debug('Good step')
             self.damp = damps[best]
@@ -581,7 +580,7 @@ class LMOptimizer(object):
                 step = self.calc_step(self.damp_JTJ(self.damp))
                 err = obj.update(lastvals + step)
                 if err < lasterror:
-                    CLOG.debug('Increased damping {}x, {}'.format(_, err))
+                    CLOG.debug('Increased damping {}x, {:.3f}'.format(_, err))
                     break
             else:  # for-break-else, failed to increase damping
                 # update function to previous value, terminate?
@@ -589,7 +588,7 @@ class LMOptimizer(object):
                 CLOG.warn('Stuck!')
                 return 'stuck'
         # If we're still here, we've taken a good step, so broyden update:
-        CLOG.debug('Initial step: \t{}'.format(obj.error))
+        CLOG.debug('Initial step: \t{:.3f}'.format(obj.error))
         self.lasterror = lasterror
         self.lastvals[:] = lastvals.copy()
         if self.dobroyden:
@@ -628,7 +627,7 @@ class LMOptimizer(object):
                 # Put params back, quit:
                 obj.update(lastvals)
                 return 'stuck'
-            CLOG.debug('Run w/ J step: \t{}'.format(obj.error))
+            CLOG.debug('Run w/ J step: \t{:.3f}'.format(obj.error))
         return 'unconverged'
 
     # def another_run(self, numdir=1):
