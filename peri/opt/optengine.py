@@ -1,4 +1,25 @@
-# FIXME when this is finished, update s.gradmodel_e to s.gradmodel_error
+# TODO: optengine only (ignoring changes that depend on states.py for now)
+"""
+    1. Decimation in OptState. Would calculate which indices to sample.
+        -- this could stay in optimize.py; not sure
+        -- in decimate_state for now; un touched.
+    2. OptimizationScheme / GroupedOptimizer.
+        a. Should know how to:
+            i.  Do a series of optimizations over different param_names,
+                each with different optimization schemes if desired.
+            ii. Do line / quadratic / etc minimization.
+        b. May work via a generator which gets called each time in a loop?
+        c. Should be agnostic to what the optimizer is -- e.g. it should
+           work for a SGD algorithm if you implement one.
+    3. Shorter fucking log lines
+"""
+# TODO: updates that depend on states.py
+"""
+    1. Update st.gradmodel_e to st.gradmodel_error
+    2. residuals = model - data (so gradmodel is gradresiduals); this
+       might be already done in which case wtf?
+"""
+
 import numpy as np
 import time
 from peri.logger import log
@@ -82,7 +103,7 @@ class OptObj(object):
         * The residuals vector
         * The current cost (`error`), not necessarily the sum of the squares
           of the residuals vector (e.g. decimated residuals but accurate cost
-          or priors) FIXME rename error -> cost?
+          or priors)
         * The gradient of the residuals vector, and a way to update it when
           desired
         * The gradient of the cost, and a way to update it with function
@@ -371,7 +392,7 @@ class OptImageState(OptObj):
         self.J[:] = np.transpose(self.state.gradmodel(
             params=self.params, rts=self.rts, dl=self.dl,
             slicer=self.tile.slicer, inds=self.inds))
-        CLOG.debug('Calcualted J:\t{} s'.format(time.time() - start))
+        CLOG.debug('Calculated J:\t{} s'.format(time.time() - start))
         self._calcjtj()
 
     @property
@@ -410,6 +431,8 @@ class OptImageState(OptObj):
         a. "Guess updates when stuck / failed step?"
             - I have no idea what that comment means
         b. A better way to update the damping significantly when needed.
+            - honestly I think this need will disappear now that the
+              rts=True vs rts=False issue is known from the biases paper
 """
 
 # ISDONE
@@ -784,10 +807,3 @@ if __name__ == '__main__':
     st, o, l = test_complex_state()
 
     # so: Make it work for decimation, make opt procedures.
-    # TODO:
-    # Decimation for optstate -- should be just inds=inds and calculating them
-    # GroupedOptimizer
-    # - Decimate by paramters
-    # - Line / quadratic / etc minimization
-    # - Probably works via a generator which gets called each time in a loop?
-
