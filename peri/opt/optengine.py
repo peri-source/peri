@@ -93,7 +93,7 @@ def _low_mem_mtm(m, step='calc'):
 
 
 class OptObj(object):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, param_ranges=None):
         """
         Superclass for optimizing an object, especially for minimizing the
         sum of the squares of a residuals vector.
@@ -112,6 +112,8 @@ class OptObj(object):
         It knows nothing about methods to compute steps for those objects,
         however.
         """
+        self.param_ranges = (np.array(param_ranges) if param_ranges is not None
+                             else param_ranges)
         pass
 
     def update_J(self):
@@ -121,8 +123,16 @@ class OptObj(object):
         return None
 
     def update(self, values):
-        """Updates the function to `values`"""
-        pass
+        """Updates the function to `values`, clipped to the allowed range"""
+        if self.param_ranges is not None:
+            goodvals = np.clip(values, param_ranges[:,0], param_ranges[:,1])
+        else:
+            goodvals = values
+        return self._update(values)
+
+    def _update(self, values):
+        """Update the object; returns the error"""
+        raise NotImplementedError("Implement in subclass")
 
     def gradcost(self):
         """Returns the gradient of the cost"""
@@ -248,7 +258,7 @@ class OptObj(object):
 
 
 class OptFunction(OptObj):
-    def __init__(self, func, data, paramvals, dl=1e-7):
+    def __init__(self, func, data, paramvals, dl=1e-7, **kwargs):
         """
         OptObj for a function
 
@@ -264,6 +274,11 @@ class OptFunction(OptObj):
             dl : Float, optional
                 Step size for finite-difference (2pt stencil) derivative
                 approximation. Default is 1e-7
+            param_ranges : [N, 2] list-like or None, optional
+                If not None, valid parameter ranges for each of the N
+                parameters, with `param_ranges[i]` being the [low, high]
+                bounding values. Default is None, for no bounds on the
+                parameters.
         """
         self.func = func
         self.data = data
@@ -271,6 +286,7 @@ class OptFunction(OptObj):
         self._paramvals = np.array(paramvals).reshape(-1)
         self.J = None  # we don't create J until we need to
         self.dl = dl
+        super(OptFunction, self).__init__(**kwargs)
 
     def _initialize_J(self):
         self.J = np.zeros([self.data.size, self.paramvals.size], dtype='float')
@@ -293,7 +309,7 @@ class OptFunction(OptObj):
         # And we put params back:
         self.update(p0)
 
-    def update(self, values):
+    def _update(self, values):
         self._paramvals[:] = values
         self._model = self.func(self._paramvals)
         return self.error
@@ -342,7 +358,7 @@ def decimate_state(state, nparams, decimate=1, min_redundant=20, max_mem=1e9):
 # Only works for image state because the residuals update tile only works
 # for image states -- get_update_io_tile is only for ImageState
 class OptImageState(OptObj):
-    def __init__(self, state, params, dl=3e-6, inds=None, rts=True):
+    def __init__(self, state, params, dl=3e-6, inds=None, rts=True, **kwargs):
         """
         OptObj for a peri.states.ImageState
 
@@ -363,6 +379,11 @@ class OptImageState(OptObj):
             before evaluating the derivative of each parameter. Set
             to True for an accurate J calculation, False for a fast
             one, as passed to states.gradmodel. Default is True.
+        param_ranges : [N, 2] list-like or None, optional
+            If not None, valid parameter ranges for each of the N
+            parameters, with `param_ranges[i]` being the [low, high]
+            bounding values. Default is None, for no bounds on the
+            parameters.
         """
         self.state = state
         self.params = params
@@ -374,6 +395,7 @@ class OptImageState(OptObj):
         else:
             self.inds = inds
         self.J = None
+        super(OptImageState, self).__init__(**kwargs)
 
     def _initialize_J(self):
         self.J = np.zeros([self.residuals.size, len(self.params)])
@@ -407,7 +429,7 @@ class OptImageState(OptObj):
     def paramvals(self):
         return np.copy(self.state.get_values(self.params))
 
-    def update(self, values):
+    def _update(self, values):
         self.state.update(self.params, values)
         return self.error
 
