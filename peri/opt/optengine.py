@@ -65,6 +65,38 @@ def _low_mem_mtm(m, step='calc'):
         mtm[a:mx, :] = np.dot(m[:, a:mx].T, m)
     return mtm
 
+
+def get_residuals_update_tile(st, params, vals=None):
+    """
+    Finds the update tile of a state in the residuals (unpadded) image.
+
+    Parameters
+    ----------
+    st : :class:`peri.states.State`
+        The state
+    params : list of valid parameter names
+        The parameter names to find the update tile for.
+    values : list of valid param values or None, optional
+        The update values of the parameters. If None, uses their
+        current values.
+
+    Returns
+    -------
+    :class:`peri.util.Tile`
+        The tile corresponding to padded_tile in the unpadded image.
+    """
+    if vals is None:
+        vals = st.get_values(params)
+    itile = st.get_update_io_tiles(params, vals)[1]
+    inner_tile = st.ishape.intersection([st.ishape, itile])
+    return inner_tile.translate(-st.pad)
+
+
+def decimate_state(state, nparams, decimate=1, min_redundant=20, max_mem=1e9):
+    """
+    Given a state, returns set of indices """
+    pass  # FIXME
+
 # The Engine should be flexible enough where it doesn't care whether residuals
 # is data-model or model-data, since the OptObj just provides residuals.
 
@@ -116,6 +148,11 @@ class OptObj(object):
                              else param_ranges)
         pass
 
+    def _clean_mem(self):
+        """Cleans up any large blocks of memory used by the object"""
+        self.J = None
+        self.JTJ = None
+
     def update_J(self):
         """
         Updates the Jacobian / gradient of the residuals = gradient of model
@@ -146,12 +183,12 @@ class OptObj(object):
     @property
     def residuals(self):
         """Returns the residuals = model-data"""
-        pass
+        raise NotImplementedError('Implement in subclass')
 
     @property
     def paramvals(self):
         """Returns the current value of the parameters"""
-        pass
+        raise NotImplementedError('Implement in subclass')
 
     def low_rank_J_update(self, direction, values=None):
         """Does a series of rank-1 updates on self.J.
@@ -321,38 +358,6 @@ class OptFunction(OptObj):
     @property
     def paramvals(self):
         return self._paramvals.copy()
-
-
-def get_residuals_update_tile(st, params, vals=None):
-    """
-    Finds the update tile of a state in the residuals (unpadded) image.
-
-    Parameters
-    ----------
-    st : :class:`peri.states.State`
-        The state
-    params : list of valid parameter names
-        The parameter names to find the update tile for.
-    values : list of valid param values or None, optional
-        The update values of the parameters. If None, uses their
-        current values.
-
-    Returns
-    -------
-    :class:`peri.util.Tile`
-        The tile corresponding to padded_tile in the unpadded image.
-    """
-    if vals is None:
-        vals = st.get_values(params)
-    itile = st.get_update_io_tiles(params, vals)[1]
-    inner_tile = st.ishape.intersection([st.ishape, itile])
-    return inner_tile.translate(-st.pad)
-
-
-def decimate_state(state, nparams, decimate=1, min_redundant=20, max_mem=1e9):
-    """
-    Given a state, returns set of indices """
-    pass  # FIXME
 
 
 # Only works for image state because the residuals update tile only works
