@@ -162,7 +162,8 @@ class OptObj(object):
     def update(self, values):
         """Updates the function to `values`, clipped to the allowed range"""
         if self.param_ranges is not None:
-            goodvals = np.clip(values, param_ranges[:,0], param_ranges[:,1])
+            goodvals = np.clip(values, self.param_ranges[:,0],
+                               self.param_ranges[:,1])
         else:
             goodvals = values
         return self._update(values)
@@ -394,11 +395,26 @@ class OptImageState(OptObj):
         self.params = params
         self.dl = dl
         self.rts = rts
-        self.tile = get_residuals_update_tile(state, params)
-        if inds is None:
-            self.inds = slice(None)
+        # self.tile = get_residuals_update_tile(state, params)
+        # if inds is None:
+        #     self.inds = slice(None)
+        # else:
+        #     self.inds = inds
+        # FIXME this is ugly. Could just be the nice thing above
+        # if states.sample took both a `inds` and a `tile`
+        tile = get_residuals_update_tile(state, params)
+        if tile == state.ishape.translate(-state.pad):
+            # full residuals, no tile:
+            self._slicer = None
         else:
+            self._slicer = tile.slicer
+        if self._slicer is None:
+            self.inds = slice(None) if inds is None else inds
+        else:  # _slicer is not None:
+            if inds is not None:
+                raise ValueError("Currently cannot set both inds and slicer.")
             self.inds = inds
+        # end fixme
         self.J = None
         super(OptImageState, self).__init__(**kwargs)
 
@@ -415,16 +431,27 @@ class OptImageState(OptObj):
         if self.J is None:
             self._initialize_J()
         start = time.time()
+        # self.J[:] = np.transpose(self.state.gradmodel(
+        #     params=self.params, rts=self.rts, dl=self.dl,
+        #     slicer=self.tile.slicer, inds=self.inds))
         self.J[:] = np.transpose(self.state.gradmodel(
             params=self.params, rts=self.rts, dl=self.dl,
-            slicer=self.tile.slicer, inds=self.inds))
+            slicer=self._slicer, inds=self.inds))  # FIXME ugly, prettier above
         CLOG.debug('Calculated J:\t{:.1f} s'.format(time.time() - start))
         self._calcjtj()
 
     @property
     def residuals(self):
         # FIXME residuals = model - data
-        return -self.state.residuals[self.tile.slicer].ravel()[self.inds]
+        # return -self.state.residuals[self.tile.slicer].ravel()[self.inds]
+        # FIXME ugly, prettier above
+        if self.inds is not None:
+            return -self.state.residuals.ravel()[self.inds]
+        elif self._slicer is not None:
+            return -self.state.residuals[self._slicer].ravel()
+        else:
+            raise RuntimeError('wtf')
+
 
     @property
     def error(self):
