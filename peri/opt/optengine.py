@@ -148,7 +148,7 @@ class OptObj(object):
                              else param_ranges)
         pass
 
-    def _clean_mem(self):
+    def clean_mem(self):
         """Cleans up any large blocks of memory used by the object"""
         self.J = None
         self.JTJ = None
@@ -402,6 +402,19 @@ class OptImageState(OptObj):
         #     self.inds = inds
         # FIXME this is ugly. Could just be the nice thing above
         # if states.sample took both a `inds` and a `tile`
+        # as far as I can tell states.sample is only used for gradmodel
+        # really, although it is also used (through st.m, st.r) for:
+        #       * st.fisherinformation
+        #       * st.gradloglikelihood
+        #       * st.hessloglikelihood
+        #       * st.gradmodel
+        #       * st.hessmodel
+        #       * st.JTJ
+        #       * st.J
+        #       * st.J_e
+        #       * st.gradmodel_e
+        # -- note that there is a states.J, so you can use st.J =
+        #    st.gradresiduals
         tile = get_residuals_update_tile(state, params)
         if tile == state.ishape.translate(-state.pad):
             # full residuals, no tile:
@@ -530,11 +543,12 @@ DAMPMODES = {'additive': damp_additive,
              'multiplicative': damp_multiplicative,
              'cutoff': damp_cutoff}
 
+
 class LMOptimizer(object):
     def __init__(self, optobj, damp=1.0, dampdown=8., dampup=3., dampmode=
                  'additive', nsteps=(1, 2), accel=True, dobroyden=True,
                  exptol=1e-7, costol=1e-5, errtol=1e-7, fractol=1e-7,
-                 paramtol=1e-7, maxiter=2):
+                 paramtol=1e-7, maxiter=2, clean_mem=True):
         """
         Parameters
         ----------
@@ -574,6 +588,7 @@ class LMOptimizer(object):
         self.term_dict = {'errtol': errtol, 'fractol': fractol,
                           'paramtol': paramtol, 'exptol': exptol,
                           'costol': costol}
+        self.clean_mem = clean_mem
 
     def optimize(self):
         """Runs the optimization"""
@@ -593,9 +608,13 @@ class LMOptimizer(object):
             #           (quick = eig, directional)
             # 4. Repeat til termination
             if np.any(list(self.check_completion().values())):
+                if self.clean_mem:
+                    self.optobj.clean_mem()
                 return 'completed'
         else:  # for-break-else, with the terminate
             # something about didn't converge maybe
+            if self.clean_mem:
+                self.optobj.clean_mem()
             return 'unconverged'
 
     def take_initial_step(self):
@@ -793,4 +812,25 @@ class LMOptimizer(object):
                                      rcond=self._rcond)[0]
         correction *= -0.5
         return correction
+
+
+class GroupedOptimizer(object):
+    def __init__(self, optimizer_generator):
+        """Optimization over groups of optimizers.
+
+        Parameters
+        ----------
+        optimizer_generator : generator or iterator
+            A generator or iterator over optimizer objects to optimize.
+            Must return objects with an optimize() method.
+
+        Methods
+        -------
+        optimize : optimizes each individual optimizer.
+        """
+        self.optimizer_generator = optimizer_generator
+
+    def optimize(self):
+        for lmopt in self.optimizer_generator:
+            lmopt.optimize()
 
