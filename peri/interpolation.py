@@ -2,11 +2,11 @@ from builtins import range, object
 
 import numpy as np
 
+
 class BarnesInterpolation1D(object):
     def __init__(self, x, d, filter_size=None, iterations=4, clip=False,
-            clipsize=3, damp=0.95, blocksize=None, donorm=True):
-        """
-        A class for 1-d barnes interpolation. Give data points d at locations x.
+                 clipsize=3, damp=0.95, blocksize=None, donorm=True):
+        """1-d barnes interpolation. Give data points d at locations x.
 
         See [1]_, equations 1-7 for implementation.
 
@@ -52,6 +52,15 @@ class BarnesInterpolation1D(object):
             rather than the correct version. Default is True. If you're using
             this, set it to True.
 
+        Examples
+        --------
+        >>> import numpy as np
+        >>> x_known = np.linspace(0, np.pi, 10)
+        >>> d_known = np.sin(x_known)
+        >>> barnes = BarnesInterpolation1D(x_known, d_known)
+        >>> x_check = np.linspace(0, np.pi, 11)
+        >>> assert np.allclose(barnes(x_check), np.sin(x_check), atol=1e-2)
+
         References
         ----------
         .. [1] S. E. Koch, M. DesJardins, P. J. Kocin, J. Climate Appl.
@@ -77,7 +86,7 @@ class BarnesInterpolation1D(object):
 
     def _distance_matrix(self, a, b):
         """Pairwise distance between each point in `a` and each point in `b`"""
-        return (a[:,None] - b[None,:])**2
+        return (a[:, None] - b[None, :])**2
 
     def _weight(self, rsq, sigma=None):
         """weighting function for Barnes"""
@@ -148,6 +157,7 @@ class BarnesInterpolation1D(object):
             g *= self.damp
         return out
 
+
 class BarnesInterpolationND(BarnesInterpolation1D):
     def __init__(self, *args, **kwargs):
         """
@@ -161,6 +171,16 @@ class BarnesInterpolationND(BarnesInterpolation1D):
         d : ndarray, 1-dimensional
             input values, y values for data points. Same number of points as
             x has positions.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> np.random.seed(0)
+        >>> x_known = np.random.randn(20, 2)
+        >>> func = lambda x: np.exp(-(x[:, 0]**2 + x[:, 1]**2))
+        >>> d_known = func(x_known)
+        >>> barnes_nd = BarnesInterpolationND(x_known, d_known, iterations=35)
+        >>> assert np.allclose(barnes_nd(x_known), func(x_known), atol=1e-2)
 
         See Also
         --------
@@ -183,11 +203,11 @@ class BarnesInterpolationND(BarnesInterpolation1D):
         dist = lambda x: np.sqrt(np.sum(x*x, axis=1))
         return dist(self.x[1:] - self.x[:-1]).mean()/2
 
+
 class ChebyshevInterpolation1D(object):
     def __init__(self, func, args=(), window=(0.,1.), degree=3, evalpts=4):
-        """
-        A 1D Chebyshev approximation / interpolation for an ND function, approximating
-        (N-1)D in in the last dimension.
+        """A 1D Chebyshev approximation / interpolation for an ND function,
+        approximating (N-1)D in in the last dimension.
 
         Parameters
         ----------
@@ -207,6 +227,14 @@ class ChebyshevInterpolation1D(object):
 
         evalpts : integer
             Number of Chebyshev points to evaluate the function at
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> func = lambda x: np.sin(x)
+        >>> cheb = ChebyshevInterpolation1D(func, window=(0, np.pi), degree=9,
+        >>>                                 evalpts=11)
+        >>> assert np.allclose(cheb(1.0), np.sin(1.0), atol=1e-7)
         """
         self.args = args
         self.func = func
