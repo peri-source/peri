@@ -112,9 +112,9 @@ class BarnesInterpolation1D(object):
     def _eval_firstorder(self, rvecs, data, sigma):
         """The first-order Barnes approximation"""
         if not self.blocksize:
-            dist = self._distance_matrix(rvecs, self.x)  # distance between points
-            weights = self._weight(dist, sigma=sigma)  # Gaussian weights
-            return weights.dot(data) / weights.sum(axis=1)  # weighted sum
+            dist_between_points = self._distance_matrix(rvecs, self.x)
+            gaussian_weights = self._weight(dist_between_points, sigma=sigma)
+            return gaussian_weights.dot(data) / gaussian_weights.sum(axis=1)
         else:
             # Now rather than calculating the distance matrix all at once,
             # we do it in chunks over rvecs
@@ -128,11 +128,11 @@ class BarnesInterpolation1D(object):
 
     def _newcall(self, rvecs):
         """Correct, normalized version of Barnes"""
-        #1. Initial guess for output:
+        # 1. Initial guess for output:
         sigma = 1*self.filter_size
         out = self._eval_firstorder(rvecs, self.d, sigma)
-        #2. There are differences between 0th order at the points and
-        #   the passed data, so we iterate to remove:
+        # 2. There are differences between 0th order at the points and
+        #    the passed data, so we iterate to remove:
         ondata = self._eval_firstorder(self.x, self.d, sigma)
         for i in range(self.iterations):
             out += self._eval_firstorder(rvecs, self.d-ondata, sigma)
@@ -143,7 +143,6 @@ class BarnesInterpolation1D(object):
     def _oldcall(self, rvecs):
         """Barnes w/o normalizing the weights"""
         g = self.filter_size
-
 
         dist0 = self._distance_matrix(self.x, self.x)
         dist1 = self._distance_matrix(rvecs, self.x)
@@ -190,22 +189,22 @@ class BarnesInterpolationND(BarnesInterpolation1D):
 
     def _distance_matrix(self, a, b):
         """Pairwise distance between each point in `a` and each point in `b`"""
-        sq = lambda x: (x*x)
+        def sq(x): return (x * x)
         # matrix = np.sum(map(lambda a,b: sq(a[:,None] - b[None,:]), a.T,
         #   b.T), axis=0)
         # A faster version than above:
-        matrix = sq(a[:,0][:,None] - b[:,0][None,:])
+        matrix = sq(a[:, 0][:, None] - b[:, 0][None, :])
         for x, y in zip(a.T[1:], b.T[1:]):
-            matrix += sq(x[:, None] - y[None,:])
+            matrix += sq(x[:, None] - y[None, :])
         return matrix
 
     def _default_filter_size(self):
-        dist = lambda x: np.sqrt(np.sum(x*x, axis=1))
+        def dist(x): return np.sqrt(np.sum(x*x, axis=1))
         return dist(self.x[1:] - self.x[:-1]).mean()/2
 
 
 class ChebyshevInterpolation1D(object):
-    def __init__(self, func, args=(), window=(0.,1.), degree=3, evalpts=4):
+    def __init__(self, func, args=(), window=(0., 1.), degree=3, evalpts=4):
         """A 1D Chebyshev approximation / interpolation for an ND function,
         approximating (N-1)D in in the last dimension.
 
@@ -243,15 +242,17 @@ class ChebyshevInterpolation1D(object):
 
     def _x2c(self, x):
         """ Convert windowdow coordinates to cheb coordinates [-1,1] """
-        return (2*x-self.window[1]-self.window[0])/(self.window[1]-self.window[0])
+        return ((2 * x - self.window[1] - self.window[0]) /
+                (self.window[1] - self.window[0]))
 
     def _c2x(self, c):
         """ Convert cheb coordinates to windowdow coordinates """
-        return 0.5*(self.window[0]+self.window[1]+c*(self.window[1]-self.window[0]))
+        return 0.5 * (self.window[0] + self.window[1] +
+                      c * (self.window[1] - self.window[0]))
 
     def _construct_coefficients(self):
-        """
-        Calculate the coefficients based on the func, degree, and interpolating points.
+        """Calculate the coefficients based on the func, degree, and
+        interpolating points.
         _coeffs is a [order, N,M,....] array
 
         Notes
@@ -307,4 +308,5 @@ class ChebyshevInterpolation1D(object):
 
         Output is in the format [A,...,x]
         """
-        return np.polynomial.chebyshev.chebval(self._x2c(x), self._coeffs, tensor=True)
+        return np.polynomial.chebyshev.chebval(
+            self._x2c(x), self._coeffs, tensor=True)
