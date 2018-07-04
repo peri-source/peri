@@ -59,7 +59,8 @@ class BarnesInterpolation1D(object):
         >>> d_known = np.sin(x_known)
         >>> barnes = BarnesInterpolation1D(x_known, d_known)
         >>> x_check = np.linspace(0, np.pi, 11)
-        >>> assert np.allclose(barnes(x_check), np.sin(x_check), atol=1e-2)
+        >>> np.allclose(barnes(x_check), np.sin(x_check), atol=1e-2)
+        True
 
         References
         ----------
@@ -179,7 +180,8 @@ class BarnesInterpolationND(BarnesInterpolation1D):
         >>> func = lambda x: np.exp(-(x[:, 0]**2 + x[:, 1]**2))
         >>> d_known = func(x_known)
         >>> barnes_nd = BarnesInterpolationND(x_known, d_known, iterations=35)
-        >>> assert np.allclose(barnes_nd(x_known), func(x_known), atol=1e-2)
+        >>> np.allclose(barnes_nd(x_known), func(x_known), atol=1e-2)
+        True
 
         See Also
         --------
@@ -233,7 +235,8 @@ class ChebyshevInterpolation1D(object):
         >>> func = lambda x: np.sin(x)
         >>> cheb = ChebyshevInterpolation1D(func, window=(0, np.pi), degree=9,
         >>>                                 evalpts=11)
-        >>> assert np.allclose(cheb(1.0), np.sin(1.0), atol=1e-7)
+        >>> np.allclose(cheb(1.0), np.sin(1.0), atol=1e-7)
+        True
         """
         self.args = args
         self.func = func
