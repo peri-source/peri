@@ -4,13 +4,7 @@
         -- this could stay in optimize.py; not sure
         -- in decimate_state for now; un touched.
     2. OptimizationScheme / GroupedOptimizer.
-        a. Should know how to:
-            i.  Do a series of optimizations over different param_names,
-                each with different optimization schemes if desired.
-            ii. Do line / quadratic / etc minimization.
-        b. May work via a generator which gets called each time in a loop?
-        c. Should be agnostic to what the optimizer is -- e.g. it should
-           work for a SGD algorithm if you implement one.
+        a. Do line / quadratic / etc minimization.
 """
 # TODO: updates that depend on states.py
 """
@@ -26,8 +20,7 @@ CLOG = log.getChild('optengine')
 
 
 def _low_mem_mtm(m, step='calc'):
-    """
-    np.dot(m.T, m) with low mem usage for m non-C-ordered, by using small steps
+    """np.dot(m.T, m) with low mem usage for m C-ordered, by using small steps
 
     Parameters
     ----------
@@ -46,29 +39,15 @@ def _low_mem_mtm(m, step='calc'):
         raise ValueError('m must be C ordered for this to work with less mem.')
     if step == 'calc':
         step = np.ceil(1e-2 * m.shape[0]).astype('int')
-    # -- can make this even faster with pre-allocating arrays, but not worth it
-    # right now
-    # mt_tmp = np.zeros([step, m.shape[0]])
-    # for a in range(0, m.shape[1], step):
-        # mx = min(a+step, m.shape[1])
-        # mt_tmp[:mx-a,:] = m.T[a:mx]
-        # # np.dot(m_tmp, m.T, out=mmt[a:mx])
-        # # np.dot(m, m[a:mx].T, out=mmt[:, a:mx])
-        # np.dot(m[:,a:mx], mt_tmp[:mx], out=mmt)
     mtm = np.zeros([m.shape[1], m.shape[1]])  # 6us
-    # m_tmp = np.zeros([step, m.shape[1]])
     for a in range(0, m.shape[1], step):
-        mx = min(a+step, m.shape[0])
-        # m_tmp[:] = m[a:mx]
-        # np.dot(m_tmp, m.T, out=mmt[a:mx])
-        # mmt[:, a:mx] = np.dot(m, m[a:mx].T)
-        mtm[a:mx, :] = np.dot(m[:, a:mx].T, m)
+        max_index = min(a+step, m.shape[0])
+        mtm[a:max_index, :] = np.dot(m[:, a:max_index].T, m)
     return mtm
 
 
-def get_residuals_update_tile(st, params, vals=None):
-    """
-    Finds the update tile of a state in the residuals (unpadded) image.
+def get_residuals_update_tile(st, params, values=None):
+    """Finds the update tile of a state in the residuals (unpadded) image.
 
     Parameters
     ----------
@@ -85,9 +64,9 @@ def get_residuals_update_tile(st, params, vals=None):
     :class:`peri.util.Tile`
         The tile corresponding to padded_tile in the unpadded image.
     """
-    if vals is None:
-        vals = st.get_values(params)
-    itile = st.get_update_io_tiles(params, vals)[1]
+    if values is None:
+        values = st.get_values(params)
+    itile = st.get_update_io_tiles(params, values)[1]
     inner_tile = st.ishape.intersection([st.ishape, itile])
     return inner_tile.translate(-st.pad)
 
@@ -146,7 +125,6 @@ class OptObj(object):
         """
         self.param_ranges = (np.array(param_ranges) if param_ranges is not None
                              else param_ranges)
-        pass
 
     def clean_mem(self):
         """Cleans up any large blocks of memory used by the object"""
@@ -154,16 +132,16 @@ class OptObj(object):
         self.JTJ = None
 
     def update_J(self):
+        """Updates the Jacobian / gradient of the residuals = gradient of model
+        Ideally stored as a C-ordered numpy.ndarray
         """
-        Updates the Jacobian / gradient of the residuals = gradient of model
-        Ideally stored as a C-ordered numpy.ndarray"""
         return None
 
     def update(self, values):
         """Updates the function to `values`, clipped to the allowed range"""
         if self.param_ranges is not None:
-            goodvals = np.clip(values, self.param_ranges[:,0],
-                               self.param_ranges[:,1])
+            goodvals = np.clip(values, self.param_ranges[:, 0],
+                               self.param_ranges[:, 1])
         else:
             goodvals = values
         return self._update(values)
@@ -241,8 +219,7 @@ class OptObj(object):
             raise RuntimeError('JTJ has nans')
 
     def find_expected_error(self, delta_params='perfect'):
-        """
-        Returns the error expected after an update if the model were linear.
+        """Returns the error expected after an update if the model were linear.
 
         Parameters
         ----------
@@ -265,9 +242,8 @@ class OptObj(object):
         return expected_error
 
     def calc_model_cosine(self):
-        """
-        Calculates the cosine of the residuals with the model, based on
-        the expected error of the model.
+        """Calculates the cosine of the residuals with the model, based
+        on the expected error of the model.
 
         Returns
         -------
@@ -297,26 +273,25 @@ class OptObj(object):
 
 class OptFunction(OptObj):
     def __init__(self, func, data, paramvals, dl=1e-7, **kwargs):
-        """
-        OptObj for a function
+        """OptObj for a function
 
         Parameters
         ----------
-            func : callable
-                Must return a np.ndarray-like with syntax func(data, *params)
-                and return an object of the same size as ``data``
-            data : flattened numpy.ndarray
-                Passed to the func. Must return a valid ``np.size``
-            paramvals : numpy.ndarray
-                extra args to pass to the function.
-            dl : Float, optional
-                Step size for finite-difference (2pt stencil) derivative
-                approximation. Default is 1e-7
-            param_ranges : [N, 2] list-like or None, optional
-                If not None, valid parameter ranges for each of the N
-                parameters, with `param_ranges[i]` being the [low, high]
-                bounding values. Default is None, for no bounds on the
-                parameters.
+        func : callable
+            Must return a np.ndarray-like with syntax func(data, *params)
+            and return an object of the same size as ``data``
+        data : flattened numpy.ndarray
+            Passed to the func. Must return a valid ``np.size``
+        paramvals : numpy.ndarray
+            extra args to pass to the function.
+        dl : Float, optional
+            Step size for finite-difference (2pt stencil) derivative
+            approximation. Default is 1e-7
+        param_ranges : [N, 2] list-like or None, optional
+            If not None, valid parameter ranges for each of the N
+            parameters, with `param_ranges[i]` being the [low, high]
+            bounding values. Default is None, for no bounds on the
+            parameters.
         """
         self.func = func
         self.data = data
@@ -365,8 +340,7 @@ class OptFunction(OptObj):
 # for image states -- get_update_io_tile is only for ImageState
 class OptImageState(OptObj):
     def __init__(self, state, params, dl=3e-6, inds=None, rts=True, **kwargs):
-        """
-        OptObj for a peri.states.ImageState
+        """OptObj for a peri.states.ImageState
 
         Parameters
         ----------
@@ -465,7 +439,6 @@ class OptImageState(OptObj):
         else:
             raise RuntimeError('wtf')
 
-
     @property
     def error(self):
         return self.state.error
@@ -549,11 +522,37 @@ class LMOptimizer(object):
                  'additive', nsteps=(1, 2), accel=True, dobroyden=True,
                  exptol=1e-7, costol=1e-5, errtol=1e-7, fractol=1e-7,
                  paramtol=1e-7, maxiter=2, clean_mem=True):
-        """
+        """Optimizes an OptObj using the Levenberg-Marquardt algorithm.
+
         Parameters
         ----------
         optobj : OptObj instance
             The OptObj to optimize.
+        damp : float, optional
+        dampdown, dampup : float > 1, optional
+            The amount to decrease or increase the damping by when after
+            a successful or failed step, respectively. Defaults are 8
+            and 3
+        dampmode : {'additive', 'multiplicative', 'cutoff'}, optional
+        nsteps : tuple, optional
+        accel : bool, optional
+        dobroyden : bool, optional
+        exptol : float, optional
+        costol : float, optional
+        errtol : float, optional
+        fractol : float, optional
+        paramtol : float, optional
+        maxiter : int, optional
+        clean_mem : float, optional
+
+        Methods
+        -------
+        optimize()
+            Runs the optimization
+        check_completion()
+            Return a bool of whether or not optimization has converged
+        get_convergence_stats()
+            Returns a dict of termination info
 
         Notes
         -----
@@ -726,8 +725,7 @@ class LMOptimizer(object):
         self.optobj.low_rank_J_update(d0.reshape(1, -1), vals.reshape(1, -1))
 
     def badstep_update_J(self, badstep, bad_dr):
-        """
-        After a bad step, update J along the 2 directions we know are bad.
+        """After a bad step, update J along the 2 directions we know are bad.
 
         Parameters
         ----------
@@ -782,8 +780,7 @@ class LMOptimizer(object):
         return d
 
     def calc_accel_correction(self, dampedJTJ, initialstep):
-        """
-        Geodesic acceleration correction to the LM step.
+        """Geodesic acceleration correction to the LM step.
 
         Parameters
         ----------
