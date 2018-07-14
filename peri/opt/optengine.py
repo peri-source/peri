@@ -599,22 +599,18 @@ class LMOptimizer(object):
             # 2. Calculate & take a step -- distinction might be blurred
             flag = self.take_initial_step()
             if flag == 'stuck':
-                return flag
+                break
             # 3. If desired, take more steps
             flag = self.take_additional_steps()
-            #       - could be run with J
-            #       - could be run with J with quick updates when stuck
-            #           (quick = eig, directional)
-            # 4. Repeat til termination
+            # 4. Termination if completed
             if np.any(list(self.check_completion().values())):
-                if self.clean_mem:
-                    self.optobj.clean_mem()
-                return 'completed'
+                flag = 'completed'
+                break
         else:  # for-break-else, with the terminate
-            # something about didn't converge maybe
-            if self.clean_mem:
-                self.optobj.clean_mem()
-            return 'unconverged'
+            flag = 'unconverged'
+        if self.clean_mem:
+            self.optobj.clean_mem()
+        return flag
 
     def take_initial_step(self):
         """Takes a step after a fresh J and updates the damping"""
