@@ -113,6 +113,7 @@ def get_rand_Japprox(s, params, num_inds=1000, include_cost=False, **kwargs):
     CLOG.debug('J:\t%f' % (time.time()-start_time))
     return J, return_inds
 
+
 def name_globals(s, remove_params=None):
     """
     Returns a list of the global parameter names.
@@ -138,6 +139,7 @@ def name_globals(s, remove_params=None):
         for p in set(remove_params):
             all_params.remove(p)
     return all_params
+
 
 def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20):
     """
@@ -181,6 +183,7 @@ def get_num_px_jtj(s, nparams, decimate=1, max_mem=1e9, min_redundant=20):
         raise RuntimeError('Insufficient max_mem for desired redundancy.')
     num_px = np.clip(px_dec, px_red, px_mem).astype('int')
     return num_px
+
 
 def vectorize_damping(params, damping=1.0, increase_list=[['psf-', 1e4]]):
     """
@@ -231,6 +234,7 @@ def find_particles_in_tile(state, tile):
     """
     bools = tile.contains(state.obj_get_positions())
     return np.arange(bools.size)[bools]
+
 
 def separate_particles_into_groups(s, region_size=40, bounds=None,
         doshift=False):
@@ -296,6 +300,7 @@ def separate_particles_into_groups(s, region_size=40, bounds=None,
     assert _check_groups(s, groups)
     return groups
 
+
 def _check_groups(s, groups):
     """Ensures that all particles are included in exactly 1 group"""
     ans = []
@@ -307,6 +312,7 @@ def _check_groups(s, groups):
         return False
     else:
         return (np.arange(s.obj_get_radii().size) == np.sort(ans)).all()
+
 
 def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
     """
@@ -609,6 +615,7 @@ class LMAugmentedState(LMGlobals):
     def update_select_J(self, *args, **kwargs):
         raise NotImplementedError('Not yet implemented for LMAugmentedState')
 
+
 #=============================================================================#
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
@@ -652,6 +659,7 @@ def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10.,
     if collect_stats:
         return lm.get_termination_stats()
 
+
 def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
         run_length=4, collect_stats=False, max_iter=2, **kwargs):
     """
@@ -680,10 +688,10 @@ def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
     if collect_stats:
         return lp.get_termination_stats()
 
+
 def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
         decrease_damp_factor=10., run_length=4, collect_stats=False, **kwargs):
-    """
-    Levenberg-Marquardt optimization for every particle in the state.
+    """Levenberg-Marquardt optimization for every particle in the state.
 
     Convenience wrapper for LMParticleGroupCollection. Same keyword args,
     but I've set the defaults to what I've found to be useful values for
@@ -707,6 +715,7 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
     lp.do_run_2()
     if collect_stats:
         return lp.stats
+
 
 def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
         damping=1e-3, collect_stats=False, marquardt_damping=True, **kwargs):
@@ -736,6 +745,7 @@ def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
     lo.do_run_1()
     if collect_stats:
         return lo.get_termination_stats()
+
 
 def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-4,
         errtol=1e-2, mode='burn', max_mem=1e9, include_rad=True,
@@ -927,6 +937,7 @@ def burn(s, n_loop=6, collect_stats=False, desc='', rz_order=0, fractol=1e-4,
                 'line_stats':all_line_stats})
     return d
 
+
 def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True,
         fractol=1e-7, errtol=1e-3, dowarn=True):
     """
@@ -1016,6 +1027,7 @@ def finish(s, desc='finish', n_loop=4, max_mem=1e9, separate_psf=True,
     if dowarn and (not dobreak):
         CLOG.warn('finish() did not converge; consider re-running')
     return {'converged':dobreak, 'loop_values':np.array(values)}
+
 
 def fit_comp(new_comp, old_comp, **kwargs):
     """
