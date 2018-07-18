@@ -16,25 +16,15 @@ from peri import states
 from peri import models as mdl
 from peri.logger import log
 CLOG = log.getChild('opt')
+import peri.opt.optengine as optengine
 
 """
-If the LMEngine gets 'stuck' on the first loop attempt, since _last_vals ==
-param_vals the LM will check completion and terminate. Leaving as is since I've
-only got this to happen when it's at the minimum...
 TODO:
     1. burn -- 2 loops of globals is only good for the first few loops; after
             that it's overkill. Best to make a 3rd mode now, since the
             psf and zscale move around without a set of burns.
 
-To add:
-1. AugmentedState: ILM scale options? You'd need a way to get an overall scale
-    block, which would probably need to come from the ILM itself.
-6. With opt using big regions for particles, globals, it makes sense to
-    put stuff back on the card again....
-
 To fix:
-1.  AugmentedState relies on the particles having radii. Prob OK but make
-    sure things play nice with objects w/o radii.
 2.  Right now, when marquardt_damping=False (the default, which works nicely),
     the correct damping parameter scales with the image size. For each element
     of J is O(1), so JTJ[i,j]~1^2 * N ~ N where N is the number of residuals
@@ -42,23 +32,6 @@ To fix:
     So, changing max_mem or changing the image size will affect what a
     reasonable damping is. One way to do this is to scale the damping by
     the size of the residuals..........................................
-
-LM Algorithm is:
-1. Evaluate J_ia = df(xi,mu)/dmu_a
-2. Solve the for delta:
-    (J^T*J + l*Diag(J^T*J))*delta = J^T(y-f(xi,mu))     (1)
-3. Update mu -> mu + delta
-
-To solve eq. (1), we need to:
-1. Construct the matrix JTJ = J^T*J
-2. Construct the matrix A=JTJ + l*Diag(JTJ)
-3. Construct err= y-f(x,beta)
-4. np.linalg.leastsq(A,err, rcond=min_eigval) to avoid near-zero eigenvalues
-
-My only change to this is, instead of calculating J_ia, we calculate
-J_ia for a small subset (say 1%) of the pixels in the image randomly selected,
-rather than for all the pixels (in addition to leastsq solution instead of
-linalg.solve)
 """
 
 def get_rand_Japprox(s, params, num_inds=1000, include_cost=False, **kwargs):
@@ -502,123 +475,71 @@ class AugmentedState(object):
         self.state.update(self._rad_nms, rnew)
 
 
-class LMAugmentedState(LMGlobals):
-    """
-    Levenberg-Marquardt on an augmented state.
-
-    Contains all the options from the M. Transtrum J. Sethna 2012 ArXiV
-    paper. See LMEngine for further documentation.
-
-    Parameters
-    ----------
-        aug_state : :class:``peri.optimize.opt.AugmentedState``
-            The state to optimize. Stored as self.aug_state
-        max_mem : Numeric, optional
-            The maximum memory to use for the optimization; controls pixel
-            decimation. Default is 1e9. Stored as self.max_mem.
-        opt_kwargs : Dict, optional
-            Dict of ``**kwargs`` for opt implementation. Right now only for
-            get_num_px_jtj, i.e. keys of 'decimate', min_redundant'.
-            Default is `{}`. Stored as self.opt_kwargs.
-
-    Attributes
-    ----------
-        num_pix : Int
-            The number of pixels of the residuals used to calculate J.
-
-    Methods
-    -------
-        reset(new_damping=None)
-            Resets the augmented state, counters, etc to zero, allowing
-            more runs to commence.
-
-    See Also
-    --------
-        LMEngine : Parent class for all Levenberg-Marquardt (LM) optimization
-        LMGlobals : LM optimization on globals without an ``AugmentedState``
-        AugmentedState : The class used by ``LMAugmentedState``.
-        LMParticles : LM optimization designed for optimizing state particles.
-        LMParticleGroupCollection : LM optimization on all particles in a
-            state.
-        LMAugmentedState : LMGlobals with additional R(z) parameters.
-        do_levmarq : Convenience function for LMGlobals
-        do_levmarq_particles : Convenience function for optimizing particles
-    """
-    def __init__(self, aug_state, max_mem=1e9, opt_kwargs={}, **kwargs):
-        self.aug_state = aug_state
-        self.state = aug_state.state
-        self.opt_kwargs = opt_kwargs
-        self.max_mem = max_mem
-        self.num_pix = get_num_px_jtj(aug_state.state, aug_state.param_vals.size,
-                max_mem=max_mem, **self.opt_kwargs)
-        # super(LMAugmentedState, self).__init__(**kwargs)
-        LMEngine.__init__(self, **kwargs)
-
-    def _set_err_paramvals(self):
-        self.error = self.aug_state.state.error
-        self._last_error = (1 + 2*self.fractol) * self.aug_state.state.error
-        self.param_vals = self.aug_state.param_vals.copy()
-        self._last_vals = self.param_vals.copy()
-
-    def calc_J(self):
-        #0. Setup
-        s = self.aug_state.state
-        sa = self.aug_state
-        if self.J is None:
-            self.J = np.zeros([sa.param_vals.size, self.num_pix])
-        else:
-            self.J *= 0
-        # the _direction_ of the exact gradient of the model, rescaled later
-        graderr = np.zeros([sa.param_vals.size])
-
-        #1. J for the state:
-        kw = {k:v for k, v in zip(list(self.opt_kwargs.keys()) + ['out'],
-                list(self.opt_kwargs.values()) + [[self.J, graderr]])}
-        params = sa.param_names
-        _, self._inds = get_rand_Japprox(s, params, num_inds=self.num_pix,
-                include_cost=True, **kw)  # storing via out kwarg
-
-        #2. J for the augmented portion:
-        old_aug_vals = sa.param_vals[sa.rscale_mask].copy()
-        dl = 1e-6
-        i0 = s.residuals.ravel()[self._inds].copy()
-        er0 = s.error
-        ind0 = len(params)
-        for a in range(old_aug_vals.size):
-            dx = np.zeros(old_aug_vals.size)
-            dx[a] = dl
-            sa.update_rscl_x_params(old_aug_vals + dx)
-            i1 = s.residuals.ravel()[self._inds].copy()
-            #J = grad(residuals)
-            der = (i1-i0)/dl
-            self.J[ind0+a] = der.copy()
-            graderr[ind0+a] = (s.error - er0)/dl
-        #resetting to prev. params:
-        sa.update_rscl_x_params(old_aug_vals)
-
-        # Rescaling the grad of cost to the size we expect from the inds:
-        rescale = float(self.J.shape[1])/self.state.residuals.size
-        self._graderr = np.array(graderr) * rescale
-
-    def update_function(self, values):
-        self.aug_state.update(values)
-        return self.aug_state.state.error
-
-    def reset(self, **kwargs):
-        """Resets the aug_state and the LMEngine"""
-        self.aug_state.reset()
-        super(LMAugmentedState, self).reset(**kwargs)
-
-    def set_params(self, *args, **kwargs):
-        raise NotImplementedError('Not supported for LMAugmentedState')
-
-    def update_select_J(self, *args, **kwargs):
-        raise NotImplementedError('Not yet implemented for LMAugmentedState')
-
-
 #=============================================================================#
 #         ~~~~~             Convenience Functions             ~~~~~
 #=============================================================================#
+
+
+def create_state_optimizer(st, param_names, rts=False, dl=3e-6, **kwargs):
+    optobj = optengine.OptImageState(st, param_names, rts=rts, dl=dl)
+    lm = optengine.LMOptimizer(optobj, **kwargs)
+    return lm
+
+
+def optimize_parameters(st, param_names, **kwargs):
+    """Levenberg-Marquardt optimization on a set of parameters."""
+    lm = create_state_optimizer(st, param_names, **kwargs)
+    lm.optimize()
+
+
+def optimize_particles(st, particle_indices, include_rad=True, **kwargs):
+    """Levenberg-Marquardt optimization on a set of particles."""
+    param_names = (st.param_particle(particle_indices) if include_rad
+                   else st.param_particle_pos(inds))
+    optimize_parameters(st, param_names)
+
+
+def particles_generator(st, groups, include_rad=True, rts=True, dl=3e-6,
+                        **kwargs):
+    """does stuff"""
+    for g in groups:
+        param_names = (st.param_particle(g) if include_rad else
+                       st.param_particle_pos(g))
+        optobj = OptImageState(st, param_names, dl=dl, rts=rts)
+        yield LMOptimizer(optobj, **kwargs)
+
+
+def create_particle_groups_optimizer(st, groups, **kwargs):
+    optimizer_generator = particles_generator(st, groups, **kwargs)
+    # param_ranges=limit_particles(st, g) for particles generator?
+    return GroupedOptimizer(optimizer_generator)
+
+
+def optimize_particle_groups(st, groups, **kwargs):
+    """Levenberg-Marquardt optimization for groups of particles.
+
+    Parameters
+    ---------
+    st : `peri.states.ImageState`
+    groups : list
+        A list of groups of particles. Each
+
+    Other Parameters
+    ----------------
+    """
+    grouped_optimizer = create_particle_groups_optimizer(st, groups, **kwargs)
+    grouped_optimizer.optimize()
+
+
+def optimize_all_particles(st, region_size=40, bounds=None, doshift=False,
+                           **kwargs):
+    all_groups = separate_particles_into_groups(st, region_size=region_size,
+                                                bounds=bounds, doshift=doshift)
+    return optimize_particle_groups(st, all_groups, **kwargs)
+
+
+# TODO Implement with optengine (problem is rz_order)!!
+# TODO Deprecate!! needs rz_order
 def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10.,
         run_length=6, eig_update=True, collect_stats=False, rz_order=0,
         run_type=2, **kwargs):
@@ -660,14 +581,13 @@ def do_levmarq(s, param_names, damping=0.1, decrease_damp_factor=10.,
         return lm.get_termination_stats()
 
 
-def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
+# TODO Deprecate!!
+# TODO collect_stats , run_length kwarg.
+#      -- needs to return stats if collect_stats is True for backwards
+#      compatibility.
+def do_levmarq_particles(st, particles, damping=1.0, decrease_damp_factor=10.,
         run_length=4, collect_stats=False, max_iter=2, **kwargs):
-    """
-    Levenberg-Marquardt optimization on a set of particles.
-
-    Convenience wrapper for LMParticles. Same keyword args, but the
-    defaults have been set to useful values for optimizing particles.
-    See LMParticles and LMEngine for documentation.
+    """Levenberg-Marquardt optimization on a set of particles.
 
     See Also
     --------
@@ -676,26 +596,21 @@ def do_levmarq_particles(s, particles, damping=1.0, decrease_damp_factor=10.,
 
         do_levmarq : Levenberg-Marquardt optimization of the entire state;
             useful for optimizing global parameters.
-
-        LMParticles : Optimizer object; the workhorse of do_levmarq_particles.
-
-        LMEngine : Engine superclass for all the optimizers.
     """
-    lp = LMParticles(s, particles, damping=damping, run_length=run_length,
-            decrease_damp_factor=decrease_damp_factor, max_iter=max_iter,
-            **kwargs)
-    lp.do_run_2()
+    optimize_particles(st, particles, damp=damping, maxiter=max_iter,
+                       dampdown=decrease_damp_factor)
     if collect_stats:
-        return lp.get_termination_stats()
+        # return lp.get_termination_stats()
+        raise NotImplementedError
 
 
-def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
+# TODO Deprecate!!
+# TODO collect_stats , run_length kwarg.
+#      -- needs to return stats if collect_stats is True for backwards
+#      compatibility.
+def do_levmarq_all_particle_groups(st, region_size=40, max_iter=2, damping=1.0,
         decrease_damp_factor=10., run_length=4, collect_stats=False, **kwargs):
     """Levenberg-Marquardt optimization for every particle in the state.
-
-    Convenience wrapper for LMParticleGroupCollection. Same keyword args,
-    but I've set the defaults to what I've found to be useful values for
-    optimizing particles. See LMParticleGroupCollection for documentation.
 
     See Also
     --------
@@ -704,18 +619,16 @@ def do_levmarq_all_particle_groups(s, region_size=40, max_iter=2, damping=1.0,
 
         do_levmarq : Levenberg-Marquardt optimization of the entire state;
             useful for optimizing global parameters.
-
-        LMParticleGroupCollection : The workhorse of do_levmarq.
-
-        LMEngine : Engine superclass for all the optimizers.
     """
-    lp = LMParticleGroupCollection(s, region_size=region_size, damping=damping,
-            run_length=run_length, decrease_damp_factor=decrease_damp_factor,
-            get_cos=collect_stats, max_iter=max_iter, **kwargs)
-    lp.do_run_2()
+    optimize_all_particles(st, region_size=region_size, doshift=doshift,
+                           damp=damping, damp_down=decrease_damp_factor,
+                           maxiter=max_iter)
     if collect_stats:
-        return lp.stats
+        # return lp.stats
+        raise NotImplementedError
 
+
+# TODO deprecate these down
 
 def do_levmarq_n_directions(s, directions, max_iter=2, run_length=2,
         damping=1e-3, collect_stats=False, marquardt_damping=True, **kwargs):
