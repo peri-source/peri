@@ -187,53 +187,117 @@ def vectorize_damping(params, damping=1.0, increase_list=[['psf-', 1e4]]):
 
 
 #=============================================================================#
-#               ~~~~~  Particle Optimization stuff  ~~~~~
+#               ~~~~~  For Groups of particle optimization  ~~~~~
 #=============================================================================#
-def find_particles_in_tile(state, tile):
-    """
-    Finds the particles in a tile, as numpy.ndarray of ints.
-
-    Parameters
-    ----------
-        state : :class:`peri.states.ImageState`
-            The state to locate particles in.
-        tile : :class:`peri.util.Tile` instance
-            Tile of the region inside which to check for particles.
-
-    Returns
-    -------
-        numpy.ndarray, int
-            The indices of the particles in the tile.
-    """
-    bools = tile.contains(state.obj_get_positions())
-    return np.arange(bools.size)[bools]
 
 
-def separate_particles_into_groups(s, region_size=40, bounds=None,
-        doshift=False):
-    """
-    Separates particles into convenient groups for optimization.
+class ParticleGroupCreator(object):
+    def __init__(self, state, max_mem=1e9, doshift=False):
+        """
+        Parameters
+        ----------
+        state
+        max_mem : numeric, optional
+        doshift : {True, False, 'rand'}, optional
+        """
+        self.state = state
+        self.max_mem = max_mem
+        self.doshift = doshift
 
-    Given a state, returns a list of groups of particles. Each group of
-    particles are located near each other in the image. Every particle
-    located in the desired region is contained in exactly 1 group.
+    def find_particles_in_tile(self, tile):
+        bools = tile.contains(self.state.obj_get_positions())
+        return np.arange(bools.size)[bools]
+
+    def _check_groups(self, groups):
+        """Ensures that all particles are included in exactly 1 group"""
+        all_indices = [i for group in groups for i in group]
+        unique_indices = np.unique(all_indices)
+        n_particles = self.state.obj_get_positions().shape[0]
+        ok = [unique_indices.size == len(all_indices),
+              unique_indices.size == n_particles,
+              (np.arange(n_particles) == np.sort(all_indices)).all()]
+        return all(ok)
+
+    def _separate_particles_into_groups(self, region_size):
+        bounding_tile = self.state.oshape.translate(-self.state.pad)
+
+        n_translate = np.ceil(bounding_tile.shape.astype('float') /
+                              region_size).astype('int')
+        particle_groups = []
+        region_tile = Tile(left=bounding_tile.l,
+                           right=bounding_tile.l + region_size)
+        doshift = (np.random.choice([True, False]) if self.doshift == 'rand'
+                   else self.doshift)
+        if doshift:
+            shift = region_size // 2
+            n_translate += 1
+        else:
+            shift = 0
+        deltas = np.meshgrid(*[np.arange(i) for i in n_translate])
+        group_tiles = [region_tile.translate(np.array(delta) * region_size -
+                       shift) for delta in deltas]
+        groups = [self.find_particles_in_tile(group_tile)
+                  for group_tile in group_tiles]
+        groups = [g for g in groups if len(g) > 0]
+        return groups
+
+    def _get_region_J_nbytes(self, group):
+        param_names = self.state.param_particle(group)
+        param_values = self.state.get_values(param_names)
+        update_region = self.state.get_update_io_tiles(
+            param_names, param_values)[2]
+        num_pixels_in_update_region = update_region.prod().astype('int64')
+        num_entries_in_J = num_pixels_in_update_region * len(param_names)
+        return num_entries_in_J * 8  # 8 for number of bytes in float64
+
+    def _calc_mem_usage(self, region_size):
+        groups = self._separate_particles_into_groups(region_size)
+        # The actual mem usage is the max of the memory usage of all the
+        # particle groups. However this is too slow. So instead we use the
+        # max of the memory of the biggest 5 particle groups:
+        num_in_group = [np.size(g) for g in particle_groups]
+        biggroups = [particle_groups[i] for i in np.argsort(num_in_group)[-5:]]
+        mems = [self._get_region_J_nbytes(g) for g in biggroups]
+        return np.max(mems)
+
+    def calc_particle_group_region_size(self, initial_region_size=40):
+        im_shape = self.state.oshape.shape
+        if np.size(initial_region_size) == 1:
+            region_size = np.full(np.ndim(im_shape), initial_region_size,
+                                  dtype='int')
+        else:
+            region_size = np.array(initial_region_size, dtype='int')
+
+        increase_size_amount = 2
+        if calc_mem_usage(region_size) > max_mem:
+            while ((self._calc_mem_usage(region_size) > max_mem) and
+                    np.any(region_size > 2)):
+                region_size = np.clip(region_size-1, 2, im_shape)
+        else:
+            while ((self._calc_mem_usage(region_size) < max_mem) and
+                    np.any(region_size < im_shape)):
+                region_size = np.clip(region_size+1, 2, im_shape)
+            # un-doing 1 iteration to ensure the required mem is < max_mem:
+            region_size -= increase_size_amount
+        return region_size
+
+    def separate_particles_into_groups(self):
+        region_size = self.calc_particle_group_region_size()
+        groups = self._separate_particles_into_groups(self, region_size)
+        assert self._check_groups(groups)
+        return groups
+
+
+def separate_particles_into_groups(state, max_mem=1e9, doshift=False):
+    """Separates particles into convenient groups for optimization.
 
     Parameters
     ----------
     s : :class:`peri.states.ImageState`
         The peri state to find particles in.
-    region_size : Int or 3-element list-like of ints, optional
-        The size of the box. Groups particles into boxes of shape
-        (region_size[0], region_size[1], region_size[2]). If region_size
-        is a scalar, the box is a cube of length region_size.
-        Default is 40.
-    bounds : 2-element list-like of 3-element lists, optional
-        The sub-region of the image over which to look for particles.
-            bounds[0]: The lower-left  corner of the image region.
-            bounds[1]: The upper-right corner of the image region.
-        Default (None -> ([0,0,0], s.oshape.shape)) is a box of the entire
-        image size, i.e. the default places every particle in the image
-        somewhere in the groups.
+    max_mem : numeric, optional
+        Maximal memory to be used by the optimizer, in bytes.
+        Default is 1e9
     doshift : {True, False, `'rand'`}, optional
         Whether or not to shift the tile boxes by half a region size, to
         prevent the same particles to be chosen every time. If `'rand'`,
@@ -242,108 +306,11 @@ def separate_particles_into_groups(s, region_size=40, bounds=None,
     Returns
     -------
     particle_groups : List
-        Each element of particle_groups is an int numpy.ndarray of the
-        group of nearby particles. Only contains groups with a nonzero
-        number of particles, so the elements don't necessarily correspond
-        to a given image region.
+        Each element of particle_groups is a numpy.ndarray of the
+        indices of a group of particles, with each particle in one group.
     """
-    bounding_tile = (s.oshape.translate(-s.pad) if bounds is None else
-            Tile(bounds[0], bounds[1]))
-    rs = (np.ones(bounding_tile.dim, dtype='int')*region_size if
-            np.size(region_size) == 1 else np.array(region_size))
-
-    n_translate = np.ceil(bounding_tile.shape.astype('float')/rs).astype('int')
-    particle_groups = []
-    tile = Tile(left=bounding_tile.l, right=bounding_tile.l + rs)
-    if doshift == 'rand':
-        doshift = np.random.choice([True, False])
-    if doshift:
-        shift = rs // 2
-        n_translate += 1
-    else:
-        shift = 0
-    deltas = np.meshgrid(*[np.arange(i) for i in n_translate])
-
-    groups = list(map(lambda *args: find_particles_in_tile(s, tile.translate(
-            np.array(args) * rs - shift)), *[d.ravel() for d in deltas]))
-
-    for i in range(len(groups)-1, -1, -1):
-        if groups[i].size == 0:
-            groups.pop(i)
-    assert _check_groups(s, groups)
-    return groups
-
-
-def _check_groups(s, groups):
-    """Ensures that all particles are included in exactly 1 group"""
-    ans = []
-    for g in groups:
-        ans.extend(g)
-    if np.unique(ans).size != np.size(ans):
-        return False
-    elif np.unique(ans).size != s.obj_get_positions().shape[0]:
-        return False
-    else:
-        return (np.arange(s.obj_get_radii().size) == np.sort(ans)).all()
-
-
-def calc_particle_group_region_size(s, region_size=40, max_mem=1e9, **kwargs):
-    """
-    Finds the biggest region size for LM particle optimization with a
-    given memory constraint.
-
-    Input Parameters
-    ----------------
-        s : :class:`peri.states.ImageState`
-            The state with the particles
-        region_size : Int or 3-element list-like of ints, optional.
-            The initial guess for the region size. Default is 40
-        max_mem : Numeric, optional
-            The maximum memory for the optimizer to take. Default is 1e9
-
-    Other Parameters
-    ----------------
-        bounds: 2-element list-like of 3-element lists.
-            The sub-region of the image over which to look for particles.
-                bounds[0]: The lower-left  corner of the image region.
-                bounds[1]: The upper-right corner of the image region.
-            Default (None -> ([0,0,0], s.oshape.shape)) is a box of the entire
-            image size, i.e. the default places every particle in the image
-            somewhere in the groups.
-    Returns
-    -------
-        region_size : numpy.ndarray of ints of the region size.
-    """
-    region_size = np.array(region_size).astype('int')
-
-    def calc_mem_usage(region_size):
-        rs = np.array(region_size)
-        particle_groups = separate_particles_into_groups(s, region_size=
-                rs.tolist(), **kwargs)
-        # The actual mem usage is the max of the memory usage of all the
-        # particle groups. However this is too slow. So instead we use the
-        # max of the memory of the biggest 5 particle groups:
-        numpart = [np.size(g) for g in particle_groups]
-        biggroups = [particle_groups[i] for i in np.argsort(numpart)[-5:]]
-        def get_tile_jsize(group):
-            nms = s.param_particle(group)
-            tile = s.get_update_io_tiles(nms, s.get_values(nms))[2]
-            return tile.shape.prod().astype('int64') * len(nms)
-        mems = [8*get_tile_jsize(g) for g in biggroups]  # 8 for bytes/float64
-        return np.max(mems)
-
-    im_shape = s.oshape.shape
-    if calc_mem_usage(region_size) > max_mem:
-        while ((calc_mem_usage(region_size) > max_mem) and
-                np.any(region_size > 2)):
-            region_size = np.clip(region_size-1, 2, im_shape)
-    else:
-        while ((calc_mem_usage(region_size) < max_mem) and
-                np.any(region_size < im_shape)):
-            region_size = np.clip(region_size+1, 2, im_shape)
-        region_size -= 1 #need to be < memory, so we undo 1 iteration
-
-    return region_size
+    groupmaker = ParticleGroupCreator(state, max_mem=max_mem, doshift=doshift)
+    return groupmaker.separate_particles_into_groups()
 
 
 #=============================================================================#
@@ -531,10 +498,9 @@ def optimize_particle_groups(st, groups, **kwargs):
     grouped_optimizer.optimize()
 
 
-def optimize_all_particles(st, region_size=40, bounds=None, doshift=False,
-                           **kwargs):
-    all_groups = separate_particles_into_groups(st, region_size=region_size,
-                                                bounds=bounds, doshift=doshift)
+def optimize_all_particles(st, max_mem=1e9, doshift=False, **kwargs):
+    all_groups = separate_particles_into_groups(st, max_mem=max_mem,
+                                                doshift=doshift)
     return optimize_particle_groups(st, all_groups, **kwargs)
 
 
@@ -608,6 +574,7 @@ def do_levmarq_particles(st, particles, damping=1.0, decrease_damp_factor=10.,
 # TODO collect_stats , run_length kwarg.
 #      -- needs to return stats if collect_stats is True for backwards
 #      compatibility.
+# region_size does not get used below...
 def do_levmarq_all_particle_groups(st, region_size=40, max_iter=2, damping=1.0,
         decrease_damp_factor=10., run_length=4, collect_stats=False, **kwargs):
     """Levenberg-Marquardt optimization for every particle in the state.
@@ -620,9 +587,8 @@ def do_levmarq_all_particle_groups(st, region_size=40, max_iter=2, damping=1.0,
         do_levmarq : Levenberg-Marquardt optimization of the entire state;
             useful for optimizing global parameters.
     """
-    optimize_all_particles(st, region_size=region_size, doshift=doshift,
-                           damp=damping, damp_down=decrease_damp_factor,
-                           maxiter=max_iter)
+    optimize_all_particles(st, doshift=doshift, damp=damping,
+                           damp_down=decrease_damp_factor, maxiter=max_iter)
     if collect_stats:
         # return lp.stats
         raise NotImplementedError
