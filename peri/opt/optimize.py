@@ -202,7 +202,8 @@ class ParticleGroupCreator(object):
         """
         self.state = state
         self.max_mem = max_mem
-        self.doshift = doshift
+        self.doshift = (np.random.choice([True, False]) if doshift == 'rand'
+                        else doshift)
 
     def find_particles_in_tile(self, tile):
         bools = tile.contains(self.state.obj_get_positions())
@@ -220,15 +221,11 @@ class ParticleGroupCreator(object):
 
     def _separate_particles_into_groups(self, region_size):
         bounding_tile = self.state.oshape.translate(-self.state.pad)
-
         n_translate = np.ceil(bounding_tile.shape.astype('float') /
                               region_size).astype('int')
-        particle_groups = []
         region_tile = Tile(left=bounding_tile.l,
                            right=bounding_tile.l + region_size)
-        doshift = (np.random.choice([True, False]) if self.doshift == 'rand'
-                   else self.doshift)
-        if doshift:
+        if self.doshift:
             shift = region_size // 2
             n_translate += 1
         else:
@@ -251,7 +248,7 @@ class ParticleGroupCreator(object):
         return num_entries_in_J * 8  # 8 for number of bytes in float64
 
     def _calc_mem_usage(self, region_size):
-        groups = self._separate_particles_into_groups(region_size)
+        particle_groups = self._separate_particles_into_groups(region_size)
         # The actual mem usage is the max of the memory usage of all the
         # particle groups. However this is too slow. So instead we use the
         # max of the memory of the biggest 5 particle groups:
