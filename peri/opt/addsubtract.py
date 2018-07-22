@@ -649,7 +649,7 @@ def identify_misfeatured_regions(st, filter_size=5, sigma_cutoff=8.):
 
 def add_subtract_misfeatured_tile(
         st, tile, rad='calc', max_iter=3, invert='guess', max_allowed_remove=20,
-        **kwargs):
+        minmass=None, use_tp=False, **kwargs):
     """
     Automatically adds and subtracts missing & extra particles in a region
     of poor fit.
@@ -749,7 +749,7 @@ def add_subtract_misfeatured_tile(
             im = 1 - st.residuals[tile.slicer]
         else:
             im = st.residuals[tile.slicer]
-        guess, _ = _feature_guess(im, rad, **kwargs)
+        guess, _ = _feature_guess(im, rad, minmass=minmass, use_tp=use_tp)
         accepts, poses = check_add_particles(
                 st, guess+tile.l, rad=rad, do_opt=True, **kwargs)
         added_poses.extend(poses)
@@ -941,5 +941,5 @@ def guess_invert(st):
 
 def guess_add_radii(st):
     current_radii = st.obj_get_radii()
-    return np.percentile(rad, 20)
+    return np.percentile(current_radii, 20)
 
