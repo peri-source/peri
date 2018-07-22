@@ -11,31 +11,6 @@ import peri.opt.optimize as opt
 from peri.logger import log
 CLOG = log.getChild('addsub')
 
-def guess_invert(st):
-    """Guesses whether particles are bright on a dark bkg or vice-versa
-
-    Works by checking whether the intensity at the particle centers is
-    brighter or darker than the average intensity of the image, by
-    comparing the median intensities of each.
-
-    Parameters
-    ----------
-    st : :class:`peri.states.ImageState`
-
-    Returns
-    -------
-    invert : bool
-        Whether to invert the image for featuring.
-    """
-    pos = st.obj_get_positions()
-    pxinds_ar = np.round(pos).astype('int')
-    inim = st.ishape.translate(-st.pad).contains(pxinds_ar)
-    pxinds_tuple = tuple(pxinds_ar[inim].T)
-    pxvals = st.data[pxinds_tuple]
-    invert = np.median(pxvals) < np.median(st.data)  # invert if dark particles
-    return invert
-
-
 def feature_guess(st, rad, invert='guess', minmass=None, use_tp=False,
                   trim_edge=False, **kwargs):
     """
@@ -147,8 +122,8 @@ def check_add_particles(st, guess, rad='calc', do_opt=True, im_change_frac=0.2,
         min_derr = 3 * st.sigma
     accepts = 0
     new_poses = []
-    if rad is 'calc':
-        rad = np.median(st.obj_get_radii())
+    if rad == 'calc':
+        rad = guess_add_radii(st)
     message = ('-'*30 + 'ADDING' + '-'*30 +
                '\n  Z\t  Y\t  X\t  R\t|\t ERR0\t\t ERR1')
     with log.noformat():
@@ -321,7 +296,7 @@ def add_missing_particles(st, rad='calc', tries=50, **kwargs):
         then these positions will differ from the input 'guess'.
     """
     if rad == 'calc':
-        rad = np.median(st.obj_get_radii())
+        rad = guess_add_radii(st)
 
     guess, npart = feature_guess(st, rad, **kwargs)
     tries = np.min([tries, npart])
@@ -752,7 +727,7 @@ def add_subtract_misfeatured_tile(
     the particles and re-add them.
     """
     if rad == 'calc':
-        rad = np.median(st.obj_get_radii())
+        rad = guess_add_radii(st)
     if invert == 'guess':
         invert = guess_invert(st)
     # 1. Remove all possibly bad particles within the tile.
@@ -937,3 +912,34 @@ def add_subtract_locally(st, region_depth=3, filter_size=5, sigma_cutoff=8,
         # CLOG.info('All regions contained particles.')
         # something else?? this is not quite true
     return n_added, new_poses
+
+
+def guess_invert(st):
+    """Guesses whether particles are bright on a dark bkg or vice-versa
+
+    Works by checking whether the intensity at the particle centers is
+    brighter or darker than the average intensity of the image, by
+    comparing the median intensities of each.
+
+    Parameters
+    ----------
+    st : :class:`peri.states.ImageState`
+
+    Returns
+    -------
+    invert : bool
+        Whether to invert the image for featuring.
+    """
+    pos = st.obj_get_positions()
+    pxinds_ar = np.round(pos).astype('int')
+    inim = st.ishape.translate(-st.pad).contains(pxinds_ar)
+    pxinds_tuple = tuple(pxinds_ar[inim].T)
+    pxvals = st.data[pxinds_tuple]
+    invert = np.median(pxvals) < np.median(st.data)  # invert if dark particles
+    return invert
+
+
+def guess_add_radii(st):
+    current_radii = st.obj_get_radii()
+    return np.percentile(rad, 20)
+
