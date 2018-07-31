@@ -55,6 +55,17 @@ class TestStepper(unittest.TestCase):
         self.assertTrue(current_error < initial_error)
 
 
+class TestOptimizer(unittest.TestCase):
+    def test_optimize(self):
+        optimizer = make_optimizer()
+        optobj = optimizer.stepper.optobj
+        optimizer.optimize()
+        error_converged = np.isclose(optobj.error, 0, atol=1e-9)
+        params_converged = np.allclose(optobj.paramvals,
+                                      np.array([3, 0.5]), atol=1e-9)
+        self.assertTrue(all([error_converged, params_converged]))
+
+
 def make_beale_optfun():
     function = opttest.beale
     data = np.array([1.5, 2.25, 2.625])
@@ -67,6 +78,12 @@ def make_basic_stepper():
     optfun = make_beale_optfun()
     stepper = optengine.BasicLMStepper(optfun)
     return stepper
+
+
+def make_optimizer():
+    stepper = make_basic_stepper()
+    optimizer = optengine.Optimizer(stepper)
+    return optimizer
 
 
 if __name__ == '__main__':
