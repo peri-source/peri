@@ -105,9 +105,8 @@ def decimate_state(state, nparams, decimate=1, min_redundant=20, max_mem=1e9):
 
 class OptObj(object):
     def __init__(self, param_ranges=None):
-        """
-        Superclass for optimizing an object, especially for minimizing the
-        sum of the squares of a residuals vector.
+        """Superclass for optimizing an object, especially for minimizing
+        the sum of the squares of a residuals vector.
         This object knows everything that might be needed about the fit
         landscape, including:
         * The residuals vector
@@ -135,7 +134,7 @@ class OptObj(object):
         """Updates the Jacobian / gradient of the residuals = gradient of model
         Ideally stored as a C-ordered numpy.ndarray
         """
-        return None
+        raise NotImplementedError("Implement in subclass")
 
     def update(self, values):
         """Updates the function to `values`, clipped to the allowed range"""
@@ -263,7 +262,7 @@ class OptObj(object):
         Rather than doing the SVD, we get this from the expected error
         of the model if it were linear. We use that expected error and
         the current error to calculate a model sine, and use that to
-        get a model cosine
+        get a model cosine (this is faster than SVD and better-conditioned).
         """
         expected_error = self.find_expected_error(delta_params='perfect')
         model_sine_2 = expected_error / (self.error + 1e-9)  # error=distance^2
@@ -313,7 +312,7 @@ class OptFunction(OptObj):
         for i in range(p0.size):
             dp *= 0
             dp[i] = self.dl
-            self.update(p0+dp)
+            self.update(p0 + dp)
             r1 = self.residuals.copy()
             self.J[:, i] = (r1-r0) / self.dl
         if np.isnan(self.J.sum()):
@@ -515,6 +514,112 @@ def damp_cutoff(jtj, damp, minval=1.0):
 DAMPMODES = {'additive': damp_additive,
              'multiplicative': damp_multiplicative,
              'cutoff': damp_cutoff}
+
+
+class Optimizer(object):
+    def __init__(self, stepper, exptol=1e-7, costol=1e-5, errtol=1e-7,
+                 fractol=1e-7, paramtol=1e-7, maxiter=100, do_clean_mem=True):
+        self.stepper = stepper
+        self.exptol = exptol
+        self.costol = costol
+        self.errtol = errtol
+        self.fractol = fractol
+        self.paramtol = paramtol
+        self.maxiter = maxiter
+        self.do_clean_mem = do_clean_mem
+
+    def check_is_completed(self):
+        """Return a bool of whether or not optimization has converged"""
+        convergence_stats = self.get_convergence_stats()
+        has_converged = any([v < getattr(self, k)
+                             for k, v in convergence_stats.items()])
+        return has_converged
+
+    def get_convergence_stats(self):
+        """Returns a dict of termination info"""
+        stepper = self.stepper
+        d = {
+            'errtol': stepper.change_in_error,
+            'fractol': stepper.change_in_error / stepper.current_error,
+            'paramtol': np.abs(stepper.change_in_parameters).max(),
+            'costol': stepper.evaluate_model_cosine(),
+            'exptol': stepper.current_error - stepper.find_expected_error(),
+            }
+        return d
+
+    def optimize(self):
+        for _ in range(self.maxiter):
+            self.stepper.take_step()
+            if self.check_is_completed():
+                flag = 'converged'
+                break
+        else:
+            flag = 'unconverged'
+        if self.do_clean_mem:
+            self.stepper.clean_mem()
+        return flag
+
+
+class Stepper(object):
+    def __init__(self, optobj):
+        self.optobj = optobj
+
+    def take_step(self):  # FIXME better name
+        initial_paramvals = np.copy(self.optobj.paramvals)
+        initial_error = np.copy(self.current_error)
+        self.execute_one_optimization_step()
+        self.change_in_error = initial_error - self.current_error
+        self.change_in_parameters = initial_paramvals - self.optobj.paramvals
+
+    def execute_one_optimization_step(self):  # FIXME better name
+        """Actually takes the steps. Calculates the paramvals to evaluate
+        and updates the optobj however many times it needs to.
+
+        The actual bookkeeping is done in take_step.
+        """
+        raise NotImplementedError('Implement in subclass!')
+
+    def evaluate_model_cosine(self):
+        return self.optobj.calc_model_cosine()
+
+    def find_expected_error(self):
+        return self.optobj.find_expected_error()
+
+    @property
+    def current_error(self):
+        return self.optobj.error
+
+    def clean_mem(self):
+        # Could do more in subclasses
+        self.optobj.clean_mem()
+
+
+class BasicLMStepper(Stepper):
+    def __init__(self, optobj, damp=1.0, dampdown=8.0, dampup=3.0,
+                 dampmode='additive'):
+        super(BasicLMStepper, self).__init__(optobj)
+        self.damp = damp
+        self.dampdown = dampdown
+        self.dampup = dampup
+        self.dampmode = dampmode
+        self._rcond = 1e-15  # rcond for np.linalg.lstsq on matrix solution
+
+    def execute_one_optimization_step(self):
+        self.optobj.update_J()
+        dampedJTJ = (self.optobj.JTJ +
+                     self.damp * np.eye(self.optobj.JTJ.shape[0]))
+        grad = self.optobj.gradcost()
+        step = self.calc_simple_LM_step(dampedJTJ, grad)
+        initial_error = np.copy(self.optobj.error)
+        initial_paramvals = np.copy(self.optobj.paramvals)
+        if self.optobj.update(initial_paramvals + step) < initial_error:
+            self.damp /= self.dampdown
+        else:
+            self.optobj.update(initial_paramvals)
+            self.damp *= self.dampup
+
+    def calc_simple_LM_step(self, dampedJTJ, grad):
+        return np.linalg.lstsq(dampedJTJ, -0.5*grad, rcond=self._rcond)[0]
 
 
 class LMOptimizer(object):
