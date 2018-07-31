@@ -7,8 +7,7 @@ import numpy as np
 
 
 def himmelblau(xy):
-    """
-    Himmelblau's function, as a set of residuals (cost = sum(residuals**2))
+    """Himmelblau's function, as a set of residuals (cost = sum(residuals**2))
 
     The standard Himmelbau's function is with data as [11, 7], and four
     minimum at (3.0, 2.0), ~(-2.8, 3.1), ~(-3.8, -3.3), ~(3.6, -1.8).
@@ -36,8 +35,7 @@ def himmelblau(xy):
 
 
 def simple_sphere(xy):
-    """
-    A simple sphere, as a set of residuals (cost = sum(residuals**2))
+    """A simple sphere, as a set of residuals (cost = sum(residuals**2))
 
     Simply returns the input parameters. A linear, uncoupled model.
 
@@ -55,8 +53,7 @@ def simple_sphere(xy):
 
 
 def rosenbrock(xy, A=10):
-    """
-    The original rosenbrock banana function, as a set of residuals
+    """The original rosenbrock banana function, as a set of residuals
     (cost = sum(residuals**2))
 
     The original function is with data = [1,0] and A=10, with a global
@@ -82,8 +79,7 @@ def rosenbrock(xy, A=10):
 
 
 def rosenbrock_gen(xy, A=10, order=3):
-    """
-    A generalized rosenbrock banana function, as a set of residuals
+    """A generalized rosenbrock banana function, as a set of residuals
     (cost = sum(residuals**2))
 
     The Rosenbrock function, generalized from a quadratic model to a
@@ -115,8 +111,7 @@ def rosenbrock_gen(xy, A=10, order=3):
 
 
 def rosenbrock_dd(xd, A=10):
-    """
-    A higher-dimensional modification of the rosenbrock function, as a
+    """A higher-dimensional modification of the rosenbrock function, as a
     set of residuals (cost = sum(residuals**2))
 
     The standard modified function is with data = zeros(2d-2), with a
@@ -151,8 +146,7 @@ def rosenbrock_dd(xd, A=10):
 
 
 def rosenbrock_gendd(xd, A=10, order=3):
-    """
-    A higher-dimensional modification of a generalized rosenbrock
+    """A higher-dimensional modification of a generalized rosenbrock
     function, as a set of residuals (cost = sum(residuals**2))
 
     The standard modified function is with data = zeros(N), with a
@@ -189,8 +183,7 @@ def rosenbrock_gendd(xd, A=10, order=3):
 
 
 def beale(xy):
-    """
-    The Beale function, as a set of residuals (cost = sum(residuals**2))
+    """The Beale function, as a set of residuals (cost = sum(residuals**2))
 
     The standard Beale's function is with data as [1.5, 2.25, 2.625],
     and has a global minima at (3, 0.5). Beale's function is a coupled
@@ -215,8 +208,7 @@ def beale(xy):
 
 
 def booth(xy):
-    """
-    The Booth's function, as a set of residuals (cost = sum(residuals**2))
+    """The Booth's function, as a set of residuals (cost = sum(residuals**2))
 
     The standard Booth function is with data as [7, 5], and has a single
     global minimum at (1,3). It is a coupled linear model, with the
@@ -237,9 +229,9 @@ def booth(xy):
     r2 = y + 2*x
     return np.array([r1, r2])
 
+
 def increase_model_dimension(func, n=1000):
-    """
-    Extends a function to higher dimensions without changing its cost
+    """Extends a function to higher dimensions without changing its cost
     topography or its minimal embedding dimension (i.e. # of parameters).
 
     Parameters
@@ -269,6 +261,10 @@ def increase_model_dimension(func, n=1000):
     so another way to do this could be with points chosen according to
     Gauss quadrature
     """
-    t = np.linspace(-1,1,n)
-    f = lambda p: np.polynomial.legendre.legval(t, func(p))
-    return f
+    t = np.linspace(-1, 1, n)
+
+    def increased_modeldimension_function(p):
+        np.polynomial.legendre.legval(t, func(p))
+
+    return increased_modeldimension_function
+
