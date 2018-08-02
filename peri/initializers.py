@@ -89,8 +89,8 @@ def generate_sphere(radius):
 
 def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
         minmass=1., trim_edge=False):
-    """
-    Local max featuring to identify spherical particles in an image.
+    """Local max featuring to identify bright spherical particles on a
+    dark background.
 
     Parameters
     ----------
@@ -100,12 +100,16 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
             Featuring radius of the particles. Default is 2.5
         noise_size : Float, optional
             Size of Gaussian kernel for smoothing out noise. Default is 1.
+        bkg_size : Float or None, optional
+            Size of the Gaussian kernel for removing long-wavelength
+            background. Default is None, which gives `2 * radius`
         minmass : Float, optional
             Return only particles with a ``mass > minmass``. Default is 1.
         trim_edge : Bool, optional
-            Set to True to omit particles identified exactly at the edge of
-            the image. False features frequently occur here because of the
-            reflected bandpass featuring. Default is False.
+            Set to True to omit particles identified exactly at the edge
+            of the image. False-positive features frequently occur here
+            because of the reflected bandpass featuring. Default is
+            False, i.e. find particles at the edge of the image.
 
     Returns
     -------
@@ -126,7 +130,6 @@ def local_max_featuring(im, radius=2.5, noise_size=1., bkg_size=None,
     mass_im = nd.convolve(filtered, footprint, mode='mirror')
     good_im = (e==filtered) * (mass_im > minmass)
     pos = np.transpose(np.nonzero(good_im))
-    # pos = np.array(nd.measurements.center_of_mass(e==filtered, lbl, ind))
     if trim_edge:
         good = np.all(pos > 0, axis=1) & np.all(pos+1 < im.shape, axis=1)
         pos = pos[good, :].copy()
