@@ -47,31 +47,6 @@ def booth(xy):
     return np.array([r1, r2])
 
 
-def beale(xy):
-    """The Beale function, as a set of residuals (cost = sum(residuals**2))
-
-    The standard Beale's function is with data as [1.5, 2.25, 2.625],
-    and has a global minima at (3, 0.5). Beale's function is a coupled
-    model, linear in x and quartic in y. Its data-space dimension (3) is
-    greater than its model-space dimension (2).
-
-    Parameters
-    ----------
-        - xy : 2-element list-like
-            The x,y parameters of the model.
-
-    Returns
-    -------
-        3-element list-like
-            The residuals of the model.
-    """
-    x, y = xy
-    r1 = x - x*y
-    r2 = x - x*y*y
-    r3 = x - x*y*y*y
-    return np.array([r1, r2, r3])
-
-
 def rosenbrock(xy, A=10):
     """The original rosenbrock banana function, as a set of residuals
     (cost = sum(residuals**2))
@@ -131,6 +106,31 @@ def rosenbrock_dd(xd, A=10):
     r1 = A*(x_iplus1 - x_i * x_i)
     r2 = 1 - x_i
     return np.append(r1, r2)
+
+
+def beale(xy):
+    """The Beale function, as a set of residuals (cost = sum(residuals**2))
+
+    The standard Beale's function is with data as [1.5, 2.25, 2.625],
+    and has a global minima at (3, 0.5). Beale's function is a coupled
+    model, linear in x and quartic in y. Its data-space dimension (3) is
+    greater than its model-space dimension (2).
+
+    Parameters
+    ----------
+        - xy : 2-element list-like
+            The x,y parameters of the model.
+
+    Returns
+    -------
+        3-element list-like
+            The residuals of the model.
+    """
+    x, y = xy
+    r1 = x - x * y
+    r2 = x - x * y**2
+    r3 = x - x * y**3
+    return np.array([r1, r2, r3])
 
 
 def rosenbrock_gen(xy, A=10, order=3):
@@ -321,7 +321,7 @@ ALL_FUNCTIONS = {
 
 
 LINEAR_FUNCTIONS = {k: ALL_FUNCTIONS[k]
-                    for k in ['simple_sphere', 'beale', 'booth']}
+                    for k in ['simple_sphere', 'booth']}
 QUADRATIC_FUNCTIONS = {k: ALL_FUNCTIONS[k]
                     for k in ['rosenbrock', 'rosenbrock_dd']}
 
