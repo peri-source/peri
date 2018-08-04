@@ -296,7 +296,7 @@ ALL_FUNCTIONS = {
 
     'rosenbrock_dd' : {
         'function': rosenbrock_dd,
-        'data': np.zeros(2 * 3),   # d > 3 possible
+        'data': np.zeros(3 + 1),   # d > 3 possible
         'true-params': np.ones(3),
         },
 
@@ -308,7 +308,7 @@ ALL_FUNCTIONS = {
 
     'rosenbrock_gendd' : {
         'function': rosenbrock_gendd,
-        'data': np.zeros(2 * 3),  # d > 3 possible
+        'data': np.zeros(3 + 1),  # d > 3 possible
         'true-params': np.ones(3),
         },
 
