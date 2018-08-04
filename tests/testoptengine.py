@@ -81,6 +81,17 @@ class TestStepper(unittest.TestCase):
             errors_near_0.append(np.isclose(stepper.current_error, 0, **TOLS))
         self.assertTrue(all(errors_near_0))
 
+    def test_accel_step_is_exact_for_quadratic_models(self):
+        errors_near_0 = []
+        all_quadratic_optfuns = itertools.chain(
+            make_all_linear_function_optobjs(),
+            make_all_quadratic_function_optobjs())
+        for optfun in all_quadratic_optfuns:
+            stepper = optengine.FancyLMStepper(optfun, damp=1e-14, accel=True)
+            stepper.take_step()
+            errors_near_0.append(np.isclose(stepper.current_error, 0, **TOLS))
+        self.assertTrue(all(errors_near_0))
+
 
 class TestOptimizer(unittest.TestCase):
     def test_optimize(self):
