@@ -1,4 +1,4 @@
-import unittest
+import unittest, itertools
 
 import numpy as np
 
@@ -9,7 +9,7 @@ import optengine, opttest
 
 # Unittests to add:
 # 1. LM steps to exactly correct parameters for linear models when damping
-#    is 0.
+#    is 0 (basic + fancy).
 # 2. Same as above for linear + quadratic models with use_accel
 
 TOLS = {'atol': 1e-11, 'rtol': 1e-11}
@@ -61,18 +61,25 @@ class TestOptFunction(unittest.TestCase):
         self.assertTrue(all(all_functions_ok))
 
 
-
 class TestStepper(unittest.TestCase):
     def test_constructor(self):
         stepper = make_basic_stepper()
         self.assertTrue(True)
 
-    def test_step(self):
+    def test_step_decreases_error(self):
         stepper = make_basic_stepper()
         initial_error = np.copy(stepper.current_error)
         stepper.take_step()
         current_error = stepper.current_error
-        self.assertTrue(current_error < initial_error)
+        self.assertTrue(current_error <= initial_error)
+
+    def test_lm_step_is_exact_for_linear_models(self):
+        errors_near_0 = []
+        for optfun in make_all_linear_function_optobjs():
+            stepper = optengine.BasicLMStepper(optfun, damp=1e-14)
+            stepper.take_step()
+            errors_near_0.append(np.isclose(stepper.current_error, 0, **TOLS))
+        self.assertTrue(all(errors_near_0))
 
 
 class TestOptimizer(unittest.TestCase):
