@@ -63,34 +63,6 @@ QUADRATIC_FUNCTIONS = {k: ALL_FUNCTIONS[k]
                     for k in ['rosenbrock', 'rosenbrock_dd']}
 
 
-def himmelblau(xy):
-    """Himmelblau's function, as a set of residuals (cost = sum(residuals**2))
-
-    The standard Himmelbau's function is with data as [11, 7], and four
-    minimum at (3.0, 2.0), ~(-2.8, 3.1), ~(-3.8, -3.3), ~(3.6, -1.8).
-    Himmelblau's function is a quadratic model in both x and y. Its data-
-    space dimension (2) is equal to its model-space dimension (2), so
-    there is only parameter-effect curvature.
-
-    Parameters
-    ----------
-        - xy : 2-element list-like
-            The x,y parameters of the model.
-
-    Returns
-    -------
-        2-element list-like
-            The residuals of the model.
-    Notes
-    ------
-    https://en.wikipedia.org/wiki/Himmelblau%27s_function
-    """
-    x, y = xy
-    r1 = x*x + y
-    r2 = y*y + x
-    return np.array([r1, r2])
-
-
 def simple_sphere(xy):
     """A simple sphere, as a set of residuals (cost = sum(residuals**2))
 
@@ -107,6 +79,54 @@ def simple_sphere(xy):
             The residuals, which are just xy
     """
     return xy
+
+
+def booth(xy):
+    """The Booth's function, as a set of residuals (cost = sum(residuals**2))
+
+    The standard Booth function is with data as [7, 5], and has a single
+    global minimum at (1,3). It is a coupled linear model, with the
+    parameter and data space both 2-dimensional.
+
+    Parameters
+    ----------
+        - xy : 2-element list-like
+            The x,y parameters of the model.
+
+    Returns
+    -------
+        2-element list-like
+            The residuals of the model.
+    """
+    x, y = xy
+    r1 = x + 2*y
+    r2 = y + 2*x
+    return np.array([r1, r2])
+
+
+def beale(xy):
+    """The Beale function, as a set of residuals (cost = sum(residuals**2))
+
+    The standard Beale's function is with data as [1.5, 2.25, 2.625],
+    and has a global minima at (3, 0.5). Beale's function is a coupled
+    model, linear in x and quartic in y. Its data-space dimension (3) is
+    greater than its model-space dimension (2).
+
+    Parameters
+    ----------
+        - xy : 2-element list-like
+            The x,y parameters of the model.
+
+    Returns
+    -------
+        3-element list-like
+            The residuals of the model.
+    """
+    x, y = xy
+    r1 = x - x*y
+    r2 = x - x*y*y
+    r3 = x - x*y*y*y
+    return np.array([r1, r2, r3])
 
 
 def rosenbrock(xy, A=10):
@@ -132,38 +152,6 @@ def rosenbrock(xy, A=10):
     x, y = xy
     r1 = x
     r2 = A*(y-x*x)
-    return np.array([r1, r2])
-
-
-def rosenbrock_gen(xy, A=10, order=3):
-    """A generalized rosenbrock banana function, as a set of residuals
-    (cost = sum(residuals**2))
-
-    The Rosenbrock function, generalized from a quadratic model to a
-    higher-order nonlinearity. The residuals are
-        r1 = xy[0]
-        r2 = xy[1] - xy[0]^n/n
-    The original function is with data = [1,0] and order=2, and has a
-    single minimum at (x,y) = (1, 1/order). The model is coupled,
-    polynomial in x and linear in y. Its data-space dimension (2) is
-    equal to its model-space dimension (2), so there is only parameter-
-    effect curvature. (See M Transtrum et al, PRE 2011)
-
-    Parameters
-    ----------
-        - xy : 2-element list-like
-            The x,y parameters of the model.
-        - order : Int, optional
-            The order of the model nonlinearity. Default is 3
-
-    Returns
-    -------
-        2-element list-like
-            The residuals of the model.
-    """
-    x, y = xy
-    r1 = x
-    r2 = A*(y-x**order / order)
     return np.array([r1, r2])
 
 
@@ -200,6 +188,38 @@ def rosenbrock_dd(xd, A=10):
     r1 = A*(x_iplus1 - x_i * x_i)
     r2 = 1 - x_i
     return np.append(r1, r2)
+
+
+def rosenbrock_gen(xy, A=10, order=3):
+    """A generalized rosenbrock banana function, as a set of residuals
+    (cost = sum(residuals**2))
+
+    The Rosenbrock function, generalized from a quadratic model to a
+    higher-order nonlinearity. The residuals are
+        r1 = xy[0]
+        r2 = xy[1] - xy[0]^n/n
+    The original function is with data = [1,0] and order=2, and has a
+    single minimum at (x,y) = (1, 1/order). The model is coupled,
+    polynomial in x and linear in y. Its data-space dimension (2) is
+    equal to its model-space dimension (2), so there is only parameter-
+    effect curvature. (See M Transtrum et al, PRE 2011)
+
+    Parameters
+    ----------
+        - xy : 2-element list-like
+            The x,y parameters of the model.
+        - order : Int, optional
+            The order of the model nonlinearity. Default is 3
+
+    Returns
+    -------
+        2-element list-like
+            The residuals of the model.
+    """
+    x, y = xy
+    r1 = x
+    r2 = A*(y-x**order / order)
+    return np.array([r1, r2])
 
 
 def rosenbrock_gendd(xd, A=10, order=3):
@@ -239,37 +259,14 @@ def rosenbrock_gendd(xd, A=10, order=3):
     return np.append(r1, r2)
 
 
-def beale(xy):
-    """The Beale function, as a set of residuals (cost = sum(residuals**2))
+def himmelblau(xy):
+    """Himmelblau's function, as a set of residuals (cost = sum(residuals**2))
 
-    The standard Beale's function is with data as [1.5, 2.25, 2.625],
-    and has a global minima at (3, 0.5). Beale's function is a coupled
-    model, linear in x and quartic in y. Its data-space dimension (3) is
-    greater than its model-space dimension (2).
-
-    Parameters
-    ----------
-        - xy : 2-element list-like
-            The x,y parameters of the model.
-
-    Returns
-    -------
-        3-element list-like
-            The residuals of the model.
-    """
-    x, y = xy
-    r1 = x - x*y
-    r2 = x - x*y*y
-    r3 = x - x*y*y*y
-    return np.array([r1, r2, r3])
-
-
-def booth(xy):
-    """The Booth's function, as a set of residuals (cost = sum(residuals**2))
-
-    The standard Booth function is with data as [7, 5], and has a single
-    global minimum at (1,3). It is a coupled linear model, with the
-    parameter and data space both 2-dimensional.
+    The standard Himmelbau's function is with data as [11, 7], and four
+    minimum at (3.0, 2.0), ~(-2.8, 3.1), ~(-3.8, -3.3), ~(3.6, -1.8).
+    Himmelblau's function is a quadratic model in both x and y. Its data-
+    space dimension (2) is equal to its model-space dimension (2), so
+    there is only parameter-effect curvature.
 
     Parameters
     ----------
@@ -280,10 +277,13 @@ def booth(xy):
     -------
         2-element list-like
             The residuals of the model.
+    Notes
+    ------
+    https://en.wikipedia.org/wiki/Himmelblau%27s_function
     """
     x, y = xy
-    r1 = x + 2*y
-    r2 = y + 2*x
+    r1 = x*x + y
+    r2 = y*y + x
     return np.array([r1, r2])
 
 
