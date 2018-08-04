@@ -6,6 +6,63 @@ https://en.wikipedia.org/wiki/Test_functions_for_optimization
 import numpy as np
 
 
+ALL_FUNCTIONS = {
+    'simple_sphere' : {
+        'function': simple_sphere,
+        'data': np.array([0, 0]),
+        'true-params': np.array([0, 0]),
+        },
+
+    'booth' : {
+        'function': booth,
+        'data': np.array([7., 5.]),
+        'true-params': np.array([1., 3.]),
+        },
+
+    'beale' : {
+        'function': beale,
+        'data': np.array([1.5, 2.25, 2.625]),
+        'true-params': np.array([3, 0.5]),
+        },
+
+    'rosenbrock' : {
+        'function': rosenbrock,
+        'data': np.array([1.0, 0.]),
+        'true-params': np.array([1., 1.]),
+        },
+
+    'rosenbrock_dd' : {
+        'function': rosenbrock_dd,
+        'data': np.zeros(2 * 3),   # d > 3 possible
+        'true-params': np.ones(3),
+        },
+
+    'rosenbrock_gen' : {
+        'function': rosenbrock_gen,
+        'data': np.array([1.0, 0.]),
+        'true-params': np.array([1., 1.]),
+        },
+
+    'rosenbrock_gendd' : {
+        'function': rosenbrock_gendd,
+        'data': np.zeros(2 * 3),  # d > 3 possible
+        'true-params': np.ones(3),
+        },
+
+    'himmelblau' : {
+        'function': himmelblau,
+        'data': np.array([11., 7.]),
+        'true-params': np.array([3.0, 2.0]),  # one of 4
+        },
+    }
+
+
+LINEAR_FUNCTIONS = {k: ALL_FUNCTIONS[k]
+                    for k in ['simple_sphere', 'beale', 'booth']}
+QUADRATIC_FUNCTIONS = {k: ALL_FUNCTIONS[k]
+                    for k in ['rosenbrock', 'rosenbrock_dd']}
+
+
 def himmelblau(xy):
     """Himmelblau's function, as a set of residuals (cost = sum(residuals**2))
 
@@ -138,10 +195,10 @@ def rosenbrock_dd(xd, A=10):
     at (1,1,1), 2 minima for 4<=N<=7. See:
     https://en.wikipedia.org/wiki/Rosenbrock_function#Multidimensional_generalisations
     """
-    xp = xd[1:]
-    xi = xd[:-1]
-    r1 = A*(xp - xi*xi)
-    r2 = 1 - xi
+    x_iplus1 = xd[1:]
+    x_i = xd[:-1]
+    r1 = A*(x_iplus1 - x_i * x_i)
+    r2 = 1 - x_i
     return np.append(r1, r2)
 
 
@@ -175,10 +232,10 @@ def rosenbrock_gendd(xd, A=10, order=3):
     has 1 minimia for N=3 at (1,1,1), 2 minima for 4<=N<=7. See:
     https://en.wikipedia.org/wiki/Rosenbrock_function#Multidimensional_generalisations
     """
-    xp = xd[1:]
-    xi = xd[:-1]
-    r1 = A*(xp - xi**order)
-    r2 = 1 - xi
+    x_iplus1 = xd[1:]
+    x_i = xd[:-1]
+    r1 = A * (x_iplus1 - x_i**order)
+    r2 = 1 - x_i
     return np.append(r1, r2)
 
 
