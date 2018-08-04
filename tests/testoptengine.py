@@ -7,6 +7,14 @@ import sys
 sys.path.append('../peri/opt')
 import optengine, opttest
 
+# Unittests to add:
+# 1. LM steps to exactly correct parameters for linear models when damping
+#    is 0.
+# 2. Same as above for linear + quadratic models with use_accel
+# 3. find_expected_error, calc_model_cosine for linear models.
+
+TOLS = {'atol': 1e-11, 'rtol': 1e-11}
+
 
 class TestOptFunction(unittest.TestCase):
     def test_constructor(self):
@@ -34,12 +42,15 @@ class TestOptFunction(unittest.TestCase):
         model_cosine = optfun.calc_model_cosine()
         self.assertTrue((model_cosine <= 1.0) and (model_cosine >= 0))
 
-    def test_expected_error(self):
-        optfun = make_beale_optfun()
-        optfun.update_J()
-        expected_error = optfun.find_expected_error()
-        is_ok = [expected_error > 0, expected_error < optfun.error]
-        self.assertTrue(all(is_ok))
+    def test_expected_error_on_all_linear_models(self):
+        all_functions_ok = []
+        for optfun in make_all_linear_function_optobjs():
+            optfun.update_J()
+            expected_error = optfun.find_expected_error()
+            is_ok = [expected_error <= optfun.error,
+                     np.isclose(expected_error, 0, **TOLS)]
+            all_functions_ok.append(all(is_ok))
+        self.assertTrue(all(all_functions_ok))
 
 
 class TestStepper(unittest.TestCase):
@@ -64,6 +75,15 @@ class TestOptimizer(unittest.TestCase):
         params_converged = np.allclose(optobj.paramvals,
                                       np.array([3, 0.5]), atol=1e-9)
         self.assertTrue(all([error_converged, params_converged]))
+
+
+def make_all_linear_function_optobjs():
+    for function_info in opttest.LINEAR_FUNCTIONS.values():
+        function = function_info['function']
+        data = function_info['data']
+        initial_param_guess = 0 * function_info['true-params']
+        optfun = optengine.OptFunction(function, data, initial_param_guess)
+        yield optfun
 
 
 def make_beale_optfun():

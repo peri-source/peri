@@ -6,63 +6,6 @@ https://en.wikipedia.org/wiki/Test_functions_for_optimization
 import numpy as np
 
 
-ALL_FUNCTIONS = {
-    'simple_sphere' : {
-        'function': simple_sphere,
-        'data': np.array([0, 0]),
-        'true-params': np.array([0, 0]),
-        },
-
-    'booth' : {
-        'function': booth,
-        'data': np.array([7., 5.]),
-        'true-params': np.array([1., 3.]),
-        },
-
-    'beale' : {
-        'function': beale,
-        'data': np.array([1.5, 2.25, 2.625]),
-        'true-params': np.array([3, 0.5]),
-        },
-
-    'rosenbrock' : {
-        'function': rosenbrock,
-        'data': np.array([1.0, 0.]),
-        'true-params': np.array([1., 1.]),
-        },
-
-    'rosenbrock_dd' : {
-        'function': rosenbrock_dd,
-        'data': np.zeros(2 * 3),   # d > 3 possible
-        'true-params': np.ones(3),
-        },
-
-    'rosenbrock_gen' : {
-        'function': rosenbrock_gen,
-        'data': np.array([1.0, 0.]),
-        'true-params': np.array([1., 1.]),
-        },
-
-    'rosenbrock_gendd' : {
-        'function': rosenbrock_gendd,
-        'data': np.zeros(2 * 3),  # d > 3 possible
-        'true-params': np.ones(3),
-        },
-
-    'himmelblau' : {
-        'function': himmelblau,
-        'data': np.array([11., 7.]),
-        'true-params': np.array([3.0, 2.0]),  # one of 4
-        },
-    }
-
-
-LINEAR_FUNCTIONS = {k: ALL_FUNCTIONS[k]
-                    for k in ['simple_sphere', 'beale', 'booth']}
-QUADRATIC_FUNCTIONS = {k: ALL_FUNCTIONS[k]
-                    for k in ['rosenbrock', 'rosenbrock_dd']}
-
-
 def simple_sphere(xy):
     """A simple sphere, as a set of residuals (cost = sum(residuals**2))
 
@@ -324,4 +267,61 @@ def increase_model_dimension(func, n=1000):
         np.polynomial.legendre.legval(t, func(p))
 
     return increased_modeldimension_function
+
+
+ALL_FUNCTIONS = {
+    'simple_sphere' : {
+        'function': simple_sphere,
+        'data': np.array([0, 0]),
+        'true-params': np.array([0, 0]),
+        },
+
+    'booth' : {
+        'function': booth,
+        'data': np.array([7., 5.]),
+        'true-params': np.array([1., 3.]),
+        },
+
+    'beale' : {
+        'function': beale,
+        'data': np.array([1.5, 2.25, 2.625]),
+        'true-params': np.array([3, 0.5]),
+        },
+
+    'rosenbrock' : {
+        'function': rosenbrock,
+        'data': np.array([1.0, 0.]),
+        'true-params': np.array([1., 1.]),
+        },
+
+    'rosenbrock_dd' : {
+        'function': rosenbrock_dd,
+        'data': np.zeros(2 * 3),   # d > 3 possible
+        'true-params': np.ones(3),
+        },
+
+    'rosenbrock_gen' : {
+        'function': rosenbrock_gen,
+        'data': np.array([1.0, 0.]),
+        'true-params': np.array([1., 1.]),
+        },
+
+    'rosenbrock_gendd' : {
+        'function': rosenbrock_gendd,
+        'data': np.zeros(2 * 3),  # d > 3 possible
+        'true-params': np.ones(3),
+        },
+
+    'himmelblau' : {
+        'function': himmelblau,
+        'data': np.array([11., 7.]),
+        'true-params': np.array([3.0, 2.0]),  # one of 4
+        },
+    }
+
+
+LINEAR_FUNCTIONS = {k: ALL_FUNCTIONS[k]
+                    for k in ['simple_sphere', 'beale', 'booth']}
+QUADRATIC_FUNCTIONS = {k: ALL_FUNCTIONS[k]
+                    for k in ['rosenbrock', 'rosenbrock_dd']}
 
