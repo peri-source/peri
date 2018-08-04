@@ -11,7 +11,6 @@ import optengine, opttest
 # 1. LM steps to exactly correct parameters for linear models when damping
 #    is 0.
 # 2. Same as above for linear + quadratic models with use_accel
-# 3. find_expected_error, calc_model_cosine for linear models.
 
 TOLS = {'atol': 1e-11, 'rtol': 1e-11}
 
@@ -52,6 +51,16 @@ class TestOptFunction(unittest.TestCase):
             all_functions_ok.append(all(is_ok))
         self.assertTrue(all(all_functions_ok))
 
+    def test_model_cosine_on_all_quadratic_models(self):
+        all_functions_ok = []
+        for optfun in make_all_linear_function_optobjs():
+            optfun.update_J()
+            model_cosine = optfun.calc_model_cosine()
+            is_ok = np.isclose(model_cosine, 1, **TOLS)
+            all_functions_ok.append(is_ok)
+        self.assertTrue(all(all_functions_ok))
+
+
 
 class TestStepper(unittest.TestCase):
     def test_constructor(self):
@@ -79,10 +88,13 @@ class TestOptimizer(unittest.TestCase):
 
 def make_all_linear_function_optobjs():
     for function_info in opttest.LINEAR_FUNCTIONS.values():
-        function = function_info['function']
-        data = function_info['data']
-        initial_param_guess = 0 * function_info['true-params']
-        optfun = optengine.OptFunction(function, data, initial_param_guess)
+        optfun = _make_optfun_from_function_info(function_info)
+        yield optfun
+
+
+def make_all_quadratic_function_optobjs():
+    for function_info in opttest.QUADRATIC_FUNCTIONS.values():
+        optfun = _make_optfun_from_function_info(function_info)
         yield optfun
 
 
@@ -104,6 +116,14 @@ def make_optimizer():
     stepper = make_basic_stepper()
     optimizer = optengine.Optimizer(stepper)
     return optimizer
+
+
+def _make_optfun_from_function_info(function_info):
+    function = function_info['function']
+    data = function_info['data']
+    initial_param_guess = 0 * function_info['true-params']
+    optfun = optengine.OptFunction(function, data, initial_param_guess)
+    return optfun
 
 
 if __name__ == '__main__':
