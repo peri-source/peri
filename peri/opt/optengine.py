@@ -604,22 +604,42 @@ class BasicLMStepper(Stepper):
         self.dampmode = dampmode
         self._rcond = 1e-15  # rcond for np.linalg.lstsq on matrix solution
 
+    def try_step(self, step):
+        """Try step. If error decreases, decrease damping. If it increases,
+        increase damping and go back."""
+        initial_error = np.copy(self.optobj.error)
+        initial_paramvals = np.copy(self.optobj.paramvals)
+        self.optobj.update(initial_paramvals + step)
+        if self.optobj.error < initial_error:
+            self.damp /= self.dampdown
+        else:
+            self.optobj.update(initial_paramvals)
+            self.damp *= self.dampup
+
     def execute_one_optimization_step(self):
         self.optobj.update_J()
         dampedJTJ = (self.optobj.JTJ +
                      self.damp * np.eye(self.optobj.JTJ.shape[0]))
         grad = self.optobj.gradcost()
         step = self.calc_simple_LM_step(dampedJTJ, grad)
-        initial_error = np.copy(self.optobj.error)
-        initial_paramvals = np.copy(self.optobj.paramvals)
-        if self.optobj.update(initial_paramvals + step) < initial_error:
-            self.damp /= self.dampdown
-        else:
-            self.optobj.update(initial_paramvals)
-            self.damp *= self.dampup
+        self.try_step(step)
 
     def calc_simple_LM_step(self, dampedJTJ, grad):
         return np.linalg.lstsq(dampedJTJ, -0.5*grad, rcond=self._rcond)[0]
+
+
+# TODO implement all the bells and whistles you used in this stepper
+class FancyLMStepper(BasicLMStepper):
+    def __init__(self, optobj, damp=1.0, dampdown=8., dampup=3., dampmode=
+                 'additive', nsteps=(1, 2), accel=True, dobroyden=True,
+                 eigupdate=True):
+        super(FancyLMStepper, self).__init__(
+            optobj, damp=damp, dampdown=dampdown, dampup=dampup,
+            dampmode=dampmode)
+        self.nsteps = nsteps
+        self.accel = accel
+        self.dobroyden = dobroyden
+        self.eigupdate = eigupdate
 
 
 class LMOptimizer(object):
