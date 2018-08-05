@@ -122,6 +122,26 @@ class TestStepper(unittest.TestCase):
                             np.allclose(correct_JTJ, new_JTJ, **SOFTTOLS)])
         self.assertTrue(all(each_ok))
 
+    def test_broyden_update_changes_J_for_quadratic_models(self):
+        each_ok = []
+        for optfun in make_all_quadratic_function_optobjs():
+            stepper = optengine.FancyLMStepper(optfun, damp=1e2, accel=False)
+            initial_residuals = optfun.residuals
+            initial_paramvals = optfun.paramvals
+            stepper.take_step()
+            correct_J = stepper.optobj.J.copy()
+            correct_JTJ = stepper.optobj.JTJ.copy()
+            # We step, get J and JTJ, then broyden update
+            direction = optfun.paramvals - initial_paramvals
+            delta_residuals = optfun.residuals - initial_residuals
+            stepper.broyden_update_J(direction, delta_residuals)
+            new_J = stepper.optobj.J.copy()
+            new_JTJ = stepper.optobj.JTJ.copy()
+            each_ok.extend([~np.allclose(correct_J, new_J, **SOFTTOLS),
+                            ~np.allclose(correct_JTJ, new_JTJ, **SOFTTOLS)])
+        self.assertTrue(all(each_ok))
+
+
 
 class TestOptimizer(unittest.TestCase):
     def test_optimize(self):
