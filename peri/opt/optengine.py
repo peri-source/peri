@@ -564,6 +564,7 @@ class Optimizer(object):
         return flag
 
 
+# TODO: add log debugs on steps
 class Stepper(object):
     def __init__(self, optobj):
         self.optobj = optobj
@@ -768,29 +769,6 @@ class LMOptimizer(object):
                           'costol': costol}
         self.clean_mem = clean_mem
 
-    def optimize(self):
-        """Runs the optimization"""
-        for _ in range(self.maxiter):
-            CLOG.debug('Start loop {}: \t{:.5}'.format(_, self.optobj.error))
-            # Most generic algorithm is:
-            # 1. Update J, JTJ
-            self.optobj.update_J()
-            # 2. Calculate & take a step -- distinction might be blurred
-            flag = self.take_initial_step()
-            if flag == 'stuck':
-                break
-            # 3. If desired, take more steps
-            flag = self.take_additional_steps()
-            # 4. Termination if completed
-            if np.any(list(self.check_completion().values())):
-                flag = 'completed'
-                break
-        else:  # for-break-else, with the terminate
-            flag = 'unconverged'
-        if self.clean_mem:
-            self.optobj.clean_mem()
-        return flag
-
     def take_initial_step(self):
         """Takes a step after a fresh J and updates the damping"""
         # 2. Calculate & take a step -- distinction might be blurred
@@ -909,33 +887,6 @@ class LMOptimizer(object):
         apparent = np.dot(bad_dr, self.optobj.J)  # apparent step
         self.optobj.low_rank_J_update([stp / np.sqrt(np.dot(stp, stp)) for
                                        stp in [badstep, apparent]])
-
-    def calc_simple_LM_step(self, dampedJTJ, grad):
-        return np.linalg.lstsq(dampedJTJ, -0.5*grad, rcond=self._rcond)[0]
-
-    def check_completion(self):
-        """Return a bool of whether or not optimization has converged"""
-        d = self.get_convergence_stats()
-        keys = [
-                ['derr',     'errtol'],
-                ['fracerr',  'fractol'],
-                ['dvals',    'paramtol'],
-                ['modelcos', 'costol'],
-                ['exp_derr', 'exptol'],
-                ]
-        return {k2: d[k1] < self.term_dict[k2] for k1, k2 in keys}
-
-    def get_convergence_stats(self):
-        """Returns a dict of termination info"""
-        obj = self.optobj
-        d = {
-            'derr': self.lasterror - obj.error,
-            'fracerr': (self.lasterror - obj.error),
-            'dvals': np.abs(self.lastvals - obj.paramvals).max(),
-            'modelcos': obj.calc_model_cosine(),
-            'exp_derr': obj.error - obj.find_expected_error(),
-            }
-        return d
 
 
 class GroupedOptimizer(object):
