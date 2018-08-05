@@ -234,7 +234,11 @@ class OptObj(object):
         grad = self.gradcost()
         if delta_params == 'perfect':
             delta_params = np.linalg.lstsq(self.JTJ, -0.5*grad, rcond=1e-13)[0]
-        # If the model were linear, then the cost would be quadratic,
+        # If the model were linear, then the residuals would be
+        # r = r0 + theta * J
+        # The cost would be quadratic in theta; c = (r0 + theta * J)^2
+        # The gradient would be grad = 2 * J * (r0 + theta * J),
+        # and the Hessian would be 2 * JTJ
         # with Hessian 2*`self.JTJ` and gradient `grad`
         expected_error = (self.error + np.dot(grad, delta_params) +
                           np.dot(np.dot(self.JTJ, delta_params), delta_params))
@@ -611,21 +615,34 @@ class BasicLMStepper(Stepper):
         initial_paramvals = np.copy(self.optobj.paramvals)
         self.optobj.update(initial_paramvals + step)
         if self.optobj.error < initial_error:
-            self.damp /= self.dampdown
+            self.decrease_damping()
         else:
             self.optobj.update(initial_paramvals)
-            self.damp *= self.dampup
+            self.increase_damping()
 
     def execute_one_optimization_step(self):
         self.optobj.update_J()
-        dampedJTJ = (self.optobj.JTJ +
-                     self.damp * np.eye(self.optobj.JTJ.shape[0]))
-        grad = self.optobj.gradcost()
-        step = self.calc_simple_LM_step(dampedJTJ, grad)
+        step = self.calc_simple_LM_step()
         self.try_step(step)
 
-    def calc_simple_LM_step(self, dampedJTJ, grad):
-        return np.linalg.lstsq(dampedJTJ, -0.5*grad, rcond=self._rcond)[0]
+    def calc_simple_LM_step(self):
+        dampedJTJ = self.damp_JTJ()
+        gradcost = self.optobj.gradcost()
+        return np.linalg.lstsq(dampedJTJ, -0.5*gradcost, rcond=self._rcond)[0]
+
+    def decrease_damping(self):
+        # splitting this out for polymorphism
+        self.damp /= self.dampdown
+
+    def increase_damping(self):
+        # splitting this out for polymorphism
+        self.damp *= self.dampup
+
+    def damp_JTJ(self):
+        # splitting this out for polymorphism
+        dampedJTJ = (self.optobj.JTJ +
+                     self.damp * np.eye(self.optobj.JTJ.shape[0]))
+        return dampedJTJ
 
 
 # TODO implement all the bells and whistles you used in this stepper
@@ -640,6 +657,43 @@ class FancyLMStepper(BasicLMStepper):
         self.accel = accel
         self.dobroyden = dobroyden
         self.eigupdate = eigupdate
+
+    def execute_one_optimization_step(self):
+        self.optobj.update_J()
+        simple_step = self.calc_simple_LM_step()
+        accel_correction = self.calc_accel_correction(simple_step)
+        step = simple_step + accel_correction
+        self.try_step(step)
+
+    def calc_accel_correction(self, initialstep):
+        """Calculates geodesic acceleration correction, exact for
+        quadratic models."""
+        # 1. Get the second derivative of the residuals along the
+        #    direction of initialstep
+        p0 = self.optobj.paramvals.copy()
+
+        self.optobj.update(p0)
+        residuals_at_p0 = self.optobj.residuals.copy()
+
+        self.optobj.update(p0 + initialstep)
+        residuals_at_plus = self.optobj.residuals.copy()
+
+        self.optobj.update(p0 - initialstep)
+        residuals_at_minus = self.optobj.residuals.copy()
+
+        self.optobj.update(p0)
+
+        second_derivative = (residuals_at_plus
+                             - 2 * residuals_at_p0
+                             + residuals_at_minus)
+
+        # 2. Calculate the acceleration correction
+        dampedJTJ = self.damp_JTJ()
+        correction = np.linalg.lstsq(
+            dampedJTJ, np.dot(second_derivative, self.optobj.J),
+            rcond=self._rcond)[0]
+        correction *= -0.5
+        return correction
 
 
 class LMOptimizer(object):
@@ -823,13 +877,6 @@ class LMOptimizer(object):
             CLOG.debug('Run w/ J step: \t{:.3f}'.format(obj.error))
         return 'unconverged'
 
-    # def another_run(self, numdir=1):
-    #     flag = run_with_J()
-    #     if flag == 'unconverged':
-    #         self.eig_update_J(numdir=numdir)
-    #         self.badstep_updat_J(badstep, badresiduals)
-    #         -- need to get the badresiduals w/o a function update though
-
     def eig_update_J(self, numdir=1):
         """Update J along the `numdir` stiffest eigendirections"""
         CLOG.debug('Eigendirection update.')
@@ -863,16 +910,6 @@ class LMOptimizer(object):
         self.optobj.low_rank_J_update([stp / np.sqrt(np.dot(stp, stp)) for
                                        stp in [badstep, apparent]])
 
-    def calc_step(self, dampedJTJ):
-        grad = self.optobj.gradcost()
-        # could be augmented to include acceleration etc:
-        # corr = self.calc_accel_correction(dampedJTJ, initialstep)
-        simple = self.calc_simple_LM_step(dampedJTJ, grad)
-        if self.accel:
-            return simple + self.calc_accel_correction(dampedJTJ, simple)
-        else:
-            return simple
-
     def calc_simple_LM_step(self, dampedJTJ, grad):
         return np.linalg.lstsq(dampedJTJ, -0.5*grad, rcond=self._rcond)[0]
 
@@ -899,37 +936,6 @@ class LMOptimizer(object):
             'exp_derr': obj.error - obj.find_expected_error(),
             }
         return d
-
-    def calc_accel_correction(self, dampedJTJ, initialstep):
-        """Geodesic acceleration correction to the LM step.
-
-        Parameters
-        ----------
-            dampedJTJ : numpy.ndarray
-                The damped JTJ used to calculate the initial step.
-            initialstep : numpy.ndarray
-                The initial LM step.
-
-        Returns
-        -------
-            corr : numpy.ndarray
-                The correction to the original LM step.
-        """
-        # Get the derivative:
-        obj = self.optobj
-        p0 = obj.paramvals.copy()  # FIXME this is probably wrong
-        _ = obj.update(p0)
-        rm0 = obj.residuals.copy()
-        _ = obj.update(p0 + initialstep)
-        rm1 = obj.residuals.copy()
-        _ = obj.update(p0 - initialstep)
-        rm2 = obj.residuals.copy()
-        der2 = (rm2 + rm1 - 2*rm0)
-
-        correction = np.linalg.lstsq(dampedJTJ, np.dot(der2, obj.J),
-                                     rcond=self._rcond)[0]
-        correction *= -0.5
-        return correction
 
 
 class GroupedOptimizer(object):
