@@ -275,16 +275,16 @@ class OptObj(object):
 
 
 class OptFunction(OptObj):
-    def __init__(self, func, data, paramvals, dl=1e-7, **kwargs):
+    def __init__(self, function, data, paramvals, dl=1e-7, **kwargs):
         """OptObj for a function
 
         Parameters
         ----------
-        func : callable
-            Must return a np.ndarray-like with syntax func(data, *params)
+        function : callable
+            Must return a np.ndarray-like with syntax function(data, *params)
             and return an object of the same size as ``data``
         data : flattened numpy.ndarray
-            Passed to the func. Must return a valid ``np.size``
+            Passed to the function. Must return a valid ``np.size``
         paramvals : numpy.ndarray
             extra args to pass to the function.
         dl : Float, optional
@@ -296,7 +296,7 @@ class OptFunction(OptObj):
             bounding values. Default is None, for no bounds on the
             parameters.
         """
-        self.func = func
+        self.function = function
         self.data = data
         self._model = np.zeros_like(data)
         self._paramvals = np.array(paramvals).reshape(-1)
@@ -327,7 +327,7 @@ class OptFunction(OptObj):
 
     def _update(self, values):
         self._paramvals[:] = values
-        self._model = self.func(self._paramvals)
+        self._model = self.function(self._paramvals)
         return self.error
 
     @property
@@ -615,11 +615,13 @@ class BasicLMStepper(Stepper):
         initial_error = np.copy(self.optobj.error)
         initial_paramvals = np.copy(self.optobj.paramvals)
         self.optobj.update(initial_paramvals + step)
-        if self.optobj.error < initial_error:
+        step_is_ok = self.optobj.error < initial_error
+        if step_is_ok:
             self.decrease_damping()
         else:
             self.optobj.update(initial_paramvals)
             self.increase_damping()
+        return step_is_ok
 
     def execute_one_optimization_step(self):
         self.optobj.update_J()
@@ -664,7 +666,9 @@ class FancyLMStepper(BasicLMStepper):
         simple_step = self.calc_simple_LM_step()
         accel_correction = self.calc_accel_correction(simple_step)
         step = simple_step + accel_correction
-        self.try_step(step)
+        step_is_ok = self.try_step(step)
+        # try_step would get the broyden and eig updates (here only)
+        # whereas run with J etc would follow here.
 
     def calc_accel_correction(self, initialstep):
         """Calculates geodesic acceleration correction, exact for
@@ -695,6 +699,17 @@ class FancyLMStepper(BasicLMStepper):
             rcond=self._rcond)[0]
         correction *= -0.5
         return correction
+
+    def broyden_update_J(self, direction, delta_residuals):
+        """Update J along `direction` for change in residuals `dr` (both 1D)"""
+        CLOG.debug('Broyden update.')
+        direction_magnitude = np.linalg.norm(direction)
+        if direction_magnitude > 0:  # edge case when at the  exact minimum
+            normalized_direction = direction / direction_magnitude
+            normalized_delta_residuals = delta_residuals / direction_magnitude
+            self.optobj.low_rank_J_update(
+                normalized_direction.reshape(1, -1),
+                normalized_delta_residuals.reshape(1, -1))
 
 
 class LMOptimizer(object):
@@ -861,14 +876,6 @@ class LMOptimizer(object):
         obj = self.optobj
         vl, vc = np.linalg.eigh(obj.JTJ)
         obj.low_rank_J_update(vc[:, -numdir:].T)
-
-    def broyden_update_J(self, direction, dr):
-        """Update J along `direction` for change in residuals `dr` (both 1D)"""
-        CLOG.debug('Broyden update.')
-        nrm = np.sqrt(np.dot(direction, direction))
-        d0 = direction / nrm
-        vals = dr / nrm
-        self.optobj.low_rank_J_update(d0.reshape(1, -1), vals.reshape(1, -1))
 
     def badstep_update_J(self, badstep, bad_dr):
         """After a bad step, update J along the 2 directions we know are bad.
