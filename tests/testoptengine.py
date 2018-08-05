@@ -87,17 +87,20 @@ class TestStepper(unittest.TestCase):
             both_ok.append(initial_error == stepper.optobj.error)
         self.assertTrue(all(both_ok))
 
-    def test_accel_step_is_exact_for_quadratic_models(self):
-        errors_near_0 = []
-        all_quadratic_optfuns = itertools.chain(
-            make_all_linear_function_optobjs(),
-            make_all_quadratic_function_optobjs())
-        for optfun in all_quadratic_optfuns:
+    def test_accel_step_is_exact_for_linear_models(self):
+        errors = []
+        all_linear_optfuns = make_all_linear_function_optobjs()
+        for optfun in all_linear_optfuns:
             stepper = optengine.FancyLMStepper(optfun, damp=1e-14, accel=True)
             stepper.take_step()
-            errors_near_0.append(np.isclose(stepper.current_error, 0, **TOLS))
-        self.assertTrue(all(errors_near_0))
+            errors.append(stepper.current_error)
+        self.assertTrue(np.allclose(errors, 0, **TOLS))
 
+    def test_accel_step_is_exact_for_rosenbrock_model(self):
+        optfun = make_rosenbrock_optfun()
+        stepper = optengine.FancyLMStepper(optfun, damp=1e-14, accel=True)
+        stepper.take_step()
+        self.assertTrue(np.allclose(stepper.current_error, 0, **TOLS))
 
 class TestOptimizer(unittest.TestCase):
     def test_optimize(self):
@@ -130,6 +133,12 @@ def make_beale_optfun():
     return optfun
 
 
+def make_rosenbrock_optfun():
+    function_info = opttest.ALL_FUNCTIONS['rosenbrock']
+    optfun = _make_optfun_from_function_info(function_info)
+    return optfun
+
+
 def make_basic_stepper():
     optfun = make_beale_optfun()
     stepper = optengine.BasicLMStepper(optfun)
@@ -140,7 +149,6 @@ def make_fancy_stepper():
     optfun = make_beale_optfun()
     stepper = optengine.FancyLMStepper(optfun)
     return stepper
-
 
 
 def make_optimizer():
