@@ -8,9 +8,6 @@ sys.path.append('../peri/opt')
 import optengine, opttest
 
 # Unittests to add:
-# 1. LM steps to exactly correct parameters for linear models when damping
-#    is 0 (basic + fancy).
-# 2. Same as above for linear + quadratic models with use_accel
 
 TOLS = {'atol': 1e-11, 'rtol': 1e-11}
 
@@ -81,6 +78,15 @@ class TestStepper(unittest.TestCase):
             errors_near_0.append(np.isclose(stepper.current_error, 0, **TOLS))
         self.assertTrue(all(errors_near_0))
 
+    def test_calc_step_does_not_change_error(self):
+        both_ok = []
+        for stepper in (make_basic_stepper(), make_fancy_stepper()):
+            initial_error = np.copy(stepper.optobj.error)
+            stepper.optobj.update_J()  # FIXME should this be not-lazy-init?
+            step = stepper.calc_simple_LM_step()
+            both_ok.append(initial_error == stepper.optobj.error)
+        self.assertTrue(all(both_ok))
+
     def test_accel_step_is_exact_for_quadratic_models(self):
         errors_near_0 = []
         all_quadratic_optfuns = itertools.chain(
@@ -128,6 +134,13 @@ def make_basic_stepper():
     optfun = make_beale_optfun()
     stepper = optengine.BasicLMStepper(optfun)
     return stepper
+
+
+def make_fancy_stepper():
+    optfun = make_beale_optfun()
+    stepper = optengine.FancyLMStepper(optfun)
+    return stepper
+
 
 
 def make_optimizer():
