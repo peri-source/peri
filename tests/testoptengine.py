@@ -1,6 +1,6 @@
 import unittest, itertools
 
-import numpy as np
+import numpy as np; np.random.seed(0)
 
 # for now:
 import sys
@@ -33,6 +33,23 @@ class TestOptFunction(unittest.TestCase):
         self.assertFalse(np.isnan(optfun.J).any())
         self.assertFalse(np.isclose(optfun.J, 0, atol=1e-15).all())
 
+    def test_low_rank_J_update(self):
+        optfun = make_beale_optfun()  # non-linear model, which is important
+        optfun.update_J()
+        true_j = optfun.J.copy()
+        true_jtj = optfun.JTJ.copy()
+        true_params = optfun.paramvals.copy()
+        direction = np.random.randn(true_params.size).reshape(1, -1)
+        direction /= np.linalg.norm(direction)
+
+        optfun.low_rank_J_update(direction)
+        j_correct = [np.allclose(true_j, optfun.J, **TOLS),
+                     np.allclose(true_jtj, optfun.JTJ, **TOLS)]
+        params_undrifted = np.allclose(true_params, optfun.paramvals, **TOLS)
+        self.assertTrue(all(j_correct))
+        self.assertTrue(all(params_undrifted))
+
+
     def test_model_cosine(self):
         optfun = make_beale_optfun()
         optfun.update_J()
@@ -59,6 +76,9 @@ class TestOptFunction(unittest.TestCase):
         self.assertTrue(all(all_functions_ok))
 
 
+# TODO: eig update tests. Can test that a full update with eig
+#       gives the same J, step on quadratic model + partial eig update
+#       does change J
 class TestStepper(unittest.TestCase):
     def test_constructor(self):
         stepper = make_basic_stepper()
@@ -141,6 +161,20 @@ class TestStepper(unittest.TestCase):
                             ~np.allclose(correct_JTJ, new_JTJ, **SOFTTOLS)])
         self.assertTrue(all(each_ok))
 
+    def test_eig_update_is_exact_when_complete(self):
+        is_ok = []
+        for function_info in opttest.ALL_FUNCTIONS.values():
+            optfun = _make_optfun_from_function_info(function_info)
+            stepper = optengine.FancyLMStepper(optfun, damp=1e4, accel=True)
+            optfun.update_J()
+            true_j = np.copy(optfun.J)
+            true_jtj = np.copy(optfun.JTJ)
+            stepper.eig_update_J(number_of_directions=optfun.paramvals.size)
+            eig_j = np.copy(optfun.J)
+            eig_jtj = np.copy(optfun.JTJ)
+            is_ok.extend([np.allclose(true_j, eig_j, **TOLS),
+                          np.allclose(true_jtj, eig_jtj, **TOLS)])
+        self.assertTrue(all(is_ok))
 
 
 class TestOptimizer(unittest.TestCase):
