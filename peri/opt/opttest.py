@@ -103,7 +103,7 @@ def rosenbrock_dd(xd, A=10):
     """
     x_iplus1 = xd[1:]
     x_i = xd[:-1]
-    r1 = A*(x_iplus1 - x_i * x_i)
+    r1 = A * (x_iplus1 - x_i * x_i)
     r2 = 1 - x_i
     return np.append(r1, r2)
 
@@ -296,7 +296,7 @@ ALL_FUNCTIONS = {
 
     'rosenbrock_dd' : {
         'function': rosenbrock_dd,
-        'data': np.zeros(3 + 1),   # d > 3 possible
+        'data': np.zeros(2 * 3 - 2),   # d > 3 possible
         'true-params': np.ones(3),
         },
 
@@ -308,7 +308,7 @@ ALL_FUNCTIONS = {
 
     'rosenbrock_gendd' : {
         'function': rosenbrock_gendd,
-        'data': np.zeros(3 + 1),  # d > 3 possible
+        'data': np.zeros(2 * 3 - 2),  # d > 3 possible
         'true-params': np.ones(3),
         },
 
