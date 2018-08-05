@@ -10,6 +10,7 @@ import optengine, opttest
 # Unittests to add:
 
 TOLS = {'atol': 1e-11, 'rtol': 1e-11}
+SOFTTOLS = {'atol': 1e-7, 'rtol': 1e-7}
 
 
 class TestOptFunction(unittest.TestCase):
@@ -101,6 +102,26 @@ class TestStepper(unittest.TestCase):
         stepper = optengine.FancyLMStepper(optfun, damp=1e-14, accel=True)
         stepper.take_step()
         self.assertTrue(np.allclose(stepper.current_error, 0, **TOLS))
+
+    def test_broyden_update_does_not_change_J_for_linear_models(self):
+        each_ok = []
+        for optfun in make_all_linear_function_optobjs():
+            stepper = optengine.FancyLMStepper(optfun, damp=1e2, accel=False)
+            initial_residuals = optfun.residuals
+            initial_paramvals = optfun.paramvals
+            stepper.take_step()
+            correct_J = stepper.optobj.J.copy()
+            correct_JTJ = stepper.optobj.JTJ.copy()
+            # We step, get J and JTJ, then broyden update
+            direction = optfun.paramvals - initial_paramvals
+            delta_residuals = optfun.residuals - initial_residuals
+            stepper.broyden_update_J(direction, delta_residuals)
+            new_J = stepper.optobj.J.copy()
+            new_JTJ = stepper.optobj.JTJ.copy()
+            each_ok.extend([np.allclose(correct_J, new_J, **SOFTTOLS),
+                            np.allclose(correct_JTJ, new_JTJ, **SOFTTOLS)])
+        self.assertTrue(all(each_ok))
+
 
 class TestOptimizer(unittest.TestCase):
     def test_optimize(self):
