@@ -168,7 +168,7 @@ class OptObj(object):
         """Returns the current value of the parameters"""
         raise NotImplementedError('Implement in subclass')
 
-    def low_rank_J_update(self, direction, values=None):
+    def low_rank_J_update(self, directions_to_update, values=None):
         """Does a series of rank-1 updates on self.J.
 
         direction : numpy.ndarray
@@ -185,31 +185,37 @@ class OptObj(object):
         Does this by doing J += np.outer(direction, new_values - old_values)
         without using lots of memory
         """
-        hasvals = values is not None
-        if hasvals:
-            if np.shape(direction)[0] != np.shape(values)[0]:
-                raise ValueError('direction, value must be same shape')
-        else:
-            r0 = self.residuals.copy()
-            p0 = self.paramvals.copy()
+        if np.ndim(directions_to_update) != 2:
+            raise ValueError('directions_to_update must be of shape (n, m)')
+        direction_norm = np.linalg.norm(directions_to_update, axis=1)
+        if not np.allclose(direction_norm, 1.0, atol=1e-12):
+            raise ValueError('directions_to_update is not normalized')
         if self.J is None:
-            self._initialize_J()
-        for a, d in enumerate(direction):
-            if not np.isclose(np.dot(d, d), 1.0, atol=1e-10):
-                raise ValueError('direction is not normalized')
-            vals_to_sub = np.dot(self.J, d)
-            if hasvals:
-                vals = values[a]
-            else:
-                dp = d * self.dl
-                self.update(p0+dp)
-                r1 = self.residuals.copy()
-                vals = (r1-r0) / self.dl
-            delta_vals = vals - vals_to_sub
-            for b in range(d.size):
-                self.J[:, b] += d[b] * delta_vals
-        if np.isnan(self.J.sum()):
-            raise RuntimeError('J has nans')
+            self._initialize_J()  # ?? why is this here?? FIXME
+        if values is None:  # manually finite-difference
+            residuals_here = self.residuals.copy()
+            paramvals_here = self.paramvals.copy()
+            values = np.zeros([np.shape(directions_to_update)[0],
+                               residuals_here.size],
+                              dtype=residuals_here.dtype)
+            for i, direction in enumerate(directions_to_update):
+                delta_params = direction * self.dl
+                self.update(paramvals_here + delta_params)
+                residuals_afterupdate = self.residuals.copy()
+                values[i] = (residuals_afterupdate - residuals_here) / self.dl
+            self.update(paramvals_here)
+        self._low_rank_J_update(directions_to_update, values)
+
+    def _low_rank_J_update(self, directions_to_update, values):
+        if np.shape(directions_to_update)[0] != np.shape(values)[0]:
+            msg = 'directions_to_update, values must have shape[0] the same'
+            raise ValueError(msg)
+        for direction, value in zip(directions_to_update, values):
+            subtract_from_value = np.dot(self.J, direction)
+            change_in_value = value - subtract_from_value
+            for a in range(direction.size):
+                self.J[:, a] += direction[a] * change_in_value
+        assert (not np.isnan(self.J.sum())), 'J has nans'
         self._calcjtj()
 
     def _calcjtj(self):
@@ -275,7 +281,7 @@ class OptObj(object):
 
 
 class OptFunction(OptObj):
-    def __init__(self, function, data, paramvals, dl=1e-7, **kwargs):
+    def __init__(self, function, data, paramvals, dl=1e-8, **kwargs):
         """OptObj for a function
 
         Parameters
@@ -711,6 +717,13 @@ class FancyLMStepper(BasicLMStepper):
                 normalized_direction.reshape(1, -1),
                 normalized_delta_residuals.reshape(1, -1))
 
+    def eig_update_J(self, number_of_directions=1):
+        """Update J along the `numdir` stiffest eigendirections"""
+        CLOG.debug('Eigendirection update.')
+        eigenvalues, eigenvectors = np.linalg.eigh(self.optobj.JTJ)
+        directions_to_update = eigenvectors[:, -number_of_directions:].T
+        self.optobj.low_rank_J_update(directions_to_update)
+
 
 class LMOptimizer(object):
     def __init__(self, optobj, damp=1.0, dampdown=8., dampup=3., dampmode=
@@ -869,13 +882,6 @@ class LMOptimizer(object):
                 return 'stuck'
             CLOG.debug('Run w/ J step: \t{:.3f}'.format(obj.error))
         return 'unconverged'
-
-    def eig_update_J(self, numdir=1):
-        """Update J along the `numdir` stiffest eigendirections"""
-        CLOG.debug('Eigendirection update.')
-        obj = self.optobj
-        vl, vc = np.linalg.eigh(obj.JTJ)
-        obj.low_rank_J_update(vc[:, -numdir:].T)
 
     def badstep_update_J(self, badstep, bad_dr):
         """After a bad step, update J along the 2 directions we know are bad.
