@@ -230,43 +230,53 @@ def himmelblau(xy):
     return np.array([r1, r2])
 
 
-def increase_model_dimension(func, n=1000):
-    """Extends a function to higher dimensions without changing its cost
-    topography or its minimal embedding dimension (i.e. # of parameters).
+class ExpandedModelDimension(object):
+    number_of_points = 1000
+    points = np.linspace(-1, 1, number_of_points)
+    def __init__(self, function):
+        """Extends a function to higher dimensions without changing its cost
+        topography or its minimal embedding dimension (i.e. # of parameters).
 
-    Parameters
-    ----------
-    func : callable
-        The function to embed in a higher dimension.
-    n : int, optional
-        The dimension to embed into. Default is 1000
+        Parameters
+        ----------
+        function : callable
+            The function to embed in a higher dimension.
 
-    Returns
-    -------
-    f : callable
-        A lambda function that is called with the same syntax as ``func``,
-        only instead of returning a d-dimensional vector returns an N-d one.
+        Returns
+        -------
+        f : callable
+            A lambda function that is called with the same syntax as ``func``,
+            only instead of returning a d-dimensional vector returns an N-d one.
 
-    Notes
-    -----
-    This works by transforming the returned vector of the function to a
-    set of coefficients in a Legendre polynomial evaluated at `n` points
-    on (-1,1). Since Leg polys are orthogonal on (-1,1) with weight w(x)=1,
-    this does not change the topography of the cost, only the scale.
-    Rescaling the function by 1/n will keep the cost exactly the same.
+        Notes
+        -----
+        This works by transforming the returned vector of the function to a
+        set of coefficients in a Legendre polynomial evaluated at `n` points
+        on (-1,1). Since Leg polys are orthogonal on (-1,1) with weight w(x)=1,
+        this does not change the topography of the cost, only the scale.
+        Rescaling the function by 1/n will keep the cost exactly the same.
 
-    Right now this is down with legendre polynomials, which are only
-    orthogonal as n-> infinity. This works as long as
-    \sum_k P_i(xk) P_j(xk) = \delta_ij
-    so another way to do this could be with points chosen according to
-    Gauss quadrature
-    """
-    t = np.linspace(-1, 1, n)
+        Right now this is down with legendre polynomials, which are only
+        orthogonal as n-> infinity. This works as long as
+        \sum_k P_i(xk) P_j(xk) = \delta_ij
+        so another way to do this could be with points chosen according to
+        Gauss quadrature
+        """
+        self.function = function
 
-    def increased_modeldimension_function(p):
-        np.polynomial.legendre.legval(t, func(p))
+    def __call__(self, parameters):
+        coeffs = self.function(parameters)
+        return np.polynomial.legendre.legval(self.points, coeffs)
 
-    return increased_modeldimension_function
+
+simple_sphere_expanded = ExpandedModelDimension(simple_sphere)
+booth_expanded = ExpandedModelDimension(booth)
+beale_expanded = ExpandedModelDimension(beale)
+rosenbrock_expanded = ExpandedModelDimension(rosenbrock)
+rosenbrock_dd_expanded = ExpandedModelDimension(rosenbrock_dd)
+rosenbrock_gen_expanded = ExpandedModelDimension(rosenbrock_gen)
+rosenbrock_gendd_expanded = ExpandedModelDimension(rosenbrock_gendd)
+himmelblau_expanded = ExpandedModelDimension(himmelblau)
 
 
 ALL_FUNCTIONS = {
@@ -276,10 +286,22 @@ ALL_FUNCTIONS = {
         'true-params': np.array([0, 0]),
         },
 
+    'simple_sphere_expanded' : {
+        'function': simple_sphere_expanded,
+        'data': np.zeros(simple_sphere_expanded.number_of_points),
+        'true-params': np.array([0, 0]),
+        },
+
     'booth' : {
         'function': booth,
         'data': np.array([7., 5.]),
         'true-params': np.array([1., 3.]),
+        },
+
+    'booth_expanded' : {
+        'function': booth_expanded,
+        'true-params': np.array([1., 3.]),
+        'data': booth_expanded(np.array([1., 3.]))
         },
 
     'beale' : {
@@ -288,10 +310,22 @@ ALL_FUNCTIONS = {
         'true-params': np.array([3, 0.5]),
         },
 
+    'beale_expanded' : {
+        'function': beale_expanded,
+        'true-params': np.array([3, 0.5]),
+        'data': beale_expanded(np.array([3, 0.5])),
+        },
+
     'rosenbrock' : {
         'function': rosenbrock,
         'data': np.array([1.0, 0.]),
         'true-params': np.array([1., 1.]),
+        },
+
+    'rosenbrock_expanded' : {
+        'function': rosenbrock_expanded,
+        'true-params': np.array([1., 1.]),
+        'data': rosenbrock_expanded(np.array([1., 1.])),
         },
 
     'rosenbrock_dd' : {
@@ -300,10 +334,22 @@ ALL_FUNCTIONS = {
         'true-params': np.ones(3),
         },
 
+    'rosenbrock_dd_expanded' : {
+        'function': rosenbrock_dd_expanded,
+        'data': np.zeros(rosenbrock_dd_expanded.number_of_points),
+        'true-params': np.ones(3),   # d > 3 possible
+        },
+
     'rosenbrock_gen' : {
         'function': rosenbrock_gen,
         'data': np.array([1.0, 0.]),
         'true-params': np.array([1., 1.]),
+        },
+
+    'rosenbrock_gen_expanded' : {
+        'function': rosenbrock_gen_expanded,
+        'true-params': np.array([1., 1.]),
+        'data': rosenbrock_gen_expanded(np.array([1., 1.])),
         },
 
     'rosenbrock_gendd' : {
@@ -312,16 +358,39 @@ ALL_FUNCTIONS = {
         'true-params': np.ones(3),
         },
 
+    'rosenbrock_gendd_expanded' : {
+        'function': rosenbrock_gendd_expanded,
+        'data': np.zeros(rosenbrock_gendd_expanded.number_of_points),
+        'true-params': np.ones(3),
+        },
+
     'himmelblau' : {
         'function': himmelblau,
         'data': np.array([11., 7.]),
         'true-params': np.array([3.0, 2.0]),  # one of 4
         },
+
+    'himmelblau_expanded' : {
+        'function': himmelblau_expanded,
+        'true-params': np.array([3.0, 2.0]),  # one of 4 minima
+        'data': himmelblau_expanded(np.array([3.0, 2.0])),
+        },
     }
 
 
 LINEAR_FUNCTIONS = {k: ALL_FUNCTIONS[k]
-                    for k in ['simple_sphere', 'booth']}
+                    for k in ['simple_sphere', 'simple_sphere_expanded',
+                              'booth', 'booth_expanded']}
+
+
 QUADRATIC_FUNCTIONS = {k: ALL_FUNCTIONS[k]
-                    for k in ['rosenbrock', 'rosenbrock_dd']}
+                    for k in ['rosenbrock', 'rosenbrock_expanded',
+                              'rosenbrock_dd', 'rosenbrock_dd_expanded']}
+
+
+big_names = ['simple_sphere_expanded', 'booth_expanded', 'beale_expanded',
+             'rosenbrock_expanded', 'rosenbrock_dd_expanded',
+             'rosenbrock_gen_expanded', 'rosenbrock_gendd_expanded',
+             'himmelblau_expanded']
+BIG_FUNCTIONS = {k: ALL_FUNCTIONS[k] for k in big_names}
 
