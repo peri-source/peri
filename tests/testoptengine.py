@@ -7,9 +7,8 @@ import sys
 sys.path.append('../peri/opt')
 import optengine, opttest
 
-# Unittests to add:
 
-TOLS = {'atol': 1e-11, 'rtol': 1e-11}
+TOLS = {'atol': 1e-10, 'rtol': 1e-10}
 SOFTTOLS = {'atol': 1e-7, 'rtol': 1e-7}
 WEAKTOLS =  {'atol': 1e-5, 'rtol': 1e-5}
 
@@ -40,11 +39,13 @@ class TestOptFunction(unittest.TestCase):
     def test_low_rank_J_update(self):
         function_names = ['beale', 'booth', 'rosenbrock', 'himmelblau',
                           'rosenbrock_gen', 'simple_sphere']
+        fail_names = (['rosenbrock_dd', 'rosenbrock_gendd'] +
+                      [k for k in opttest.BIG_FUNCTIONS.keys()])
         # FIXME this test fails only on rosenbrock_dd and rosenbrock_gendd
         # why????
         js_correct = []
         params_undrifted = []
-        for function_name in function_names:
+        for function_name in function_names + fail_names:
             optfun = make_optfun(function_name)
             optfun.update_J()
             true_j = optfun.J.copy()
