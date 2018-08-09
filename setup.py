@@ -22,7 +22,6 @@ setup(name='peri',
           "numpy>=1.8.1",
           "scipy>=0.14.0",
           "matplotlib>=1.0.0",
-          "pyfftw>=0.9.1",
           "pillow>=1.1.7"
       ],
       package_data={
