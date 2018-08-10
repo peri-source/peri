@@ -304,7 +304,7 @@ class OptFunction(OptObj):
         """
         self.function = function
         self.data = data
-        self._model = np.zeros_like(data)
+        self._model = np.array(function(paramvals))
         self._paramvals = np.array(paramvals).reshape(-1)
         self.J = None  # we don't create J until we need to
         self.dl = dl
@@ -324,7 +324,7 @@ class OptFunction(OptObj):
             dp[i] = self.dl
             self.update(p0 + dp)
             r1 = self.residuals.copy()
-            self.J[:, i] = (r1-r0) / self.dl
+            self.J[:, i] = (r1 - r0) / self.dl
         if np.isnan(self.J.sum()):
             raise RuntimeError('J has nans')
         self._calcjtj()
