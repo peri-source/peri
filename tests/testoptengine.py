@@ -36,32 +36,43 @@ class TestOptFunction(unittest.TestCase):
         self.assertFalse(np.isnan(optfun.J).any())
         self.assertFalse(np.isclose(optfun.J, 0, atol=1e-15).all())
 
-    def test_low_rank_J_update(self):
-        function_names = ['beale', 'booth', 'rosenbrock', 'himmelblau',
-                          'rosenbrock_gen', 'simple_sphere']
-        fail_names = (['rosenbrock_dd', 'rosenbrock_gendd'] +
-                      [k for k in opttest.BIG_FUNCTIONS.keys()])
-        # FIXME this test fails only on rosenbrock_dd and rosenbrock_gendd
-        # why????
+    def test_low_rank_J_update_does_not_drift_params(self):
+        params_undrifted = []
+        for function_name in opttest.ALL_FUNCTIONS.keys():
+            optfun = make_optfun(function_name)
+            true_params = optfun.paramvals.copy()
+            num_params = true_params.size
+            random_direction = np.random.randn(num_params).reshape(1, -1)
+            random_direction /= np.linalg.norm(random_direction)
+
+            optfun.low_rank_J_update(random_direction)
+            params_undrifted.append(
+                np.allclose(true_params, optfun.paramvals, **TOLS))
+        self.assertTrue(all(params_undrifted))
+
+    def test_low_rank_J_update_correct_values(self):
         js_correct = []
         params_undrifted = []
-        for function_name in function_names + fail_names:
+        for function_name in opttest.ALL_FUNCTIONS.keys():
             optfun = make_optfun(function_name)
             optfun.update_J()
             true_j = optfun.J.copy()
             true_jtj = optfun.JTJ.copy()
-            true_params = optfun.paramvals.copy()
-            random_direction = np.random.randn(true_params.size).reshape(1, -1)
-            random_direction /= np.linalg.norm(random_direction)
 
-            optfun.low_rank_J_update(random_direction)
-            js_correct.extend(
-                [np.allclose(true_j, optfun.J, **SOFTTOLS),
-                 np.allclose(true_jtj, optfun.JTJ, **SOFTTOLS)])
-            params_undrifted.append(
-                np.allclose(true_params, optfun.paramvals, **TOLS))
+            num_params = optfun.paramvals.size
+            # We pick a direction along the coordinate directions,
+            # since that should be exactly the same as the J calculation
+            # even with roundoff errors:
+            direction = np.zeros([1, num_params])
+            direction[0, 0] = 1.0
+
+            optfun.low_rank_J_update(direction)
+            current_correct = [np.allclose(true_j, optfun.J, **TOLS),
+                               np.allclose(true_jtj, optfun.JTJ, **TOLS)]
+            js_correct.extend(current_correct)
+            if not all(current_correct):
+                print(function_name)
         self.assertTrue(all(js_correct))
-        self.assertTrue(params_undrifted)
 
     def test_model_cosine(self):
         optfun = make_optfun('beale')
