@@ -6,6 +6,7 @@ import time
 import tempfile
 import pickle
 import gc
+import itertools
 
 import numpy as np
 from numpy.random import randint
@@ -16,13 +17,26 @@ from peri import states
 from peri import models as mdl
 from peri.logger import log
 CLOG = log.getChild('opt')
-import peri.opt.optengine as optengine
+# import peri.opt.optengine as optengine
 
 """
 TODO:
     1. burn -- 2 loops of globals is only good for the first few loops; after
             that it's overkill. Best to make a 3rd mode now, since the
             psf and zscale move around without a set of burns.
+    2.  separate_particles_into_groups : Current version makes a lot of
+        size-1 groups. A better version would be:
+            a. initialize a list of active groups as all particles.
+            b. initialize a list of final groups as [].
+            c. while len(active list) > 0:
+                pop a group from the active list
+                if it is small enough for mem < max_mem:
+                    append it to the final list
+                else:
+                    split it in two (randomly? along its long direction?
+                    both?) and add both groups back to the active list.
+        Algorithm should run in O(ln N) and the groups should all be
+        sizeable.
 
 To fix:
 2.  Right now, when marquardt_damping=False (the default, which works nicely),
@@ -32,6 +46,7 @@ To fix:
     So, changing max_mem or changing the image size will affect what a
     reasonable damping is. One way to do this is to scale the damping by
     the size of the residuals..........................................
+        np.mean(np.diag(self.JTJ))
 """
 
 def get_rand_Japprox(s, params, num_inds=1000, include_cost=False, **kwargs):
@@ -230,9 +245,13 @@ class ParticleGroupCreator(object):
             n_translate += 1
         else:
             shift = 0
-        deltas = np.meshgrid(*[np.arange(i) for i in n_translate])
-        group_tiles = [region_tile.translate(np.array(delta) * region_size -
-                       shift) for delta in deltas]
+        # ~~~ Get the x, y, z shifts of the particles:
+        num_tiles_zyx = [[i for i in range(n_translate_xi)]
+                         for n_translate_xi in n_translate]
+        tile_shift_values = [np.array([i, j, k]) * region_size
+                             for i, j, k in itertools.product(*num_tiles_zyx)]
+        group_tiles = [region_tile.translate(tile_shift_value)
+                       for tile_shift_value in tile_shift_values]
         groups = [self.find_particles_in_tile(group_tile)
                   for group_tile in group_tiles]
         groups = [g for g in groups if len(g) > 0]
@@ -243,7 +262,7 @@ class ParticleGroupCreator(object):
         param_values = self.state.get_values(param_names)
         update_region = self.state.get_update_io_tiles(
             param_names, param_values)[2]
-        num_pixels_in_update_region = update_region.prod().astype('int64')
+        num_pixels_in_update_region = update_region.volume.astype('int64')
         num_entries_in_J = num_pixels_in_update_region * len(param_names)
         return num_entries_in_J * 8  # 8 for number of bytes in float64
 
@@ -266,12 +285,12 @@ class ParticleGroupCreator(object):
             region_size = np.array(initial_region_size, dtype='int')
 
         increase_size_amount = 2
-        if calc_mem_usage(region_size) > max_mem:
-            while ((self._calc_mem_usage(region_size) > max_mem) and
+        if self._calc_mem_usage(region_size) > self.max_mem:
+            while ((self._calc_mem_usage(region_size) > self.max_mem) and
                     np.any(region_size > 2)):
                 region_size = np.clip(region_size-1, 2, im_shape)
         else:
-            while ((self._calc_mem_usage(region_size) < max_mem) and
+            while ((self._calc_mem_usage(region_size) < self.max_mem) and
                     np.any(region_size < im_shape)):
                 region_size = np.clip(region_size+1, 2, im_shape)
             # un-doing 1 iteration to ensure the required mem is < max_mem:
@@ -280,7 +299,7 @@ class ParticleGroupCreator(object):
 
     def separate_particles_into_groups(self):
         region_size = self.calc_particle_group_region_size()
-        groups = self._separate_particles_into_groups(self, region_size)
+        groups = self._separate_particles_into_groups(region_size)
         assert self._check_groups(groups)
         return groups
 
