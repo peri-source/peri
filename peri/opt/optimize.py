@@ -217,8 +217,6 @@ class ParticleGroupCreator(object):
         """
         self.state = state
         self.max_mem = max_mem
-        self.doshift = (np.random.choice([True, False]) if doshift == 'rand'
-                        else doshift)
 
     def find_particles_in_tile(self, tile):
         bools = tile.contains(self.state.obj_get_positions())
@@ -234,30 +232,7 @@ class ParticleGroupCreator(object):
               (np.arange(n_particles) == np.sort(all_indices)).all()]
         return all(ok)
 
-    def _separate_particles_into_groups(self, region_size):
-        bounding_tile = self.state.oshape.translate(-self.state.pad)
-        n_translate = np.ceil(bounding_tile.shape.astype('float') /
-                              region_size).astype('int')
-        region_tile = Tile(left=bounding_tile.l,
-                           right=bounding_tile.l + region_size)
-        if self.doshift:
-            shift = region_size // 2
-            n_translate += 1
-        else:
-            shift = 0
-        # ~~~ Get the x, y, z shifts of the particles:
-        num_tiles_zyx = [[i for i in range(n_translate_xi)]
-                         for n_translate_xi in n_translate]
-        tile_shift_values = [np.array([i, j, k]) * region_size
-                             for i, j, k in itertools.product(*num_tiles_zyx)]
-        group_tiles = [region_tile.translate(tile_shift_value)
-                       for tile_shift_value in tile_shift_values]
-        groups = [self.find_particles_in_tile(group_tile)
-                  for group_tile in group_tiles]
-        groups = [g for g in groups if len(g) > 0]
-        return groups
-
-    def _get_region_J_nbytes(self, group):
+    def calc_group_memory_bytes(self, group):
         param_names = self.state.param_particle(group)
         param_values = self.state.get_values(param_names)
         update_region = self.state.get_update_io_tiles(
@@ -266,15 +241,15 @@ class ParticleGroupCreator(object):
         num_entries_in_J = num_pixels_in_update_region * len(param_names)
         return num_entries_in_J * 8  # 8 for number of bytes in float64
 
-    def _calc_mem_usage(self, region_size):
-        particle_groups = self._separate_particles_into_groups(region_size)
-        # The actual mem usage is the max of the memory usage of all the
-        # particle groups. However this is too slow. So instead we use the
-        # max of the memory of the biggest 5 particle groups:
-        num_in_group = [np.size(g) for g in particle_groups]
-        biggroups = [particle_groups[i] for i in np.argsort(num_in_group)[-5:]]
-        mems = [self._get_region_J_nbytes(g) for g in biggroups]
-        return np.max(mems)
+    def separate_particles_into_groups(self):
+        raise NotImplementedError('implement in subclass')
+
+
+class BoxParticleGroupCreator(ParticleGroupCreator):
+    def __init__(self, state, max_mem=1e9, doshift=False):
+        super(BoxParticleGroupCreator, self).__init__(state, max_mem=max_mem)
+        self.doshift = (np.random.choice([True, False]) if doshift == 'rand'
+                        else doshift)
 
     def calc_particle_group_region_size(self, initial_region_size=40):
         im_shape = self.state.oshape.shape
@@ -303,6 +278,79 @@ class ParticleGroupCreator(object):
         assert self._check_groups(groups)
         return groups
 
+    def _separate_particles_into_groups(self, region_size):
+        bounding_tile = self.state.oshape.translate(-self.state.pad)
+        n_translate = np.ceil(bounding_tile.shape.astype('float') /
+                              region_size).astype('int')
+        region_tile = Tile(left=bounding_tile.l,
+                           right=bounding_tile.l + region_size)
+        if self.doshift:
+            shift = region_size // 2
+            n_translate += 1
+        else:
+            shift = 0
+        # ~~~ Get the x, y, z shifts of the particles:
+        num_tiles_zyx = [[i for i in range(n_translate_xi)]
+                         for n_translate_xi in n_translate]
+        tile_shift_values = [np.array([i, j, k]) * region_size
+                             for i, j, k in itertools.product(*num_tiles_zyx)]
+        group_tiles = [region_tile.translate(tile_shift_value)
+                       for tile_shift_value in tile_shift_values]
+        groups = [self.find_particles_in_tile(group_tile)
+                  for group_tile in group_tiles]
+        groups = [g for g in groups if len(g) > 0]
+        return groups
+
+    def _calc_mem_usage(self, region_size):
+        particle_groups = self._separate_particles_into_groups(region_size)
+        # The actual mem usage is the max of the memory usage of all the
+        # particle groups. However this is too slow. So instead we use the
+        # max of the memory of the biggest 5 particle groups:
+        num_in_group = [np.size(g) for g in particle_groups]
+        biggroups = [particle_groups[i] for i in np.argsort(num_in_group)[-5:]]
+        mems = [self.calc_group_memory_bytes(g) for g in biggroups]
+        return np.max(mems)
+
+
+class ListParticleGroupCreator(ParticleGroupCreator):
+    def __init__(self, state, max_mem=1e9, split_by=2):
+        super(ListParticleGroupCreator, self).__init__(state, max_mem=max_mem)
+        self.split_by = split_by
+        self.percentiles = 100 * np.arange(split_by) / float(split_by)
+
+    def separate_particles_into_groups(self):
+        active_list=[self._get_all_particles()]
+        groups = []
+        while len(active_list) > 0:
+            current_group = active_list.pop()
+            if self.calc_group_memory_bytes(current_group) < self.max_mem:
+                groups.append(current_group)
+            else:
+                smaller_groups = self.split_into_smaller_groups(current_group)
+                active_list.extend(smaller_groups)
+        return groups
+
+    def split_into_smaller_groups(self, current_group):
+        x = self.find_amount_along_longest_axis(current_group)
+        cut_at = np.percentile(x, self.percentiles)
+        group_masks = [(x >= lower) & (x < upper)
+                       for lower, upper in zip(cut_at[:-1], cut_at[1:])]
+        group_masks.append(x >= cut_at[-1])
+        new_groups = [current_group[m] for m in group_masks]
+        return new_groups
+
+    def find_amount_along_longest_axis(self, group):
+        positions = self.state.obj_get_positions()[group]
+        # 1. Find the longest principal axis of the group:
+        radius_of_gyration = np.dot(positions.T, positions)
+        vals, vecs = np.linalg.eigh(radius_of_gyration)
+        direction = vecs[-1]
+        # 2. The coordinate along that direction:
+        coordinate = positions.dot(direction)
+        return coordinate
+
+    def _get_all_particles(self):
+        return self.find_particles_in_tile(self.state.oshape)
 
 def separate_particles_into_groups(state, max_mem=1e9, doshift=False):
     """Separates particles into convenient groups for optimization.
@@ -325,7 +373,8 @@ def separate_particles_into_groups(state, max_mem=1e9, doshift=False):
         Each element of particle_groups is a numpy.ndarray of the
         indices of a group of particles, with each particle in one group.
     """
-    groupmaker = ParticleGroupCreator(state, max_mem=max_mem, doshift=doshift)
+    groupmaker = BoxParticleGroupCreator(
+        state, max_mem=max_mem, doshift=doshift)
     return groupmaker.separate_particles_into_groups()
 
 

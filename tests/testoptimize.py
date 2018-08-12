@@ -35,6 +35,25 @@ class TestSeparateParticlesIntoGroups(unittest.TestCase):
             size_ok = check_groups_not_too_large(STATE, groups, max_mem=1e8)
             self.assertTrue(size_ok)
 
+    def test_split_group_creator_init(self):
+        pgc = opt.ListParticleGroupCreator(STATE, max_mem=1e8)
+        self.assertTrue(True)
+
+    def test_split_group_creator_all_in_groups(self):
+        for split_by in [2, 3]:
+            pgc = opt.ListParticleGroupCreator(
+                STATE, max_mem=1e8, split_by=split_by)
+            groups = pgc.separate_particles_into_groups()
+            self.assertTrue(check_all_particles_in_groups(STATE, groups))
+
+    def test_split_groups_not_too_large(self):
+        for split_by in [2, 3]:
+            pgc = opt.ListParticleGroupCreator(
+                STATE, max_mem=1e8, split_by=split_by)
+            groups = pgc.separate_particles_into_groups()
+            size_ok = check_groups_not_too_large(STATE, groups, max_mem=1e8)
+            self.assertTrue(size_ok)
+
 
 def check_all_particles_in_groups(state, groups):
     pg = opt.ParticleGroupCreator(state)
@@ -43,7 +62,7 @@ def check_all_particles_in_groups(state, groups):
 
 def check_groups_not_too_large(state, groups, max_mem=1e8):
     pg = opt.ParticleGroupCreator(state, max_mem=1e8)
-    sizes_ok = [pg._get_region_J_nbytes(g) < max_mem for g in groups]
+    sizes_ok = [pg.calc_group_memory_bytes(g) < max_mem for g in groups]
     return all(sizes_ok)
 
 
