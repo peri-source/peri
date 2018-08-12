@@ -21,17 +21,30 @@ class TestSeparateParticlesIntoGroups(unittest.TestCase):
     def test_all_in_groups(self):
         unshifted_groups = opt.separate_particles_into_groups(
             STATE, max_mem=1e8)
-        unshifted_ok = check_groups(STATE, unshifted_groups)
+        unshifted_ok = check_all_particles_in_groups(STATE, unshifted_groups)
         shifted_groups = opt.separate_particles_into_groups(
             STATE, max_mem=1e8, doshift=True)
-        shifted_ok = check_groups(STATE, shifted_groups)
+        shifted_ok = check_all_particles_in_groups(STATE, shifted_groups)
         self.assertTrue(unshifted_ok)
         self.assertTrue(shifted_ok)
 
+    def test_groups_not_too_large(self):
+        for doshift in [True, False]:
+            groups = opt.separate_particles_into_groups(
+                STATE, max_mem=1e8, doshift=doshift)
+            size_ok = check_groups_not_too_large(STATE, groups, max_mem=1e8)
+            self.assertTrue(size_ok)
 
-def check_groups(state, groups):
+
+def check_all_particles_in_groups(state, groups):
     pg = opt.ParticleGroupCreator(state)
     return pg._check_groups(groups)
+
+
+def check_groups_not_too_large(state, groups, max_mem=1e8):
+    pg = opt.ParticleGroupCreator(state, max_mem=1e8)
+    sizes_ok = [pg._get_region_J_nbytes(g) < max_mem for g in groups]
+    return all(sizes_ok)
 
 
 if __name__ == '__main__':
