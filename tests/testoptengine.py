@@ -10,11 +10,8 @@ import optengine, opttest
 
 TOLS = {'atol': 1e-10, 'rtol': 1e-10}
 SOFTTOLS = {'atol': 1e-7, 'rtol': 1e-7}
-WEAKTOLS =  {'atol': 1e-5, 'rtol': 1e-5}
+WEAKTOLS =  {'atol': 1e-6, 'rtol': 1e-6}
 
-# TODO:
-# Some of the unit tests (test_low_rank_J_update, test_eig_update)
-# fail with rosenbrock_dd and rosenbrock_gendd only. Figure out why
 
 class TestOptFunction(unittest.TestCase):
     def test_constructor(self):
@@ -100,9 +97,6 @@ class TestOptFunction(unittest.TestCase):
         self.assertTrue(all(all_functions_ok))
 
 
-# TODO: eig update tests. Can test that a full update with eig
-#       gives the same J, step on quadratic model + partial eig update
-#       does change J
 class TestStepper(unittest.TestCase):
     def test_constructor(self):
         stepper = make_basic_stepper()
@@ -187,19 +181,16 @@ class TestStepper(unittest.TestCase):
 
     def test_eig_update_is_exact_when_complete(self):
         is_ok = []
-        nice_names = ['simple_sphere', 'booth', 'beale', 'rosenbrock',
-                      'himmelblau']
-        for function_name in nice_names:
+        for function_name in opttest.ALL_FUNCTIONS.keys():
             optfun = make_optfun(function_name)
-            stepper = optengine.FancyLMStepper(optfun, damp=1e4, accel=True)
+            stepper = optengine.FancyLMStepper(optfun)
             optfun.update_J()
             true_j = np.copy(optfun.J)
             true_jtj = np.copy(optfun.JTJ)
             stepper.eig_update_J(number_of_directions=optfun.paramvals.size)
             eig_j = np.copy(optfun.J)
             eig_jtj = np.copy(optfun.JTJ)
-            is_ok.extend([np.allclose(true_j, eig_j, **WEAKTOLS),
-                          np.allclose(true_jtj, eig_jtj, **WEAKTOLS)])
+            is_ok.append(np.allclose(true_j, eig_j, **WEAKTOLS))
         self.assertTrue(all(is_ok))
 
 
