@@ -8,8 +8,8 @@ import matplotlib.pylab as pl
 
 from matplotlib import ticker
 from matplotlib.gridspec import GridSpec
+from matplotlib.offsetbox import AnchoredText
 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
-from mpl_toolkits.axes_grid1.anchored_artists import AnchoredText, AnchoredOffsetbox
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 from mpl_toolkits.axes_grid1 import ImageGrid
 from matplotlib.patches import Circle, Rectangle
@@ -444,10 +444,10 @@ def examine_unexplained_noise(state, bins=1000, xlim=(-10,10)):
     #Get the expected values of `sigma`:
     calc_sig = lambda x: np.sqrt(np.dot(x,x) / x.size)
     rh, xr = np.histogram(r.ravel() / calc_sig(r.ravel()), bins=bins,
-            normed=True)
+            density=True)
     bigq = np.append(q.real.ravel(), q.imag.ravel())
     qh, xq = np.histogram(bigq / calc_sig(q.real.ravel()), bins=bins,
-            normed=True)
+            density=True)
     xr = 0.5*(xr[1:] + xr[:-1])
     xq = 0.5*(xq[1:] + xq[:-1])
 
