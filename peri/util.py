@@ -14,9 +14,11 @@ from peri import initializers
 from peri.logger import log
 log = log.getChild('util')
 
-#=============================================================================
+
+# ============================================================================
 # Tiling utilities
-#=============================================================================
+# ============================================================================
+
 def oddify(num):
     """
     Return the next odd number if ``num`` is even.
@@ -30,6 +32,7 @@ def oddify(num):
     5
     """
     return num + (num % 2 == 0)
+
 
 def listify(a):
     """
@@ -57,6 +60,7 @@ def listify(a):
     elif not isinstance(a, (tuple, list, np.ndarray)):
         return [a]
     return list(a)
+
 
 def delistify(a, b=None):
     """
@@ -90,11 +94,14 @@ def delistify(a, b=None):
         return a
     return a
 
+
 def amin(a, b):
     return np.vstack([a, b]).min(axis=0)
 
+
 def amax(a, b):
     return np.vstack([a, b]).max(axis=0)
+
 
 def aN(a, dim=3, dtype='int'):
     """
@@ -121,28 +128,32 @@ def aN(a, dim=3, dtype='int'):
     Examples
     --------
     >>> aN(1, dim=2, dtype='float')
-    array([ 1.,  1.])
+    array([1., 1.])
 
     >>> aN(1, dtype='int')
     array([1, 1, 1])
 
     >>> aN(np.array([1,2,3]), dtype='float')
-    array([ 1.,  2.,  3.])
+    array([1., 2., 3.])
     """
     if not hasattr(a, '__iter__'):
         return np.array([a]*dim, dtype=dtype)
     return np.array(a).astype(dtype)
 
+
 def getdtype(types):
     return np.sum([np.array([1], dtype=t) for t in types]).dtype
+
 
 def getdim(a):
     if not hasattr(a, '__iter__'):
         return None
     return len(a)
 
+
 def isint(dtype):
     return np.array([0.0], dtype=dtype).dtype.name[0] in ['i', 'u']
+
 
 class CompatibilityPatch(object):
     def patch(self, var):
@@ -150,9 +161,10 @@ class CompatibilityPatch(object):
         for n, v in zip(names, default_values):
             self.__dict__.update({n: self.__dict__.get(n, v)})
 
+
 class Tile(CompatibilityPatch):
     def __init__(self, left, right=None, mins=None, maxs=None,
-            size=None, centered=False, dim=None, dtype='int'):
+                 size=None, centered=False, dim=None, dtype='int'):
         """
         Creates a tile element which represents a hyperrectangle in D
         dimensions. These hyperrectangles may be operated upon to find
@@ -191,8 +203,8 @@ class Tile(CompatibilityPatch):
         -----
 
         These parameters can be combined into many different combinations
-        (where [] indicates an array created from either a single number or any
-        iterable):
+        (where [] indicates an array created from either a single number
+        or any iterable):
 
             * left : ``[0,0,0] -> [left]``
             * left, right : ``[left] -> [right]``
@@ -205,13 +217,13 @@ class Tile(CompatibilityPatch):
             * ``left = max(left, [mins])``
             * ``right = min(right, [maxs])``
 
-        Since tiles are used for array slicing, they only allow integer values,
-        which can truncated without warning from float.
+        Since tiles are used for array slicing, they only allow integer
+        values, which can truncated without warning from float.
 
-        Notes on dimension. The dimensionality is determined first by the shape
-        of left, right, size if provided not as an integer. If it not provided there
-        then it is assumed to be 3D. This can be overridden by setting dim in the
-        arguments. For example:
+        Notes on dimension. The dimensionality is determined first by the
+        shape of left, right, size if provided not as an integer. If it
+        not provided there then it is assumed to be 3D. This can be
+        overridden by setting dim in the arguments. For example:
 
             * Tile(3)         : ``[0,0,0] -> [3,3,3]``
             * Tile(3, dim=2)  : ``[0,0] -> [3,3]``
@@ -330,7 +342,7 @@ class Tile(CompatibilityPatch):
         Return the center of the tile
 
         >>> Tile(5).center
-        array([ 2.5,  2.5,  2.5])
+        array([2.5, 2.5, 2.5])
         """
         return (self.r + self.l)/2.0
 
@@ -374,8 +386,8 @@ class Tile(CompatibilityPatch):
 
     def _format_vector(self, vecs, form='broadcast'):
         """
-        Format a 3d vector field in certain ways, see `coords` for a description
-        of each formatting method.
+        Format a 3d vector field in certain ways, see `coords` for a
+        description of each formatting method.
         """
         if form == 'meshed':
             return np.meshgrid(*vecs, indexing='ij')
@@ -394,10 +406,10 @@ class Tile(CompatibilityPatch):
         Parameters
         -----------
         norm : boolean
-            can rescale the coordinates for you. False is no rescaling, True is
-            rescaling so that all coordinates are from 0 -> 1.  If a scalar,
-            the same norm is applied uniformally while if an iterable, each
-            scale is applied to each dimension.
+            can rescale the coordinates for you. False is no rescaling,
+            True is rescaling so that all coordinates are from 0 -> 1.
+            If a scalar, the same norm is applied uniformally while if
+            an iterable, each scale is applied to each dimension.
 
         form : string
             In what form to return the vector array. Can be one of:
@@ -415,14 +427,14 @@ class Tile(CompatibilityPatch):
         Examples
         --------
         >>> Tile(3, dim=2).coords(form='meshed')[0]
-        array([[ 0.,  0.,  0.],
-               [ 1.,  1.,  1.],
-               [ 2.,  2.,  2.]])
+        array([[0., 0., 0.],
+               [1., 1., 1.],
+               [2., 2., 2.]])
 
         >>> Tile(3, dim=2).coords(form='meshed')[1]
-        array([[ 0.,  1.,  2.],
-               [ 0.,  1.,  2.],
-               [ 0.,  1.,  2.]])
+        array([[0., 1., 2.],
+               [0., 1., 2.],
+               [0., 1., 2.]])
 
         >>> Tile([4,5]).coords(form='vector').shape
         (4, 5, 2)
@@ -489,7 +501,7 @@ class Tile(CompatibilityPatch):
         Examples
         --------
         >>> Tile(5, dim=2).contains([[-1, 0], [2, 3], [2, 6]])
-        array([False,  True, False], dtype=bool)
+        array([False,  True, False])
         """
         o = ((items >= self.l-pad) & (items < self.r+pad))
         if len(o.shape) == 2:
@@ -623,9 +635,9 @@ class Tile(CompatibilityPatch):
         self._build_caches()
 
 
-#=============================================================================
+# ============================================================================
 # Image classes
-#=============================================================================
+# ============================================================================
 class Image(object):
     def __init__(self, image, tile=None, filters=None):
         """
@@ -706,6 +718,7 @@ class Image(object):
     def __str__(self):
         return self.__repr__()
 
+
 class NullImage(Image):
     def __init__(self, image=None, shape=None):
         """
@@ -740,6 +753,7 @@ class NullImage(Image):
 
     def __str__(self):
         return self.__repr__()
+
 
 class RawImage(Image, CompatibilityPatch):
     def __init__(self, filename, tile=None, invert=False, exposure=None,
@@ -880,6 +894,7 @@ class RawImage(Image, CompatibilityPatch):
     def __str__(self):
         return self.__repr__()
 
+
 def cdd(d, k):
     """ Conditionally delete key (or list of keys) 'k' from dict 'd' """
     if not isinstance(k, list):
@@ -888,9 +903,10 @@ def cdd(d, k):
         if i in d:
             d.pop(i)
 
-#=============================================================================
+
+# ============================================================================
 # Progress bar
-#=============================================================================
+# ============================================================================
 class ProgressBar(object):
     def __init__(self, num, label='Progress', value=0, screen=79,
             time_remaining=True, bar=True, bar_symbol='=', bar_caps='[]',
@@ -1039,11 +1055,12 @@ class ProgressBar(object):
             print('\r{lett:>{screen}}'.format(**{'lett':'', 'screen': self.screen}))
 
 
-#=============================================================================
+# ============================================================================
 # useful decorators
-#=============================================================================
+# ============================================================================
 import functools
 import types
+
 
 def newcache():
     out = {}
@@ -1051,6 +1068,7 @@ def newcache():
     out['misses'] = 0
     out['size'] = 0
     return out
+
 
 def memoize(cache_max_size=1e9):
     def memoize_inner(obj):
@@ -1113,9 +1131,12 @@ def memoize(cache_max_size=1e9):
 
     return memoize_inner
 
-#=============================================================================
+
+# ============================================================================
 # patching docstrings of sub-classes
-#=============================================================================
+# ============================================================================
+
+
 def patch_docs(subclass, superclass):
     """
     Apply the documentation from ``superclass`` to ``subclass`` by filling
@@ -1138,9 +1159,12 @@ def patch_docs(subclass, superclass):
             func = getattr(subclass, name)
             func.__func__.__doc__ = getattr(superclass, name).__func__.__doc__
 
-#=============================================================================
+
+# ============================================================================
 # misc helper functions
-#=============================================================================
+# ============================================================================
+
+
 @contextmanager
 def indir(path):
     """
