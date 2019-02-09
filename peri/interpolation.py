@@ -234,7 +234,7 @@ class ChebyshevInterpolation1D(object):
         >>> import numpy as np
         >>> func = lambda x: np.sin(x)
         >>> cheb = ChebyshevInterpolation1D(func, window=(0, np.pi), degree=9,
-        >>>                                 evalpts=11)
+        ...                                 evalpts=11)
         >>> np.allclose(cheb(1.0), np.sin(1.0), atol=1e-7)
         True
         """
