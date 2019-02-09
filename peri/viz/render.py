@@ -9,17 +9,21 @@ import peri.comp.objs
 import matplotlib as mpl
 import matplotlib.pyplot as pl
 
+
 def norm(field, vmin=0, vmax=255):
     """Truncates field to 0,1; then normalizes to a uin8 on [0,255]"""
     field = 255*np.clip(field, 0, 1)
     field = field.astype('uint8')
     return field
 
+
 def roll(field):
     return np.rollaxis(field, 0, 2)
 
+
 def clip(field):
     return np.clip(field, 0, 1)
+
 
 def extract_field(state, field='exp-particles'):
     """
@@ -32,8 +36,8 @@ def extract_field(state, field='exp-particles'):
         'sim-particles' : Just the particles image; no noise from the data.
         'sim-platonic'  : Just the platonic image; no noise from the data.
     """
-    es, pp = field.split('-')  #exp vs sim, particles vs platonic
-    #1. The weights for the field, based off the platonic vs particles
+    es, pp = field.split('-')  # exp vs sim, particles vs platonic
+    # 1. The weights for the field, based off the platonic vs particles
     if pp == 'particles':
         o = state.get('obj')
         if isinstance(o, peri.comp.comp.ComponentCollection):
@@ -47,7 +51,7 @@ def extract_field(state, field='exp-particles'):
         wts = state.get('obj').get()[state.inner]
     else:
         raise ValueError('Not a proper field.')
-    #2. Exp vs sim-like data
+    # 2. Exp vs sim-like data
     if es == 'exp':
         out = (1-state.data) * (wts > 1e-5)
     elif es == 'sim':
@@ -55,6 +59,7 @@ def extract_field(state, field='exp-particles'):
     else:
         raise ValueError('Not a proper field.')
     return norm(clip(roll(out)))
+
 
 def cmap2colorfunc(cmap='bone'):
     values = np.arange(255)
@@ -65,9 +70,10 @@ def cmap2colorfunc(cmap='bone'):
         colorFunc.AddRGBPoint(v, *c[:-1])
     return colorFunc
 
-def volume_render(field, outfile, maxopacity=1.0, cmap='bone',
-        size=600, elevation=45, azimuth=45, bkg=(0.0, 0.0, 0.0),
-        opacitycut=0.35, offscreen=False, rayfunction='smart'):
+
+def volume_render(field, outfile, maxopacity=1.0, cmap='bone', size=600,
+                  elevation=45, azimuth=45, bkg=(0.0, 0.0, 0.0),
+                  opacitycut=0.35, offscreen=False, rayfunction='smart'):
     """
     Uses vtk to make render an image of a field, with control over the
     camera angle and colormap.
@@ -142,7 +148,7 @@ def volume_render(field, outfile, maxopacity=1.0, cmap='bone',
     renderer = vtk.vtkRenderer()
     renderWin = vtk.vtkRenderWindow()
     renderWin.AddRenderer(renderer)
-    renderWin.SetOffScreenRendering(1);
+    renderWin.SetOffScreenRendering(1)
 
     if not hasattr(size, '__iter__'):
         size = (size, size)
@@ -165,16 +171,6 @@ def volume_render(field, outfile, maxopacity=1.0, cmap='bone',
     renderInteractor.Initialize()
     renderWin.Render()
     renderInteractor.Start()
-
-    #writer = vtk.vtkFFMPEGWriter()
-    #writer.SetQuality(2)
-    #writer.SetRate(24)
-    #w2i = vtk.vtkWindowToImageFilter()
-    #w2i.SetInput(renderWin)
-    #writer.SetInputConnection(w2i.GetOutputPort())
-    #writer.SetFileName('movie.avi')
-    #writer.Start()
-    #writer.End()
 
     writer = vtk.vtkPNGWriter()
     w2i = vtk.vtkWindowToImageFilter()
