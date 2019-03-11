@@ -8,7 +8,7 @@ sys.path.append('../peri/opt')
 import optengine, opttest
 
 
-TOLS = {'atol': 1e-10, 'rtol': 1e-10}
+TOLS = {'atol': 1e-13, 'rtol': 1e-13}
 SOFTTOLS = {'atol': 1e-7, 'rtol': 1e-7}
 WEAKTOLS =  {'atol': 1e-6, 'rtol': 1e-6}
 
@@ -81,9 +81,11 @@ class TestOptFunction(unittest.TestCase):
         all_functions_ok = []
         for optfun in make_all_linear_function_optobjs():
             optfun.update_J()
+            current_error = optfun.error
             expected_error = optfun.find_expected_error()
-            is_ok = [expected_error <= optfun.error,
-                     np.isclose(expected_error, 0, **TOLS)]
+            rescaleby = max([1.0, current_error])
+            is_ok = [expected_error <= current_error,
+                     np.isclose(expected_error / rescaleby, 0, **TOLS)]
             all_functions_ok.append(all(is_ok))
         self.assertTrue(all(all_functions_ok))
 
