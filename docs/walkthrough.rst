@@ -258,7 +258,7 @@ mathematically is by typing
 
 .. code-block:: python
 
-    print model
+    print(model)
 
 Finally, we need to combine the mathematical model and its components together
 to create a model image. In ``peri``, the image, the mathematical model, its
@@ -299,7 +299,7 @@ the residuals. Look at the error by typing
 
 .. code-block:: python
 
-    print st.error
+    print(st.error)
 
 Right now the fit's error is pretty bad. We can fit the state and improve the
 error significantly using the convenience functions in :mod:`peri.runner`:
@@ -494,8 +494,8 @@ You can get the parameters and values by typing
 
 .. code-block:: python
 
-    print st.params
-    print st.values
+    print(st.params)
+    print(st.values)
 
 which will print a very long list of all the state's parameters and values.
 Usually this isn't the best format to access the data. Instead, if you want a
@@ -506,8 +506,8 @@ type:
 
 .. code-block:: python
 
-    print st.get_values('sph-13-a')  # 13th particle's radius, counting from 0
-    print st.get_values('psf-laser-wavelength')  # psf's fitted laser wavelength
+    print(st.get_values('sph-13-a'))  # 13th particle's radius, counting from 0
+    print(st.get_values('psf-laser-wavelength'))  # psf's fitted laser wavelength
 
 In addition, there are several convenience functions. You can get all the
 positions or radii of all the particles in the state through these commands:
